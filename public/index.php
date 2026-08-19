@@ -32,7 +32,39 @@ $brandPrimary = '#315285';
 $brandGray = '#C4C4C4';
 $brandYellow = '#F5DF25';
 $appName = app_name();
-$logoUrl = asset('/assets/brand/logo.png');
+
+// Soporte a docroot “/public” y a “public/ movido a raíz”.
+// Detectamos en filesystem dónde están los assets y generamos el URL correcto.
+function assets_url(string $relativeUrl, array $filesystemCandidates): string
+{
+    foreach ($filesystemCandidates as $fs) {
+        if (is_file($fs)) {
+            return $relativeUrl;
+        }
+    }
+    // Fallback: usar la convención /assets/... basada en APP_URL
+    return asset($relativeUrl);
+}
+
+$logoUrl = assets_url(
+    '/assets/brand/logo.png',
+    [
+        __DIR__ . '/assets/brand/logo.png',
+        dirname(__DIR__) . '/assets/brand/logo.png',
+        __DIR__ . '/public/assets/brand/logo.png',
+        dirname(__DIR__) . '/public/assets/brand/logo.png',
+    ]
+);
+
+$faviconUrl = assets_url(
+    '/assets/brand/favicon.ico',
+    [
+        __DIR__ . '/assets/brand/favicon.ico',
+        dirname(__DIR__) . '/assets/brand/favicon.ico',
+        __DIR__ . '/public/assets/brand/favicon.ico',
+        dirname(__DIR__) . '/public/assets/brand/favicon.ico',
+    ]
+);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -40,7 +72,7 @@ $logoUrl = asset('/assets/brand/logo.png');
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($appName) ?></title>
-    <link rel="icon" href="<?= e(asset('/assets/brand/favicon.ico')) ?>" type="image/x-icon">
+    <link rel="icon" href="<?= e($faviconUrl) ?>" type="image/x-icon">
     <style>
         :root {
             --doceo-blue: <?= e($brandPrimary) ?>;
@@ -61,7 +93,15 @@ $logoUrl = asset('/assets/brand/logo.png');
             padding: 3rem 1.5rem;
             text-align: center;
         }
-        .logo { width: min(220px, 70vw); height: auto; margin-bottom: 1.5rem; }
+        .logo {
+            width: auto;
+            height: auto;
+            max-width: min(170px, 45vw);
+            max-height: min(170px, 24vh);
+            object-fit: contain;
+            margin: 0 auto 1.5rem;
+            display: block;
+        }
         h1 { color: var(--doceo-blue); font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 0 0 .75rem; }
         p { color: #445; line-height: 1.6; margin: 0 0 1rem; }
         .badge {
