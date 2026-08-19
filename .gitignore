@@ -1,4 +1,5 @@
 .env
+upload_version.php
 /storage/uploads/*
 !/storage/uploads/.gitkeep
 /storage/logs/*
