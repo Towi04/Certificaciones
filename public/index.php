@@ -93,7 +93,15 @@ $faviconUrl = assets_url(
             padding: 3rem 1.5rem;
             text-align: center;
         }
-        .logo { width: min(220px, 70vw); height: auto; margin-bottom: 1.5rem; }
+        .logo {
+            width: auto;
+            height: auto;
+            max-width: min(170px, 45vw);
+            max-height: min(170px, 24vh);
+            object-fit: contain;
+            margin: 0 auto 1.5rem;
+            display: block;
+        }
         h1 { color: var(--doceo-blue); font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 0 0 .75rem; }
         p { color: #445; line-height: 1.6; margin: 0 0 1rem; }
         .badge {
