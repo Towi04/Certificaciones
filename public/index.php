@@ -2,7 +2,27 @@
 
 declare(strict_types=1);
 
-require dirname(__DIR__) . '/bootstrap.php';
+// Soporte para dos despliegues comunes:
+// 1) Docroot = /public        => bootstrap.php está 1 nivel arriba
+// 2) public/ movido a la raíz => bootstrap.php está en el mismo directorio
+$bootstrapCandidates = [
+    __DIR__ . '/bootstrap.php',
+    dirname(__DIR__) . '/bootstrap.php',
+];
+$bootstrapPath = null;
+foreach ($bootstrapCandidates as $candidate) {
+    if (is_file($candidate)) {
+        $bootstrapPath = $candidate;
+        break;
+    }
+}
+if ($bootstrapPath === null) {
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=UTF-8');
+    die('No se encontró bootstrap.php. Revisa rutas/document root y que bootstrap.php exista.');
+}
+
+require $bootstrapPath;
 
 use App\Config\Env;
 
