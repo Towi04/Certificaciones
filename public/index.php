@@ -32,7 +32,39 @@ $brandPrimary = '#315285';
 $brandGray = '#C4C4C4';
 $brandYellow = '#F5DF25';
 $appName = app_name();
-$logoUrl = asset('/assets/brand/logo.png');
+
+// Soporte a docroot “/public” y a “public/ movido a raíz”.
+// Detectamos en filesystem dónde están los assets y generamos el URL correcto.
+function assets_url(string $relativeUrl, array $filesystemCandidates): string
+{
+    foreach ($filesystemCandidates as $fs) {
+        if (is_file($fs)) {
+            return $relativeUrl;
+        }
+    }
+    // Fallback: usar la convención /assets/... basada en APP_URL
+    return asset($relativeUrl);
+}
+
+$logoUrl = assets_url(
+    '/assets/brand/logo.png',
+    [
+        __DIR__ . '/assets/brand/logo.png',
+        dirname(__DIR__) . '/assets/brand/logo.png',
+        __DIR__ . '/public/assets/brand/logo.png',
+        dirname(__DIR__) . '/public/assets/brand/logo.png',
+    ]
+);
+
+$faviconUrl = assets_url(
+    '/assets/brand/favicon.ico',
+    [
+        __DIR__ . '/assets/brand/favicon.ico',
+        dirname(__DIR__) . '/assets/brand/favicon.ico',
+        __DIR__ . '/public/assets/brand/favicon.ico',
+        dirname(__DIR__) . '/public/assets/brand/favicon.ico',
+    ]
+);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -40,7 +72,7 @@ $logoUrl = asset('/assets/brand/logo.png');
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($appName) ?></title>
-    <link rel="icon" href="<?= e(asset('/assets/brand/favicon.ico')) ?>" type="image/x-icon">
+    <link rel="icon" href="<?= e($faviconUrl) ?>" type="image/x-icon">
     <style>
         :root {
             --doceo-blue: <?= e($brandPrimary) ?>;
