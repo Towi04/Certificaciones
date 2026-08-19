@@ -4,9 +4,9 @@ ini_set('memory_limit', '256M');
 
 // CONFIGURACIÓN
 $username   = "Towi04";          
-$repo       = "Certifications";    
-$token      = "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";  
-$secret_key = "UPL-AmorVincitOmnia3*1-DOC"; 
+$repo       = "certificationes";    
+$token      = "token";  
+$secret_key = ""; 
 
 if (!isset($_GET['key']) || $_GET['key'] !== $secret_key) {
     http_response_code(403);
