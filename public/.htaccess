@@ -1,0 +1,9 @@
+RewriteEngine On
+
+# Si el archivo o carpeta existe, servirlo directamente (assets, favicon, etc.)
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Todo lo demás al front controller
+RewriteRule ^ index.php [L]

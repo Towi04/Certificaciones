@@ -19,7 +19,7 @@ final class Env
 
         if (!is_file($path)) {
             throw new \RuntimeException(
-                'No se encontró el archivo .env. Copia .env.example a .env y completa los valores.'
+                'No se encontró el archivo .env. Copia env.example a .env y completa los valores.'
             );
         }
 

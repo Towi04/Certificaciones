@@ -2,10 +2,9 @@
 
 declare(strict_types=1);
 
-use App\Auth\Auth;
 use App\Config\Env;
 
-define('BASE_PATH', dirname(__DIR__));
+define('BASE_PATH', __DIR__);
 
 spl_autoload_register(static function (string $class): void {
     $prefix = 'App\\';
@@ -37,7 +36,7 @@ if (!is_dir($logDir)) {
 ini_set('error_log', $logDir . '/php-error.log');
 
 set_exception_handler(static function (Throwable $e) use ($debug): void {
-    error_log('[PDV] ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+    error_log('[Doceo] ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
     if (!headers_sent()) {
         http_response_code(500);
         header('Content-Type: text/html; charset=UTF-8');
@@ -47,26 +46,8 @@ set_exception_handler(static function (Throwable $e) use ($debug): void {
         echo '<pre>' . htmlspecialchars((string) $e, ENT_QUOTES, 'UTF-8') . '</pre>';
     } else {
         echo '<p>Revisa <code>storage/logs/php-error.log</code> o activa <code>APP_DEBUG=true</code> en el .env.</p>';
-        echo '<p><small>' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</small></p>';
     }
 });
-
-Auth::startSession();
-
-function view(string $name, array $data = []): void
-{
-    extract($data, EXTR_SKIP);
-    $viewFile = BASE_PATH . '/views/' . $name . '.php';
-    if (!is_file($viewFile)) {
-        throw new RuntimeException("Vista no encontrada: {$name}");
-    }
-    $layout = (string) ($layout ?? 'default');
-    if ($layout === 'bare' || $layout === 'print') {
-        require BASE_PATH . '/views/layout_bare.php';
-        return;
-    }
-    require BASE_PATH . '/views/layout.php';
-}
 
 function e(mixed $value): string
 {
@@ -77,54 +58,15 @@ function e(mixed $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
-/** Solo dígitos (para tel: y wa.me). */
-function phone_digits(?string $value): string
-{
-    return preg_replace('/\D+/', '', (string) $value) ?? '';
-}
-
-/** Enlace WhatsApp (wa.me). Prefija 52 si son 10 dígitos (MX). */
-function wa_me_url(?string $whatsapp): ?string
-{
-    $digits = phone_digits($whatsapp);
-    if ($digits === '') {
-        return null;
-    }
-    if (strlen($digits) === 10) {
-        $digits = '52' . $digits;
-    }
-    return 'https://wa.me/' . $digits;
-}
-
-function tel_url(?string $phone): ?string
-{
-    $digits = phone_digits($phone);
-    return $digits !== '' ? 'tel:+' . $digits : null;
-}
-
-function e_json(mixed $value): string
-{
-    $flags = JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE;
-    if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) {
-        $flags |= JSON_INVALID_UTF8_SUBSTITUTE;
-    }
-    $json = json_encode($value, $flags);
-
-    return e($json === false ? '{"error":"json_encode failed"}' : $json);
-}
-
 function app_name(): string
 {
-    return Env::get('APP_NAME', 'Instituto Doceo') ?? 'Instituto Doceo';
+    return Env::get('APP_NAME', 'Instituto DOCEO') ?? 'Instituto DOCEO';
 }
 
-function flash(string $key, mixed $value = null): mixed
+function asset(string $path): string
 {
-    if (func_num_args() >= 2) {
-        $_SESSION['_flash'][$key] = $value;
-        return null;
-    }
-    $msg = $_SESSION['_flash'][$key] ?? null;
-    unset($_SESSION['_flash'][$key]);
-    return $msg;
+    $base = rtrim((string) (Env::get('APP_URL', '') ?? ''), '/');
+    $path = '/' . ltrim($path, '/');
+
+    return ($base !== '' ? $base : '') . $path;
 }
