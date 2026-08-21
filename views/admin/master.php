@@ -11,14 +11,14 @@
         <button class="btn btn-primary" type="submit">Filtrar</button>
     </form>
 </div>
-<p class="muted">Aquí vivirían filtros por certificación/proveedor/fecha y el botón “Preparar correos”.</p>
+<p class="muted">Revisa comprobantes y confirma pagos desde el detalle de cada matrícula.</p>
 <div class="panel" style="margin-top:1rem">
     <div class="table-wrap">
         <table class="data">
             <thead>
             <tr>
                 <th>Matrícula</th><th>Alumno</th><th>Email</th><th>Partner</th>
-                <th>Monto</th><th>Estatus</th><th>Creado</th>
+                <th>Monto</th><th>Estatus</th><th>Creado</th><th></th>
             </tr>
             </thead>
             <tbody>
@@ -31,10 +31,11 @@
                     <td><?= money($r['charged_amount']) ?></td>
                     <td><span class="pill"><?= e($r['status']) ?></span></td>
                     <td><?= e($r['created_at']) ?></td>
+                    <td><a href="<?= e(url('/admin/compras/' . $r['id'])) ?>">Ver</a></td>
                 </tr>
             <?php endforeach; ?>
             <?php if ($rows === []): ?>
-                <tr><td colspan="7" class="muted">Sin compras aún.</td></tr>
+                <tr><td colspan="8" class="muted">Sin compras aún.</td></tr>
             <?php endif; ?>
             </tbody>
         </table>

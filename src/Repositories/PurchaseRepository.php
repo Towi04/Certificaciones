@@ -63,5 +63,122 @@ final class PurchaseRepository
 
         return (string) $n;
     }
+
+    public function find(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM purchases WHERE id = ? LIMIT 1');
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    public function findByMatricula(string $matricula): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM purchases WHERE matricula = ? LIMIT 1');
+        $stmt->execute([$matricula]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    /**
+     * @param array{
+     *   matricula:string,student_user_id:int,partner_id:?int,discount_code_id:?int,combo_id:?int,
+     *   status:string,payment_method:string,currency:string,catalog_amount:float,charged_amount:float,
+     *   partner_price_amount:?float,partner_credit_earned:float
+     * } $data
+     */
+    public function create(array $data): int
+    {
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO purchases (
+                matricula, student_user_id, partner_id, discount_code_id, combo_id,
+                status, payment_method, currency, catalog_amount, charged_amount,
+                partner_price_amount, partner_credit_earned
+             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+        );
+        $stmt->execute([
+            $data['matricula'],
+            $data['student_user_id'],
+            $data['partner_id'],
+            $data['discount_code_id'],
+            $data['combo_id'],
+            $data['status'],
+            $data['payment_method'],
+            $data['currency'],
+            $data['catalog_amount'],
+            $data['charged_amount'],
+            $data['partner_price_amount'],
+            $data['partner_credit_earned'],
+        ]);
+
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    public function addItem(int $purchaseId, int $productId, float $public, float $charged): int
+    {
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO purchase_items (purchase_id, product_id, unit_public_price, unit_charged_price)
+             VALUES (?,?,?,?)'
+        );
+        $stmt->execute([$purchaseId, $productId, $public, $charged]);
+
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    public function setPaymentProof(int $purchaseId, string $path): void
+    {
+        $this->pdo->prepare(
+            'UPDATE purchases SET payment_proof_path = ?, status = \'payment_review\' WHERE id = ?'
+        )->execute([$path, $purchaseId]);
+    }
+
+    public function setOpenPay(int $purchaseId, string $chargeId, ?string $clabe): void
+    {
+        $this->pdo->prepare(
+            'UPDATE purchases SET openpay_charge_id = ?, openpay_clabe = ?, status = \'awaiting_payment\' WHERE id = ?'
+        )->execute([$chargeId, $clabe, $purchaseId]);
+    }
+
+    public function markPaid(int $purchaseId): void
+    {
+        $this->pdo->prepare(
+            'UPDATE purchases SET status = \'paid\', paid_at = NOW() WHERE id = ?'
+        )->execute([$purchaseId]);
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function items(int $purchaseId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT pi.*, pr.name AS product_name, pr.slug AS product_slug, pr.code AS product_code
+             FROM purchase_items pi
+             JOIN products pr ON pr.id = pi.product_id
+             WHERE pi.purchase_id = ?'
+        );
+        $stmt->execute([$purchaseId]);
+
+        return $stmt->fetchAll();
+    }
+
+    /** @return array<string, mixed>|null */
+    public function detail(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT pu.*,
+                    u.first_name, u.last_name_p, u.last_name_m, u.email AS student_email, u.phone AS student_phone,
+                    p.name AS partner_name, p.code AS partner_code
+             FROM purchases pu
+             JOIN users u ON u.id = pu.student_user_id
+             LEFT JOIN partners p ON p.id = pu.partner_id
+             WHERE pu.id = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
 }
 

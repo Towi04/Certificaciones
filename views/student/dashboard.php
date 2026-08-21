@@ -7,15 +7,21 @@
     <?php else: ?>
         <div class="table-wrap">
             <table class="data">
-                <thead><tr><th>Matrícula</th><th>Producto</th><th>Estatus</th><th>Paso</th><th>Examen</th></tr></thead>
+                <thead>
+                <tr>
+                    <th>Matrícula</th><th>Producto</th><th>Pago</th><th>Seguimiento</th><th>Paso</th><th>Examen</th><th></th>
+                </tr>
+                </thead>
                 <tbody>
                 <?php foreach ($trackings as $t): ?>
                     <tr>
                         <td><?= e($t['matricula']) ?></td>
                         <td><?= e($t['product_name']) ?></td>
+                        <td><span class="pill"><?= e($t['purchase_status'] ?? '—') ?></span></td>
                         <td><span class="pill"><?= e($t['status']) ?></span></td>
                         <td><?= e($t['current_step_code'] ?? '—') ?></td>
                         <td><?= e($t['exam_date'] ?? '—') ?></td>
+                        <td><a href="<?= e(url('/compra/' . $t['matricula'])) ?>">Ver</a></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>
