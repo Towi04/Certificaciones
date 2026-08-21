@@ -1,6 +1,11 @@
 <?php
-set_time_limit(180);
-ini_set('memory_limit', '256M');
+set_time_limit(300);
+ini_set('memory_limit', '512M');
+ini_set('zlib.output_compression', '0');
+while (ob_get_level() > 0) {
+    ob_end_flush();
+}
+ob_implicit_flush(true);
 
 // CONFIGURACIÓN — copia este archivo como upload_version.php en el servidor
 $username   = 'Towi04';
@@ -13,12 +18,14 @@ if (!isset($_GET['key']) || $_GET['key'] !== $secret_key) {
     die('Acceso no autorizado.');
 }
 
+header('Content-Type: text/html; charset=UTF-8');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+
 $repo_zip = "https://{$username}:{$token}@github.com/{$username}/{$repo}/archive/refs/heads/main.zip";
 $zip_file = 'repo.zip';
 
-header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-
-echo '<h3>Iniciando actualización...</h3>';
+echo '<h3>Iniciando actualización desde main…</h3>';
+flush();
 
 $opts = [
     'http' => [
@@ -39,7 +46,8 @@ if ($file_data === false) {
 }
 
 file_put_contents($zip_file, $file_data);
-echo '• Código descargado de GitHub.<br>';
+echo '• Código descargado de GitHub (' . strlen($file_data) . ' bytes).<br>';
+flush();
 
 $zip = new ZipArchive;
 if ($zip->open($zip_file) !== true) {
@@ -48,6 +56,7 @@ if ($zip->open($zip_file) !== true) {
 $zip->extractTo('./extracted');
 $zip->close();
 echo '• Archivos descomprimidos.<br>';
+flush();
 
 function smartCopy(string $source, string $dest): void
 {
@@ -93,6 +102,13 @@ foreach (scandir($source_folder) ?: [] as $item) {
     }
 }
 echo '• Archivos actualizados.<br>';
+flush();
+
+// Marca de versión para verificar en /admin/salud
+@file_put_contents(
+    __DIR__ . '/storage/DEPLOYED_AT.txt',
+    date('c') . ' main zip deployed' . PHP_EOL
+);
 
 if (file_exists($zip_file)) {
     unlink($zip_file);
@@ -115,3 +131,5 @@ function rmDir_rf(string $dir): void
 rmDir_rf('./extracted');
 
 echo '<h2>Despliegue completado</h2>';
+echo '<p>Recarga el admin (Ctrl+F5). En Salud debe decir fix tabla maestra: OK.</p>';
+flush();
