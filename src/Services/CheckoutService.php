@@ -119,6 +119,8 @@ final class CheckoutService
             );
 
             $pipelineId = $this->resolvePipelineId((string) $product['type']);
+            $stepCode = TrackingService::initialStepCode((string) $product['type'], $required);
+            $trackStatus = TrackingService::initialStatus($paymentMethod);
             $trackingId = $this->trackings->create([
                 'purchase_id' => $purchaseId,
                 'purchase_item_id' => $itemId,
@@ -126,8 +128,18 @@ final class CheckoutService
                 'student_user_id' => $studentUserId,
                 'partner_id' => $partnerId,
                 'pipeline_template_id' => $pipelineId,
-                'current_step_code' => $required !== [] ? 'docs_received' : 'registered',
-                'status' => 'waiting_admin',
+                'current_step_code' => $stepCode,
+                'status' => $trackStatus,
+            ]);
+
+            $this->pdo->prepare(
+                'INSERT INTO tracking_step_logs (tracking_id, step_code, note, actor_user_id)
+                 VALUES (?, ?, ?, ?)'
+            )->execute([
+                $trackingId,
+                $stepCode,
+                'Compra registrada · matrícula ' . $matricula,
+                $studentUserId,
             ]);
 
             $this->saveDocuments($required, $files, $purchaseId, $trackingId, $studentUserId);
@@ -209,16 +221,6 @@ final class CheckoutService
                 )->execute([$credit, (int) $purchase['partner_id']]);
             }
 
-            $this->pdo->prepare(
-                'INSERT INTO tracking_step_logs (tracking_id, step_code, note, actor_user_id)
-                 SELECT id, ?, ?, ? FROM trackings WHERE purchase_id = ?'
-            )->execute([
-                'payment_confirmed',
-                $notes ?? 'Pago confirmado por administración',
-                $adminUserId,
-                $purchaseId,
-            ]);
-
             $this->pdo->commit();
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
@@ -226,6 +228,8 @@ final class CheckoutService
             }
             throw $e;
         }
+
+        (new TrackingService())->onPaymentConfirmed($purchaseId, $adminUserId, $notes);
 
         $fresh = $this->purchases->find($purchaseId);
         if ($fresh) {

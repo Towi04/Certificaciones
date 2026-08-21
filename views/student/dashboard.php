@@ -21,7 +21,7 @@
                         <td><span class="pill"><?= e($t['status']) ?></span></td>
                         <td><?= e($t['current_step_code'] ?? '—') ?></td>
                         <td><?= e($t['exam_date'] ?? '—') ?></td>
-                        <td><a href="<?= e(url('/compra/' . $t['matricula'])) ?>">Ver</a></td>
+                        <td><a href="<?= e(url('/alumno/caso/' . $t['id'])) ?>">Abrir caso</a></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>

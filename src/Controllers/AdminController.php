@@ -10,6 +10,7 @@ use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\TrackingRepository;
 use App\Services\CheckoutService;
+use App\Services\TrackingService;
 
 final class AdminController
 {
@@ -119,6 +120,106 @@ final class AdminController
         redirect('/admin/compras/' . $purchaseId);
     }
 
+    public function trackingShow(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $svc = new TrackingService();
+        $tracking = $svc->find((int) $id);
+        if ($tracking === null) {
+            http_response_code(404);
+            view('errors/404', ['title' => 'Seguimiento no encontrado', 'layout' => 'admin']);
+
+            return;
+        }
+        $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
+        view('admin/tracking', [
+            'title' => 'Caso ' . $tracking['matricula'],
+            'tracking' => $tracking,
+            'steps' => $pipelineId > 0 ? $svc->steps($pipelineId) : [],
+            'logs' => $svc->logs((int) $tracking['id']),
+            'documents' => $svc->documentsForTracking((int) $tracking['id']),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function trackingAdvance(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        try {
+            $note = trim((string) ($_POST['note'] ?? '')) ?: null;
+            $to = trim((string) ($_POST['step_code'] ?? ''));
+            $svc = new TrackingService();
+            if ($to !== '') {
+                $svc->setStep($trackingId, $to, (int) Auth::id(), $note);
+                flash('success', 'Paso actualizado a ' . $to);
+            } else {
+                $code = $svc->advance($trackingId, (int) Auth::id(), $note);
+                flash('success', 'Avanzó a ' . $code);
+            }
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/seguimientos/' . $trackingId);
+    }
+
+    public function documentApprove(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $docId = (int) $id;
+        $svc = new TrackingService();
+        $doc = $svc->findDocument($docId);
+        try {
+            $svc->approveDocument($docId, (int) Auth::id());
+            flash('success', 'Documento aprobado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        $tid = $doc['tracking_id'] ?? null;
+        redirect($tid ? '/admin/seguimientos/' . $tid : '/admin');
+    }
+
+    public function documentReject(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $docId = (int) $id;
+        $svc = new TrackingService();
+        $doc = $svc->findDocument($docId);
+        try {
+            $svc->rejectDocument($docId, (int) Auth::id(), trim((string) ($_POST['reason'] ?? '')));
+            flash('success', 'Documento rechazado. Se notificó al alumno.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        $tid = $doc['tracking_id'] ?? null;
+        redirect($tid ? '/admin/seguimientos/' . $tid : '/admin');
+    }
+
+    public function documentDownload(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $svc = new TrackingService();
+        $doc = $svc->findDocument((int) $id);
+        if ($doc === null) {
+            http_response_code(404);
+            exit('No encontrado');
+        }
+        $path = $svc->absoluteDocumentPath($doc);
+        if (!is_file($path)) {
+            http_response_code(404);
+            exit('Archivo no disponible');
+        }
+        $mime = mime_content_type($path) ?: 'application/octet-stream';
+        header('Content-Type: ' . $mime);
+        header('Content-Disposition: inline; filename="' . basename((string) $doc['original_name']) . '"');
+        header('Content-Length: ' . (string) filesize($path));
+        readfile($path);
+        exit;
+    }
+
     public function suppliers(): void
     {
         Auth::requireRole(['admin']);
@@ -142,4 +243,3 @@ final class AdminController
         ]);
     }
 }
-
