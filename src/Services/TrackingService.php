@@ -30,7 +30,7 @@ final class TrackingService
 
         return match ($productType) {
             'course' => 'pago',
-            'procedure' => $hasDocs ? 'docs' : 'docs',
+            'procedure' => 'docs',
             default => $hasDocs ? 'docs' : 'pago',
         };
     }
