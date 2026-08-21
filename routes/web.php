@@ -39,6 +39,8 @@ $router->get('/recuperar', fn () => $auth->showForgot());
 
 $router->get('/admin', fn () => $admin->dashboard());
 $router->get('/admin/productos', fn () => $admin->products());
+$router->get('/admin/productos/{id}', fn (string $id) => $admin->productEdit($id));
+$router->post('/admin/productos/{id}', fn (string $id) => $admin->productUpdate($id));
 $router->get('/admin/maestra', fn () => $admin->master());
 $router->get('/admin/pagos', fn () => $admin->payments());
 $router->get('/admin/compras/{id}', fn (string $id) => $admin->purchaseShow($id));

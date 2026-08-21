@@ -5,14 +5,14 @@
         <button class="btn btn-primary" type="submit">Filtrar</button>
     </form>
 </div>
-<p class="muted">Catálogo configurable. Alta/edición completa en siguientes iteraciones; por ahora listado tras <code>bin/seed-catalog.php</code>.</p>
+<p class="muted">Para cursos Moodle: edita el producto y captura el <strong>ID numérico del curso</strong> de campus.</p>
 <div class="panel" style="margin-top:1rem">
     <div class="table-wrap">
         <table class="data">
             <thead>
             <tr>
-                <th>Código</th><th>Nombre</th><th>Tipo</th><th>Certificador</th>
-                <th>Público</th><th>Catálogo</th><th>Estado</th>
+                <th>Código</th><th>Nombre</th><th>Tipo</th><th>Plataforma</th>
+                <th>Moodle ID</th><th>Público</th><th></th>
             </tr>
             </thead>
             <tbody>
@@ -21,10 +21,10 @@
                     <td><?= e($p['code']) ?></td>
                     <td><?= e($p['name']) ?><?= !empty($p['is_star']) ? ' ⭐' : '' ?></td>
                     <td><?= e($p['type']) ?></td>
-                    <td><?= e($p['certifier_name'] ?? '—') ?></td>
+                    <td><?= e($p['platform_type'] ?? 'none') ?></td>
+                    <td><?= !empty($p['moodle_course_id']) ? (int) $p['moodle_course_id'] : '—' ?></td>
                     <td><?= money($p['public_price']) ?></td>
-                    <td><?= money($p['catalog_price']) ?></td>
-                    <td><?= (int) $p['is_active'] ? 'Activo' : 'Off' ?></td>
+                    <td><a href="<?= e(url('/admin/productos/' . $p['id'])) ?>">Editar</a></td>
                 </tr>
             <?php endforeach; ?>
             <?php if ($products === []): ?>

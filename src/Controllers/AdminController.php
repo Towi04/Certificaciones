@@ -64,6 +64,64 @@ final class AdminController
         ]);
     }
 
+    public function productEdit(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $product = (new ProductRepository())->find((int) $id);
+        if ($product === null) {
+            http_response_code(404);
+            view('errors/404', ['title' => 'Producto no encontrado', 'layout' => 'admin']);
+
+            return;
+        }
+        view('admin/product_edit', [
+            'title' => 'Editar · ' . $product['name'],
+            'product' => $product,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function productUpdate(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $repo = new ProductRepository();
+        $product = $repo->find((int) $id);
+        if ($product === null) {
+            flash('error', 'Producto no encontrado.');
+            redirect('/admin/productos');
+        }
+
+        $platform = (string) ($_POST['platform_type'] ?? $product['platform_type'] ?? 'none');
+        if (!in_array($platform, ['none', 'moodle', 'provider'], true)) {
+            $platform = 'none';
+        }
+        $courseIdRaw = trim((string) ($_POST['moodle_course_id'] ?? ''));
+        $courseId = $courseIdRaw === '' ? null : (int) $courseIdRaw;
+        if ($courseId !== null && $courseId < 1) {
+            $courseId = null;
+        }
+        $months = (int) ($_POST['access_months'] ?? ($product['access_months'] ?? 6));
+        if ($months < 1) {
+            $months = 6;
+        }
+        if ($months > 60) {
+            $months = 60;
+        }
+
+        try {
+            $repo->update((int) $id, [
+                'platform_type' => $platform,
+                'moodle_course_id' => $courseId,
+                'access_months' => $months,
+            ]);
+            flash('success', 'Producto actualizado. Si es Moodle, usa Sincronizar Moodle en el caso o confirma un pago de prueba.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/productos/' . (int) $id);
+    }
+
     public function master(): void
     {
         Auth::requireRole(['admin']);
