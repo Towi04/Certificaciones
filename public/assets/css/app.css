@@ -180,9 +180,28 @@ table.data th { color: var(--doceo-blue); font-size: .78rem; text-transform: upp
 .login-card img { width: 96px; display: block; margin: 0 auto 1rem; }
 .form .field { margin-bottom: .9rem; }
 .form label { display: block; font-weight: 700; margin-bottom: .35rem; font-size: .88rem; }
-.site-footer {
-  padding: 2rem 0; color: var(--doceo-muted); font-size: .85rem; text-align: center;
+.login-card img {
+  width: 96px;
+  max-width: 40vw;
+  height: auto;
+  display: block;
+  margin: 0 auto 1rem;
+  object-fit: contain;
 }
+.side-nav .brand-mini img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 10px;
+  padding: 4px;
+}
+@media (max-width: 900px) {
+  .app-main .stats + div[style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 .pill {
   display: inline-block; padding: .2rem .55rem; border-radius: 999px;
   background: #eef3f9; color: var(--doceo-blue); font-size: .75rem; font-weight: 700;

@@ -79,7 +79,32 @@ function asset(string $path): string
 {
     $path = '/' . ltrim($path, '/');
 
-    return $path;
+    // Prefijo opcional: ASSET_BASE=/public  (Neubox con docroot en la raíz)
+    $configured = rtrim((string) (\App\Config\Env::get('ASSET_BASE', '') ?? ''), '/');
+    if ($configured !== '') {
+        return $configured . $path;
+    }
+
+    // Auto: si el archivo solo existe bajo public/, exponerlo como /public/...
+    // (docroot = raíz del subdominio). Si docroot = /public, el archivo también
+    // existe como BASE_PATH/public/... pero la URL correcta sigue siendo /assets/...
+    // Detectamos docroot-raíz cuando hay index.php en la raíz del repo.
+    $publicFile = BASE_PATH . '/public' . $path;
+    $rootFile = BASE_PATH . $path;
+    $rootFrontController = is_file(BASE_PATH . '/index.php') && is_file(BASE_PATH . '/public/index.php');
+    if ($rootFrontController && is_file($publicFile) && !is_file($rootFile)) {
+        $url = '/public' . $path;
+    } else {
+        $url = $path;
+    }
+
+    // Cache-bust si el archivo existe en disco
+    $disk = is_file($publicFile) ? $publicFile : (is_file($rootFile) ? $rootFile : null);
+    if ($disk !== null) {
+        $url .= '?v=' . filemtime($disk);
+    }
+
+    return $url;
 }
 
 function url(string $path = '/'): string

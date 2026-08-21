@@ -1,9 +1,14 @@
 RewriteEngine On
 
-# Archivos/carpetas reales (setup.php, assets, etc.) se sirven directo
+# Si piden /assets/... y viven en public/assets (docroot = raíz Neubox)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{DOCUMENT_ROOT}/public/assets/$1 -f
+RewriteRule ^assets/(.*)$ public/assets/$1 [L]
+
+# Archivos/carpetas reales
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# Todo lo demás al front controller de la app
+# Front controller
 RewriteRule ^ index.php [L]
