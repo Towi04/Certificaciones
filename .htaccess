@@ -1,0 +1,9 @@
+RewriteEngine On
+
+# Archivos/carpetas reales (setup.php, assets, etc.) se sirven directo
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Todo lo demás al front controller de la app
+RewriteRule ^ index.php [L]
