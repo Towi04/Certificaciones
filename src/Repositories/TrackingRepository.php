@@ -127,4 +127,22 @@ final class TrackingRepository
 
         return $stmt->fetchAll();
     }
+
+    /** @return array<string, mixed>|null */
+    public function find(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT t.*, pr.name AS product_name, pr.type AS product_type, pu.matricula,
+                    pu.status AS purchase_status
+             FROM trackings t
+             JOIN products pr ON pr.id = t.product_id
+             JOIN purchases pu ON pu.id = t.purchase_id
+             WHERE t.id = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
 }

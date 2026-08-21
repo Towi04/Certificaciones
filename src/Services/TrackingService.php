@@ -1,0 +1,401 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services;
+
+use App\Database\Connection;
+use App\Integrations\Mailer;
+use PDO;
+
+final class TrackingService
+{
+    private PDO $pdo;
+    private DocumentService $documents;
+
+    public function __construct()
+    {
+        $this->pdo = Connection::get();
+        $this->documents = new DocumentService();
+    }
+
+    /**
+     * Paso inicial al crear el tracking en checkout.
+     *
+     * @param list<array{code:string,label:string,required:bool,accept:string}> $requiredDocs
+     */
+    public static function initialStepCode(string $productType, array $requiredDocs): string
+    {
+        $hasDocs = $requiredDocs !== [];
+
+        return match ($productType) {
+            'course' => 'pago',
+            'procedure' => $hasDocs ? 'docs' : 'docs',
+            default => $hasDocs ? 'docs' : 'pago',
+        };
+    }
+
+    public static function initialStatus(string $paymentMethod): string
+    {
+        // Comprobante → admin revisa pago; SPEI → también puede requerir confirmación
+        return in_array($paymentMethod, ['transfer_proof', 'openpay_spei'], true)
+            ? 'waiting_admin'
+            : 'open';
+    }
+
+    /** @return array<string, mixed>|null */
+    public function find(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT t.*, pr.name AS product_name, pr.type AS product_type, pr.slug AS product_slug,
+                    pu.matricula, pu.status AS purchase_status, pu.charged_amount, pu.payment_method,
+                    pu.payment_proof_path, pu.student_user_id AS purchase_student_id,
+                    u.first_name, u.last_name_p, u.last_name_m, u.email AS student_email, u.phone AS student_phone,
+                    pt.code AS pipeline_code, pt.name AS pipeline_name
+             FROM trackings t
+             JOIN products pr ON pr.id = t.product_id
+             JOIN purchases pu ON pu.id = t.purchase_id
+             JOIN users u ON u.id = t.student_user_id
+             LEFT JOIN pipeline_templates pt ON pt.id = t.pipeline_template_id
+             WHERE t.id = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function steps(int $pipelineTemplateId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM pipeline_steps WHERE pipeline_template_id = ? ORDER BY sort_order ASC, id ASC'
+        );
+        $stmt->execute([$pipelineTemplateId]);
+
+        return $stmt->fetchAll();
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function logs(int $trackingId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT l.*, u.first_name, u.last_name_p
+             FROM tracking_step_logs l
+             LEFT JOIN users u ON u.id = l.actor_user_id
+             WHERE l.tracking_id = ?
+             ORDER BY l.created_at DESC, l.id DESC'
+        );
+        $stmt->execute([$trackingId]);
+
+        return $stmt->fetchAll();
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function documentsForTracking(int $trackingId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM documents WHERE tracking_id = ? ORDER BY created_at DESC, id DESC'
+        );
+        $stmt->execute([$trackingId]);
+
+        return $stmt->fetchAll();
+    }
+
+    /** @return array<string, mixed>|null */
+    public function findDocument(int $docId): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM documents WHERE id = ? LIMIT 1');
+        $stmt->execute([$docId]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    public function setStep(
+        int $trackingId,
+        string $stepCode,
+        ?int $actorUserId,
+        ?string $note = null,
+        ?string $status = null
+    ): void {
+        $tracking = $this->find($trackingId);
+        if ($tracking === null) {
+            throw new \InvalidArgumentException('Seguimiento no encontrado.');
+        }
+
+        $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
+        if ($pipelineId > 0) {
+            $steps = $this->steps($pipelineId);
+            $codes = array_column($steps, 'code');
+            if ($codes !== [] && !in_array($stepCode, $codes, true)) {
+                throw new \InvalidArgumentException('Paso no pertenece al pipeline: ' . $stepCode);
+            }
+            $stepRow = null;
+            foreach ($steps as $s) {
+                if ((string) $s['code'] === $stepCode) {
+                    $stepRow = $s;
+                    break;
+                }
+            }
+            if ($status === null && $stepRow !== null) {
+                $status = $this->statusForActor((string) $stepRow['actor'], (bool) $stepRow['is_terminal']);
+            }
+        }
+
+        if ($status === null) {
+            $status = (string) $tracking['status'];
+        }
+
+        $this->pdo->prepare(
+            'UPDATE trackings SET current_step_code = ?, status = ? WHERE id = ?'
+        )->execute([$stepCode, $status, $trackingId]);
+
+        $this->log($trackingId, $stepCode, $note, $actorUserId);
+    }
+
+    public function advance(int $trackingId, ?int $actorUserId, ?string $note = null): string
+    {
+        $tracking = $this->find($trackingId);
+        if ($tracking === null) {
+            throw new \InvalidArgumentException('Seguimiento no encontrado.');
+        }
+        $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
+        if ($pipelineId < 1) {
+            throw new \InvalidArgumentException('Este seguimiento no tiene pipeline.');
+        }
+
+        $steps = $this->steps($pipelineId);
+        if ($steps === []) {
+            throw new \InvalidArgumentException('Pipeline sin pasos.');
+        }
+
+        $current = (string) ($tracking['current_step_code'] ?? '');
+        $idx = -1;
+        foreach ($steps as $i => $s) {
+            if ((string) $s['code'] === $current) {
+                $idx = $i;
+                break;
+            }
+        }
+        $next = $steps[$idx + 1] ?? null;
+        if ($next === null) {
+            throw new \InvalidArgumentException('Ya está en el último paso.');
+        }
+
+        $code = (string) $next['code'];
+        $this->setStep($trackingId, $code, $actorUserId, $note ?? ('Avance a ' . $next['label']), null);
+
+        return $code;
+    }
+
+    public function approveDocument(int $docId, int $adminUserId): void
+    {
+        $doc = $this->findDocument($docId);
+        if ($doc === null) {
+            throw new \InvalidArgumentException('Documento no encontrado.');
+        }
+        $this->pdo->prepare(
+            'UPDATE documents SET status = \'approved\', rejection_reason = NULL, reviewed_by = ?, reviewed_at = NOW()
+             WHERE id = ?'
+        )->execute([$adminUserId, $docId]);
+
+        if (!empty($doc['tracking_id'])) {
+            $this->log(
+                (int) $doc['tracking_id'],
+                'doc_approved',
+                'Documento aprobado: ' . $doc['doc_type'],
+                $adminUserId
+            );
+        }
+    }
+
+    public function rejectDocument(int $docId, int $adminUserId, string $reason): void
+    {
+        $reason = trim($reason);
+        if ($reason === '') {
+            throw new \InvalidArgumentException('Indica el motivo del rechazo.');
+        }
+        $doc = $this->findDocument($docId);
+        if ($doc === null) {
+            throw new \InvalidArgumentException('Documento no encontrado.');
+        }
+        $this->pdo->prepare(
+            'UPDATE documents SET status = \'rejected\', rejection_reason = ?, reviewed_by = ?, reviewed_at = NOW()
+             WHERE id = ?'
+        )->execute([$reason, $adminUserId, $docId]);
+
+        if (!empty($doc['tracking_id'])) {
+            $trackingId = (int) $doc['tracking_id'];
+            $this->pdo->prepare(
+                'UPDATE trackings SET status = \'waiting_student\' WHERE id = ?'
+            )->execute([$trackingId]);
+            $this->log($trackingId, 'doc_rejected', 'Rechazado ' . $doc['doc_type'] . ': ' . $reason, $adminUserId);
+            $this->notifyStudentDocRejected($trackingId, (string) $doc['doc_type'], $reason);
+        }
+    }
+
+    /**
+     * Alumno vuelve a subir un documento rechazado.
+     *
+     * @param array{tmp_name:string,name:string,error:int,size:int} $file
+     */
+    public function reuploadDocument(int $docId, int $studentUserId, array $file, string $accept = '.pdf,.jpg,.jpeg,.png'): void
+    {
+        $doc = $this->findDocument($docId);
+        if ($doc === null || (int) $doc['student_user_id'] !== $studentUserId) {
+            throw new \InvalidArgumentException('Documento no encontrado.');
+        }
+        if ((string) $doc['status'] !== 'rejected') {
+            throw new \InvalidArgumentException('Solo puedes reemplazar documentos rechazados.');
+        }
+
+        if ((string) $doc['doc_type'] === 'ine') {
+            $accept = '.pdf';
+        }
+
+        $stored = $this->documents->storeUploaded(
+            $file,
+            'docs/' . (int) ($doc['purchase_id'] ?? 0),
+            $accept
+        );
+
+        $this->pdo->prepare(
+            'UPDATE documents
+             SET storage_path = ?, original_name = ?, status = \'pending\',
+                 rejection_reason = NULL, reviewed_by = NULL, reviewed_at = NULL, uploaded_by = ?
+             WHERE id = ?'
+        )->execute([
+            $stored['path'],
+            $stored['original_name'],
+            $studentUserId,
+            $docId,
+        ]);
+
+        if (!empty($doc['tracking_id'])) {
+            $trackingId = (int) $doc['tracking_id'];
+            $this->pdo->prepare(
+                'UPDATE trackings SET status = \'waiting_admin\' WHERE id = ?'
+            )->execute([$trackingId]);
+            $this->log($trackingId, 'doc_reuploaded', 'Nueva versión: ' . $doc['doc_type'], $studentUserId);
+        }
+    }
+
+    /** Tras confirmar pago de la compra: mueve cada tracking al paso operativo. */
+    public function onPaymentConfirmed(int $purchaseId, int $adminUserId, ?string $notes = null): void
+    {
+        $stmt = $this->pdo->prepare('SELECT id, pipeline_template_id, product_id FROM trackings WHERE purchase_id = ?');
+        $stmt->execute([$purchaseId]);
+        $rows = $stmt->fetchAll();
+
+        foreach ($rows as $row) {
+            $trackingId = (int) $row['id'];
+            $this->log(
+                $trackingId,
+                'confirm_pago',
+                $notes ?? 'Pago confirmado por administración',
+                $adminUserId
+            );
+
+            $productType = $this->productType((int) $row['product_id']);
+            $target = match ($productType) {
+                'course' => 'alta_moodle',
+                'procedure' => $this->hasPendingDocs($trackingId) ? 'docs' : 'revision',
+                default => 'asignacion',
+            };
+
+            try {
+                $this->setStep(
+                    $trackingId,
+                    $target,
+                    $adminUserId,
+                    'Tras pago confirmado → ' . $target,
+                    'waiting_admin'
+                );
+            } catch (\Throwable $e) {
+                // Si el pipeline no tiene ese código, avanza un paso desde el actual
+                error_log('[Doceo] onPaymentConfirmed step: ' . $e->getMessage());
+                try {
+                    $this->advance($trackingId, $adminUserId, 'Avance automático tras pago');
+                } catch (\Throwable $e2) {
+                    error_log('[Doceo] onPaymentConfirmed advance: ' . $e2->getMessage());
+                }
+            }
+        }
+    }
+
+    public function absoluteDocumentPath(array $doc): string
+    {
+        return $this->documents->absolutePath((string) $doc['storage_path']);
+    }
+
+    private function productType(int $productId): string
+    {
+        $stmt = $this->pdo->prepare('SELECT type FROM products WHERE id = ?');
+        $stmt->execute([$productId]);
+        $t = $stmt->fetchColumn();
+
+        return $t ? (string) $t : 'certification';
+    }
+
+    private function hasPendingDocs(int $trackingId): bool
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT COUNT(*) FROM documents WHERE tracking_id = ? AND status IN ('pending','rejected')"
+        );
+        $stmt->execute([$trackingId]);
+
+        return (int) $stmt->fetchColumn() > 0;
+    }
+
+    private function statusForActor(string $actor, bool $terminal): string
+    {
+        if ($terminal) {
+            return 'completed';
+        }
+
+        return match ($actor) {
+            'student' => 'waiting_student',
+            'partner' => 'waiting_partner',
+            'provider' => 'waiting_provider',
+            'system' => 'open',
+            default => 'waiting_admin',
+        };
+    }
+
+    private function log(int $trackingId, string $stepCode, ?string $note, ?int $actorUserId): void
+    {
+        $this->pdo->prepare(
+            'INSERT INTO tracking_step_logs (tracking_id, step_code, note, actor_user_id) VALUES (?,?,?,?)'
+        )->execute([$trackingId, $stepCode, $note, $actorUserId]);
+    }
+
+    private function notifyStudentDocRejected(int $trackingId, string $docType, string $reason): void
+    {
+        try {
+            $t = $this->find($trackingId);
+            if ($t === null) {
+                return;
+            }
+            $name = trim(($t['first_name'] ?? '') . ' ' . ($t['last_name_p'] ?? ''));
+            $url = rtrim((string) (\App\Config\Env::get('APP_URL', '') ?? ''), '/') . '/alumno/caso/' . $trackingId;
+            $text = "Hola {$name},\n\nRechazamos el documento \"{$docType}\" de tu caso {$t['matricula']}.\n"
+                . "Motivo: {$reason}\n\nSube una nueva versión aquí: {$url}\n\n— Instituto DOCEO\n";
+            $html = '<p>Hola ' . htmlspecialchars($name) . ',</p>'
+                . '<p>Rechazamos el documento <strong>' . htmlspecialchars($docType) . '</strong> '
+                . 'de tu caso ' . htmlspecialchars((string) $t['matricula']) . '.</p>'
+                . '<p><strong>Motivo:</strong> ' . htmlspecialchars($reason) . '</p>'
+                . '<p><a href="' . htmlspecialchars($url) . '">Subir nueva versión</a></p>'
+                . '<p>— Instituto DOCEO</p>';
+            (new Mailer())->send(
+                (string) $t['student_email'],
+                'Documento rechazado — caso ' . $t['matricula'],
+                $text,
+                ['html' => true, 'body_html' => $html]
+            );
+        } catch (\Throwable $e) {
+            error_log('[Doceo] doc reject email: ' . $e->getMessage());
+        }
+    }
+}

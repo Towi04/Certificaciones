@@ -42,10 +42,18 @@ $router->get('/admin/productos', fn () => $admin->products());
 $router->get('/admin/maestra', fn () => $admin->master());
 $router->get('/admin/compras/{id}', fn (string $id) => $admin->purchaseShow($id));
 $router->post('/admin/compras/{id}/confirmar-pago', fn (string $id) => $admin->confirmPayment($id));
+$router->get('/admin/seguimientos/{id}', fn (string $id) => $admin->trackingShow($id));
+$router->post('/admin/seguimientos/{id}/avanzar', fn (string $id) => $admin->trackingAdvance($id));
+$router->post('/admin/documentos/{id}/aprobar', fn (string $id) => $admin->documentApprove($id));
+$router->post('/admin/documentos/{id}/rechazar', fn (string $id) => $admin->documentReject($id));
+$router->get('/admin/documentos/{id}/ver', fn (string $id) => $admin->documentDownload($id));
 $router->get('/admin/proveedores', fn () => $admin->suppliers());
 $router->get('/admin/salud', fn () => $admin->health());
 
 $router->get('/alumno', fn () => $student->dashboard());
+$router->get('/alumno/caso/{id}', fn (string $id) => $student->caseShow($id));
+$router->post('/alumno/documentos/{id}/reenviar', fn (string $id) => $student->reuploadDocument($id));
+$router->get('/alumno/documentos/{id}/ver', fn (string $id) => $student->documentDownload($id));
 $router->get('/partner', fn () => $partner->dashboard());
 
 return $router;

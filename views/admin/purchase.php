@@ -49,7 +49,13 @@ $canConfirm = in_array($purchase['status'], ['awaiting_payment', 'payment_review
                 <?php foreach ($documents as $d): ?>
                     <tr>
                         <td><?= e($d['doc_type']) ?></td>
-                        <td><?= e($d['original_name']) ?></td>
+                        <td>
+                            <?php if (!empty($d['id'])): ?>
+                                <a href="<?= e(url('/admin/documentos/' . $d['id'] . '/ver')) ?>" target="_blank" rel="noopener"><?= e($d['original_name']) ?></a>
+                            <?php else: ?>
+                                <?= e($d['original_name']) ?>
+                            <?php endif; ?>
+                        </td>
                         <td><span class="pill"><?= e($d['status']) ?></span></td>
                         <td><?= e($d['created_at']) ?></td>
                     </tr>
@@ -73,7 +79,10 @@ $canConfirm = in_array($purchase['status'], ['awaiting_payment', 'payment_review
     <?php else: ?>
         <ul>
             <?php foreach ($trackings as $t): ?>
-                <li><?= e($t['product_name']) ?> · <?= e($t['status']) ?> · paso <?= e($t['current_step_code'] ?? '—') ?></li>
+                <li>
+                    <a href="<?= e(url('/admin/seguimientos/' . $t['id'])) ?>"><?= e($t['product_name']) ?></a>
+                    · <?= e($t['status']) ?> · paso <?= e($t['current_step_code'] ?? '—') ?>
+                </li>
             <?php endforeach; ?>
         </ul>
     <?php endif; ?>

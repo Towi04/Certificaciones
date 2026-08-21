@@ -18,7 +18,7 @@
                     <tbody>
                     <?php foreach ($queue as $row): ?>
                         <tr>
-                            <td><?= e($row['matricula']) ?></td>
+                            <td><a href="<?= e(url('/admin/seguimientos/' . $row['id'])) ?>"><?= e($row['matricula']) ?></a></td>
                             <td><?= e(trim(($row['first_name'] ?? '') . ' ' . ($row['last_name_p'] ?? ''))) ?></td>
                             <td><?= e($row['product_name']) ?></td>
                             <td><span class="pill"><?= e($row['current_step_code'] ?? '—') ?></span></td>
@@ -42,7 +42,7 @@
                         <tr>
                             <td><?= e($row['exam_date']) ?> <?= e(substr((string) ($row['exam_time'] ?? ''), 0, 5)) ?></td>
                             <td><?= e(trim(($row['first_name'] ?? '') . ' ' . ($row['last_name_p'] ?? ''))) ?></td>
-                            <td><?= e($row['product_name']) ?></td>
+                            <td><a href="<?= e(url('/admin/seguimientos/' . $row['id'])) ?>"><?= e($row['product_name']) ?></a></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
