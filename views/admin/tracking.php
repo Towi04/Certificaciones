@@ -31,10 +31,26 @@ $statusLabels = [
 </p>
 
 <?php if (in_array((string) $tracking['purchase_status'], ['awaiting_payment', 'payment_review'], true)): ?>
-    <div class="panel" style="margin-top:1rem;border-color:#F5DF25">
+    <div class="panel" style="margin-top:1rem;border:2px solid var(--doceo-yellow)">
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Pago pendiente de confirmación</h2>
-        <p class="muted" style="margin-top:0">El alumno ya registró la compra. Confirma el pago para avanzar el caso.</p>
-        <a class="btn btn-accent" href="<?= e(url('/admin/compras/' . $tracking['purchase_id'])) ?>">Ir a confirmar pago</a>
+        <p class="muted" style="margin-top:0">Revisa el comprobante y confirma el pago para avanzar el caso.</p>
+        <?php if (!empty($tracking['payment_proof_path'])): ?>
+            <?php
+            $proofUrl = url('/admin/compras/' . $tracking['purchase_id'] . '/comprobante');
+            $ext = strtolower(pathinfo((string) $tracking['payment_proof_path'], PATHINFO_EXTENSION));
+            ?>
+            <?php if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)): ?>
+                <a href="<?= e($proofUrl) ?>" target="_blank" rel="noopener">
+                    <img src="<?= e($proofUrl) ?>" alt="Comprobante" style="max-width:min(360px,100%);height:auto;border:1px solid #d5deea;border-radius:12px;margin-bottom:.75rem">
+                </a>
+            <?php endif; ?>
+            <p>
+                <a class="btn btn-primary btn-sm" href="<?= e($proofUrl) ?>" target="_blank" rel="noopener">Ver comprobante</a>
+                <a class="btn btn-accent btn-sm" href="<?= e(url('/admin/compras/' . $tracking['purchase_id'])) ?>">Confirmar pago</a>
+            </p>
+        <?php else: ?>
+            <a class="btn btn-accent" href="<?= e(url('/admin/compras/' . $tracking['purchase_id'])) ?>">Ir a confirmar pago</a>
+        <?php endif; ?>
     </div>
 <?php endif; ?>
 
