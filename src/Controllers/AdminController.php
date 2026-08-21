@@ -292,6 +292,27 @@ final class AdminController
         redirect('/admin/seguimientos/' . $trackingId);
     }
 
+    public function trackingUpdateExam(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        try {
+            (new TrackingService())->saveExamSchedule($trackingId, [
+                'exam_date' => $_POST['exam_date'] ?? null,
+                'exam_time' => $_POST['exam_time'] ?? null,
+                'exam_date_2' => $_POST['exam_date_2'] ?? null,
+                'exam_time_2' => $_POST['exam_time_2'] ?? null,
+                'zoom_url' => $_POST['zoom_url'] ?? null,
+                'notify' => !empty($_POST['notify']),
+            ], (int) Auth::id());
+            flash('success', 'Fecha de examen guardada.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/seguimientos/' . $trackingId);
+    }
+
     public function documentApprove(string $id): void
     {
         Auth::requireRole(['admin']);

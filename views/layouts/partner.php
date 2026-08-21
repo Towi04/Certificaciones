@@ -21,6 +21,7 @@ $title = $title ?? 'Partner';
         <nav class="nav">
             <a href="<?= e(url('/catalogo')) ?>">Catálogo</a>
             <a href="<?= e(url('/partner')) ?>">Mis alumnos</a>
+            <a class="btn btn-accent btn-sm" href="<?= e(url('/partner/registrar')) ?>">Registrar</a>
             <form method="post" action="<?= e(url('/logout')) ?>"><?= csrf_field() ?>
                 <button class="btn btn-ghost btn-sm" type="submit">Salir</button>
             </form>
@@ -30,6 +31,7 @@ $title = $title ?? 'Partner';
 <main class="container" style="padding:1.25rem 0 3rem">
     <?php if ($msg = flash('error')): ?><div class="flash flash-error"><?= e($msg) ?></div><?php endif; ?>
     <?php if ($msg = flash('success')): ?><div class="flash flash-success"><?= e($msg) ?></div><?php endif; ?>
+    <?php if ($msg = flash('info')): ?><div class="flash flash-info"><?= e($msg) ?></div><?php endif; ?>
     <?php require $contentFile; ?>
 </main>
 </body>

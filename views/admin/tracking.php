@@ -88,6 +88,56 @@ $statusLabels = [
     </form>
 </div>
 
+<div class="panel" style="margin-top:1rem">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Fecha de examen</h2>
+    <?php if (!empty($tracking['exam_date'])): ?>
+        <p style="margin-top:0">
+            Programado:
+            <strong><?= e((string) $tracking['exam_date']) ?></strong>
+            <?php if (!empty($tracking['exam_time'])): ?>
+                <?= e(substr((string) $tracking['exam_time'], 0, 5)) ?>
+            <?php endif; ?>
+            <?php if (!empty($tracking['exam_date_2'])): ?>
+                <span class="muted">
+                    · 2ª opción <?= e((string) $tracking['exam_date_2']) ?>
+                    <?php if (!empty($tracking['exam_time_2'])): ?>
+                        <?= e(substr((string) $tracking['exam_time_2'], 0, 5)) ?>
+                    <?php endif; ?>
+                </span>
+            <?php endif; ?>
+        </p>
+        <?php if (!empty($tracking['zoom_url'])): ?>
+            <p class="muted" style="margin-top:0"><a href="<?= e((string) $tracking['zoom_url']) ?>" target="_blank" rel="noopener">Enlace Zoom / reunión</a></p>
+        <?php endif; ?>
+    <?php else: ?>
+        <p class="muted" style="margin-top:0">Sin fecha asignada todavía.</p>
+    <?php endif; ?>
+    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/examen')) ?>" style="margin-top:.75rem">
+        <?= csrf_field() ?>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem">
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">Fecha *
+                <input type="date" name="exam_date" required value="<?= e((string) ($tracking['exam_date'] ?? '')) ?>" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            </label>
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">Hora
+                <input type="time" name="exam_time" value="<?= e(isset($tracking['exam_time']) ? substr((string) $tracking['exam_time'], 0, 5) : '') ?>" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            </label>
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">2ª fecha
+                <input type="date" name="exam_date_2" value="<?= e((string) ($tracking['exam_date_2'] ?? '')) ?>" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            </label>
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">2ª hora
+                <input type="time" name="exam_time_2" value="<?= e(isset($tracking['exam_time_2']) ? substr((string) $tracking['exam_time_2'], 0, 5) : '') ?>" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            </label>
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;grid-column:1/-1">Zoom / enlace
+                <input type="url" name="zoom_url" value="<?= e((string) ($tracking['zoom_url'] ?? '')) ?>" placeholder="https://…" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            </label>
+        </div>
+        <label class="muted" style="display:flex;gap:.4rem;align-items:center;margin:.85rem 0;font-size:.88rem">
+            <input type="checkbox" name="notify" value="1" checked> Avisar al alumno por correo
+        </label>
+        <button class="btn btn-accent" type="submit">Guardar fecha de examen</button>
+    </form>
+</div>
+
 <?php if (($tracking['platform_type'] ?? '') === 'moodle' || ($tracking['product_type'] ?? '') === 'course'): ?>
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Campus Moodle</h2>
