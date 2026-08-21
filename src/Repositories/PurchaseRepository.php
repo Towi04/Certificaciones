@@ -21,7 +21,7 @@ final class PurchaseRepository
     {
         $sql = 'SELECT pu.*,
                        u.first_name, u.last_name_p, u.last_name_m, u.email AS student_email, u.phone AS student_phone,
-                       p.name AS partner_name, p.code AS partner_code
+                       p.display_name AS partner_name, p.code AS partner_code
                 FROM purchases pu
                 JOIN users u ON u.id = pu.student_user_id
                 LEFT JOIN partners p ON p.id = pu.partner_id
@@ -45,6 +45,24 @@ final class PurchaseRepository
         $sql .= ' ORDER BY pu.created_at DESC LIMIT 200';
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
+
+        return $stmt->fetchAll();
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function awaitingPaymentList(int $limit = 20): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT pu.id, pu.matricula, pu.status, pu.charged_amount, pu.payment_method, pu.created_at,
+                    u.first_name, u.last_name_p, u.email AS student_email
+             FROM purchases pu
+             JOIN users u ON u.id = pu.student_user_id
+             WHERE pu.status IN ('awaiting_payment', 'payment_review')
+             ORDER BY pu.created_at ASC
+             LIMIT ?"
+        );
+        $stmt->bindValue(1, $limit, PDO::PARAM_INT);
+        $stmt->execute();
 
         return $stmt->fetchAll();
     }
@@ -168,7 +186,7 @@ final class PurchaseRepository
         $stmt = $this->pdo->prepare(
             'SELECT pu.*,
                     u.first_name, u.last_name_p, u.last_name_m, u.email AS student_email, u.phone AS student_phone,
-                    p.name AS partner_name, p.code AS partner_code
+                    p.display_name AS partner_name, p.code AS partner_code
              FROM purchases pu
              JOIN users u ON u.id = pu.student_user_id
              LEFT JOIN partners p ON p.id = pu.partner_id

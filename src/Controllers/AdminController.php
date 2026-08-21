@@ -25,12 +25,14 @@ final class AdminController
         ];
         $upcoming = [];
         $queue = [];
+        $paymentQueue = [];
         try {
             $stats['products'] = (new ProductRepository())->countActive();
             $purchases = new PurchaseRepository();
             $stats['paid'] = $purchases->countByStatus('paid');
             $stats['awaiting_payment'] = $purchases->countByStatus('awaiting_payment')
                 + $purchases->countByStatus('payment_review');
+            $paymentQueue = $purchases->awaitingPaymentList(10);
             $track = new TrackingRepository();
             $queue = $track->waitingAdmin(10);
             $stats['waiting_admin'] = count($queue);
@@ -43,6 +45,7 @@ final class AdminController
             'title' => 'Admin',
             'stats' => $stats,
             'queue' => $queue,
+            'paymentQueue' => $paymentQueue,
             'upcoming' => $upcoming,
             'layout' => 'admin',
         ]);
