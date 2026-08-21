@@ -1,10 +1,37 @@
+<?php /** @var list<array<string,mixed>> $paymentQueue */ ?>
 <h1 style="margin-top:0;color:var(--doceo-blue)">Dashboard</h1>
 <div class="stats" style="margin-bottom:1.25rem">
     <div class="stat"><div class="label">Productos activos</div><div class="value"><?= (int) $stats['products'] ?></div></div>
     <div class="stat"><div class="label">Compras pagadas</div><div class="value"><?= (int) $stats['paid'] ?></div></div>
-    <div class="stat"><div class="label">Por confirmar pago</div><div class="value"><?= (int) $stats['awaiting_payment'] ?></div></div>
+    <a class="stat" href="<?= e(url('/admin/maestra?status=payment_review')) ?>" style="text-decoration:none;color:inherit">
+        <div class="label">Por confirmar pago</div>
+        <div class="value"><?= (int) $stats['awaiting_payment'] ?></div>
+    </a>
     <div class="stat"><div class="label">Pendientes de ti</div><div class="value"><?= (int) $stats['waiting_admin'] ?></div></div>
 </div>
+
+<?php if (!empty($paymentQueue)): ?>
+<section class="panel" style="margin-bottom:1rem">
+    <h2 style="margin-top:0">Pagos por confirmar</h2>
+    <p class="muted" style="margin-top:0">Abre la compra y usa <strong>Marcar como pagado</strong>.</p>
+    <div class="table-wrap">
+        <table class="data">
+            <thead><tr><th>Matrícula</th><th>Alumno</th><th>Monto</th><th>Estatus</th><th></th></tr></thead>
+            <tbody>
+            <?php foreach ($paymentQueue as $row): ?>
+                <tr>
+                    <td><?= e($row['matricula']) ?></td>
+                    <td><?= e(trim(($row['first_name'] ?? '') . ' ' . ($row['last_name_p'] ?? ''))) ?></td>
+                    <td><?= money($row['charged_amount']) ?></td>
+                    <td><span class="pill"><?= e($row['status']) ?></span></td>
+                    <td><a class="btn btn-accent btn-sm" href="<?= e(url('/admin/compras/' . $row['id'])) ?>">Confirmar pago</a></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</section>
+<?php endif; ?>
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
     <section class="panel">

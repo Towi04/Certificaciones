@@ -30,6 +30,14 @@ $statusLabels = [
     <?php if (!empty($tracking['student_phone'])): ?> · <?= e($tracking['student_phone']) ?><?php endif; ?>
 </p>
 
+<?php if (in_array((string) $tracking['purchase_status'], ['awaiting_payment', 'payment_review'], true)): ?>
+    <div class="panel" style="margin-top:1rem;border-color:#F5DF25">
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Pago pendiente de confirmación</h2>
+        <p class="muted" style="margin-top:0">El alumno ya registró la compra. Confirma el pago para avanzar el caso.</p>
+        <a class="btn btn-accent" href="<?= e(url('/admin/compras/' . $tracking['purchase_id'])) ?>">Ir a confirmar pago</a>
+    </div>
+<?php endif; ?>
+
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Pipeline<?= !empty($tracking['pipeline_name']) ? ': ' . e($tracking['pipeline_name']) : '' ?></h2>
     <?php if ($steps === []): ?>
