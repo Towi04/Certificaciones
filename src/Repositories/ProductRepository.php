@@ -1,0 +1,148 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Repositories;
+
+use App\Database\Connection;
+use PDO;
+
+final class ProductRepository
+{
+    private PDO $pdo;
+
+    public function __construct()
+    {
+        $this->pdo = Connection::get();
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function publicCatalog(?string $category = null, ?string $q = null, bool $starsOnly = false): array
+    {
+        $sql = 'SELECT p.*, c.name AS certifier_name, s.name AS supplier_name
+                FROM products p
+                LEFT JOIN certifiers c ON c.id = p.certifier_id
+                LEFT JOIN suppliers s ON s.id = p.supplier_id
+                WHERE p.is_active = 1 AND p.is_public = 1';
+        $params = [];
+        if ($category !== null && $category !== '' && $category !== 'all') {
+            $sql .= ' AND p.category = ?';
+            $params[] = $category;
+        }
+        if ($starsOnly) {
+            $sql .= ' AND p.is_star = 1';
+        }
+        if ($q !== null && trim($q) !== '') {
+            $sql .= ' AND (p.name LIKE ? OR p.code LIKE ? OR c.name LIKE ? OR s.name LIKE ?)';
+            $like = '%' . trim($q) . '%';
+            array_push($params, $like, $like, $like, $like);
+        }
+        $sql .= ' ORDER BY p.is_star DESC, p.sort_order ASC, p.name ASC';
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function starProducts(int $limit = 8): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT p.*, c.name AS certifier_name
+             FROM products p
+             LEFT JOIN certifiers c ON c.id = p.certifier_id
+             WHERE p.is_active = 1 AND p.is_public = 1 AND p.is_star = 1
+             ORDER BY p.sort_order ASC, p.name ASC
+             LIMIT ?'
+        );
+        $stmt->bindValue(1, $limit, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll();
+    }
+
+    public function findBySlug(string $slug): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT p.*, c.name AS certifier_name, s.name AS supplier_name, s.code AS supplier_code
+             FROM products p
+             LEFT JOIN certifiers c ON c.id = p.certifier_id
+             LEFT JOIN suppliers s ON s.id = p.supplier_id
+             WHERE p.slug = ? LIMIT 1'
+        );
+        $stmt->execute([$slug]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    public function find(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM products WHERE id = ? LIMIT 1');
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function adminList(?string $q = null): array
+    {
+        $sql = 'SELECT p.*, c.name AS certifier_name, s.name AS supplier_name
+                FROM products p
+                LEFT JOIN certifiers c ON c.id = p.certifier_id
+                LEFT JOIN suppliers s ON s.id = p.supplier_id
+                WHERE 1=1';
+        $params = [];
+        if ($q) {
+            $sql .= ' AND (p.name LIKE ? OR p.code LIKE ?)';
+            $like = '%' . $q . '%';
+            $params[] = $like;
+            $params[] = $like;
+        }
+        $sql .= ' ORDER BY p.type, p.name';
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
+    }
+
+    /** @param array<string, mixed> $data */
+    public function create(array $data): int
+    {
+        $cols = array_keys($data);
+        $placeholders = array_map(static fn ($c) => ':' . $c, $cols);
+        $sql = 'INSERT INTO products (' . implode(',', $cols) . ') VALUES (' . implode(',', $placeholders) . ')';
+        $stmt = $this->pdo->prepare($sql);
+        foreach ($data as $k => $v) {
+            $stmt->bindValue(':' . $k, $v);
+        }
+        $stmt->execute();
+
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    /** @param array<string, mixed> $data */
+    public function update(int $id, array $data): void
+    {
+        if ($data === []) {
+            return;
+        }
+        $sets = [];
+        foreach ($data as $k => $_) {
+            $sets[] = "{$k} = :{$k}";
+        }
+        $sql = 'UPDATE products SET ' . implode(', ', $sets) . ' WHERE id = :id';
+        $stmt = $this->pdo->prepare($sql);
+        foreach ($data as $k => $v) {
+            $stmt->bindValue(':' . $k, $v);
+        }
+        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $stmt->execute();
+    }
+
+    public function countActive(): int
+    {
+        return (int) $this->pdo->query('SELECT COUNT(*) FROM products WHERE is_active = 1')->fetchColumn();
+    }
+}
