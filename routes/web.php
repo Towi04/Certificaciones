@@ -49,6 +49,7 @@ $router->get('/admin/compras/{id}/comprobante', fn (string $id) => $admin->payme
 $router->get('/admin/seguimientos/{id}', fn (string $id) => $admin->trackingShow($id));
 $router->post('/admin/seguimientos/{id}/avanzar', fn (string $id) => $admin->trackingAdvance($id));
 $router->post('/admin/seguimientos/{id}/moodle', fn (string $id) => $admin->trackingSyncMoodle($id));
+$router->post('/admin/seguimientos/{id}/examen', fn (string $id) => $admin->trackingUpdateExam($id));
 $router->post('/admin/documentos/{id}/aprobar', fn (string $id) => $admin->documentApprove($id));
 $router->post('/admin/documentos/{id}/rechazar', fn (string $id) => $admin->documentReject($id));
 $router->get('/admin/documentos/{id}/ver', fn (string $id) => $admin->documentDownload($id));
@@ -60,5 +61,9 @@ $router->get('/alumno/caso/{id}', fn (string $id) => $student->caseShow($id));
 $router->post('/alumno/documentos/{id}/reenviar', fn (string $id) => $student->reuploadDocument($id));
 $router->get('/alumno/documentos/{id}/ver', fn (string $id) => $student->documentDownload($id));
 $router->get('/partner', fn () => $partner->dashboard());
+$router->get('/partner/registrar', fn () => $partner->registerForm());
+$router->post('/partner/registrar', fn () => $partner->registerSubmit());
+$router->get('/partner/caso/{id}', fn (string $id) => $partner->caseShow($id));
+$router->post('/partner/caso/{id}/examen', fn (string $id) => $partner->updateExam($id));
 
 return $router;

@@ -360,6 +360,136 @@ final class TrackingService
         return $this->documents->absolutePath((string) $doc['storage_path']);
     }
 
+    /**
+     * @param array{
+     *   exam_date?:?string,
+     *   exam_time?:?string,
+     *   exam_date_2?:?string,
+     *   exam_time_2?:?string,
+     *   zoom_url?:?string,
+     *   notify?:bool
+     * } $data
+     */
+    public function saveExamSchedule(int $trackingId, array $data, ?int $actorUserId = null): void
+    {
+        $tracking = $this->find($trackingId);
+        if ($tracking === null) {
+            throw new \InvalidArgumentException('Seguimiento no encontrado.');
+        }
+
+        $examDate = $this->normalizeDate($data['exam_date'] ?? null);
+        $examTime = $this->normalizeTime($data['exam_time'] ?? null);
+        $examDate2 = $this->normalizeDate($data['exam_date_2'] ?? null);
+        $examTime2 = $this->normalizeTime($data['exam_time_2'] ?? null);
+        $zoom = trim((string) ($data['zoom_url'] ?? ''));
+        if ($zoom === '') {
+            $zoom = null;
+        } elseif (!filter_var($zoom, FILTER_VALIDATE_URL)) {
+            throw new \InvalidArgumentException('La URL de Zoom/meet no es válida.');
+        }
+
+        if ($examDate === null) {
+            throw new \InvalidArgumentException('La fecha de examen es obligatoria.');
+        }
+
+        $this->pdo->prepare(
+            'UPDATE trackings
+             SET exam_date = ?, exam_time = ?, exam_date_2 = ?, exam_time_2 = ?, zoom_url = ?
+             WHERE id = ?'
+        )->execute([$examDate, $examTime, $examDate2, $examTime2, $zoom, $trackingId]);
+
+        $note = 'Examen: ' . $examDate . ($examTime ? ' ' . substr($examTime, 0, 5) : '');
+        if ($examDate2) {
+            $note .= ' · 2ª opción: ' . $examDate2 . ($examTime2 ? ' ' . substr($examTime2, 0, 5) : '');
+        }
+        if ($zoom) {
+            $note .= ' · enlace asignado';
+        }
+        $this->log($trackingId, 'examen', $note, $actorUserId);
+
+        // Si el pipeline tiene paso examen y aún no está ahí ni más adelante, muévelo
+        $current = (string) ($tracking['current_step_code'] ?? '');
+        if ($current !== 'examen' && $current !== 'resultados' && $current !== 'fin') {
+            try {
+                $this->setStep($trackingId, 'examen', $actorUserId, 'Fecha de examen asignada', 'waiting_student');
+            } catch (\Throwable) {
+                // Pipelines sin paso examen (cursos): solo guarda fechas
+            }
+        }
+
+        if (!empty($data['notify'])) {
+            $fresh = $this->find($trackingId);
+            if ($fresh) {
+                $this->notifyExamScheduled($fresh);
+            }
+        }
+    }
+
+    private function normalizeDate(mixed $value): ?string
+    {
+        $value = trim((string) ($value ?? ''));
+        if ($value === '') {
+            return null;
+        }
+        $dt = \DateTimeImmutable::createFromFormat('Y-m-d', $value);
+
+        return $dt ? $dt->format('Y-m-d') : null;
+    }
+
+    private function normalizeTime(mixed $value): ?string
+    {
+        $value = trim((string) ($value ?? ''));
+        if ($value === '') {
+            return null;
+        }
+        // HTML time puede venir HH:MM
+        if (preg_match('/^\d{2}:\d{2}$/', $value)) {
+            return $value . ':00';
+        }
+        if (preg_match('/^\d{2}:\d{2}:\d{2}$/', $value)) {
+            return $value;
+        }
+
+        return null;
+    }
+
+    /** @param array<string, mixed> $tracking */
+    private function notifyExamScheduled(array $tracking): void
+    {
+        try {
+            $name = trim(($tracking['first_name'] ?? '') . ' ' . ($tracking['last_name_p'] ?? ''));
+            $when = (string) $tracking['exam_date'];
+            if (!empty($tracking['exam_time'])) {
+                $when .= ' ' . substr((string) $tracking['exam_time'], 0, 5);
+            }
+            $url = rtrim((string) (\App\Config\Env::get('APP_URL', '') ?? ''), '/')
+                . '/alumno/caso/' . (int) $tracking['id'];
+            $zoom = !empty($tracking['zoom_url'])
+                ? "\nEnlace: " . $tracking['zoom_url'] . "\n"
+                : "\n";
+            $text = "Hola {$name},\n\nTu examen de {$tracking['product_name']} quedó programado.\n"
+                . "Fecha: {$when}\n"
+                . $zoom
+                . "Detalle: {$url}\n\n— Instituto DOCEO\n";
+            $html = '<p>Hola ' . htmlspecialchars($name) . ',</p>'
+                . '<p>Tu examen de <strong>' . htmlspecialchars((string) $tracking['product_name']) . '</strong> quedó programado.</p>'
+                . '<p><strong>Fecha:</strong> ' . htmlspecialchars($when) . '</p>'
+                . (!empty($tracking['zoom_url'])
+                    ? '<p><a href="' . htmlspecialchars((string) $tracking['zoom_url']) . '">Enlace de sesión</a></p>'
+                    : '')
+                . '<p><a href="' . htmlspecialchars($url) . '">Ver tu caso</a></p>'
+                . '<p>— Instituto DOCEO</p>';
+            (new \App\Integrations\Mailer())->send(
+                (string) $tracking['student_email'],
+                'Examen programado — caso ' . $tracking['matricula'],
+                $text,
+                ['html' => true, 'body_html' => $html]
+            );
+        } catch (\Throwable $e) {
+            error_log('[Doceo] Exam email: ' . $e->getMessage());
+        }
+    }
+
     private function productType(int $productId): string
     {
         $stmt = $this->pdo->prepare('SELECT type FROM products WHERE id = ?');

@@ -53,6 +53,32 @@ $payLabels = [
     <?php endif; ?>
 </div>
 
+<?php if (!empty($tracking['exam_date'])): ?>
+<div class="panel" style="margin-top:1rem">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Fecha de examen</h2>
+    <p style="margin-top:0">
+        <strong><?= e((string) $tracking['exam_date']) ?></strong>
+        <?php if (!empty($tracking['exam_time'])): ?>
+            a las <?= e(substr((string) $tracking['exam_time'], 0, 5)) ?>
+        <?php endif; ?>
+    </p>
+    <?php if (!empty($tracking['exam_date_2'])): ?>
+        <p class="muted">
+            Alternativa:
+            <?= e((string) $tracking['exam_date_2']) ?>
+            <?php if (!empty($tracking['exam_time_2'])): ?>
+                <?= e(substr((string) $tracking['exam_time_2'], 0, 5)) ?>
+            <?php endif; ?>
+        </p>
+    <?php endif; ?>
+    <?php if (!empty($tracking['zoom_url'])): ?>
+        <p><a class="btn btn-accent" href="<?= e((string) $tracking['zoom_url']) ?>" target="_blank" rel="noopener">Abrir enlace de reunión</a></p>
+    <?php else: ?>
+        <p class="muted">El enlace de Zoom se publicará aquí cuando esté listo.</p>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <?php if (!empty($tracking['moodle_username'])): ?>
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Acceso Campus DOCEO</h2>
