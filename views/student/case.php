@@ -53,6 +53,24 @@ $payLabels = [
     <?php endif; ?>
 </div>
 
+<?php if (!empty($tracking['moodle_username'])): ?>
+<div class="panel" style="margin-top:1rem">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Acceso Campus DOCEO</h2>
+    <p>
+        Entra a <a href="https://campus.institutodoceo.com" target="_blank" rel="noopener">campus.institutodoceo.com</a>
+    </p>
+    <p>
+        Usuario: <strong><?= e($tracking['moodle_username']) ?></strong>
+        <?php if (!empty($tracking['moodle_password'])): ?>
+            <br>Contraseña temporal: <strong><?= e($tracking['moodle_password']) ?></strong>
+        <?php endif; ?>
+    </p>
+    <?php if (!empty($tracking['moodle_access_ends_at'])): ?>
+        <p class="muted" style="font-size:.85rem">Vigencia hasta <?= e($tracking['moodle_access_ends_at']) ?></p>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Documentos</h2>
     <?php if ($documents === []): ?>

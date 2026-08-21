@@ -46,6 +46,7 @@ $router->post('/admin/compras/{id}/confirmar-pago', fn (string $id) => $admin->c
 $router->get('/admin/compras/{id}/comprobante', fn (string $id) => $admin->paymentProof($id));
 $router->get('/admin/seguimientos/{id}', fn (string $id) => $admin->trackingShow($id));
 $router->post('/admin/seguimientos/{id}/avanzar', fn (string $id) => $admin->trackingAdvance($id));
+$router->post('/admin/seguimientos/{id}/moodle', fn (string $id) => $admin->trackingSyncMoodle($id));
 $router->post('/admin/documentos/{id}/aprobar', fn (string $id) => $admin->documentApprove($id));
 $router->post('/admin/documentos/{id}/rechazar', fn (string $id) => $admin->documentReject($id));
 $router->get('/admin/documentos/{id}/ver', fn (string $id) => $admin->documentDownload($id));
