@@ -3,13 +3,15 @@
 declare(strict_types=1);
 
 /**
- * Copia para docroot = /public
- * Preferible en Neubox: /setup.php (raíz) o /setup (ruta de la app)
+ * Instalador en la RAÍZ del repo (Neubox suele servir desde aquí).
+ *
+ * https://pdv.institutodoceo.com/setup.php?key=TU_INSTALL_KEY
+ * https://pdv.institutodoceo.com/setup?key=TU_INSTALL_KEY
  */
 
 $bootstrapCandidates = [
     __DIR__ . '/bootstrap.php',
-    dirname(__DIR__) . '/bootstrap.php',
+    __DIR__ . '/public/bootstrap.php',
 ];
 $bootstrapPath = null;
 foreach ($bootstrapCandidates as $candidate) {
@@ -21,7 +23,7 @@ foreach ($bootstrapCandidates as $candidate) {
 if ($bootstrapPath === null) {
     http_response_code(500);
     header('Content-Type: text/plain; charset=UTF-8');
-    die("No se encontró bootstrap.php.\n");
+    die("No se encontró bootstrap.php junto a setup.php.\nRuta actual: " . __DIR__ . "\n");
 }
 
 require $bootstrapPath;
