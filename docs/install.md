@@ -22,8 +22,25 @@ https://pdv.institutodoceo.com/setup?key=TU_INSTALL_KEY
 https://pdv.institutodoceo.com/setup.php?key=TU_INSTALL_KEY
 ```
 
-La ruta `/setup` pasa por la app (recomendadasi `/setup.php` “no hace nada”).
-La página muestra un bloque **Diagnóstico** si falta la key o no coincide.
+## Estructura en Neubox (importante)
+
+El deploy deja el repo completo. Si el subdominio apunta a la **raíz** (no a `/public`),
+deben existir en esa raíz:
+
+- `index.php` (app real, no la página “En construcción”)
+- `setup.php`
+- `bootstrap.php`, `src/`, `routes/`, `views/`, `sql/`, `assets/`…
+
+Si aún ves “🚧 En construcción”, el servidor tiene un `index.php` viejo:
+vuelve a desplegar para que se sobrescriba, luego abre:
+
+```
+https://pdv.institutodoceo.com/setup.php?key=TU_INSTALL_KEY
+```
+
+(usa `/setup.php` con `.php`; si usas solo `/setup` necesitas el `index.php` nuevo).
+
+La página debe mostrar “Instituto DOCEO · instalador web”, no el logo con badge amarillo.
 
 Luego entra a `/login` y al catálogo `/`.
 
