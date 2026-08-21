@@ -43,6 +43,7 @@ $router->get('/admin/maestra', fn () => $admin->master());
 $router->get('/admin/pagos', fn () => $admin->payments());
 $router->get('/admin/compras/{id}', fn (string $id) => $admin->purchaseShow($id));
 $router->post('/admin/compras/{id}/confirmar-pago', fn (string $id) => $admin->confirmPayment($id));
+$router->get('/admin/compras/{id}/comprobante', fn (string $id) => $admin->paymentProof($id));
 $router->get('/admin/seguimientos/{id}', fn (string $id) => $admin->trackingShow($id));
 $router->post('/admin/seguimientos/{id}/avanzar', fn (string $id) => $admin->trackingAdvance($id));
 $router->post('/admin/documentos/{id}/aprobar', fn (string $id) => $admin->documentApprove($id));
