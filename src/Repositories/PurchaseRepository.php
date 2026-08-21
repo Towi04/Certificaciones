@@ -21,7 +21,7 @@ final class PurchaseRepository
     {
         $sql = 'SELECT pu.*,
                        u.first_name, u.last_name_p, u.last_name_m, u.email AS student_email, u.phone AS student_phone,
-                       // partners.display_name (no existe partners.name) — fix maestra
+                       /* partners.display_name — no existe partners.name */
                        p.display_name AS partner_name, p.code AS partner_code
                 FROM purchases pu
                 JOIN users u ON u.id = pu.student_user_id
