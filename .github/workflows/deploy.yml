@@ -1,0 +1,35 @@
+name: Deploy to Neubox
+
+# Dispara upload_version.php en el servidor cuando hay push/merge a main.
+# Configura en GitHub → Settings → Secrets and variables → Actions:
+#   DEPLOY_URL  = https://pdv.institutodoceo.com/upload_version.php
+#   DEPLOY_KEY  = la misma secret_key de tu upload_version.php del servidor
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Neubox deploy script
+        env:
+          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_URL" ] || [ -z "$DEPLOY_KEY" ]; then
+            echo "Faltan secrets DEPLOY_URL y/o DEPLOY_KEY. Configúralos en el repo para deploy automático."
+            exit 1
+          fi
+          # Une URL + ?key= o &key=
+          sep='?'
+          case "$DEPLOY_URL" in
+            *\?*) sep='&' ;;
+          esac
+          url="${DEPLOY_URL}${sep}key=${DEPLOY_KEY}"
+          echo "Llamando deploy…"
+          curl -fsSL --max-time 180 "$url"
+          echo
+          echo "Deploy disparado."
