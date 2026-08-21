@@ -1,56 +1,65 @@
 <?php
 /** @var array<string,mixed> $product */
+/** @var list<array{code:string,label:string,required:bool,type:string}> $fields */
 /** @var list<array{code:string,label:string,required:bool,accept:string}> $docs */
 /** @var array<string,string> $prefill */
 /** @var array<string,mixed> $quote */
 /** @var array{bank:string,clabe:string,holder:string,concept:string} $bank */
 /** @var bool $openpayReady */
+$step = 1;
 ?>
 <article class="panel checkout" style="margin:1.25rem 0 2.5rem">
     <p class="meta"><a href="<?= e(url('/producto/' . $product['slug'])) ?>">← <?= e($product['name']) ?></a></p>
     <h1 style="margin:.2rem 0 .4rem;color:var(--doceo-blue)">Adquirir</h1>
-    <p class="muted" style="margin-top:0">Sube los documentos requeridos y elige cómo pagar. Al confirmar se crea tu matrícula y acceso al portal.</p>
+    <p class="muted" style="margin-top:0">
+        Solo te pedimos lo necesario para este producto.
+        <?php if ($docs === []): ?>
+            Los documentos del proceso (reglamento, firma, etc.) se solicitan después, en tu panel, solo si aplica.
+        <?php else: ?>
+            Sube los documentos indicados y elige cómo pagar.
+        <?php endif; ?>
+    </p>
 
     <form method="post" action="<?= e(url('/adquirir/' . $product['slug'])) ?>" enctype="multipart/form-data" class="checkout-form" id="checkout-form">
         <?= csrf_field() ?>
 
         <section class="checkout-section">
-            <h2>1. Datos del alumno</h2>
+            <h2><?= $step++ ?>. Tus datos</h2>
             <div class="form-grid">
-                <label>Correo *
-                    <input type="email" name="email" required value="<?= e($prefill['email']) ?>" autocomplete="email">
-                </label>
-                <label>Teléfono
-                    <input type="tel" name="phone" value="<?= e($prefill['phone']) ?>" autocomplete="tel">
-                </label>
-                <label>Nombre(s) *
-                    <input type="text" name="first_name" required value="<?= e($prefill['first_name']) ?>">
-                </label>
-                <label>Apellido paterno *
-                    <input type="text" name="last_name_p" required value="<?= e($prefill['last_name_p']) ?>">
-                </label>
-                <label>Apellido materno
-                    <input type="text" name="last_name_m" value="<?= e($prefill['last_name_m']) ?>">
-                </label>
-                <label>CURP
-                    <input type="text" name="curp" maxlength="18" value="" style="text-transform:uppercase">
-                </label>
-                <label>Fecha de nacimiento
-                    <input type="date" name="birth_date">
-                </label>
-                <label>Sexo
-                    <select name="sex">
-                        <option value="">—</option>
-                        <option value="F">Femenino</option>
-                        <option value="M">Masculino</option>
-                        <option value="X">Otro / X</option>
-                    </select>
-                </label>
+                <?php foreach ($fields as $field): ?>
+                    <?php
+                    $code = $field['code'];
+                    $val = $prefill[$code] ?? '';
+                    $req = !empty($field['required']);
+                    ?>
+                    <?php if ($field['type'] === 'select' && $code === 'sex'): ?>
+                        <label><?= e($field['label']) ?><?= $req ? ' *' : '' ?>
+                            <select name="sex" <?= $req ? 'required' : '' ?>>
+                                <option value="">—</option>
+                                <option value="F">Femenino</option>
+                                <option value="M">Masculino</option>
+                                <option value="X">Otro / X</option>
+                            </select>
+                        </label>
+                    <?php else: ?>
+                        <label><?= e($field['label']) ?><?= $req ? ' *' : '' ?>
+                            <input
+                                type="<?= e($field['type']) ?>"
+                                name="<?= e($code) ?>"
+                                value="<?= e((string) $val) ?>"
+                                <?= $req ? 'required' : '' ?>
+                                <?= $code === 'curp' ? 'maxlength="18" style="text-transform:uppercase"' : '' ?>
+                                <?= $code === 'email' ? 'autocomplete="email"' : '' ?>
+                                <?= $code === 'phone' ? 'autocomplete="tel"' : '' ?>
+                            >
+                        </label>
+                    <?php endif; ?>
+                <?php endforeach; ?>
             </div>
         </section>
 
         <section class="checkout-section">
-            <h2>2. Precio y código</h2>
+            <h2><?= $step++ ?>. Precio y código</h2>
             <div class="price-box">
                 <div>
                     <div class="muted" style="font-size:.85rem">Precio de lista</div>
@@ -68,36 +77,38 @@
             <p class="muted" id="quote-error" style="color:#b00020;display:none"></p>
         </section>
 
-        <section class="checkout-section">
-            <h2>3. Documentos (antes del pago)</h2>
-            <div class="form-grid">
-                <?php foreach ($docs as $doc): ?>
-                    <label><?= e($doc['label']) ?><?= $doc['required'] ? ' *' : '' ?>
-                        <input type="file" name="doc_<?= e($doc['code']) ?>" accept="<?= e($doc['accept']) ?>" <?= $doc['required'] ? 'required' : '' ?>>
-                    </label>
-                <?php endforeach; ?>
-            </div>
-            <p class="muted" style="font-size:.82rem">PDF, JPG o PNG · máx. 8 MB c/u</p>
-        </section>
+        <?php if ($docs !== []): ?>
+            <section class="checkout-section">
+                <h2><?= $step++ ?>. Documentos</h2>
+                <div class="form-grid">
+                    <?php foreach ($docs as $doc): ?>
+                        <label><?= e($doc['label']) ?><?= $doc['required'] ? ' *' : '' ?>
+                            <input type="file" name="doc_<?= e($doc['code']) ?>" accept="<?= e($doc['accept']) ?>" <?= $doc['required'] ? 'required' : '' ?>>
+                            <span class="muted" style="font-weight:500;font-size:.78rem">Formatos: <?= e(strtoupper(str_replace('.', '', $doc['accept']))) ?> · máx. 8 MB</span>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+            </section>
+        <?php endif; ?>
 
         <section class="checkout-section">
-            <h2>4. Pago</h2>
+            <h2><?= $step++ ?>. Pago</h2>
             <div class="pay-options">
                 <label class="pay-option">
-                    <input type="radio" name="payment_method" value="transfer_proof" checked data-needs-proof="1">
+                    <input type="radio" name="payment_method" value="openpay_spei" <?= $openpayReady ? 'checked' : '' ?> data-needs-proof="0">
                     <span>
-                        <strong>Transferencia bancaria</strong>
+                        <strong>SPEI (OpenPay)</strong>
+                        <small><?= $openpayReady ? 'Te generamos una CLABE única al confirmar.' : 'Si OpenPay no responde, usa transferencia DOCEO.' ?></small>
+                    </span>
+                </label>
+                <label class="pay-option">
+                    <input type="radio" name="payment_method" value="transfer_proof" <?= $openpayReady ? '' : 'checked' ?> data-needs-proof="1">
+                    <span>
+                        <strong>Transferencia a cuenta DOCEO</strong>
                         <small>Deposita y sube tu comprobante. Validamos el pago manualmente.</small>
                         <?php if ($bank['clabe'] !== ''): ?>
                             <small class="bank-hint"><?= e($bank['bank']) ?> · CLABE <?= e($bank['clabe']) ?> · <?= e($bank['holder']) ?></small>
                         <?php endif; ?>
-                    </span>
-                </label>
-                <label class="pay-option">
-                    <input type="radio" name="payment_method" value="openpay_spei" data-needs-proof="0" <?= $openpayReady ? '' : '' ?>>
-                    <span>
-                        <strong>SPEI (OpenPay)</strong>
-                        <small><?= $openpayReady ? 'Te generamos una CLABE única al confirmar.' : 'Si OpenPay no está configurado, te mostraremos la cuenta DOCEO al confirmar.' ?></small>
                     </span>
                 </label>
             </div>
