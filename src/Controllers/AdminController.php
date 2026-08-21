@@ -80,6 +80,17 @@ final class AdminController
         ]);
     }
 
+    public function payments(): void
+    {
+        Auth::requireRole(['admin']);
+        $rows = (new PurchaseRepository())->awaitingPaymentList(100);
+        view('admin/payments', [
+            'title' => 'Pagos por confirmar',
+            'rows' => $rows,
+            'layout' => 'admin',
+        ]);
+    }
+
     public function purchaseShow(string $id): void
     {
         Auth::requireRole(['admin']);
@@ -239,9 +250,20 @@ final class AdminController
         Auth::requireRole(['admin']);
         $checker = new \App\Integrations\HealthChecker();
         $results = $checker->runAll();
+        $deployedAt = null;
+        $stamp = BASE_PATH . '/storage/DEPLOYED_AT.txt';
+        if (is_file($stamp)) {
+            $deployedAt = trim((string) file_get_contents($stamp));
+        }
+        // Señal rápida: el fix de maestra usa partners.display_name
+        $repoFile = BASE_PATH . '/src/Repositories/PurchaseRepository.php';
+        $repoSrc = is_file($repoFile) ? (string) file_get_contents($repoFile) : '';
+        $maestraFix = str_contains($repoSrc, 'p.display_name AS partner_name');
         view('admin/health', [
             'title' => 'Salud del sistema',
             'results' => $results,
+            'deployedAt' => $deployedAt,
+            'maestraFix' => $maestraFix,
             'layout' => 'admin',
         ]);
     }

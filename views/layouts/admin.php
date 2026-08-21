@@ -25,6 +25,7 @@ $path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
         </div>
         <a class="<?= str_starts_with($path, '/admin') && $path === '/admin' ? 'active' : '' ?>" href="<?= e(url('/admin')) ?>">Dashboard</a>
         <a class="<?= str_contains($path, '/maestra') ? 'active' : '' ?>" href="<?= e(url('/admin/maestra')) ?>">Tabla maestra</a>
+        <a class="<?= str_contains($path, '/pagos') || str_contains($path, '/compras') ? 'active' : '' ?>" href="<?= e(url('/admin/pagos')) ?>">Pagos</a>
         <a class="<?= str_contains($path, '/productos') ? 'active' : '' ?>" href="<?= e(url('/admin/productos')) ?>">Productos</a>
         <a class="<?= str_contains($path, '/proveedores') ? 'active' : '' ?>" href="<?= e(url('/admin/proveedores')) ?>">Proveedores</a>
         <a class="<?= str_contains($path, '/salud') ? 'active' : '' ?>" href="<?= e(url('/admin/salud')) ?>">Salud</a>

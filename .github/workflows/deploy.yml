@@ -23,13 +23,34 @@ jobs:
             echo "Faltan secrets DEPLOY_URL y/o DEPLOY_KEY. Configúralos en el repo para deploy automático."
             exit 1
           fi
-          # Une URL + ?key= o &key=
           sep='?'
           case "$DEPLOY_URL" in
             *\?*) sep='&' ;;
           esac
           url="${DEPLOY_URL}${sep}key=${DEPLOY_KEY}"
-          echo "Llamando deploy…"
-          curl -fsSL --max-time 180 "$url"
-          echo
-          echo "Deploy disparado."
+          echo "Llamando deploy (timeout 300s, 1 reintento)…"
+          ok=0
+          for attempt in 1 2; do
+            echo "Intento ${attempt}…"
+            if curl -sS -L --max-time 300 -o /tmp/deploy-out.txt -w "HTTP %{http_code}\n" "$url"; then
+              echo "---- respuesta servidor ----"
+              head -c 4000 /tmp/deploy-out.txt || true
+              echo
+              echo "---- fin respuesta ----"
+              if grep -qiE 'Despliegue completado|Archivos actualizados' /tmp/deploy-out.txt; then
+                ok=1
+                break
+              fi
+              echo "Respuesta sin confirmación clara; reintentando si queda intento…"
+            else
+              echo "curl falló en intento ${attempt}"
+            fi
+            sleep 5
+          done
+          if [ "$ok" != "1" ]; then
+            echo "Deploy no confirmó éxito. Abre manualmente:"
+            echo "  ${DEPLOY_URL}?key=***"
+            echo "y espera a ver «Despliegue completado»."
+            exit 1
+          fi
+          echo "Deploy OK."

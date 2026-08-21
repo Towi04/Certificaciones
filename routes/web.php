@@ -40,6 +40,7 @@ $router->get('/recuperar', fn () => $auth->showForgot());
 $router->get('/admin', fn () => $admin->dashboard());
 $router->get('/admin/productos', fn () => $admin->products());
 $router->get('/admin/maestra', fn () => $admin->master());
+$router->get('/admin/pagos', fn () => $admin->payments());
 $router->get('/admin/compras/{id}', fn (string $id) => $admin->purchaseShow($id));
 $router->post('/admin/compras/{id}/confirmar-pago', fn (string $id) => $admin->confirmPayment($id));
 $router->get('/admin/seguimientos/{id}', fn (string $id) => $admin->trackingShow($id));
