@@ -134,6 +134,32 @@ final class AdminController
         redirect('/admin/compras/' . $purchaseId);
     }
 
+    public function paymentProof(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $purchase = (new PurchaseRepository())->find((int) $id);
+        if ($purchase === null || empty($purchase['payment_proof_path'])) {
+            http_response_code(404);
+            exit('Comprobante no encontrado');
+        }
+
+        $docs = new \App\Services\DocumentService();
+        $path = $docs->absolutePath((string) $purchase['payment_proof_path']);
+        if (!is_file($path)) {
+            http_response_code(404);
+            exit('Archivo no disponible en disco');
+        }
+
+        $mime = mime_content_type($path) ?: 'application/octet-stream';
+        $name = basename((string) $purchase['payment_proof_path']);
+        header('Content-Type: ' . $mime);
+        header('Content-Disposition: inline; filename="' . $name . '"');
+        header('Content-Length: ' . (string) filesize($path));
+        header('X-Content-Type-Options: nosniff');
+        readfile($path);
+        exit;
+    }
+
     public function trackingShow(string $id): void
     {
         Auth::requireRole(['admin']);
