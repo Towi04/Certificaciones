@@ -13,7 +13,7 @@
             <p class="price" style="font-size:1.6rem;margin:.5rem 0"><?= money($product['catalog_price']) ?></p>
             <p class="muted" style="font-size:.85rem">Precio de lista en catálogo. Al adquirir podrás aplicar un código promocional o de partner.</p>
             <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem">
-                <a class="btn btn-accent" href="<?= e(url('/login')) ?>">Adquirir</a>
+                <a class="btn btn-accent" href="<?= e(url('/adquirir/' . $product['slug'])) ?>">Adquirir</a>
                 <a class="btn btn-ghost" href="<?= e(url('/catalogo')) ?>">Volver al catálogo</a>
             </div>
         </div>
