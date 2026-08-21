@@ -48,6 +48,7 @@ final class TrackingService
     {
         $stmt = $this->pdo->prepare(
             'SELECT t.*, pr.name AS product_name, pr.type AS product_type, pr.slug AS product_slug,
+                    pr.platform_type, pr.moodle_course_id, pr.access_months,
                     pu.matricula, pu.status AS purchase_status, pu.charged_amount, pu.payment_method,
                     pu.payment_proof_path, pu.student_user_id AS purchase_student_id,
                     u.first_name, u.last_name_p, u.last_name_m, u.email AS student_email, u.phone AS student_phone,
@@ -320,6 +321,35 @@ final class TrackingService
                     $this->advance($trackingId, $adminUserId, 'Avance automático tras pago');
                 } catch (\Throwable $e2) {
                     error_log('[Doceo] onPaymentConfirmed advance: ' . $e2->getMessage());
+                }
+            }
+
+            if ($productType === 'course') {
+                try {
+                    $result = (new MoodleEnrolmentService())->syncTracking($trackingId, $adminUserId, true);
+                    if (!empty($result['skipped'])) {
+                        $this->log(
+                            $trackingId,
+                            'alta_moodle',
+                            'Moodle omitido: ' . ($result['reason'] ?? 'n/a'),
+                            $adminUserId
+                        );
+                    } elseif (empty($result['ok'])) {
+                        $this->log(
+                            $trackingId,
+                            'alta_moodle',
+                            'Moodle falló: ' . ($result['reason'] ?? 'error'),
+                            $adminUserId
+                        );
+                    }
+                } catch (\Throwable $e) {
+                    error_log('[Doceo] Moodle enrol on payment: ' . $e->getMessage());
+                    $this->log(
+                        $trackingId,
+                        'alta_moodle',
+                        'Error Moodle: ' . $e->getMessage(),
+                        $adminUserId
+                    );
                 }
             }
         }

@@ -178,6 +178,7 @@ final class AdminController
             'steps' => $pipelineId > 0 ? $svc->steps($pipelineId) : [],
             'logs' => $svc->logs((int) $tracking['id']),
             'documents' => $svc->documentsForTracking((int) $tracking['id']),
+            'moodleConfigured' => \App\Services\MoodleEnrolmentService::isConfigured(),
             'layout' => 'admin',
         ]);
     }
@@ -197,6 +198,35 @@ final class AdminController
             } else {
                 $code = $svc->advance($trackingId, (int) Auth::id(), $note);
                 flash('success', 'Avanzó a ' . $code);
+            }
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/seguimientos/' . $trackingId);
+    }
+
+    public function trackingSyncMoodle(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        try {
+            $sendEmail = !empty($_POST['send_email']);
+            $result = (new \App\Services\MoodleEnrolmentService())->syncTracking(
+                $trackingId,
+                (int) Auth::id(),
+                $sendEmail
+            );
+            if (!empty($result['skipped'])) {
+                flash('info', 'Moodle omitido: ' . ($result['reason'] ?? ''));
+            } elseif (!empty($result['ok'])) {
+                flash(
+                    'success',
+                    'Moodle OK · usuario ' . ($result['username'] ?? '')
+                    . (!empty($result['created_user']) ? ' (nuevo)' : ' (existente)')
+                );
+            } else {
+                flash('error', 'Moodle: ' . ($result['reason'] ?? 'falló'));
             }
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());

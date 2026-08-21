@@ -88,6 +88,41 @@ $statusLabels = [
     </form>
 </div>
 
+<?php if (($tracking['platform_type'] ?? '') === 'moodle' || ($tracking['product_type'] ?? '') === 'course'): ?>
+<div class="panel" style="margin-top:1rem">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Campus Moodle</h2>
+    <?php if (empty($moodleConfigured)): ?>
+        <p class="muted">Configura <code>MOODLE_URL</code> y <code>MOODLE_TOKEN</code> en el .env. Revisa /admin/salud.</p>
+    <?php endif; ?>
+    <?php if (!empty($tracking['moodle_username'])): ?>
+        <p>
+            Usuario: <code><?= e($tracking['moodle_username']) ?></code>
+            <?php if (!empty($tracking['moodle_password'])): ?>
+                · Contraseña: <code><?= e($tracking['moodle_password']) ?></code>
+            <?php endif; ?>
+        </p>
+        <p class="muted" style="font-size:.85rem">
+            Acceso:
+            <?= e($tracking['moodle_access_starts_at'] ?? '—') ?>
+            →
+            <?= e($tracking['moodle_access_ends_at'] ?? '—') ?>
+            <?php if (!empty($tracking['moodle_course_id'])): ?>
+                · course id <?= (int) $tracking['moodle_course_id'] ?>
+            <?php endif; ?>
+        </p>
+    <?php else: ?>
+        <p class="muted">Aún no hay alta Moodle en este caso.</p>
+    <?php endif; ?>
+    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/moodle')) ?>" style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-top:.75rem">
+        <?= csrf_field() ?>
+        <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
+            <input type="checkbox" name="send_email" value="1" checked> Enviar correo al alumno
+        </label>
+        <button class="btn btn-primary" type="submit">Sincronizar Moodle</button>
+    </form>
+</div>
+<?php endif; ?>
+
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Documentos</h2>
     <?php if ($documents === []): ?>
