@@ -23,7 +23,7 @@ final class CheckoutRequirements
     /** Campos siempre disponibles en el formulario cuando se piden. */
     public const FIELD_META = [
         'email' => ['label' => 'Correo', 'required' => true, 'type' => 'email'],
-        'phone' => ['label' => 'Teléfono', 'required' => false, 'type' => 'tel'],
+        'phone' => ['label' => 'Teléfono', 'required' => true, 'type' => 'tel'],
         'first_name' => ['label' => 'Nombre(s)', 'required' => true, 'type' => 'text'],
         'last_name_p' => ['label' => 'Apellido paterno', 'required' => true, 'type' => 'text'],
         'last_name_m' => ['label' => 'Apellido materno', 'required' => false, 'type' => 'text'],
@@ -68,8 +68,8 @@ final class CheckoutRequirements
                     $codes[] = $code;
                 }
             }
-            // Siempre exigir identificación mínima de la persona
-            foreach (['email', 'first_name', 'last_name_p'] as $must) {
+            // Siempre exigir identificación mínima de la persona + teléfono de soporte
+            foreach (['email', 'first_name', 'last_name_p', 'phone'] as $must) {
                 if (!in_array($must, $codes, true)) {
                     array_unshift($codes, $must);
                 }
