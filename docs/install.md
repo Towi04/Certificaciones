@@ -15,16 +15,15 @@ ADMIN_PASSWORD=tu-password-admin
 
 Los archivos en `bin/` son solo para CLI. En hosting compartido **no se ejecutan** al abrirlos en el explorador.
 
-Usa el instalador web:
+Usa el instalador web (cualquiera de estas URLs, con el valor de **INSTALL_KEY**, no APP_KEY):
 
 ```
+https://pdv.institutodoceo.com/setup?key=TU_INSTALL_KEY
 https://pdv.institutodoceo.com/setup.php?key=TU_INSTALL_KEY
 ```
 
-Eso crea las tablas, el admin y carga productos de ejemplo.
-
-- Solo tablas + admin: `setup.php?key=...&seed=0`
-- Con catálogo (default): `setup.php?key=...` o `&seed=1`
+La ruta `/setup` pasa por la app (recomendadasi `/setup.php` “no hace nada”).
+La página muestra un bloque **Diagnóstico** si falta la key o no coincide.
 
 Luego entra a `/login` y al catálogo `/`.
 

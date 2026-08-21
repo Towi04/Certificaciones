@@ -6,6 +6,7 @@ use App\Controllers\AdminController;
 use App\Controllers\AuthController;
 use App\Controllers\CatalogController;
 use App\Controllers\PartnerController;
+use App\Controllers\SetupController;
 use App\Controllers\StudentController;
 use App\Http\Router;
 
@@ -15,10 +16,14 @@ $auth = new AuthController();
 $admin = new AdminController();
 $student = new StudentController();
 $partner = new PartnerController();
+$setup = new SetupController();
 
 $router->get('/', fn () => $catalog->home());
 $router->get('/catalogo', fn () => $catalog->home());
 $router->get('/producto/{slug}', fn (string $slug) => $catalog->show($slug));
+
+// Instalador web (funciona aunque setup.php no esté en el docroot)
+$router->get('/setup', fn () => $setup->run());
 
 $router->get('/login', fn () => $auth->showLogin());
 $router->post('/login', fn () => $auth->login());
