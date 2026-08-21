@@ -8,9 +8,9 @@ use App\Auth\Auth;
 use App\Config\Env;
 use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
+use App\Services\CheckoutRequirements;
 use App\Services\CheckoutService;
 use App\Services\PricingService;
-use App\Services\RequiredDocuments;
 use App\Support\Settings;
 
 final class CheckoutController
@@ -30,7 +30,8 @@ final class CheckoutController
         view('checkout/acquire', [
             'title' => 'Adquirir · ' . $product['name'],
             'product' => $product,
-            'docs' => RequiredDocuments::forProduct($product),
+            'fields' => CheckoutRequirements::fieldsForProduct($product),
+            'docs' => CheckoutRequirements::docsForProduct($product),
             'prefill' => $prefill,
             'user' => $user,
             'quote' => (new PricingService())->quoteProduct($product, null),
@@ -43,25 +44,34 @@ final class CheckoutController
     {
         csrf_verify();
         $product = $this->loadProduct($slug);
+        $fieldCodes = array_column(CheckoutRequirements::fieldsForProduct($product), 'code');
 
         $buyer = [
             'email' => trim((string) ($_POST['email'] ?? '')),
             'first_name' => trim((string) ($_POST['first_name'] ?? '')),
             'last_name_p' => trim((string) ($_POST['last_name_p'] ?? '')),
-            'last_name_m' => trim((string) ($_POST['last_name_m'] ?? '')),
-            'phone' => trim((string) ($_POST['phone'] ?? '')),
-            'curp' => strtoupper(trim((string) ($_POST['curp'] ?? ''))),
-            'birth_date' => trim((string) ($_POST['birth_date'] ?? '')),
-            'sex' => trim((string) ($_POST['sex'] ?? '')),
-            'nationality' => trim((string) ($_POST['nationality'] ?? 'México')),
+            'last_name_m' => in_array('last_name_m', $fieldCodes, true) ? trim((string) ($_POST['last_name_m'] ?? '')) : '',
+            'phone' => in_array('phone', $fieldCodes, true) ? trim((string) ($_POST['phone'] ?? '')) : '',
+            'curp' => in_array('curp', $fieldCodes, true) ? strtoupper(trim((string) ($_POST['curp'] ?? ''))) : '',
+            'birth_date' => in_array('birth_date', $fieldCodes, true) ? trim((string) ($_POST['birth_date'] ?? '')) : '',
+            'sex' => in_array('sex', $fieldCodes, true) ? trim((string) ($_POST['sex'] ?? '')) : '',
+            'nationality' => in_array('nationality', $fieldCodes, true)
+                ? trim((string) ($_POST['nationality'] ?? 'México'))
+                : '',
         ];
 
-        $paymentMethod = (string) ($_POST['payment_method'] ?? 'transfer_proof');
+        $paymentMethod = (string) ($_POST['payment_method'] ?? ($this->openPayConfigured() ? 'openpay_spei' : 'transfer_proof'));
         $promoCode = trim((string) ($_POST['promo_code'] ?? ''));
 
         try {
-            if ($buyer['first_name'] === '' || $buyer['last_name_p'] === '') {
-                throw new \InvalidArgumentException('Nombre y apellido paterno son obligatorios.');
+            foreach (CheckoutRequirements::fieldsForProduct($product) as $field) {
+                if (!$field['required']) {
+                    continue;
+                }
+                $code = $field['code'];
+                if (($buyer[$code] ?? '') === '') {
+                    throw new \InvalidArgumentException('Completa el campo: ' . $field['label']);
+                }
             }
 
             $result = (new CheckoutService())->complete(

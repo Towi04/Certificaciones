@@ -18,9 +18,10 @@ final class DocumentService
 
     /**
      * @param array{tmp_name:string,name:string,error:int,size:int,type?:string} $file
+     * @param string $accept Extensiones permitidas estilo HTML accept, p.ej. ".pdf" o ".pdf,.jpg,.jpeg"
      * @return array{path:string,original_name:string,mime:string,size:int}
      */
-    public function storeUploaded(array $file, string $subdir): array
+    public function storeUploaded(array $file, string $subdir, string $accept = '.pdf,.jpg,.jpeg,.png,.webp'): array
     {
         if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
             throw new \InvalidArgumentException('Error al subir el archivo.');
@@ -36,23 +37,31 @@ final class DocumentService
 
         $original = basename((string) ($file['name'] ?? 'archivo'));
         $ext = strtolower(pathinfo($original, PATHINFO_EXTENSION));
-        $allowed = ['pdf', 'jpg', 'jpeg', 'png', 'webp'];
+        $allowed = self::extensionsFromAccept($accept);
+        if ($allowed === []) {
+            $allowed = ['pdf', 'jpg', 'jpeg', 'png', 'webp'];
+        }
         if (!in_array($ext, $allowed, true)) {
-            throw new \InvalidArgumentException('Formato no permitido. Usa PDF, JPG o PNG.');
+            $list = strtoupper(implode(', ', $allowed));
+            throw new \InvalidArgumentException("Formato no permitido. Usa: {$list}.");
         }
 
         $finfo = new \finfo(FILEINFO_MIME_TYPE);
         $mime = (string) ($finfo->file((string) $file['tmp_name']) ?: ($file['type'] ?? 'application/octet-stream'));
-        $okMimes = [
-            'application/pdf',
-            'image/jpeg',
-            'image/png',
-            'image/webp',
-        ];
+        $okMimes = [];
+        foreach ($allowed as $a) {
+            $okMimes[] = match ($a) {
+                'pdf' => 'application/pdf',
+                'png' => 'image/png',
+                'webp' => 'image/webp',
+                'jpg', 'jpeg' => 'image/jpeg',
+                default => '',
+            };
+        }
+        $okMimes = array_values(array_filter(array_unique($okMimes)));
         if (!in_array($mime, $okMimes, true)) {
-            // Algunos hosts reportan application/octet-stream; confiar en extensión si es conocida
             if ($mime !== 'application/octet-stream') {
-                throw new \InvalidArgumentException('Tipo MIME no permitido.');
+                throw new \InvalidArgumentException('Tipo MIME no permitido para este documento.');
             }
             $mime = match ($ext) {
                 'pdf' => 'application/pdf',
@@ -84,6 +93,24 @@ final class DocumentService
             'mime' => $mime,
             'size' => $size,
         ];
+    }
+
+    /** @return list<string> */
+    public static function extensionsFromAccept(string $accept): array
+    {
+        $parts = preg_split('/\s*,\s*/', strtolower($accept)) ?: [];
+        $out = [];
+        foreach ($parts as $p) {
+            $p = ltrim(trim($p), '.');
+            if ($p === 'jpeg') {
+                $out[] = 'jpg';
+                $out[] = 'jpeg';
+            } elseif ($p !== '' && !str_contains($p, '/')) {
+                $out[] = $p;
+            }
+        }
+
+        return array_values(array_unique($out));
     }
 
     public function absolutePath(string $relative): string

@@ -65,7 +65,7 @@ final class CheckoutService
             throw new \InvalidArgumentException('Método de pago inválido.');
         }
 
-        $required = RequiredDocuments::forProduct($product);
+        $required = CheckoutRequirements::docsForProduct($product);
         $this->assertRequiredDocs($required, $files);
 
         $quote = $this->pricing->quoteProduct($product, $promoCode);
@@ -126,7 +126,7 @@ final class CheckoutService
                 'student_user_id' => $studentUserId,
                 'partner_id' => $partnerId,
                 'pipeline_template_id' => $pipelineId,
-                'current_step_code' => 'docs_received',
+                'current_step_code' => $required !== [] ? 'docs_received' : 'registered',
                 'status' => 'waiting_admin',
             ]);
 
@@ -138,7 +138,7 @@ final class CheckoutService
                 if ($proof === null || ($proof['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
                     throw new \InvalidArgumentException('Sube el comprobante de transferencia.');
                 }
-                $stored = $this->documents->storeUploaded($proof, 'payments/' . $purchaseId);
+                $stored = $this->documents->storeUploaded($proof, 'payments/' . $purchaseId, '.pdf,.jpg,.jpeg,.png');
                 $this->purchases->setPaymentProof($purchaseId, $stored['path']);
             } elseif ($paymentMethod === 'openpay_spei') {
                 $openpay = $this->createSpeiCharge(
@@ -268,7 +268,11 @@ final class CheckoutService
             if ($file === null || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
                 continue;
             }
-            $stored = $this->documents->storeUploaded($file, 'docs/' . $purchaseId);
+            $stored = $this->documents->storeUploaded(
+                $file,
+                'docs/' . $purchaseId,
+                (string) ($doc['accept'] ?? '.pdf,.jpg,.jpeg,.png')
+            );
             $this->pdo->prepare(
                 'INSERT INTO documents (tracking_id, purchase_id, student_user_id, doc_type, original_name, storage_path, status, uploaded_by)
                  VALUES (?,?,?,?,?,?,\'pending\',?)'
