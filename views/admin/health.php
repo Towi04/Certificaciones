@@ -19,6 +19,12 @@
             <?= !empty($r['ok']) ? 'OK' : 'FALLA' ?>
         </div>
         <div class="muted" style="margin-top:.4rem;font-size:.85rem"><?= e($r['message']) ?></div>
+        <?php if (!empty($r['meta']['webhook_url'])): ?>
+            <div class="muted" style="margin-top:.35rem;font-size:.8rem;word-break:break-all">
+                Webhook: <code><?= e((string) $r['meta']['webhook_url']) ?></code>
+                · auth <?= e((string) ($r['meta']['webhook_auth'] ?? 'none')) ?>
+            </div>
+        <?php endif; ?>
     </div>
 <?php endforeach; ?>
 </div>

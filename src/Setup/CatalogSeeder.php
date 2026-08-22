@@ -226,10 +226,27 @@ final class CatalogSeeder
             $p['is_active'] = 1;
             $p['is_public'] = 1;
             $p['cost_price'] = $p['cost_price'] ?? 0;
-            // Checkout mínimo por defecto: contacto + pago. Docs/CURP/etc. se piden
-            // después en el pipeline o vía config_json por producto cuando aplique.
+            // Checkout mínimo por defecto: contacto + pago.
+            // Reglamento/firma se piden después en el caso del alumno (registration_docs).
             if (!isset($p['config_json'])) {
                 $type = (string) ($p['type'] ?? '');
+                $registrationDocs = [];
+                if (in_array($type, ['certification', 'procedure'], true)) {
+                    $registrationDocs = [
+                        [
+                            'code' => 'reglamento',
+                            'label' => 'Reglamento firmado (PDF)',
+                            'required' => true,
+                            'accept' => '.pdf',
+                        ],
+                        [
+                            'code' => 'signature',
+                            'label' => 'Firma (imagen)',
+                            'required' => true,
+                            'accept' => '.jpg,.jpeg,.png',
+                        ],
+                    ];
+                }
                 $deferred = [
                     'enabled' => in_array($type, ['certification', 'procedure'], true),
                     'months' => [1, 3, 6],
@@ -239,6 +256,7 @@ final class CatalogSeeder
                 $p['config_json'] = json_encode([
                     'checkout_fields' => ['email', 'first_name', 'last_name_p', 'last_name_m', 'phone'],
                     'required_docs' => [],
+                    'registration_docs' => $registrationDocs,
                     'deferred' => $deferred,
                 ], JSON_UNESCAPED_UNICODE);
             }

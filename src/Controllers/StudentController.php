@@ -32,15 +32,48 @@ final class StudentController
 
             return;
         }
+        $product = [
+            'type' => $tracking['product_type'] ?? '',
+            'config_json' => $tracking['config_json'] ?? null,
+        ];
+        $checklist = $svc->registrationChecklist((int) $tracking['id'], $product);
         $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
         view('student/case', [
             'title' => 'Caso ' . $tracking['matricula'],
             'tracking' => $tracking,
             'steps' => $pipelineId > 0 ? $svc->steps($pipelineId) : [],
             'documents' => $svc->documentsForTracking((int) $tracking['id']),
+            'registrationDocs' => $checklist,
             'logs' => $svc->logs((int) $tracking['id']),
             'layout' => 'student',
         ]);
+    }
+
+    public function uploadRegistrationDocument(string $id): void
+    {
+        Auth::requireRole(['student']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        try {
+            $file = $_FILES['document'] ?? null;
+            if ($file === null) {
+                throw new \InvalidArgumentException('Selecciona un archivo.');
+            }
+            $docType = trim((string) ($_POST['doc_type'] ?? ''));
+            if ($docType === '') {
+                throw new \InvalidArgumentException('Indica el tipo de documento.');
+            }
+            (new TrackingService())->uploadRegistrationDocument(
+                $trackingId,
+                (int) Auth::id(),
+                $docType,
+                $file
+            );
+            flash('success', 'Documento enviado. Lo revisaremos pronto.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/alumno/caso/' . $trackingId);
     }
 
     public function reuploadDocument(string $id): void

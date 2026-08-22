@@ -101,6 +101,19 @@ final class PurchaseRepository
         return $row ?: null;
     }
 
+    public function findByOpenPayChargeId(string $chargeId): ?array
+    {
+        $chargeId = trim($chargeId);
+        if ($chargeId === '') {
+            return null;
+        }
+        $stmt = $this->pdo->prepare('SELECT * FROM purchases WHERE openpay_charge_id = ? LIMIT 1');
+        $stmt->execute([$chargeId]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
     /**
      * @param array{
      *   matricula:string,student_user_id:int,partner_id:?int,discount_code_id:?int,combo_id:?int,
@@ -275,18 +288,5 @@ final class PurchaseRepository
         $this->pdo->prepare(
             'UPDATE purchases SET paid_installments = paid_installments + 1 WHERE id = ?'
         )->execute([$purchaseId]);
-    }
-
-    public function findByOpenPayChargeId(string $chargeId): ?array
-    {
-        $chargeId = trim($chargeId);
-        if ($chargeId === '') {
-            return null;
-        }
-        $stmt = $this->pdo->prepare('SELECT * FROM purchases WHERE openpay_charge_id = ? LIMIT 1');
-        $stmt->execute([$chargeId]);
-        $row = $stmt->fetch();
-
-        return $row ?: null;
     }
 }

@@ -48,7 +48,7 @@ final class TrackingService
     {
         $stmt = $this->pdo->prepare(
             'SELECT t.*, pr.name AS product_name, pr.type AS product_type, pr.slug AS product_slug,
-                    pr.platform_type, pr.moodle_course_id, pr.access_months,
+                    pr.platform_type, pr.moodle_course_id, pr.access_months, pr.config_json,
                     pu.matricula, pu.status AS purchase_status, pu.charged_amount, pu.payment_method,
                     pu.payment_proof_path, pu.student_user_id AS purchase_student_id,
                     u.first_name, u.last_name_p, u.last_name_m, u.email AS student_email, u.phone AS student_phone,
@@ -189,6 +189,155 @@ final class TrackingService
         $this->setStep($trackingId, $code, $actorUserId, $note ?? ('Avance a ' . $next['label']), null);
 
         return $code;
+    }
+
+    /**
+     * Checklist de documentos de registro vs lo ya subido.
+     *
+     * @param array<string, mixed> $product
+     * @return list<array{
+     *   code:string,label:string,required:bool,accept:string,
+     *   status:?string,document_id:?int,original_name:?string,rejection_reason:?string
+     * }>
+     */
+    public function registrationChecklist(int $trackingId, array $product): array
+    {
+        $required = CheckoutRequirements::registrationDocsForProduct($product);
+        if ($required === []) {
+            return [];
+        }
+
+        $existing = $this->documentsForTracking($trackingId);
+        /** @var array<string, array<string, mixed>> $byType */
+        $byType = [];
+        foreach ($existing as $doc) {
+            $code = (string) $doc['doc_type'];
+            // Conserva el más reciente por tipo
+            if (!isset($byType[$code])) {
+                $byType[$code] = $doc;
+            }
+        }
+
+        $out = [];
+        foreach ($required as $req) {
+            $doc = $byType[$req['code']] ?? null;
+            $out[] = [
+                'code' => $req['code'],
+                'label' => $req['label'],
+                'required' => $req['required'],
+                'accept' => $req['accept'],
+                'status' => $doc ? (string) $doc['status'] : null,
+                'document_id' => $doc ? (int) $doc['id'] : null,
+                'original_name' => $doc ? (string) $doc['original_name'] : null,
+                'rejection_reason' => $doc['rejection_reason'] ?? null,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Primera carga o reemplazo de un documento del expediente de registro.
+     *
+     * @param array{tmp_name:string,name:string,error:int,size:int} $file
+     */
+    public function uploadRegistrationDocument(
+        int $trackingId,
+        int $studentUserId,
+        string $docType,
+        array $file
+    ): int {
+        $tracking = $this->find($trackingId);
+        if ($tracking === null || (int) $tracking['student_user_id'] !== $studentUserId) {
+            throw new \InvalidArgumentException('Caso no encontrado.');
+        }
+
+        $product = [
+            'type' => $tracking['product_type'] ?? '',
+            'config_json' => $tracking['config_json'] ?? null,
+        ];
+        $required = CheckoutRequirements::registrationDocsForProduct($product);
+        $meta = null;
+        foreach ($required as $row) {
+            if ($row['code'] === $docType) {
+                $meta = $row;
+                break;
+            }
+        }
+        if ($meta === null) {
+            throw new \InvalidArgumentException('Este caso no pide el documento: ' . $docType);
+        }
+
+        $stored = $this->documents->storeUploaded(
+            $file,
+            'docs/' . (int) ($tracking['purchase_id'] ?? 0),
+            $meta['accept']
+        );
+
+        $existing = null;
+        foreach ($this->documentsForTracking($trackingId) as $doc) {
+            if ((string) $doc['doc_type'] === $docType) {
+                $existing = $doc;
+                break;
+            }
+        }
+
+        if ($existing !== null) {
+            $status = (string) $existing['status'];
+            if ($status === 'approved') {
+                throw new \InvalidArgumentException('Ese documento ya fue aprobado. Contacta a administración si necesitas cambiarlo.');
+            }
+            $this->pdo->prepare(
+                'UPDATE documents
+                 SET storage_path = ?, original_name = ?, status = \'pending\',
+                     rejection_reason = NULL, reviewed_by = NULL, reviewed_at = NULL, uploaded_by = ?
+                 WHERE id = ?'
+            )->execute([
+                $stored['path'],
+                $stored['original_name'],
+                $studentUserId,
+                (int) $existing['id'],
+            ]);
+            $docId = (int) $existing['id'];
+            $this->log($trackingId, 'doc_uploaded', 'Actualizó: ' . $meta['label'], $studentUserId);
+        } else {
+            $this->pdo->prepare(
+                'INSERT INTO documents (tracking_id, purchase_id, student_user_id, doc_type, original_name, storage_path, status, uploaded_by)
+                 VALUES (?,?,?,?,?,?,\'pending\',?)'
+            )->execute([
+                $trackingId,
+                (int) $tracking['purchase_id'],
+                $studentUserId,
+                $docType,
+                $stored['original_name'],
+                $stored['path'],
+                $studentUserId,
+            ]);
+            $docId = (int) $this->pdo->lastInsertId();
+            $this->log($trackingId, 'doc_uploaded', 'Subió: ' . $meta['label'], $studentUserId);
+        }
+
+        if ($docType === 'signature') {
+            $this->pdo->prepare(
+                'UPDATE students SET signature_image_path = ? WHERE user_id = ?'
+            )->execute([$stored['path'], $studentUserId]);
+        }
+
+        $this->pdo->prepare(
+            'UPDATE trackings SET status = \'waiting_admin\' WHERE id = ?'
+        )->execute([$trackingId]);
+
+        // Si el pipeline está en docs y ya se subió lo requerido, deja el caso en revisión
+        $current = (string) ($tracking['current_step_code'] ?? '');
+        if ($current === '' || $current === 'docs' || $current === 'registro') {
+            try {
+                $this->setStep($trackingId, 'docs', $studentUserId, 'Documentos de registro en revisión', 'waiting_admin');
+            } catch (\Throwable) {
+                // Pipelines sin paso docs
+            }
+        }
+
+        return $docId;
     }
 
     public function approveDocument(int $docId, int $adminUserId): void
