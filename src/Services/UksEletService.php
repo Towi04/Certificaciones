@@ -84,7 +84,7 @@ final class UksEletService
         $to = $this->uksRequestEmail();
         if ($to === '') {
             throw new \RuntimeException(
-                'Configura el correo de UKS en Ajustes (uks_elet_request_email) o en el proveedor UKS.'
+                'Configura el correo de destino en Admin → Correos (UKS ELeT) o en el proveedor UKS.'
             );
         }
 
@@ -110,30 +110,10 @@ final class UksEletService
             throw new \RuntimeException('El archivo del reglamento firmado no está disponible en el servidor.');
         }
 
-        $subject = 'Solicitud examen ELeT · ' . $fullName . ' · ' . $matricula;
         $attachmentNote = 'Adjunto: reglamento firmado.';
         if ($includePaymentProof) {
             $attachmentNote .= ' Comprobante de pago incluido.';
         }
-
-        $text = "Solicitud de registro examen ELeT — Instituto DOCEO\n\n"
-            . "Alumno: {$fullName}\n"
-            . "Matrícula DOCEO: {$matricula}\n"
-            . "Correo alumno: " . ($tracking['student_email'] ?? '') . "\n"
-            . "Fecha examen: {$examDate}\n"
-            . "Hora examen: {$examTime}\n\n"
-            . $attachmentNote . "\n\n"
-            . "— Instituto DOCEO\n";
-
-        $html = '<p>Solicitud de registro examen <strong>ELeT</strong> — Instituto DOCEO</p>'
-            . '<ul>'
-            . '<li><strong>Alumno:</strong> ' . htmlspecialchars($fullName) . '</li>'
-            . '<li><strong>Matrícula DOCEO:</strong> ' . htmlspecialchars($matricula) . '</li>'
-            . '<li><strong>Correo:</strong> ' . htmlspecialchars((string) ($tracking['student_email'] ?? '')) . '</li>'
-            . '<li><strong>Fecha examen:</strong> ' . htmlspecialchars($examDate) . '</li>'
-            . '<li><strong>Hora examen:</strong> ' . htmlspecialchars($examTime) . '</li>'
-            . '</ul>'
-            . '<p>' . htmlspecialchars($attachmentNote) . '</p>';
 
         $attachments = [
             [
@@ -155,11 +135,43 @@ final class UksEletService
             }
         }
 
-        (new Mailer())->send($to, $subject, $text, [
-            'html' => true,
-            'body_html' => $html,
-            'attachments' => $attachments,
-        ]);
+        $mailTpl = new MailTemplateService();
+        $vars = [
+            'full_name' => $fullName,
+            'matricula' => $matricula,
+            'student_email' => (string) ($tracking['student_email'] ?? ''),
+            'exam_date' => $examDate,
+            'exam_time' => $examTime,
+            'attachment_note' => $attachmentNote,
+        ];
+
+        if ($mailTpl->render('uks_elet_solicitud', $vars) !== null) {
+            $mailTpl->send('uks_elet_solicitud', $to, $vars, ['attachments' => $attachments]);
+        } else {
+            $subject = 'Solicitud examen ELeT · ' . $fullName . ' · ' . $matricula;
+            $text = "Solicitud de registro examen ELeT — Instituto DOCEO\n\n"
+                . "Alumno: {$fullName}\n"
+                . "Matrícula DOCEO: {$matricula}\n"
+                . "Correo alumno: " . ($tracking['student_email'] ?? '') . "\n"
+                . "Fecha examen: {$examDate}\n"
+                . "Hora examen: {$examTime}\n\n"
+                . $attachmentNote . "\n\n"
+                . "— Instituto DOCEO\n";
+            $html = '<p>Solicitud de registro examen <strong>ELeT</strong> — Instituto DOCEO</p>'
+                . '<ul>'
+                . '<li><strong>Alumno:</strong> ' . htmlspecialchars($fullName) . '</li>'
+                . '<li><strong>Matrícula DOCEO:</strong> ' . htmlspecialchars($matricula) . '</li>'
+                . '<li><strong>Correo:</strong> ' . htmlspecialchars((string) ($tracking['student_email'] ?? '')) . '</li>'
+                . '<li><strong>Fecha examen:</strong> ' . htmlspecialchars($examDate) . '</li>'
+                . '<li><strong>Hora examen:</strong> ' . htmlspecialchars($examTime) . '</li>'
+                . '</ul>'
+                . '<p>' . htmlspecialchars($attachmentNote) . '</p>';
+            (new Mailer())->send($to, $subject, $text, [
+                'html' => true,
+                'body_html' => $html,
+                'attachments' => $attachments,
+            ]);
+        }
 
         $logNote = 'Correo a UKS (' . $to . ') · reglamento firmado';
         if ($includePaymentProof) {
@@ -267,6 +279,22 @@ final class UksEletService
         $examUrl = $this->examUrl();
         $examDate = (string) ($tracking['exam_date'] ?? '');
         $examTime = !empty($tracking['exam_time']) ? substr((string) $tracking['exam_time'], 0, 5) : '';
+
+        $mailTpl = new MailTemplateService();
+        $vars = [
+            'name' => $name,
+            'matricula' => $matricula,
+            'exam_url' => $examUrl,
+            'exam_date' => $examDate,
+            'exam_time' => $examTime,
+            'folio' => $folio,
+            'access_key' => $accessKey,
+        ];
+
+        if ($mailTpl->render('student_elet_exam_access', $vars) !== null) {
+            $mailTpl->send('student_elet_exam_access', $email, $vars);
+            return;
+        }
 
         $subject = 'Accesos a tu examen ELeT · ' . $matricula;
         $text = "Hola {$name},\n\n"

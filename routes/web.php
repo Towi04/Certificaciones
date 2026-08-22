@@ -73,6 +73,11 @@ $router->get('/admin/exportaciones/{code}', fn (string $code) => $admin->exportD
 $router->post('/admin/importaciones/{code}', fn (string $code) => $admin->importUpload($code));
 $router->get('/admin/promo', fn () => $admin->promoCode());
 $router->post('/admin/promo', fn () => $admin->promoCodeUpdate());
+$router->get('/admin/correos', fn () => $admin->mailTemplates());
+$router->post('/admin/correos/destinatarios', fn () => $admin->mailRecipientsUpdate());
+$router->post('/admin/correos/{code}/probar', fn (string $code) => $admin->mailTemplateTest($code));
+$router->get('/admin/correos/{code}', fn (string $code) => $admin->mailTemplateEdit($code));
+$router->post('/admin/correos/{code}', fn (string $code) => $admin->mailTemplateUpdate($code));
 $router->get('/admin/salud', fn () => $admin->health());
 
 $router->get('/alumno', fn () => $student->dashboard());

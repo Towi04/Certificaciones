@@ -13,6 +13,7 @@ use App\Services\CheckoutService;
 use App\Services\CheckoutRequirements;
 use App\Services\ExportService;
 use App\Services\ImportService;
+use App\Services\MailTemplateService;
 use App\Services\TrackingService;
 use App\Services\UksEletService;
 use App\Support\Settings;
@@ -770,5 +771,120 @@ final class AdminController
         }
 
         redirect('/admin/promo');
+    }
+
+    /** @return array<string, list<string>> */
+    private function mailTemplatePlaceholders(): array
+    {
+        return [
+            'uks_elet_solicitud' => [
+                'full_name', 'matricula', 'student_email', 'exam_date', 'exam_time', 'attachment_note',
+            ],
+            'student_elet_exam_access' => [
+                'name', 'matricula', 'exam_url', 'exam_date', 'exam_time', 'folio', 'access_key',
+            ],
+            'student_registration' => [
+                'full_name', 'matricula', 'product_name', 'amount', 'pay_instructions_html',
+                'password_block_html', 'login_url',
+            ],
+            'student_payment_confirmed' => ['name', 'matricula', 'product_name'],
+        ];
+    }
+
+    public function mailTemplates(): void
+    {
+        Auth::requireRole(['admin']);
+        $svc = new MailTemplateService();
+        $svc->ensureDefaults();
+        view('admin/mail_templates', [
+            'title' => 'Plantillas de correo',
+            'templates' => $svc->all(),
+            'uksEmail' => trim(Settings::get('uks_elet_request_email', '') ?? ''),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function mailTemplateEdit(string $code): void
+    {
+        Auth::requireRole(['admin']);
+        $svc = new MailTemplateService();
+        $template = $svc->find($code);
+        if ($template === null) {
+            http_response_code(404);
+            view('errors/404', ['title' => 'Plantilla no encontrada', 'layout' => 'admin']);
+
+            return;
+        }
+        $placeholders = $this->mailTemplatePlaceholders();
+        view('admin/mail_template_edit', [
+            'title' => 'Editar correo · ' . $template['name'],
+            'template' => $template,
+            'placeholders' => $placeholders[$code] ?? [],
+            'uksEmail' => trim(Settings::get('uks_elet_request_email', '') ?? ''),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function mailTemplateUpdate(string $code): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            (new MailTemplateService())->update(
+                $code,
+                trim((string) ($_POST['subject'] ?? '')),
+                (string) ($_POST['body_html'] ?? ''),
+                !empty($_POST['is_active'])
+            );
+            flash('success', 'Plantilla guardada.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/correos/' . $code);
+    }
+
+    public function mailRecipientsUpdate(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $email = trim((string) ($_POST['uks_elet_request_email'] ?? ''));
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            flash('error', 'Indica un correo válido o déjalo vacío.');
+            redirect('/admin/correos');
+        }
+        Settings::set('uks_elet_request_email', $email);
+        flash('success', $email !== ''
+            ? 'Destinatario UKS guardado: ' . $email
+            : 'Destinatario UKS vacío (se usará contacto del proveedor).');
+        redirect('/admin/correos');
+    }
+
+    public function mailTemplateTest(string $code): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        if ($code !== 'uks_elet_solicitud') {
+            flash('error', 'La prueba solo está disponible para la plantilla UKS ELeT.');
+            redirect('/admin/correos');
+        }
+        $to = trim(Settings::get('uks_elet_request_email', '') ?? '');
+        if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            flash('error', 'Configura primero el correo destino UKS en esta misma página.');
+            redirect('/admin/correos/uks_elet_solicitud');
+        }
+        try {
+            (new MailTemplateService())->send('uks_elet_solicitud', $to, [
+                'full_name' => 'Alumno de prueba DOCEO',
+                'matricula' => '9999',
+                'student_email' => 'alumno@ejemplo.com',
+                'exam_date' => date('Y-m-d', strtotime('+7 days')),
+                'exam_time' => '10:00',
+                'attachment_note' => '[PRUEBA] Sin adjuntos. En producción va el reglamento firmado.',
+            ]);
+            flash('success', 'Correo de prueba enviado a ' . $to);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/correos/uks_elet_solicitud');
     }
 }
