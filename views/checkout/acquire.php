@@ -649,10 +649,12 @@ $stepLabels = [
       .catch(() => {});
   }
 
-  applyBtn.addEventListener('click', refreshQuote);
-  codeInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); refreshQuote(); }
-  });
+  applyBtn?.addEventListener('click', refreshQuote);
+  if (codeInput) {
+    codeInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); refreshQuote(); }
+    });
+  }
 
   if (proofPicker && proofInput) {
     const pickBtn = proofPicker.querySelector('.file-picker-btn');

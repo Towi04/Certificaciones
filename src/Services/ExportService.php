@@ -55,7 +55,7 @@ final class ExportService
         }
 
         $sql = 'SELECT pu.matricula, u.first_name, u.last_name_p, u.last_name_m, u.email,
-                       t.id AS tracking_id, t.exam_date, t.current_step_code, pr.code AS product_code
+                       t.id AS tracking_id, t.exam_date, t.exam_time, t.current_step_code, pr.code AS product_code
                 FROM trackings t
                 JOIN purchases pu ON pu.id = t.purchase_id
                 JOIN users u ON u.id = t.student_user_id
@@ -207,6 +207,8 @@ final class ExportService
             'last_name_p' => (string) ($row['last_name_p'] ?? ''),
             'last_name_m' => (string) ($row['last_name_m'] ?? ''),
             'email' => (string) ($row['email'] ?? ''),
+            'exam_date' => (string) ($row['exam_date'] ?? ''),
+            'exam_time' => !empty($row['exam_time']) ? substr((string) $row['exam_time'], 0, 5) : '',
             default => (string) ($row[$field] ?? ''),
         };
     }

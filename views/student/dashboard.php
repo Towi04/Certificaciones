@@ -1,3 +1,28 @@
+<?php
+/** @var list<array<string,mixed>> $trackings */
+$stepLabels = [
+    'registro' => 'Registro',
+    'confirm_pago' => 'Confirmación de pago',
+    'solicitud_uks' => 'Solicitud a UKS',
+    'codigos' => 'Accesos al examen',
+    'resultados' => 'Resultados',
+    'fin' => 'Completado',
+];
+$statusLabels = [
+    'open' => 'En proceso',
+    'waiting_admin' => 'En revisión DOCEO',
+    'waiting_student' => 'Acción pendiente tuya',
+    'waiting_partner' => 'Espera partner',
+    'waiting_provider' => 'En proceso con UKS',
+    'completed' => 'Completado',
+    'cancelled' => 'Cancelado',
+];
+$payLabels = [
+    'awaiting_payment' => 'Esperando pago',
+    'payment_review' => 'Comprobante en revisión',
+    'paid' => 'Pagado',
+];
+?>
 <h1 style="margin-top:0;color:var(--doceo-blue)">Hola, <?= e(\App\Auth\Auth::user()['first_name'] ?? 'alumno') ?></h1>
 <p class="muted">Aquí verás el estatus de cada compra y las acciones pendientes (docs, pago, resultados, CENNI…).</p>
 <div class="panel">
@@ -14,12 +39,18 @@
                 </thead>
                 <tbody>
                 <?php foreach ($trackings as $t): ?>
+                    <?php
+                    $stepCode = (string) ($t['current_step_code'] ?? '');
+                    $stepLabel = $stepLabels[$stepCode] ?? $stepCode;
+                    $statusKey = (string) ($t['status'] ?? '');
+                    $payKey = (string) ($t['purchase_status'] ?? '');
+                    ?>
                     <tr>
                         <td><?= e($t['matricula']) ?></td>
                         <td><?= e($t['product_name']) ?></td>
-                        <td><span class="pill"><?= e($t['purchase_status'] ?? '—') ?></span></td>
-                        <td><span class="pill"><?= e($t['status']) ?></span></td>
-                        <td><?= e($t['current_step_code'] ?? '—') ?></td>
+                        <td><span class="pill"><?= e($payLabels[$payKey] ?? $payKey) ?></span></td>
+                        <td><span class="pill"><?= e($statusLabels[$statusKey] ?? $statusKey) ?></span></td>
+                        <td><?= e($stepLabel) ?></td>
                         <td><?= e($t['exam_date'] ?? '—') ?></td>
                         <td><a href="<?= e(url('/alumno/caso/' . $t['id'])) ?>">Abrir caso</a></td>
                     </tr>

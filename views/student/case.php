@@ -73,9 +73,28 @@ $payLabels = [
     <?php endif; ?>
     <?php if (!empty($tracking['zoom_url'])): ?>
         <p><a class="btn btn-accent" href="<?= e((string) $tracking['zoom_url']) ?>" target="_blank" rel="noopener">Abrir acceso Zoom</a></p>
-    <?php else: ?>
-        <p class="muted">El enlace Zoom (acceso a la certificación) lo publicará administración aquí cuando esté listo.</p>
+    <?php elseif (empty($tracking['folio']) && empty($tracking['access_key'])): ?>
+        <p class="muted">Los accesos al examen (folio y clave del día) se publicarán aquí cuando UKS confirme tu registro.</p>
     <?php endif; ?>
+</div>
+<?php endif; ?>
+
+<?php if (!empty($tracking['folio']) && !empty($tracking['access_key'])): ?>
+<div class="panel" style="margin-top:1rem;border:2px solid var(--doceo-yellow)">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Acceso al examen ELeT</h2>
+    <p style="margin-top:0">
+        Entra en:
+        <a class="btn btn-accent btn-sm" href="<?= e($eletExamUrl ?? 'https://exam.elet.com.mx/') ?>" target="_blank" rel="noopener">exam.elet.com.mx</a>
+    </p>
+    <ul style="margin:.5rem 0;padding-left:1.1rem">
+        <li>Folio (único): <strong style="font-family:ui-monospace,monospace"><?= e((string) $tracking['folio']) ?></strong></li>
+        <li>Clave del día: <strong style="font-family:ui-monospace,monospace"><?= e((string) $tracking['access_key']) ?></strong></li>
+    </ul>
+    <p class="muted" style="font-size:.85rem;margin:0">Presenta el examen en la fecha y hora programadas arriba.</p>
+</div>
+<?php elseif ((string) ($tracking['purchase_status'] ?? '') === 'paid' && ($tracking['pipeline_code'] ?? '') === 'elet_uks'): ?>
+<div class="panel" style="margin-top:1rem;background:#f4f7fb">
+    <p class="muted" style="margin:0">Tu pago está confirmado. Estamos coordinando con UKS tu registro; recibirás folio y clave por correo y aquí.</p>
 </div>
 <?php endif; ?>
 
