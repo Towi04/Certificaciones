@@ -37,6 +37,7 @@ final class CheckoutController
             'user' => $user,
             'quote' => (new PricingService())->quoteProduct($product, null),
             'openpayReady' => $this->openPayConfigured(),
+            'bank' => $this->bankTransferInfo(),
         ]);
     }
 
@@ -60,7 +61,7 @@ final class CheckoutController
                 : '',
         ];
 
-        $paymentMethod = (string) ($_POST['payment_method'] ?? ($this->openPayConfigured() ? 'openpay_spei' : 'transfer_proof'));
+        $paymentMethod = (string) ($_POST['payment_method'] ?? 'transfer_proof');
         $promoCode = trim((string) ($_POST['promo_code'] ?? ''));
         $cardMsiMonths = max(1, (int) ($_POST['card_msi_months'] ?? 1));
 

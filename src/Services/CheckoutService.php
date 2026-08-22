@@ -65,9 +65,9 @@ final class CheckoutService
         $openpayConfigured = trim((string) (Env::get('OPENPAY_MERCHANT_ID', '') ?? '')) !== ''
             && trim((string) (Env::get('OPENPAY_PRIVATE_KEY', '') ?? '')) !== '';
 
-        $allowedPay = ['openpay_spei', 'openpay_card', 'openpay_store'];
+        $allowedPay = ['transfer_proof', 'openpay_spei', 'openpay_card', 'openpay_store'];
         if (!$openpayConfigured) {
-            $allowedPay[] = 'transfer_proof';
+            $allowedPay = ['transfer_proof'];
         }
         if (!in_array($paymentMethod, $allowedPay, true)) {
             throw new \InvalidArgumentException('Método de pago inválido.');
@@ -306,27 +306,26 @@ final class CheckoutService
         }
 
         if ($paymentMethod === 'openpay_spei') {
-            $p = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_SPEI);
-
-            return ['gross' => $p['gross'], 'fee' => $p['fee'], 'msi' => null];
+            return ['gross' => round($base, 2), 'fee' => 0.0, 'msi' => null];
         }
 
         if ($paymentMethod === 'openpay_store') {
-            $p = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_STORE);
-
-            return ['gross' => $p['gross'], 'fee' => $p['fee'], 'msi' => null];
+            return ['gross' => round($base, 2), 'fee' => 0.0, 'msi' => null];
         }
 
         if ($paymentMethod === 'openpay_card') {
             if (!CardMsiCalculator::isValidMonths($base, $product, $cardMsiMonths)) {
                 throw new \InvalidArgumentException('El plan MSI seleccionado no aplica para este producto.');
             }
+            if ($cardMsiMonths <= 1) {
+                return ['gross' => round($base, 2), 'fee' => 0.0, 'msi' => null];
+            }
             $p = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_CARD);
 
             return [
                 'gross' => $p['gross'],
                 'fee' => $p['fee'],
-                'msi' => $cardMsiMonths > 1 ? $cardMsiMonths : null,
+                'msi' => $cardMsiMonths,
             ];
         }
 
