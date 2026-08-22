@@ -11,6 +11,8 @@ $statusLabels = [
     'draft' => 'Borrador',
     'cancelled' => 'Cancelado',
 ];
+$msiMonths = (int) ($purchase['card_msi_months'] ?? 0);
+$isCard = ($purchase['payment_method'] ?? '') === 'openpay_card';
 ?>
 <article class="panel" style="margin:1.25rem 0 2.5rem">
     <p class="meta">Compra registrada</p>
@@ -25,6 +27,11 @@ $statusLabels = [
         <div>
             <div class="muted" style="font-size:.85rem">Método</div>
             <div><strong><?= e($purchase['payment_method']) ?></strong></div>
+            <?php if ($isCard && $msiMonths > 1): ?>
+                <div class="muted" style="font-size:.85rem;margin-top:.25rem">
+                    <?= $msiMonths ?> MSI — cargo total autorizado; tu banco cobra en mensualidades
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -37,12 +44,23 @@ $statusLabels = [
         </ul>
     <?php endif; ?>
 
+    <?php if ($isCard && (string) $purchase['status'] === 'paid'): ?>
+        <div class="panel" style="margin-top:1rem;background:#f0faf4;border-color:#b8e6c8">
+            <p style="margin:0"><strong>Pago con tarjeta confirmado.</strong>
+                Recibimos el monto total de <?= money($purchase['charged_amount']) ?>.
+                <?php if ($msiMonths > 1): ?>
+                    Tu banco puede diferir el cobro en <?= $msiMonths ?> mensualidades en tu estado de cuenta.
+                <?php endif; ?>
+            </p>
+        </div>
+    <?php endif; ?>
+
     <?php if (in_array($purchase['status'], ['awaiting_payment', 'payment_review'], true)): ?>
         <hr style="border:0;border-top:1px solid #e6ebf2;margin:1.25rem 0">
         <h2 style="font-size:1.05rem;color:var(--doceo-blue)">Instrucciones de pago</h2>
 
         <?php if (!empty($purchase['openpay_clabe'])): ?>
-            <p>Realiza una transferencia SPEI a esta CLABE única:</p>
+            <p>Realiza una transferencia SPEI por el <strong>monto total</strong> a esta CLABE única:</p>
             <p style="font-family:ui-monospace,monospace;font-size:1.15rem;letter-spacing:.04em">
                 <?= e($purchase['openpay_clabe']) ?>
             </p>
@@ -51,59 +69,15 @@ $statusLabels = [
                 <p><a class="btn btn-primary btn-sm" href="<?= e($openpayPdf) ?>" target="_blank" rel="noopener">Descargar ficha SPEI</a></p>
             <?php endif; ?>
 
-    <?php
-    /** @var list<array<string,mixed>> $installments */
-    $installments = $installments ?? [];
-    $installmentCount = (int) ($purchase['installment_count'] ?? 1);
-    ?>
-    <?php if ($installmentCount > 1 || $installments !== []): ?>
-        <div class="panel" style="margin-top:1rem">
-            <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Calendario de pagos diferidos</h2>
-            <p class="muted" style="margin-top:0">
-                Total del caso <?= money($purchase['charged_amount']) ?>
-                · <?= (int) ($purchase['paid_installments'] ?? 0) ?>/<?= $installmentCount ?> pagos confirmados
-            </p>
-            <div style="overflow-x:auto">
-                <table class="table" style="width:100%;font-size:.9rem">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Monto</th>
-                            <th>Vence</th>
-                            <th>Estado</th>
-                            <th>CLABE</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($installments as $inst): ?>
-                            <tr>
-                                <td><?= (int) $inst['sequence_no'] ?></td>
-                                <td><?= money($inst['amount']) ?></td>
-                                <td><?= e((string) ($inst['due_date'] ?? '—')) ?></td>
-                                <td><span class="pill"><?= e((string) $inst['status']) ?></span></td>
-                                <td style="font-family:ui-monospace,monospace;font-size:.8rem">
-                                    <?= e((string) ($inst['openpay_clabe'] ?? '—')) ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-            <?php if ($installmentCount > 1): ?>
-                <p class="muted" style="font-size:.85rem">
-                    El SPEI mostrado arriba corresponde al pago en curso. Al confirmarse, administración habilita el siguiente.
-                </p>
-            <?php endif; ?>
-        </div>
-    <?php endif; ?>
-
         <?php elseif ($purchase['payment_method'] === 'transfer_proof'): ?>
             <p>Recibimos tu comprobante. Lo revisaremos y te avisaremos por correo.</p>
             <?php if ($bank['clabe'] !== ''): ?>
                 <p class="muted">Cuenta DOCEO de referencia: <?= e($bank['bank']) ?> · CLABE <?= e($bank['clabe']) ?> · <?= e($bank['holder']) ?></p>
             <?php endif; ?>
+        <?php elseif ($isCard): ?>
+            <p>Estamos procesando tu pago con tarjeta. Si no se confirma en unos minutos, contacta a administración con tu matrícula.</p>
         <?php else: ?>
-            <p>Transfiere el monto a la cuenta DOCEO e incluye tu matrícula en el concepto:</p>
+            <p>Transfiere el monto total a la cuenta DOCEO e incluye tu matrícula en el concepto:</p>
             <?php if ($bank['clabe'] !== ''): ?>
                 <ul>
                     <li>Banco: <strong><?= e($bank['bank']) ?></strong></li>

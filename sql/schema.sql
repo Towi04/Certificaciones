@@ -252,9 +252,7 @@ CREATE TABLE IF NOT EXISTS purchases (
   currency CHAR(3) NOT NULL DEFAULT 'MXN',
   catalog_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
   charged_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-  installment_count TINYINT UNSIGNED NOT NULL DEFAULT 1,
-  installment_amount DECIMAL(12,2) NULL,
-  paid_installments TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  card_msi_months TINYINT UNSIGNED NULL,
   partner_price_amount DECIMAL(12,2) NULL,
   partner_credit_earned DECIMAL(12,2) NOT NULL DEFAULT 0.00,
   openpay_charge_id VARCHAR(80) NULL,
@@ -271,23 +269,6 @@ CREATE TABLE IF NOT EXISTS purchases (
   CONSTRAINT fk_purchases_partner FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE SET NULL,
   CONSTRAINT fk_purchases_dcode FOREIGN KEY (discount_code_id) REFERENCES discount_codes(id) ON DELETE SET NULL,
   CONSTRAINT fk_purchases_combo FOREIGN KEY (combo_id) REFERENCES combos(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS purchase_installments (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  purchase_id BIGINT UNSIGNED NOT NULL,
-  sequence_no TINYINT UNSIGNED NOT NULL,
-  amount DECIMAL(12,2) NOT NULL,
-  due_date DATE NULL,
-  status ENUM('pending','awaiting_payment','paid','cancelled') NOT NULL DEFAULT 'pending',
-  openpay_charge_id VARCHAR(80) NULL,
-  openpay_clabe VARCHAR(30) NULL,
-  paid_at DATETIME NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_purchase_installment_seq (purchase_id, sequence_no),
-  KEY idx_installments_status (status),
-  KEY idx_installments_openpay (openpay_charge_id),
-  CONSTRAINT fk_installments_purchase FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS purchase_items (
