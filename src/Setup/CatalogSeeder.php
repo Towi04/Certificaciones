@@ -80,26 +80,105 @@ final class CatalogSeeder
             return "Producto creado: {$code}";
         };
 
+        $eletDescription = <<<'TXT'
+El ELeT es un examen de acreditación del nivel de inglés computarizado y con resultados inmediatos. Se encuentra alineado al marco común europeo y al programa de Certificación Nacional del Nivel de Idioma (CENNI) de la SEP.
+
+Características:
+• Examen de acreditación para personas de 14 años en adelante.
+• Reactivos alineados al Marco Común Europeo (CEFR), niveles A1− a C1+ (CENNI niveles 2–16).
+• Inglés adaptado a necesidades de uso global.
+• Resultado al instante al terminar el examen.
+• Aprobado por el Colegio de Profesionales en la Enseñanza del Inglés (COPEI).
+• Duración aproximada: 75 minutos.
+• Cuatro secciones: Comprensión de lectura (Reading), Comprensión auditiva (Listening), Uso del idioma (Use of English), Producción escrita (Writing).
+TXT;
+
+        $eletBenefits = <<<'HTML'
+<ul>
+<li><strong>Resultados inmediatos</strong></li>
+<li><strong>Constancia UKS</strong></li>
+<li>Combo opcional: trámite CENNI sin costo adicional (constancia CENNI validez 1 año)</li>
+</ul>
+HTML;
+
+        $eletUksConfig = [
+            'checkout_fields' => ['email', 'first_name', 'last_name_p', 'last_name_m', 'phone'],
+            'required_docs' => [],
+            'registration_docs' => [
+                ['code' => 'reglamento', 'label' => 'Reglamento firmado (PDF)', 'required' => true, 'accept' => '.pdf'],
+                ['code' => 'signature', 'label' => 'Firma (imagen)', 'required' => true, 'accept' => '.jpg,.jpeg,.png'],
+            ],
+            'card_msi' => ['enabled' => true, 'months' => [1, 3, 6], 'min_amount' => 500],
+            'schedule' => [
+                'weekdays' => ['start' => '10:00', 'end' => '17:30'],
+                'saturday' => ['start' => '08:00', 'end' => '12:00'],
+                'min_advance_days' => 2,
+                'same_day_exception' => ['before' => '16:00', 'requires_admin' => true],
+            ],
+            'optional_addons' => [
+                [
+                    'product_code' => 'ELET-CENNI',
+                    'label' => 'Incluir trámite CENNI (sin costo adicional)',
+                    'description' => 'Constancia CENNI con validez 1 año. Trámite gestionado por DOCEO.',
+                    'default' => false,
+                    'price' => 0,
+                ],
+            ],
+        ];
+
+        $eletCenniConfig = [
+            'checkout_fields' => [],
+            'required_docs' => [],
+            'registration_docs' => [
+                ['code' => 'reglamento', 'label' => 'Reglamento firmado (PDF)', 'required' => true, 'accept' => '.pdf'],
+                ['code' => 'signature', 'label' => 'Firma (imagen)', 'required' => true, 'accept' => '.jpg,.jpeg,.png'],
+            ],
+            'card_msi' => ['enabled' => false, 'months' => [], 'min_amount' => 0],
+            'bundled_with' => 'ELET-UKS',
+        ];
+
         $products = [
             [
-                'code' => 'ELET-CENNI',
-                'name' => 'ELeT + CENNI',
-                'slug' => 'elet-cenni',
+                'code' => 'ELET-UKS',
+                'name' => 'ELET',
+                'slug' => 'elet',
                 'type' => 'certification',
                 'category' => 'english_adult',
                 'supplier_id' => $supplierIds['uks'],
                 'certifier_id' => $certifierIds['uks'],
-                'short_description' => 'Certificación UKS con trámite CENNI incluido vía proveedor.',
-                'public_price' => 1890,
-                'cost_price' => 0,
-                'price_partner_a' => 1650,
-                'price_partner_b' => 1600,
-                'price_partner_c' => 1550,
-                'price_cncm' => 1600,
+                'short_description' => 'Examen ELeT computarizado con resultados inmediatos. Alineado CEFR y CENNI.',
+                'description' => $eletDescription,
+                'benefits_html' => $eletBenefits,
+                'catalog_price' => 1500,
+                'public_price' => 1350,
+                'cost_price' => 846,
+                'price_partner_a' => 1300,
+                'price_partner_b' => 1250,
+                'price_partner_c' => 1200,
+                'price_cncm' => 846,
                 'is_star' => 1,
                 'audience' => 'adult',
                 'platform_type' => 'none',
                 'sort_order' => 1,
+                'config_json' => json_encode($eletUksConfig, JSON_UNESCAPED_UNICODE),
+            ],
+            [
+                'code' => 'ELET-CENNI',
+                'name' => 'Trámite CENNI (ELeT)',
+                'slug' => 'elet-cenni-tramite',
+                'type' => 'procedure',
+                'category' => 'english_adult',
+                'supplier_id' => $supplierIds['doceo'],
+                'certifier_id' => $certifierIds['cenni'],
+                'short_description' => 'Trámite CENNI incluido sin costo al adquirir ELET (opcional).',
+                'public_price' => 0,
+                'cost_price' => 0,
+                'is_star' => 0,
+                'is_public' => 0,
+                'audience' => 'adult',
+                'platform_type' => 'none',
+                'sort_order' => 99,
+                'config_json' => json_encode($eletCenniConfig, JSON_UNESCAPED_UNICODE),
             ],
             [
                 'code' => 'ITEP-CENNI',
@@ -221,10 +300,12 @@ final class CatalogSeeder
         ];
 
         foreach ($products as $p) {
-            $public = (float) $p['public_price'];
-            $p['catalog_price'] = Settings::catalogPriceFromPublic($public);
-            $p['is_active'] = 1;
-            $p['is_public'] = 1;
+            if (!isset($p['catalog_price'])) {
+                $public = (float) $p['public_price'];
+                $p['catalog_price'] = Settings::catalogPriceFromPublic($public);
+            }
+            $p['is_active'] = $p['is_active'] ?? 1;
+            $p['is_public'] = $p['is_public'] ?? 1;
             $p['cost_price'] = $p['cost_price'] ?? 0;
             // Checkout mínimo por defecto: contacto + pago.
             // Reglamento/firma se piden después en el caso del alumno (registration_docs).
