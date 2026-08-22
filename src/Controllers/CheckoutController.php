@@ -62,6 +62,7 @@ final class CheckoutController
 
         $paymentMethod = (string) ($_POST['payment_method'] ?? ($this->openPayConfigured() ? 'openpay_spei' : 'transfer_proof'));
         $promoCode = trim((string) ($_POST['promo_code'] ?? ''));
+        $installmentCount = max(1, (int) ($_POST['installment_count'] ?? 1));
 
         try {
             foreach (CheckoutRequirements::fieldsForProduct($product) as $field) {
@@ -79,7 +80,8 @@ final class CheckoutController
                 $buyer,
                 $_FILES,
                 $paymentMethod,
-                $promoCode !== '' ? $promoCode : null
+                $promoCode !== '' ? $promoCode : null,
+                $installmentCount
             );
 
             $matricula = (string) $result['purchase']['matricula'];
@@ -139,7 +141,9 @@ final class CheckoutController
             redirect('/login');
         }
 
-        $items = (new PurchaseRepository())->items((int) $purchase['id']);
+        $repo = new PurchaseRepository();
+        $items = $repo->items((int) $purchase['id']);
+        $installments = $repo->installments((int) $purchase['id']);
         $openpayPdf = null;
         if (!empty($purchase['openpay_charge_id']) && $this->openPayConfigured()) {
             try {
@@ -153,6 +157,7 @@ final class CheckoutController
             'title' => 'Caso ' . $purchase['matricula'],
             'purchase' => $purchase,
             'items' => $items,
+            'installments' => $installments,
             'bank' => $this->bankTransferInfo(),
             'openpayPdf' => $openpayPdf,
             'user' => $user,

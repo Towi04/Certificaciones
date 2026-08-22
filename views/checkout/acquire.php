@@ -91,6 +91,36 @@ $step = 1;
             </section>
         <?php endif; ?>
 
+
+        <section class="checkout-section" id="deferred-section">
+            <h2><?= $step++ ?>. Plan de pago</h2>
+            <p class="muted" style="margin-top:0">Elige contado o pagos diferidos. Con SPEI OpenPay se genera la CLABE del <strong>primer pago</strong>; el resto queda calendarizado.</p>
+            <div class="pay-options" id="deferred-options">
+                <?php
+                $plans = $quote['deferred_plans'] ?? [];
+                if ($plans === []) {
+                    $plans = [['months' => 1, 'monthly' => $quote['charged'], 'label' => 'Pago de contado', 'total' => $quote['charged']]];
+                }
+                foreach ($plans as $i => $plan):
+                ?>
+                    <label class="pay-option">
+                        <input type="radio" name="installment_count" value="<?= (int) $plan['months'] ?>"
+                               data-monthly="<?= e(number_format((float) $plan['monthly'], 2, '.', '')) ?>"
+                               <?= $i === 0 ? 'checked' : '' ?>>
+                        <span>
+                            <strong><?= e($plan['label']) ?></strong>
+                            <?php if ((int) $plan['months'] > 1): ?>
+                                <small>Total <?= money($plan['total']) ?> · primer cargo <?= money($plan['monthly']) ?></small>
+                            <?php else: ?>
+                                <small>Un solo cargo por el total</small>
+                            <?php endif; ?>
+                        </span>
+                    </label>
+                <?php endforeach; ?>
+            </div>
+            <p class="muted" id="deferred-hint" style="font-size:.85rem;margin-top:.5rem"></p>
+        </section>
+
         <section class="checkout-section">
             <h2><?= $step++ ?>. Pago</h2>
             <div class="pay-options">
@@ -143,6 +173,44 @@ $step = 1;
 .bank-hint { font-family:ui-monospace,monospace; }
 </style>
 <script>
+
+  const deferredBox = document.getElementById('deferred-options');
+  const deferredHint = document.getElementById('deferred-hint');
+
+  function moneyFmt(n) {
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(n || 0));
+  }
+
+  function renderDeferredPlans(plans) {
+    if (!deferredBox) return;
+    const list = Array.isArray(plans) && plans.length ? plans : [{ months: 1, monthly: 0, total: 0, label: 'Pago de contado' }];
+    deferredBox.innerHTML = list.map((p, i) => {
+      const months = Number(p.months || 1);
+      const monthly = Number(p.monthly || 0);
+      const total = Number(p.total || monthly);
+      const label = p.label || (months === 1 ? 'Pago de contado' : (months + ' pagos'));
+      const small = months > 1
+        ? ('Total ' + moneyFmt(total) + ' · primer cargo ' + moneyFmt(monthly))
+        : 'Un solo cargo por el total';
+      return '<label class="pay-option">'
+        + '<input type="radio" name="installment_count" value="' + months + '" data-monthly="' + monthly.toFixed(2) + '"' + (i === 0 ? ' checked' : '') + '>'
+        + '<span><strong>' + label + '</strong><small>' + small + '</small></span></label>';
+    }).join('');
+    deferredBox.querySelectorAll('input[name=installment_count]').forEach(el => el.addEventListener('change', updateDeferredHint));
+    updateDeferredHint();
+  }
+
+  function updateDeferredHint() {
+    if (!deferredHint) return;
+    const selected = document.querySelector('input[name=installment_count]:checked');
+    if (!selected) { deferredHint.textContent = ''; return; }
+    const months = Number(selected.value || 1);
+    const monthly = selected.getAttribute('data-monthly');
+    deferredHint.textContent = months > 1
+      ? ('Se cobrará ahora el pago 1 de ' + months + ' (' + moneyFmt(monthly) + '). Los siguientes quedan en tu calendario.')
+      : 'Se cobrará el monto total en un solo pago.';
+  }
+
 (function () {
   const slug = <?= json_encode($product['slug'], JSON_UNESCAPED_UNICODE) ?>;
   const codeInput = document.getElementById('promo_code');
@@ -167,6 +235,7 @@ $step = 1;
         }
         errEl.style.display = 'none';
         chargedEl.textContent = money(data.quote.charged);
+        if (typeof renderDeferredPlans === 'function') renderDeferredPlans(data.quote.deferred_plans || []);
         labelEl.textContent = data.quote.label || '';
       })
       .catch(() => {});
@@ -187,5 +256,6 @@ $step = 1;
   }
   document.querySelectorAll('input[name=payment_method]').forEach(el => el.addEventListener('change', syncProof));
   syncProof();
+  updateDeferredHint();
 })();
 </script>

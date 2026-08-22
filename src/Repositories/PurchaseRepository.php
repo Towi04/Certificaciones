@@ -105,6 +105,7 @@ final class PurchaseRepository
      * @param array{
      *   matricula:string,student_user_id:int,partner_id:?int,discount_code_id:?int,combo_id:?int,
      *   status:string,payment_method:string,currency:string,catalog_amount:float,charged_amount:float,
+     *   installment_count?:int,installment_amount?:?float,paid_installments?:int,
      *   partner_price_amount:?float,partner_credit_earned:float
      * } $data
      */
@@ -114,8 +115,9 @@ final class PurchaseRepository
             'INSERT INTO purchases (
                 matricula, student_user_id, partner_id, discount_code_id, combo_id,
                 status, payment_method, currency, catalog_amount, charged_amount,
+                installment_count, installment_amount, paid_installments,
                 partner_price_amount, partner_credit_earned
-             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         );
         $stmt->execute([
             $data['matricula'],
@@ -128,6 +130,9 @@ final class PurchaseRepository
             $data['currency'],
             $data['catalog_amount'],
             $data['charged_amount'],
+            (int) ($data['installment_count'] ?? 1),
+            $data['installment_amount'] ?? null,
+            (int) ($data['paid_installments'] ?? 0),
             $data['partner_price_amount'],
             $data['partner_credit_earned'],
         ]);
@@ -199,5 +204,89 @@ final class PurchaseRepository
 
         return $row ?: null;
     }
-}
 
+    /**
+     * @param list<array{seq:int,amount:float,due_date:?string,status?:string}> $rows
+     */
+    public function createInstallments(int $purchaseId, array $rows): void
+    {
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO purchase_installments
+                (purchase_id, sequence_no, amount, due_date, status)
+             VALUES (?,?,?,?,?)'
+        );
+        foreach ($rows as $row) {
+            $stmt->execute([
+                $purchaseId,
+                (int) $row['seq'],
+                round((float) $row['amount'], 2),
+                $row['due_date'] ?? null,
+                (string) ($row['status'] ?? 'pending'),
+            ]);
+        }
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function installments(int $purchaseId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM purchase_installments WHERE purchase_id = ? ORDER BY sequence_no ASC'
+        );
+        $stmt->execute([$purchaseId]);
+
+        return $stmt->fetchAll();
+    }
+
+    public function findInstallmentByOpenPayChargeId(string $chargeId): ?array
+    {
+        $chargeId = trim($chargeId);
+        if ($chargeId === '') {
+            return null;
+        }
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM purchase_installments WHERE openpay_charge_id = ? LIMIT 1'
+        );
+        $stmt->execute([$chargeId]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    public function setInstallmentOpenPay(int $installmentId, string $chargeId, ?string $clabe): void
+    {
+        $this->pdo->prepare(
+            "UPDATE purchase_installments
+             SET openpay_charge_id = ?, openpay_clabe = ?, status = 'awaiting_payment'
+             WHERE id = ?"
+        )->execute([$chargeId, $clabe, $installmentId]);
+    }
+
+    public function markInstallmentPaid(int $installmentId): void
+    {
+        $this->pdo->prepare(
+            "UPDATE purchase_installments
+             SET status = 'paid', paid_at = NOW()
+             WHERE id = ?"
+        )->execute([$installmentId]);
+    }
+
+    public function incrementPaidInstallments(int $purchaseId): void
+    {
+        $this->pdo->prepare(
+            'UPDATE purchases SET paid_installments = paid_installments + 1 WHERE id = ?'
+        )->execute([$purchaseId]);
+    }
+
+    public function findByOpenPayChargeId(string $chargeId): ?array
+    {
+        $chargeId = trim($chargeId);
+        if ($chargeId === '') {
+            return null;
+        }
+        $stmt = $this->pdo->prepare('SELECT * FROM purchases WHERE openpay_charge_id = ? LIMIT 1');
+        $stmt->execute([$chargeId]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+}

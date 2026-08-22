@@ -229,9 +229,17 @@ final class CatalogSeeder
             // Checkout mínimo por defecto: contacto + pago. Docs/CURP/etc. se piden
             // después en el pipeline o vía config_json por producto cuando aplique.
             if (!isset($p['config_json'])) {
+                $type = (string) ($p['type'] ?? '');
+                $deferred = [
+                    'enabled' => in_array($type, ['certification', 'procedure'], true),
+                    'months' => [1, 3, 6],
+                    'min_amount' => 500,
+                    'label' => 'Pago diferido',
+                ];
                 $p['config_json'] = json_encode([
                     'checkout_fields' => ['email', 'first_name', 'last_name_p', 'last_name_m', 'phone'],
                     'required_docs' => [],
+                    'deferred' => $deferred,
                 ], JSON_UNESCAPED_UNICODE);
             }
             $log[] = $upsertProduct($p);

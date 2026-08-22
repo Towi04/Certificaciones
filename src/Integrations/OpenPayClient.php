@@ -110,6 +110,42 @@ final class OpenPayClient
         return $this->request('POST', 'charges', $payload);
     }
 
+    /**
+     * Cargo con tarjeta (token) y MSI OpenPay.
+     * $payments = número de meses (p.ej. 3, 6, 9, 12). Null = contado.
+     *
+     * @param array{
+     *   amount: float|int|string,
+     *   description: string,
+     *   order_id: string,
+     *   source_id: string,
+     *   device_session_id?: string,
+     *   customer: array{name: string, email: string, phone_number?: string},
+     *   payments?: int|null
+     * } $data
+     * @return array<string, mixed>
+     */
+    public function createCardCharge(array $data): array
+    {
+        $payload = [
+            'method' => 'card',
+            'amount' => round((float) $data['amount'], 2),
+            'description' => mb_substr((string) $data['description'], 0, 250),
+            'order_id' => mb_substr((string) $data['order_id'], 0, 100),
+            'source_id' => (string) $data['source_id'],
+            'customer' => $data['customer'],
+        ];
+        if (!empty($data['device_session_id'])) {
+            $payload['device_session_id'] = (string) $data['device_session_id'];
+        }
+        $payments = isset($data['payments']) ? (int) $data['payments'] : 0;
+        if ($payments > 1) {
+            $payload['payment_plan'] = ['payments' => $payments];
+        }
+
+        return $this->request('POST', 'charges', $payload);
+    }
+
     public function getCharge(string $chargeId): array
     {
         return $this->request('GET', 'charges/' . rawurlencode($chargeId));
