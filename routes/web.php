@@ -53,6 +53,11 @@ $router->post('/admin/seguimientos/{id}/examen', fn (string $id) => $admin->trac
 $router->post('/admin/documentos/{id}/aprobar', fn (string $id) => $admin->documentApprove($id));
 $router->post('/admin/documentos/{id}/rechazar', fn (string $id) => $admin->documentReject($id));
 $router->get('/admin/documentos/{id}/ver', fn (string $id) => $admin->documentDownload($id));
+$router->get('/admin/partners', fn () => $admin->partners());
+$router->get('/admin/partners/nuevo', fn () => $admin->partnerCreateForm());
+$router->post('/admin/partners/nuevo', fn () => $admin->partnerCreate());
+$router->get('/admin/partners/{id}', fn (string $id) => $admin->partnerEdit($id));
+$router->post('/admin/partners/{id}', fn (string $id) => $admin->partnerUpdate($id));
 $router->get('/admin/proveedores', fn () => $admin->suppliers());
 $router->get('/admin/salud', fn () => $admin->health());
 

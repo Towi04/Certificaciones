@@ -369,6 +369,111 @@ final class AdminController
         exit;
     }
 
+    public function partners(): void
+    {
+        Auth::requireRole(['admin']);
+        $q = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
+        $partners = (new \App\Repositories\PartnerRepository())->adminList($q !== '' ? $q : null);
+        view('admin/partners', [
+            'title' => 'Partners',
+            'partners' => $partners,
+            'q' => $q,
+            'tierLabels' => \App\Services\PartnerAdminService::tierLabels(),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function partnerCreateForm(): void
+    {
+        Auth::requireRole(['admin']);
+        view('admin/partner_form', [
+            'title' => 'Nuevo partner',
+            'partner' => null,
+            'tierLabels' => \App\Services\PartnerAdminService::tierLabels(),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function partnerCreate(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            $result = (new \App\Services\PartnerAdminService())->create([
+                'email' => (string) ($_POST['email'] ?? ''),
+                'password' => (string) ($_POST['password'] ?? ''),
+                'first_name' => (string) ($_POST['first_name'] ?? ''),
+                'last_name_p' => (string) ($_POST['last_name_p'] ?? ''),
+                'last_name_m' => (string) ($_POST['last_name_m'] ?? ''),
+                'phone' => (string) ($_POST['phone'] ?? ''),
+                'code' => (string) ($_POST['code'] ?? ''),
+                'display_name' => (string) ($_POST['display_name'] ?? ''),
+                'tier' => (string) ($_POST['tier'] ?? 'c'),
+                'notes' => (string) ($_POST['notes'] ?? ''),
+                'is_active' => !empty($_POST['is_active']),
+                'must_change_password' => !empty($_POST['must_change_password']),
+            ]);
+            flash(
+                'success',
+                'Partner creado. Contraseña temporal: ' . $result['plain_password']
+                . ' — guárdala; el partner entra en /login.'
+            );
+            redirect('/admin/partners/' . $result['partner_id']);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/admin/partners/nuevo');
+        }
+    }
+
+    public function partnerEdit(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $partner = (new \App\Repositories\PartnerRepository())->find((int) $id);
+        if ($partner === null) {
+            http_response_code(404);
+            view('errors/404', ['title' => 'Partner no encontrado', 'layout' => 'admin']);
+
+            return;
+        }
+        view('admin/partner_form', [
+            'title' => 'Editar partner',
+            'partner' => $partner,
+            'tierLabels' => \App\Services\PartnerAdminService::tierLabels(),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function partnerUpdate(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $partnerId = (int) $id;
+        try {
+            $result = (new \App\Services\PartnerAdminService())->update($partnerId, [
+                'email' => (string) ($_POST['email'] ?? ''),
+                'password' => (string) ($_POST['password'] ?? ''),
+                'first_name' => (string) ($_POST['first_name'] ?? ''),
+                'last_name_p' => (string) ($_POST['last_name_p'] ?? ''),
+                'last_name_m' => (string) ($_POST['last_name_m'] ?? ''),
+                'phone' => (string) ($_POST['phone'] ?? ''),
+                'code' => (string) ($_POST['code'] ?? ''),
+                'display_name' => (string) ($_POST['display_name'] ?? ''),
+                'tier' => (string) ($_POST['tier'] ?? 'c'),
+                'notes' => (string) ($_POST['notes'] ?? ''),
+                'is_active' => !empty($_POST['is_active']),
+                'must_change_password' => !empty($_POST['must_change_password']),
+            ]);
+            $msg = 'Partner actualizado.';
+            if (!empty($result['plain_password'])) {
+                $msg .= ' Nueva contraseña: ' . $result['plain_password'];
+            }
+            flash('success', $msg);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/partners/' . $partnerId);
+    }
+
     public function suppliers(): void
     {
         Auth::requireRole(['admin']);
