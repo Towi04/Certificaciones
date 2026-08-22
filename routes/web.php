@@ -9,6 +9,7 @@ use App\Controllers\CheckoutController;
 use App\Controllers\PartnerController;
 use App\Controllers\SetupController;
 use App\Controllers\StudentController;
+use App\Controllers\WebhookController;
 use App\Http\Router;
 
 $router = new Router();
@@ -19,6 +20,7 @@ $student = new StudentController();
 $partner = new PartnerController();
 $setup = new SetupController();
 $checkout = new CheckoutController();
+$webhooks = new WebhookController();
 
 $router->get('/', fn () => $catalog->home());
 $router->get('/catalogo', fn () => $catalog->home());
@@ -31,6 +33,9 @@ $router->get('/api/cotizar/{slug}', fn (string $slug) => $checkout->quote($slug)
 
 // Instalador web (funciona aunque setup.php no esté en el docroot)
 $router->get('/setup', fn () => $setup->run());
+
+// OpenPay (SPEI / cargos) — sin CSRF; auth HTTP Basic opcional vía OPENPAY_WEBHOOK_*
+$router->post('/webhooks/openpay', fn () => $webhooks->openPay());
 
 $router->get('/login', fn () => $auth->showLogin());
 $router->post('/login', fn () => $auth->login());

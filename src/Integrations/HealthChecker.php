@@ -115,6 +115,10 @@ final class HealthChecker
                 'meta' => [
                     'id' => $merchant['id'] ?? Env::get('OPENPAY_MERCHANT_ID'),
                     'name' => $merchant['name'] ?? null,
+                    'webhook_url' => OpenPayClient::publicWebhookUrl(),
+                    'webhook_auth' => Env::isFilled('OPENPAY_WEBHOOK_USER') && Env::isFilled('OPENPAY_WEBHOOK_PASSWORD')
+                        ? 'basic'
+                        : 'none',
                 ],
             ];
         } catch (\Throwable $e) {

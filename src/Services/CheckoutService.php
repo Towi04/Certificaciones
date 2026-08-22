@@ -238,6 +238,134 @@ final class CheckoutService
     }
 
     /**
+     * Webhook OpenPay: confirma SPEI cuando el cargo queda completed.
+     * Idempotente si la compra ya está paid.
+     *
+     * @return array{ok:bool,action:string,type?:string,purchase_id?:int,matricula?:string,reason?:string}
+     */
+    public function handleOpenPayWebhook(string $rawBody): array
+    {
+        $payload = json_decode($rawBody, true);
+        if (!is_array($payload)) {
+            throw new \InvalidArgumentException('JSON de webhook inválido.');
+        }
+
+        $type = (string) ($payload['type'] ?? $payload['event_type'] ?? '');
+        if ($type === '' || $type === 'verification') {
+            return ['ok' => true, 'action' => 'ack', 'type' => $type !== '' ? $type : 'empty'];
+        }
+
+        $successTypes = ['charge.succeeded', 'spei.received'];
+        if (!in_array($type, $successTypes, true)) {
+            return ['ok' => true, 'action' => 'ignored', 'type' => $type, 'reason' => 'event_not_payment'];
+        }
+
+        $tx = $payload['transaction'] ?? $payload['data'] ?? null;
+        if (!is_array($tx)) {
+            return ['ok' => true, 'action' => 'ignored', 'type' => $type, 'reason' => 'no_transaction'];
+        }
+
+        $chargeId = trim((string) ($tx['id'] ?? ''));
+        if ($chargeId === '') {
+            return ['ok' => true, 'action' => 'ignored', 'type' => $type, 'reason' => 'no_charge_id'];
+        }
+
+        $purchase = $this->purchases->findByOpenPayChargeId($chargeId);
+        if ($purchase === null) {
+            $orderId = (string) ($tx['order_id'] ?? '');
+            $matricula = $this->matriculaFromOpenPayOrderId($orderId);
+            if ($matricula !== null) {
+                $purchase = $this->purchases->findByMatricula($matricula);
+            }
+        }
+        if ($purchase === null) {
+            return [
+                'ok' => true,
+                'action' => 'ignored',
+                'type' => $type,
+                'reason' => 'purchase_not_found',
+            ];
+        }
+
+        if ((string) $purchase['status'] === 'paid') {
+            return [
+                'ok' => true,
+                'action' => 'already_paid',
+                'type' => $type,
+                'purchase_id' => (int) $purchase['id'],
+                'matricula' => (string) $purchase['matricula'],
+            ];
+        }
+
+        // Verifica en la API que el cargo esté completed (no confiar solo en el evento).
+        $merchant = trim((string) (Env::get('OPENPAY_MERCHANT_ID', '') ?? ''));
+        $key = trim((string) (Env::get('OPENPAY_PRIVATE_KEY', '') ?? ''));
+        if ($merchant !== '' && $key !== '') {
+            $remote = (new OpenPayClient())->getCharge($chargeId);
+            $remoteStatus = strtolower((string) ($remote['status'] ?? ''));
+            if ($remoteStatus !== 'completed') {
+                return [
+                    'ok' => true,
+                    'action' => 'ignored',
+                    'type' => $type,
+                    'purchase_id' => (int) $purchase['id'],
+                    'matricula' => (string) $purchase['matricula'],
+                    'reason' => 'charge_status_' . $remoteStatus,
+                ];
+            }
+        }
+
+        $actorId = $this->systemActorUserId();
+        $this->confirmPayment(
+            (int) $purchase['id'],
+            $actorId,
+            'Pago SPEI confirmado por OpenPay (' . $type . ', cargo ' . $chargeId . ')'
+        );
+
+        return [
+            'ok' => true,
+            'action' => 'confirmed',
+            'type' => $type,
+            'purchase_id' => (int) $purchase['id'],
+            'matricula' => (string) $purchase['matricula'],
+        ];
+    }
+
+    private function matriculaFromOpenPayOrderId(string $orderId): ?string
+    {
+        // Formato al crear SPEI: doceo-{matricula}-{timestamp}
+        if (preg_match('/^doceo-(.+)-(\d+)$/', trim($orderId), $m)) {
+            return $m[1];
+        }
+
+        return null;
+    }
+
+    private function systemActorUserId(): int
+    {
+        $email = trim((string) (Env::get('ADMIN_EMAIL', '') ?? ''));
+        if ($email !== '') {
+            $stmt = $this->pdo->prepare(
+                "SELECT id FROM users WHERE email = ? AND role = 'admin' LIMIT 1"
+            );
+            $stmt->execute([$email]);
+            $id = $stmt->fetchColumn();
+            if ($id !== false) {
+                return (int) $id;
+            }
+        }
+
+        $id = $this->pdo->query(
+            "SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1"
+        )->fetchColumn();
+        if ($id === false) {
+            throw new \RuntimeException('No hay usuario admin para registrar la confirmación de pago.');
+        }
+
+        return (int) $id;
+    }
+
+    /**
      * @param list<array{code:string,label:string,required:bool,accept:string}> $required
      * @param array<string, array{tmp_name:string,name:string,error:int,size:int}> $files
      */
