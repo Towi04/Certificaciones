@@ -374,8 +374,14 @@ final class AdminController
                     'waiting_provider'
                 );
             }
-            $uks->sendSolicitudEmail($trackingId, (int) $tracking['purchase_id']);
-            flash('success', 'Correo enviado a UKS y caso en solicitud UKS.');
+            $includeProof = !empty($_POST['include_payment_proof']);
+            $uks->sendSolicitudEmail($trackingId, (int) $tracking['purchase_id'], $includeProof);
+            $msg = 'Correo enviado a UKS (reglamento firmado';
+            $msg .= $includeProof ? ' + comprobante)' : ')';
+            if (($tracking['current_step_code'] ?? '') !== 'solicitud_uks') {
+                $msg .= ' · caso en solicitud UKS';
+            }
+            flash('success', $msg);
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
