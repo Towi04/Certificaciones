@@ -8,7 +8,11 @@
 ?>
 <p class="meta"><a href="<?= e(url('/admin/correos')) ?>">← Plantillas de correo</a></p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)"><?= e($template['name']) ?></h1>
-<p class="muted">Código: <code><?= e($template['code']) ?></code></p>
+<p class="muted">Código: <code><?= e($template['code']) ?></code>
+    <?php if (!(int) ($template['is_active'] ?? 0)): ?>
+        · <strong style="color:#b45309">Plantilla desactivada — no se enviarán correos</strong>
+    <?php endif; ?>
+</p>
 
 <div class="panel" style="margin-top:1rem;max-width:720px">
     <form method="post" action="<?= e(url('/admin/correos/' . $template['code'])) ?>">
