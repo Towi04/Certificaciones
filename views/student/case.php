@@ -98,14 +98,67 @@ $payLabels = [
 <?php endif; ?>
 
 <div class="panel" style="margin-top:1rem">
-    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Documentos</h2>
-    <?php if ($documents === []): ?>
-        <p class="muted">Este producto no requiere documentos por ahora. Si más adelante hace falta reglamento o firma, te lo pediremos aquí.</p>
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Documentos del registro</h2>
+    <?php
+    /** @var list<array<string,mixed>> $registrationDocs */
+    $registrationDocs = $registrationDocs ?? [];
+    $statusDoc = [
+        'pending' => 'En revisión',
+        'approved' => 'Aprobado',
+        'rejected' => 'Rechazado',
+    ];
+    ?>
+    <?php if ($registrationDocs === []): ?>
+        <p class="muted">Este producto no pide reglamento ni firma en el expediente.</p>
     <?php else: ?>
+        <p class="muted" style="margin-top:0">Sube el reglamento firmado y tu firma. Administración los revisará.</p>
+        <?php foreach ($registrationDocs as $req): ?>
+            <?php
+            $st = $req['status'] ?? null;
+            $canUpload = $st === null || $st === 'rejected' || $st === 'pending';
+            ?>
+            <div style="padding:.75rem 0;border-bottom:1px solid #e6ebf2">
+                <strong><?= e($req['label']) ?></strong>
+                <?php if ($req['required']): ?> <span class="muted">*</span><?php endif; ?>
+                <?php if ($st): ?>
+                    · <span class="pill"><?= e($statusDoc[$st] ?? $st) ?></span>
+                    <?php if (!empty($req['document_id']) && !empty($req['original_name'])): ?>
+                        · <a href="<?= e(url('/alumno/documentos/' . $req['document_id'] . '/ver')) ?>" target="_blank" rel="noopener"><?= e($req['original_name']) ?></a>
+                    <?php endif; ?>
+                <?php else: ?>
+                    · <span class="pill">Pendiente de subir</span>
+                <?php endif; ?>
+
+                <?php if ($st === 'rejected'): ?>
+                    <p class="muted" style="margin:.4rem 0">Motivo: <?= e((string) ($req['rejection_reason'] ?? '')) ?></p>
+                <?php endif; ?>
+
+                <?php if ($canUpload && $st !== 'approved'): ?>
+                    <form method="post" action="<?= e(url('/alumno/caso/' . $tracking['id'] . '/documentos')) ?>" enctype="multipart/form-data" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-top:.5rem">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="doc_type" value="<?= e($req['code']) ?>">
+                        <input type="file" name="document" required accept="<?= e($req['accept']) ?>">
+                        <button class="btn btn-accent btn-sm" type="submit">
+                            <?= $st === null ? 'Subir' : ($st === 'rejected' ? 'Subir de nuevo' : 'Reemplazar') ?>
+                        </button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        <?php endforeach; ?>
+    <?php endif; ?>
+
+    <?php if ($documents !== []): ?>
+        <h3 style="margin:1.25rem 0 .5rem;font-size:.95rem;color:var(--doceo-blue)">Otros archivos del caso</h3>
         <?php foreach ($documents as $d): ?>
+            <?php
+            $codes = array_column($registrationDocs, 'code');
+            if (in_array((string) $d['doc_type'], $codes, true)) {
+                continue;
+            }
+            ?>
             <div style="padding:.75rem 0;border-bottom:1px solid #e6ebf2">
                 <strong><?= e($d['doc_type']) ?></strong>
-                · <span class="pill"><?= e($d['status']) ?></span>
+                · <span class="pill"><?= e($statusDoc[$d['status']] ?? $d['status']) ?></span>
                 · <a href="<?= e(url('/alumno/documentos/' . $d['id'] . '/ver')) ?>" target="_blank" rel="noopener"><?= e($d['original_name']) ?></a>
                 <?php if ($d['status'] === 'rejected'): ?>
                     <p class="muted" style="margin:.4rem 0">Motivo: <?= e($d['rejection_reason'] ?? '') ?></p>
