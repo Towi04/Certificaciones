@@ -17,6 +17,50 @@ final class MailTemplateService
     /** @deprecated alias migrado a uks_solicitud */
     public const UKS_SOLICITUD_LEGACY = 'uks_elet_solicitud';
 
+    /** @var array<string, array<string, string>> */
+    private const PLACEHOLDER_OPTIONS = [
+        'Alumno' => [
+            'name' => 'Nombre corto',
+            'full_name' => 'Nombre completo',
+            'first_name' => 'Nombre(s)',
+            'last_name_p' => 'Apellido paterno',
+            'last_name_m' => 'Apellido materno',
+            'student_email' => 'Correo del alumno',
+            'student_phone' => 'Teléfono del alumno',
+        ],
+        'Caso / compra' => [
+            'matricula' => 'Matrícula / caso',
+            'product_name' => 'Producto',
+            'certificacion' => 'Certificación',
+            'amount' => 'Monto',
+            'login_url' => 'URL de login',
+        ],
+        'Pago y cuenta' => [
+            'pay_instructions_html' => 'Instrucciones de pago (HTML)',
+            'password_block_html' => 'Bloque usuario/contraseña (HTML)',
+        ],
+        'Examen ELeT' => [
+            'exam_url' => 'URL del examen',
+            'exam_date' => 'Fecha de examen',
+            'exam_time' => 'Hora de examen',
+            'folio' => 'Folio UKS / examen',
+            'access_key' => 'Clave del día',
+        ],
+        'Documentos UKS' => [
+            'reglamento_url' => 'URL reglamento firmado',
+            'comprobante_url' => 'URL comprobante de pago',
+            'documentos_html' => 'Lista de documentos (HTML)',
+            'attachment_note' => 'Nota de adjuntos/enlaces',
+        ],
+        'Resultados / CENNI' => [
+            'results_level' => 'Nivel alcanzado',
+            'results_score' => 'Puntaje',
+            'results_url' => 'URL certificado',
+            'cenni_folio' => 'Folio CENNI',
+            'sep_consulta_url' => 'URL consulta SEP',
+        ],
+    ];
+
     private MailTemplateRepository $repo;
 
     public function __construct()
@@ -156,6 +200,84 @@ final class MailTemplateService
         return in_array($code, [self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY], true);
     }
 
+    /** @return array<string, array<string, string>> */
+    public static function availablePlaceholderOptions(): array
+    {
+        return self::PLACEHOLDER_OPTIONS;
+    }
+
+    /** @return list<string> */
+    public static function defaultPlaceholdersForCode(string $code): array
+    {
+        $uks = [
+            'certificacion', 'product_name', 'full_name', 'matricula', 'student_email',
+            'exam_date', 'exam_time', 'reglamento_url', 'comprobante_url', 'documentos_html', 'attachment_note',
+        ];
+
+        return match ($code) {
+            self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY => $uks,
+            'student_elet_exam_access' => [
+                'name', 'matricula', 'exam_url', 'exam_date', 'exam_time', 'folio', 'access_key',
+            ],
+            'student_registration' => [
+                'full_name', 'matricula', 'product_name', 'amount', 'pay_instructions_html',
+                'password_block_html', 'login_url',
+            ],
+            'student_payment_confirmed' => ['name', 'matricula', 'product_name'],
+            default => [],
+        };
+    }
+
+    /**
+     * @param array<string, mixed> $template
+     * @return list<string>
+     */
+    public static function placeholdersForTemplate(array $template): array
+    {
+        $raw = $template['required_fields_json'] ?? null;
+        if (is_string($raw) && trim($raw) !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                return self::sanitizePlaceholders($decoded);
+            }
+        } elseif (is_array($raw)) {
+            return self::sanitizePlaceholders($raw);
+        }
+
+        return self::defaultPlaceholdersForCode((string) ($template['code'] ?? ''));
+    }
+
+    /**
+     * @param list<mixed> $raw
+     * @return list<string>
+     */
+    public static function sanitizePlaceholders(array $raw): array
+    {
+        $allowed = self::availablePlaceholderKeys();
+        $out = [];
+        foreach ($raw as $value) {
+            $key = is_string($value) ? trim($value) : '';
+            if ($key !== '' && in_array($key, $allowed, true) && !in_array($key, $out, true)) {
+                $out[] = $key;
+            }
+        }
+
+        return $out;
+    }
+
+    /** @return list<string> */
+    private static function availablePlaceholderKeys(): array
+    {
+        $keys = [];
+        foreach (self::PLACEHOLDER_OPTIONS as $group) {
+            foreach ($group as $key => $_label) {
+                $keys[] = $key;
+            }
+        }
+
+        return $keys;
+    }
+
     /**
      * @param array{subject: string, body_html: string, body_text: string} $rendered
      * @param array<string, mixed> $options
@@ -204,7 +326,11 @@ final class MailTemplateService
      */
     public function sendTemplateTest(string $code, string $to): array
     {
+        $tpl = $this->repo->findByCode($code);
         $vars = self::sampleVarsForCode($code);
+        if ($tpl !== null) {
+            $vars = array_merge($vars, self::sampleVarsForPlaceholders(self::placeholdersForTemplate($tpl)));
+        }
         $rendered = $this->render($code, $vars);
         if ($rendered === null) {
             throw new \RuntimeException('Plantilla no encontrada, desactivada o sin datos de prueba.');
@@ -307,6 +433,40 @@ final class MailTemplateService
         };
     }
 
+    /**
+     * @param list<string> $placeholders
+     * @return array<string, string>
+     */
+    public static function sampleVarsForPlaceholders(array $placeholders): array
+    {
+        $samples = array_merge(self::uksSolicitudSampleVars(), [
+            'name' => 'María Ejemplo',
+            'first_name' => 'María',
+            'last_name_p' => 'Ejemplo',
+            'last_name_m' => 'Demo',
+            'student_phone' => '555-010-0000',
+            'amount' => '$1,350.00',
+            'pay_instructions_html' => 'Completa tu pago SPEI con la CLABE de tu caso.',
+            'password_block_html' => '<p><strong>Usuario:</strong> alumno@ejemplo.com<br><strong>Contraseña temporal:</strong> Doceo*1234</p>',
+            'login_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/login',
+            'exam_url' => 'https://exam.elet.com.mx/',
+            'folio' => 'FOLIO-12345',
+            'access_key' => 'CLAVE-DIA',
+            'results_level' => 'B2',
+            'results_score' => '82',
+            'results_url' => 'https://certificados.example/elet/9999',
+            'cenni_folio' => 'CENNI-ABC-123',
+            'sep_consulta_url' => 'https://cennisistema.sep.gob.mx/cenni/consulta/consultaEstatus.jsp',
+        ]);
+
+        $out = [];
+        foreach ($placeholders as $key) {
+            $out[$key] = $samples[$key] ?? ('Ejemplo ' . $key);
+        }
+
+        return $out;
+    }
+
     /** @return array<string, string> */
     public static function uksSolicitudSampleVars(): array
     {
@@ -352,12 +512,102 @@ final class MailTemplateService
         return trim($text);
     }
 
-    public function update(string $code, string $subject, string $bodyHtml, bool $isActive): void
+    /**
+     * @param list<string> $placeholders
+     */
+    public function create(
+        string $code,
+        string $name,
+        string $subject,
+        string $bodyHtml,
+        bool $isActive,
+        array $placeholders,
+        string $triggerMode = 'manual'
+    ): void {
+        $code = trim($code);
+        $name = trim($name);
+        $subject = trim($subject);
+        if (!preg_match('/^[a-z0-9_]{3,60}$/', $code)) {
+            throw new \InvalidArgumentException('El código debe usar minúsculas, números y guion bajo (3-60 caracteres).');
+        }
+        if ($name === '') {
+            throw new \InvalidArgumentException('Indica el nombre de la plantilla.');
+        }
+        if ($subject === '') {
+            throw new \InvalidArgumentException('Indica el asunto de la plantilla.');
+        }
+        if (trim($bodyHtml) === '') {
+            throw new \InvalidArgumentException('Indica el contenido HTML de la plantilla.');
+        }
+        if ($this->repo->findByCode($code) !== null) {
+            throw new \InvalidArgumentException('Ya existe una plantilla con ese código.');
+        }
+
+        $placeholders = self::sanitizePlaceholders($placeholders);
+        $this->assertOnlySelectedPlaceholders($subject, $bodyHtml, $placeholders);
+        $triggerMode = in_array($triggerMode, ['automatic', 'manual'], true) ? $triggerMode : 'manual';
+
+        $this->repo->create($code, $name, $subject, $bodyHtml, $triggerMode, $isActive, $placeholders);
+    }
+
+    /**
+     * @param list<string>|null $placeholders
+     */
+    public function update(string $code, string $subject, string $bodyHtml, bool $isActive, ?array $placeholders = null): void
     {
         if ($this->repo->findByCode($code) === null) {
             throw new \InvalidArgumentException('Plantilla no encontrada.');
         }
-        $this->repo->update($code, $subject, $bodyHtml, $isActive);
+        $subject = trim($subject);
+        if ($subject === '') {
+            throw new \InvalidArgumentException('Indica el asunto de la plantilla.');
+        }
+        if (trim($bodyHtml) === '') {
+            throw new \InvalidArgumentException('Indica el contenido HTML de la plantilla.');
+        }
+        if ($placeholders !== null) {
+            $placeholders = self::sanitizePlaceholders($placeholders);
+            $this->assertOnlySelectedPlaceholders($subject, $bodyHtml, $placeholders);
+        }
+
+        $this->repo->update($code, $subject, $bodyHtml, $isActive, $placeholders);
+    }
+
+    /**
+     * @param list<string> $allowed
+     */
+    private function assertOnlySelectedPlaceholders(string $subject, string $bodyHtml, array $allowed): void
+    {
+        $used = self::extractPlaceholders($subject . "\n" . $bodyHtml);
+        if ($allowed === []) {
+            if ($used !== []) {
+                throw new \InvalidArgumentException(
+                    'Selecciona estos placeholders antes de usarlos: {{' . implode('}}, {{', $used) . '}}'
+                );
+            }
+            return;
+        }
+
+        $invalid = array_values(array_diff($used, $allowed));
+        if ($invalid !== []) {
+            throw new \InvalidArgumentException(
+                'Selecciona estos placeholders antes de usarlos: {{' . implode('}}, {{', $invalid) . '}}'
+            );
+        }
+    }
+
+    /** @return list<string> */
+    private static function extractPlaceholders(string $text): array
+    {
+        preg_match_all('/\{\{(\w+)\}\}/', $text, $matches);
+        $out = [];
+        foreach ($matches[1] ?? [] as $key) {
+            if (!in_array($key, $out, true)) {
+                $out[] = $key;
+            }
+        }
+
+        return $out;
     }
 
     /** Plantillas por defecto + migración UKS genérica. */

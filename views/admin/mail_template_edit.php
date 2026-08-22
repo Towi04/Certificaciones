@@ -6,18 +6,53 @@
 /** @var bool $requiresFixedRecipient */
 /** @var bool $isUksSolicitud */
 /** @var array<string, string> $previewVars */
+/** @var array<string, array<string, string>> $availablePlaceholders */
+/** @var list<string> $selectedPlaceholders */
+/** @var bool $isNew */
+$isNew = $isNew ?? false;
+$selectedPlaceholders = $selectedPlaceholders ?? $placeholders;
+$availablePlaceholders = $availablePlaceholders ?? [];
+$formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $template['code']);
 ?>
 <p class="meta"><a href="<?= e(url('/admin/correos')) ?>">← Plantillas de correo</a></p>
-<h1 style="margin:.2rem 0;color:var(--doceo-blue)"><?= e($template['name']) ?></h1>
-<p class="muted">Código: <code><?= e($template['code']) ?></code>
+<h1 style="margin:.2rem 0;color:var(--doceo-blue)"><?= $isNew ? 'Nueva plantilla de correo' : e($template['name']) ?></h1>
+<p class="muted">Código: <code><?= e($template['code'] ?: 'por definir') ?></code>
     <?php if (!(int) ($template['is_active'] ?? 0)): ?>
         · <strong style="color:#b45309">Plantilla desactivada — no se enviarán correos</strong>
     <?php endif; ?>
 </p>
 
 <div class="panel" style="margin-top:1rem;max-width:720px">
-    <form method="post" action="<?= e(url('/admin/correos/' . $template['code'])) ?>" id="mail-template-form">
+    <form method="post" action="<?= e($formAction) ?>" id="mail-template-form">
         <?= csrf_field() ?>
+
+        <?php if ($isNew): ?>
+        <div style="margin-bottom:1.25rem;padding:1rem;background:#f4f7fb;border-radius:12px;border:1px solid #dbeafe">
+            <h2 style="margin:0 0 .75rem;font-size:1rem;color:var(--doceo-blue)">Identificación</h2>
+            <div style="display:grid;gap:.75rem">
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    Nombre *
+                    <input type="text" name="name" required value=""
+                        placeholder="Alumno · Recordatorio de examen"
+                        style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                </label>
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    Código *
+                    <input type="text" name="code" required pattern="[a-z0-9_]{3,60}" value=""
+                        placeholder="student_exam_reminder"
+                        style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                    <span style="font-size:.78rem">Usa minúsculas, números y guion bajo. Este código se usará para invocar la plantilla.</span>
+                </label>
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    Modo
+                    <select name="trigger_mode" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                        <option value="manual">Manual / configurable</option>
+                        <option value="automatic">Automática</option>
+                    </select>
+                </label>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <?php if ($requiresFixedRecipient): ?>
         <div style="margin-bottom:1.25rem;padding:1rem;background:#f4f7fb;border-radius:12px;border:1px solid #dbeafe">
@@ -80,21 +115,38 @@
             Plantilla activa
         </label>
 
-        <?php if ($placeholders !== []): ?>
-            <p class="muted" style="font-size:.82rem;margin:0 0 1rem">
-                Variables:
-                <?php foreach ($placeholders as $p): ?>
-                    <code style="margin-right:.35rem">{{<?= e($p) ?>}}</code>
-                <?php endforeach; ?>
+        <div style="margin:1rem 0;padding:1rem;background:#f8fafc;border-radius:12px;border:1px solid #e6ebf2">
+            <h2 style="margin:0 0 .5rem;font-size:1rem;color:var(--doceo-blue)">Placeholders habilitados</h2>
+            <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
+                Selecciona las variables que esta plantilla puede usar. Luego insértalas en asunto o HTML con doble llave:
+                <code>{{matricula}}</code>.
             </p>
+            <?php foreach ($availablePlaceholders as $group => $items): ?>
+                <div style="margin:.85rem 0 0">
+                    <strong style="font-size:.85rem;color:var(--doceo-blue)"><?= e($group) ?></strong>
+                    <div class="placeholder-grid">
+                        <?php foreach ($items as $key => $label): ?>
+                            <?php $checked = in_array((string) $key, $selectedPlaceholders, true); ?>
+                            <label class="placeholder-option">
+                                <input type="checkbox" name="placeholders[]" value="<?= e((string) $key) ?>" <?= $checked ? 'checked' : '' ?>>
+                                <span>
+                                    <code>{{<?= e((string) $key) ?>}}</code>
+                                    <small><?= e((string) $label) ?></small>
+                                </span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
             <?php if ($isUksSolicitud): ?>
-                <p class="muted" style="font-size:.82rem;margin:0 0 1rem">
+                <p class="muted" style="font-size:.82rem;margin:.85rem 0 0">
                     <strong>{{certificacion}}</strong> = producto comprado.
                     <strong>{{documentos_html}}</strong> = enlaces al reglamento (sin adjuntos).
                 </p>
             <?php endif; ?>
-        <?php endif; ?>
+        </div>
 
+        <?php if (!$isNew): ?>
         <div style="margin:1.25rem 0;padding:1rem;border-top:1px solid #e6ebf2;border-bottom:1px solid #e6ebf2">
             <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem;font-weight:600">
                 <input type="checkbox" name="send_test" value="1" id="send-test-check">
@@ -113,8 +165,9 @@
                 </p>
             </div>
         </div>
+        <?php endif; ?>
 
-        <button class="btn btn-accent" type="submit">Guardar plantilla</button>
+        <button class="btn btn-accent" type="submit"><?= $isNew ? 'Crear plantilla' : 'Guardar plantilla' ?></button>
     </form>
 </div>
 
@@ -144,6 +197,27 @@
     color: #1a2b42;
 }
 .mail-preview-content a { color: var(--doceo-blue); }
+.placeholder-grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:.45rem .75rem;
+    margin-top:.45rem;
+}
+.placeholder-option {
+    display:flex;
+    align-items:flex-start;
+    gap:.45rem;
+    padding:.45rem .55rem;
+    border:1px solid #e6ebf2;
+    border-radius:10px;
+    background:#fff;
+    font-size:.82rem;
+}
+.placeholder-option small {
+    display:block;
+    color:var(--doceo-muted);
+    margin-top:.12rem;
+}
 </style>
 
 <script>

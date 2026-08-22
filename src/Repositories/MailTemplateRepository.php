@@ -60,15 +60,47 @@ final class MailTemplateRepository
         }
     }
 
+    /**
+     * @param list<string> $requiredFields
+     */
+    public function create(
+        string $code,
+        string $name,
+        string $subject,
+        string $bodyHtml,
+        string $triggerMode,
+        bool $isActive,
+        array $requiredFields
+    ): void {
+        $fieldsJson = $requiredFields !== [] ? json_encode(array_values($requiredFields), JSON_UNESCAPED_UNICODE) : null;
+        $this->pdo->prepare(
+            'INSERT INTO mail_templates (code, name, subject, body_html, trigger_mode, is_active, required_fields_json)
+             VALUES (?, ?, ?, ?, ?, ?, ?)'
+        )->execute([$code, $name, $subject, $bodyHtml, $triggerMode, $isActive ? 1 : 0, $fieldsJson]);
+    }
+
+    /**
+     * @param list<string>|null $requiredFields
+     */
     public function update(
         string $code,
         string $subject,
         string $bodyHtml,
-        bool $isActive
+        bool $isActive,
+        ?array $requiredFields = null
     ): void {
+        if ($requiredFields === null) {
+            $this->pdo->prepare(
+                'UPDATE mail_templates SET subject = ?, body_html = ?, is_active = ? WHERE code = ?'
+            )->execute([$subject, $bodyHtml, $isActive ? 1 : 0, $code]);
+
+            return;
+        }
+
+        $fieldsJson = $requiredFields !== [] ? json_encode(array_values($requiredFields), JSON_UNESCAPED_UNICODE) : null;
         $this->pdo->prepare(
-            'UPDATE mail_templates SET subject = ?, body_html = ?, is_active = ? WHERE code = ?'
-        )->execute([$subject, $bodyHtml, $isActive ? 1 : 0, $code]);
+            'UPDATE mail_templates SET subject = ?, body_html = ?, is_active = ?, required_fields_json = ? WHERE code = ?'
+        )->execute([$subject, $bodyHtml, $isActive ? 1 : 0, $fieldsJson, $code]);
     }
 
     public function renameCode(string $fromCode, string $toCode, string $newName): void

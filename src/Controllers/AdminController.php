@@ -774,28 +774,6 @@ final class AdminController
         redirect('/admin/promo');
     }
 
-    /** @return array<string, list<string>> */
-    private function mailTemplatePlaceholders(): array
-    {
-        $uks = [
-            'certificacion', 'product_name', 'full_name', 'matricula', 'student_email',
-            'exam_date', 'exam_time', 'reglamento_url', 'comprobante_url', 'documentos_html', 'attachment_note',
-        ];
-
-        return [
-            MailTemplateService::UKS_SOLICITUD => $uks,
-            MailTemplateService::UKS_SOLICITUD_LEGACY => $uks,
-            'student_elet_exam_access' => [
-                'name', 'matricula', 'exam_url', 'exam_date', 'exam_time', 'folio', 'access_key',
-            ],
-            'student_registration' => [
-                'full_name', 'matricula', 'product_name', 'amount', 'pay_instructions_html',
-                'password_block_html', 'login_url',
-            ],
-            'student_payment_confirmed' => ['name', 'matricula', 'product_name'],
-        ];
-    }
-
     private function isUksSolicitudTemplate(string $code): bool
     {
         return in_array($code, [MailTemplateService::UKS_SOLICITUD, MailTemplateService::UKS_SOLICITUD_LEGACY], true);
@@ -811,6 +789,61 @@ final class AdminController
             'templates' => $svc->all(),
             'layout' => 'admin',
         ]);
+    }
+
+    public function mailTemplateCreate(): void
+    {
+        Auth::requireRole(['admin']);
+        $template = [
+            'code' => '',
+            'name' => 'Nueva plantilla',
+            'subject' => '',
+            'body_html' => '<p>Hola {{name}},</p>' . "\n" . '<p>Escribe aquí el contenido de tu correo.</p>',
+            'is_active' => 1,
+            'trigger_mode' => 'manual',
+            'required_fields_json' => null,
+        ];
+
+        view('admin/mail_template_edit', [
+            'title' => 'Nueva plantilla de correo',
+            'template' => $template,
+            'placeholders' => [],
+            'selectedPlaceholders' => [],
+            'availablePlaceholders' => MailTemplateService::availablePlaceholderOptions(),
+            'routing' => ['to' => '', 'cc' => ''],
+            'requiresFixedRecipient' => false,
+            'testEmailDefault' => trim((string) (Auth::user()['email'] ?? '')),
+            'previewVars' => [],
+            'isUksSolicitud' => false,
+            'isNew' => true,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function mailTemplateStore(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $svc = new MailTemplateService();
+        $placeholders = $this->mailTemplatePlaceholdersFromPost();
+        $code = trim((string) ($_POST['code'] ?? ''));
+
+        try {
+            $svc->create(
+                $code,
+                trim((string) ($_POST['name'] ?? '')),
+                trim((string) ($_POST['subject'] ?? '')),
+                (string) ($_POST['body_html'] ?? ''),
+                !empty($_POST['is_active']),
+                $placeholders,
+                (string) ($_POST['trigger_mode'] ?? 'manual')
+            );
+            flash('success', 'Plantilla creada. Ya puedes editarla o probarla cuando el envío quede corregido.');
+            redirect('/admin/correos/' . $code);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/admin/correos/nueva');
+        }
     }
 
     public function mailTemplateEdit(string $code): void
@@ -832,22 +865,29 @@ final class AdminController
             return;
         }
 
-        $placeholders = $this->mailTemplatePlaceholders();
         $adminUser = Auth::user();
         $effectiveCode = $code;
         if ($code === MailTemplateService::UKS_SOLICITUD_LEGACY && $svc->find(MailTemplateService::UKS_SOLICITUD) !== null) {
             $effectiveCode = MailTemplateService::UKS_SOLICITUD;
         }
+        $selectedPlaceholders = MailTemplateService::placeholdersForTemplate($template);
+        $previewVars = array_merge(
+            MailTemplateService::sampleVarsForCode($code),
+            MailTemplateService::sampleVarsForPlaceholders($selectedPlaceholders)
+        );
 
         view('admin/mail_template_edit', [
             'title' => 'Editar correo · ' . $template['name'],
             'template' => $template,
-            'placeholders' => $placeholders[$code] ?? $placeholders[MailTemplateService::UKS_SOLICITUD] ?? [],
+            'placeholders' => $selectedPlaceholders,
+            'selectedPlaceholders' => $selectedPlaceholders,
+            'availablePlaceholders' => MailTemplateService::availablePlaceholderOptions(),
             'routing' => $svc->routing($effectiveCode),
             'requiresFixedRecipient' => $svc->requiresFixedRecipient($code),
             'testEmailDefault' => trim((string) ($adminUser['email'] ?? '')),
-            'previewVars' => MailTemplateService::sampleVarsForCode($code),
+            'previewVars' => $previewVars,
             'isUksSolicitud' => $this->isUksSolicitudTemplate($code),
+            'isNew' => false,
             'layout' => 'admin',
         ]);
     }
@@ -867,11 +907,13 @@ final class AdminController
         }
 
         try {
+            $placeholders = $this->mailTemplatePlaceholdersFromPost();
             $svc->update(
                 $code,
                 trim((string) ($_POST['subject'] ?? '')),
                 (string) ($_POST['body_html'] ?? ''),
-                !empty($_POST['is_active'])
+                !empty($_POST['is_active']),
+                $placeholders
             );
 
             if ($requiresFixed) {
@@ -919,5 +961,16 @@ final class AdminController
         }
 
         redirect('/admin/correos/' . $effectiveCode);
+    }
+
+    /** @return list<string> */
+    private function mailTemplatePlaceholdersFromPost(): array
+    {
+        $raw = $_POST['placeholders'] ?? [];
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        return MailTemplateService::sanitizePlaceholders(array_values($raw));
     }
 }

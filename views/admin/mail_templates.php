@@ -1,7 +1,10 @@
 <?php
 /** @var list<array<string,mixed>> $templates */
 ?>
-<h1 style="margin-top:0;color:var(--doceo-blue)">Plantillas de correo</h1>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+    <h1 style="margin:0;color:var(--doceo-blue)">Plantillas de correo</h1>
+    <a class="btn btn-accent" href="<?= e(url('/admin/correos/nueva')) ?>">Nueva plantilla</a>
+</div>
 <p class="muted">
     Edita asunto, contenido y destinatarios en cada plantilla. Variables con doble llave, por ejemplo <code>{{matricula}}</code> o <code>{{certificacion}}</code>.
 </p>
