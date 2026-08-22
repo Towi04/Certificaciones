@@ -2,6 +2,7 @@
 /** @var array<string,mixed> $purchase */
 /** @var list<array<string,mixed>> $items */
 /** @var array{bank:string,clabe:string,holder:string,concept:string} $bank */
+/** @var string $depositCard */
 /** @var ?string $openpayPdf */
 $statusLabels = [
     'awaiting_payment' => 'Esperando pago',
@@ -86,6 +87,17 @@ $methodLabels = [
                 <p><img src="<?= e($purchase['openpay_barcode_url']) ?>" alt="Código de barras OXXO" style="max-width:100%;height:auto;border:1px solid #e6ebf2;border-radius:8px;background:#fff"></p>
             <?php endif; ?>
             <p class="muted" style="font-size:.85rem">Monto exacto: <?= money($purchase['charged_amount']) ?></p>
+
+        <?php elseif ($isStore): ?>
+            <p>Realiza un depósito en OXXO (o tienda afiliada) a esta tarjeta:</p>
+            <p class="deposit-card-box" style="margin:.75rem 0;padding:1rem;background:#f4f7fb;border-radius:12px;border:1px solid #d5deea">
+                <span class="muted" style="font-size:.82rem;display:block">Número de tarjeta</span>
+                <strong style="font-family:ui-monospace,monospace;font-size:1.15rem;color:var(--doceo-blue)"><?= e($depositCard ?? '') ?></strong>
+            </p>
+            <p class="muted" style="font-size:.85rem">
+                Monto exacto: <strong><?= money($purchase['charged_amount']) ?></strong>.
+                Incluye tu matrícula <strong><?= e($purchase['matricula']) ?></strong> al depositar.
+            </p>
 
         <?php elseif ($purchase['payment_method'] === 'transfer_proof'): ?>
             <p>Recibimos tu comprobante. Lo revisaremos y te avisaremos por correo.</p>

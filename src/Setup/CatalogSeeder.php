@@ -557,6 +557,8 @@ HTML;
         }
         Settings::set('doceo_promo_code', $promoCode);
 
+        Settings::set('oxxo_deposit_card', Settings::get('oxxo_deposit_card', '4555113010972414') ?? '4555113010972414');
+
         $log[] = 'Seed de catálogo completado.';
 
         return $log;

@@ -3,10 +3,9 @@
 $docCode = $reglamento['doc_code'];
 $docField = 'doc_' . $docCode;
 ?>
-<section class="checkout-section reglamento-section" id="reglamento-section">
-    <h2><?= (int) $step ?>. Reglamento</h2>
+<div class="reglamento-block" id="reglamento-block">
     <p class="muted" style="margin-top:0;font-size:.88rem">
-        Lee el reglamento completo. Debes firmarlo digitalmente antes de continuar con la compra.
+        Lee el reglamento completo. Debes firmarlo digitalmente antes de continuar.
     </p>
 
     <div class="reglamento-viewer">
@@ -20,14 +19,20 @@ $docField = 'doc_' . $docCode;
         </p>
     </div>
 
-    <label class="reglamento-check" style="display:flex;gap:.5rem;align-items:flex-start;margin:1rem 0;font-size:.9rem;font-weight:600;color:var(--doceo-text)">
-        <input type="checkbox" name="reglamento_accepted" id="reglamento_accepted" value="1" required style="margin-top:.2rem">
-        <span>He leído y acepto el reglamento del examen.</span>
+    <label class="accept-box" id="reglamento-accept-box">
+        <input type="checkbox" name="reglamento_accepted" id="reglamento_accepted" value="1">
+        <span class="accept-box-inner">
+            <strong>He leído y acepto el reglamento del examen</strong>
+            <span class="muted">Es obligatorio marcar esta casilla para continuar con tu registro.</span>
+        </span>
     </label>
 
     <div class="signature-block">
         <p style="margin:0 0 .5rem;font-weight:600;color:var(--doceo-blue);font-size:.92rem">Firma digital</p>
-        <p class="muted" style="font-size:.82rem;margin:0 0 .65rem">Firma dentro del recuadro con mouse o dedo. Se adjuntará como última página del PDF.</p>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .65rem">
+            Firma dentro del recuadro con mouse o dedo, <strong>lo más parecida a tu firma en tu INE</strong>.
+            Se adjuntará como última página del PDF.
+        </p>
         <div class="signature-pad-wrap">
             <canvas id="signature-canvas" width="520" height="160" aria-label="Área de firma"></canvas>
         </div>
@@ -38,16 +43,28 @@ $docField = 'doc_' . $docCode;
     </div>
 
     <input type="file" name="<?= e($docField) ?>" id="<?= e($docField) ?>" accept=".pdf" hidden>
-</section>
+</div>
 
 <style>
 .reglamento-viewer { border:1px solid #d5deea; border-radius:12px; overflow:hidden; background:#f8fafc; }
-.reglamento-frame { width:100%; height:min(420px,55vh); border:0; display:block; }
+.reglamento-frame { width:100%; height:min(380px,50vh); border:0; display:block; }
 .signature-pad-wrap {
   border:2px dashed #cfd8e6; border-radius:12px; background:#fff; max-width:540px;
   touch-action: none;
 }
 #signature-canvas { display:block; width:100%; max-width:520px; height:160px; cursor:crosshair; }
+.accept-box {
+  display:flex; gap:.85rem; align-items:flex-start; margin:1.1rem 0;
+  padding:1rem 1.1rem; border:2px solid var(--doceo-yellow); border-radius:14px;
+  background:linear-gradient(135deg, #fffef5 0%, #fff9d6 100%);
+  cursor:pointer; font:inherit; color:var(--doceo-text);
+  box-shadow:0 4px 16px rgba(245, 223, 37, 0.25);
+}
+.accept-box input { width:1.25rem; height:1.25rem; margin-top:.15rem; accent-color:var(--doceo-blue); flex-shrink:0; }
+.accept-box-inner { display:flex; flex-direction:column; gap:.25rem; }
+.accept-box-inner strong { color:var(--doceo-blue); font-size:.95rem; }
+.accept-box-inner .muted { font-size:.82rem; font-weight:500; }
+.accept-box:has(input:checked) { border-color:var(--doceo-blue); background:#eef4fc; }
 </style>
 
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -58,6 +75,7 @@ $docField = 'doc_' . $docCode;
   const canvas = document.getElementById('signature-canvas');
   const clearBtn = document.getElementById('signature-clear');
   const accepted = document.getElementById('reglamento_accepted');
+  const acceptBox = document.getElementById('reglamento-accept-box');
   const statusEl = document.getElementById('signature-status');
   const form = document.getElementById('checkout-form');
   if (!canvas || !form || !docInput) return;
@@ -113,6 +131,13 @@ $docField = 'doc_' . $docCode;
   canvas.addEventListener('touchmove', move, { passive: false });
   canvas.addEventListener('touchend', end);
 
+  if (acceptBox) {
+    acceptBox.addEventListener('click', e => {
+      if (e.target === accepted) return;
+      accepted.checked = !accepted.checked;
+    });
+  }
+
   clearBtn.addEventListener('click', () => {
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -134,10 +159,10 @@ $docField = 'doc_' . $docCode;
 
   async function buildSignedPdf() {
     if (!accepted.checked) {
-      throw new Error('Debes aceptar el reglamento.');
+      throw new Error('Debes aceptar el reglamento marcando la casilla amarilla.');
     }
     if (!hasStroke) {
-      throw new Error('Dibuja tu firma en el recuadro.');
+      throw new Error('Dibuja tu firma en el recuadro (similar a tu INE).');
     }
     if (typeof PDFLib === 'undefined') {
       throw new Error('No se pudo cargar el generador de PDF. Recarga la página.');
@@ -172,6 +197,19 @@ $docField = 'doc_' . $docCode;
     const bytes = await pdfDoc.save();
     return new File([bytes], 'reglamento-firmado.pdf', { type: 'application/pdf' });
   }
+
+  window.reglamentoWizard = {
+    hasAccepted: () => accepted.checked,
+    hasSignature: () => hasStroke,
+    validateStep: () => {
+      if (!accepted.checked) {
+        throw new Error('Marca la casilla amarilla: aceptación del reglamento.');
+      }
+      if (!hasStroke) {
+        throw new Error('Dibuja tu firma similar a tu INE.');
+      }
+    },
+  };
 
   form.addEventListener('submit', async function (e) {
     if (reglamentoAttached) return;

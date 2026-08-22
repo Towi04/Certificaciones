@@ -10,6 +10,7 @@ use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Services\CheckoutRequirements;
 use App\Services\CheckoutService;
+use App\Services\ExamScheduleService;
 use App\Services\PricingService;
 use App\Support\Settings;
 
@@ -38,6 +39,11 @@ final class CheckoutController
             'quote' => (new PricingService())->quoteProduct($product, null),
             'openpayReady' => $this->openPayConfigured(),
             'bank' => $this->bankTransferInfo(),
+            'depositCard' => $this->depositCardNumber(),
+            'needsExam' => ExamScheduleService::needsExamAtCheckout($product),
+            'examMinDate' => ExamScheduleService::needsExamAtCheckout($product)
+                ? (new ExamScheduleService())->minSelectableDate($product)
+                : null,
         ]);
     }
 
@@ -82,7 +88,13 @@ final class CheckoutController
                 $_FILES,
                 $paymentMethod,
                 $promoCode !== '' ? $promoCode : null,
-                $cardMsiMonths
+                $cardMsiMonths,
+                ExamScheduleService::needsExamAtCheckout($product)
+                    ? [
+                        'exam_date' => trim((string) ($_POST['exam_date'] ?? '')),
+                        'exam_time' => trim((string) ($_POST['exam_time'] ?? '')),
+                    ]
+                    : null
             );
 
             $matricula = (string) $result['purchase']['matricula'];
@@ -128,6 +140,42 @@ final class CheckoutController
             http_response_code(422);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
         }
+    }
+
+    public function examSlots(string $slug): void
+    {
+        header('Content-Type: application/json; charset=UTF-8');
+        $product = (new ProductRepository())->findBySlug($slug);
+        if (!$product || !(int) $product['is_active']) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Producto no encontrado']);
+
+            return;
+        }
+
+        if (!ExamScheduleService::needsExamAtCheckout($product)) {
+            echo json_encode(['ok' => true, 'slots' => [], 'min_date' => null]);
+
+            return;
+        }
+
+        $service = new ExamScheduleService();
+        $date = isset($_GET['date']) && is_string($_GET['date']) ? trim($_GET['date']) : '';
+
+        if ($date === '') {
+            echo json_encode([
+                'ok' => true,
+                'min_date' => $service->minSelectableDate($product),
+                'dates' => $service->selectableDates($product),
+            ], JSON_UNESCAPED_UNICODE);
+
+            return;
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'slots' => $service->slotsForDate($product, $date),
+        ], JSON_UNESCAPED_UNICODE);
     }
 
     public function success(string $matricula): void
@@ -185,6 +233,7 @@ final class CheckoutController
             'purchase' => $purchase,
             'items' => $items,
             'bank' => $this->bankTransferInfo(),
+            'depositCard' => $this->depositCardNumber(),
             'openpayPdf' => $openpayPdf,
             'user' => $user,
         ]);
@@ -212,6 +261,11 @@ final class CheckoutController
             'holder' => Settings::get('bank_transfer_holder', Env::get('BANK_TRANSFER_HOLDER', 'Instituto DOCEO')) ?? 'Instituto DOCEO',
             'concept' => Settings::get('bank_transfer_concept', 'Matrícula DOCEO') ?? 'Matrícula DOCEO',
         ];
+    }
+
+    private function depositCardNumber(): string
+    {
+        return Settings::get('oxxo_deposit_card', Env::get('OXXO_DEPOSIT_CARD', '4555113010972414')) ?? '4555113010972414';
     }
 
     private function openPayConfigured(): bool

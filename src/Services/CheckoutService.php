@@ -12,6 +12,7 @@ use App\Integrations\OpenPayClient;
 use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\TrackingRepository;
+use App\Support\Settings;
 use PDO;
 
 final class CheckoutService
@@ -41,6 +42,7 @@ final class CheckoutService
      *   phone?:string,curp?:string,birth_date?:string,sex?:string,nationality?:string
      * } $buyer
      * @param array<string, array{tmp_name:string,name:string,error:int,size:int}> $files
+     * @param array{exam_date?:string,exam_time?:string}|null $exam
      * @return array{
      *   purchase: array<string,mixed>,
      *   created_account: bool,
@@ -55,7 +57,8 @@ final class CheckoutService
         array $files,
         string $paymentMethod,
         ?string $promoCode,
-        int $cardMsiMonths = 1
+        int $cardMsiMonths = 1,
+        ?array $exam = null
     ): array {
         $product = $this->products->find($productId);
         if ($product === null || !(int) $product['is_active'] || !(int) $product['is_public']) {
@@ -78,6 +81,16 @@ final class CheckoutService
         $this->assertRequiredDocs($required, $files);
         if ($reglamento !== null && $reglamento['required_before_checkout']) {
             $this->assertReglamentoFirmado($reglamento, $files);
+        }
+
+        $examSchedule = new ExamScheduleService();
+        if (ExamScheduleService::needsExamAtCheckout($product)) {
+            $examDate = trim((string) ($exam['exam_date'] ?? ''));
+            $examTime = trim((string) ($exam['exam_time'] ?? ''));
+            if ($examDate === '' || $examTime === '') {
+                throw new \InvalidArgumentException('Selecciona fecha y hora para tu examen.');
+            }
+            $examSchedule->validateSlot($product, $examDate, $examTime);
         }
 
         $quote = $this->pricing->quoteProduct($product, $promoCode);
@@ -200,13 +213,7 @@ final class CheckoutService
                 );
                 $redirectUrl = (string) ($openpay['redirect_url'] ?? '');
             } elseif ($paymentMethod === 'openpay_store') {
-                $openpay = $this->createStoreCharge(
-                    $purchaseId,
-                    $matricula,
-                    $chargeAmount,
-                    (string) $product['name'],
-                    $account['user']
-                );
+                // Depósito OXXO / tienda: número de tarjeta fijo DOCEO (sin referencia OpenPay).
             }
 
             $this->pdo->commit();
@@ -220,6 +227,14 @@ final class CheckoutService
         $purchase = $this->purchases->find($purchaseId);
         if ($purchase === null) {
             throw new \RuntimeException('No se pudo leer la compra creada.');
+        }
+
+        if (ExamScheduleService::needsExamAtCheckout($product) && $exam !== null) {
+            (new TrackingService())->saveExamSchedule($trackingId, [
+                'exam_date' => $exam['exam_date'] ?? null,
+                'exam_time' => $exam['exam_time'] ?? null,
+                'notify' => false,
+            ], $studentUserId);
         }
 
         $this->sendWelcomeEmail(
@@ -776,10 +791,12 @@ final class CheckoutService
                 ? "Usuario: {$user['email']}\nContraseña temporal: {$plainPassword}\nCámbiala después de iniciar sesión.\n"
                 : "Usa tu cuenta existente para seguir el caso.\n";
 
+            $depositCard = Settings::get('oxxo_deposit_card', Env::get('OXXO_DEPOSIT_CARD', '4555113010972414')) ?? '4555113010972414';
+
             $payText = match ($paymentMethod) {
                 'transfer_proof' => "Recibimos tu comprobante. Validaremos el pago y te avisaremos.\n",
                 'openpay_card' => "Completa el pago con tarjeta en la página segura de OpenPay (enlace al confirmar).\n",
-                'openpay_store' => "Te enviamos la referencia para pagar en OXXO u otra tienda afiliada.\n",
+                'openpay_store' => "Deposita en OXXO o tienda afiliada a la tarjeta {$depositCard}. Incluye tu matrícula en el depósito.\n",
                 default => "Tu solicitud quedó registrada. Completa el pago SPEI con los datos de tu caso.\n",
             };
 
