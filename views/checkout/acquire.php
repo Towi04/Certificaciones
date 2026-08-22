@@ -6,7 +6,16 @@
 /** @var array<string,mixed> $quote */
 /** @var array{bank:string,clabe:string,holder:string,concept:string} $bank */
 /** @var bool $openpayReady */
+/** @var bool $openpayCardReady */
+/** @var string $openpayMerchantId */
+/** @var string $openpayPublicKey */
+/** @var bool $openpaySandbox */
 $step = 1;
+$msiPlans = $quote['msi_plans'] ?? [];
+if ($msiPlans === []) {
+    $msiPlans = [['months' => 1, 'total' => $quote['charged'], 'monthly_estimate' => $quote['charged'], 'label' => 'Un solo pago (contado)']];
+}
+$defaultPay = $openpayCardReady ? 'openpay_card' : ($openpayReady ? 'openpay_spei' : 'transfer_proof');
 ?>
 <article class="panel checkout" style="margin:1.25rem 0 2.5rem">
     <p class="meta"><a href="<?= e(url('/producto/' . $product['slug'])) ?>">← <?= e($product['name']) ?></a></p>
@@ -22,6 +31,8 @@ $step = 1;
 
     <form method="post" action="<?= e(url('/adquirir/' . $product['slug'])) ?>" enctype="multipart/form-data" class="checkout-form" id="checkout-form">
         <?= csrf_field() ?>
+        <input type="hidden" name="openpay_token" id="openpay_token" value="">
+        <input type="hidden" name="device_session_id" id="device_session_id" value="">
 
         <section class="checkout-section">
             <h2><?= $step++ ?>. Tus datos</h2>
@@ -91,57 +102,80 @@ $step = 1;
             </section>
         <?php endif; ?>
 
-
-        <section class="checkout-section" id="deferred-section">
-            <h2><?= $step++ ?>. Plan de pago</h2>
-            <p class="muted" style="margin-top:0">Elige contado o pagos diferidos. Con SPEI OpenPay se genera la CLABE del <strong>primer pago</strong>; el resto queda calendarizado.</p>
-            <div class="pay-options" id="deferred-options">
-                <?php
-                $plans = $quote['deferred_plans'] ?? [];
-                if ($plans === []) {
-                    $plans = [['months' => 1, 'monthly' => $quote['charged'], 'label' => 'Pago de contado', 'total' => $quote['charged']]];
-                }
-                foreach ($plans as $i => $plan):
-                ?>
-                    <label class="pay-option">
-                        <input type="radio" name="installment_count" value="<?= (int) $plan['months'] ?>"
-                               data-monthly="<?= e(number_format((float) $plan['monthly'], 2, '.', '')) ?>"
-                               <?= $i === 0 ? 'checked' : '' ?>>
-                        <span>
-                            <strong><?= e($plan['label']) ?></strong>
-                            <?php if ((int) $plan['months'] > 1): ?>
-                                <small>Total <?= money($plan['total']) ?> · primer cargo <?= money($plan['monthly']) ?></small>
-                            <?php else: ?>
-                                <small>Un solo cargo por el total</small>
-                            <?php endif; ?>
-                        </span>
-                    </label>
-                <?php endforeach; ?>
-            </div>
-            <p class="muted" id="deferred-hint" style="font-size:.85rem;margin-top:.5rem"></p>
-        </section>
-
         <section class="checkout-section">
             <h2><?= $step++ ?>. Pago</h2>
             <div class="pay-options">
+                <?php if ($openpayCardReady): ?>
+                    <label class="pay-option">
+                        <input type="radio" name="payment_method" value="openpay_card" <?= $defaultPay === 'openpay_card' ? 'checked' : '' ?> data-needs-proof="0" data-needs-card="1">
+                        <span>
+                            <strong>Tarjeta de crédito (OpenPay)</strong>
+                            <small>Pagas el total hoy con tu tarjeta. Si eliges MSI, tu banco te cobra en mensualidades; nosotros recibimos el monto completo.</small>
+                        </span>
+                    </label>
+                <?php endif; ?>
                 <label class="pay-option">
-                    <input type="radio" name="payment_method" value="openpay_spei" <?= $openpayReady ? 'checked' : '' ?> data-needs-proof="0">
+                    <input type="radio" name="payment_method" value="openpay_spei" <?= $defaultPay === 'openpay_spei' ? 'checked' : '' ?> data-needs-proof="0" data-needs-card="0">
                     <span>
                         <strong>SPEI (OpenPay)</strong>
-                        <small><?= $openpayReady ? 'Te generamos una CLABE única al confirmar.' : 'Si OpenPay no responde, usa transferencia DOCEO.' ?></small>
+                        <small><?= $openpayReady ? 'Te generamos una CLABE única por el monto total.' : 'Si OpenPay no responde, usa transferencia DOCEO.' ?></small>
                     </span>
                 </label>
                 <label class="pay-option">
-                    <input type="radio" name="payment_method" value="transfer_proof" <?= $openpayReady ? '' : 'checked' ?> data-needs-proof="1">
+                    <input type="radio" name="payment_method" value="transfer_proof" <?= $defaultPay === 'transfer_proof' ? 'checked' : '' ?> data-needs-proof="1" data-needs-card="0">
                     <span>
                         <strong>Transferencia a cuenta DOCEO</strong>
-                        <small>Deposita y sube tu comprobante. Validamos el pago manualmente.</small>
+                        <small>Deposita el monto total y sube tu comprobante. Validamos el pago manualmente.</small>
                         <?php if ($bank['clabe'] !== ''): ?>
                             <small class="bank-hint"><?= e($bank['bank']) ?> · CLABE <?= e($bank['clabe']) ?> · <?= e($bank['holder']) ?></small>
                         <?php endif; ?>
                     </span>
                 </label>
             </div>
+
+            <div id="msi-section" style="margin-top:1rem;display:none">
+                <h3 style="margin:0 0 .5rem;font-size:.95rem;color:var(--doceo-blue)">Meses sin intereses (opcional)</h3>
+                <p class="muted" style="margin-top:0;font-size:.85rem">El cargo a tu tarjeta es por el <strong>total</strong>. Tu banco puede diferir el cobro en mensualidades según el plan elegido.</p>
+                <div class="pay-options" id="msi-options">
+                    <?php foreach ($msiPlans as $i => $plan): ?>
+                        <label class="pay-option">
+                            <input type="radio" name="card_msi_months" value="<?= (int) $plan['months'] ?>"
+                                   data-total="<?= e(number_format((float) $plan['total'], 2, '.', '')) ?>"
+                                   data-estimate="<?= e(number_format((float) $plan['monthly_estimate'], 2, '.', '')) ?>"
+                                   <?= $i === 0 ? 'checked' : '' ?>>
+                            <span>
+                                <strong><?= e($plan['label']) ?></strong>
+                                <?php if ((int) $plan['months'] > 1): ?>
+                                    <small>Cargo hoy: <?= money($plan['total']) ?> · referencia ~<?= money($plan['monthly_estimate']) ?>/mes en tu estado de cuenta</small>
+                                <?php else: ?>
+                                    <small>Un solo cargo por <?= money($plan['total']) ?></small>
+                                <?php endif; ?>
+                            </span>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+                <p class="muted" id="msi-hint" style="font-size:.85rem;margin-top:.5rem"></p>
+            </div>
+
+            <div id="card-wrap" style="margin-top:1rem;display:none">
+                <h3 style="margin:0 0 .5rem;font-size:.95rem;color:var(--doceo-blue)">Datos de la tarjeta</h3>
+                <div class="form-grid">
+                    <label>Titular *
+                        <input type="text" id="card_holder" autocomplete="cc-name" placeholder="Como aparece en la tarjeta">
+                    </label>
+                    <label>Número de tarjeta *
+                        <input type="text" id="card_number" inputmode="numeric" autocomplete="cc-number" maxlength="19" placeholder="0000 0000 0000 0000">
+                    </label>
+                    <label>Vence (MM/AA) *
+                        <input type="text" id="card_expiry" inputmode="numeric" autocomplete="cc-exp" maxlength="5" placeholder="MM/AA">
+                    </label>
+                    <label>CVV *
+                        <input type="text" id="card_cvv" inputmode="numeric" autocomplete="cc-csc" maxlength="4" placeholder="123">
+                    </label>
+                </div>
+                <p class="muted" id="card-error" style="color:#b00020;display:none;font-size:.85rem;margin-top:.5rem"></p>
+            </div>
+
             <div id="proof-wrap" style="margin-top:.85rem">
                 <label>Comprobante de transferencia *
                     <input type="file" name="payment_proof" id="payment_proof" accept=".pdf,.jpg,.jpeg,.png">
@@ -150,7 +184,7 @@ $step = 1;
         </section>
 
         <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1.25rem">
-            <button class="btn btn-accent" type="submit">Confirmar compra</button>
+            <button class="btn btn-accent" type="submit" id="checkout-submit">Confirmar compra</button>
             <a class="btn btn-ghost" href="<?= e(url('/producto/' . $product['slug'])) ?>">Cancelar</a>
         </div>
         <p class="muted" style="font-size:.8rem;margin-top:.75rem">Si el correo es nuevo, creamos tu cuenta con contraseña temporal <code>Doceo*1234</code> (configurable).</p>
@@ -172,55 +206,69 @@ $step = 1;
 .pay-option small { display:block; color:var(--doceo-muted); font-weight:500; margin-top:.15rem; }
 .bank-hint { font-family:ui-monospace,monospace; }
 </style>
+<?php if ($openpayCardReady): ?>
+<script src="https://openpay.s3.amazonaws.com/openpay.v1.min.js"></script>
+<script src="https://openpay.s3.amazonaws.com/openpay-data.v1.min.js"></script>
+<?php endif; ?>
 <script>
-
-  const deferredBox = document.getElementById('deferred-options');
-  const deferredHint = document.getElementById('deferred-hint');
-
-  function moneyFmt(n) {
-    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(n || 0));
-  }
-
-  function renderDeferredPlans(plans) {
-    if (!deferredBox) return;
-    const list = Array.isArray(plans) && plans.length ? plans : [{ months: 1, monthly: 0, total: 0, label: 'Pago de contado' }];
-    deferredBox.innerHTML = list.map((p, i) => {
-      const months = Number(p.months || 1);
-      const monthly = Number(p.monthly || 0);
-      const total = Number(p.total || monthly);
-      const label = p.label || (months === 1 ? 'Pago de contado' : (months + ' pagos'));
-      const small = months > 1
-        ? ('Total ' + moneyFmt(total) + ' · primer cargo ' + moneyFmt(monthly))
-        : 'Un solo cargo por el total';
-      return '<label class="pay-option">'
-        + '<input type="radio" name="installment_count" value="' + months + '" data-monthly="' + monthly.toFixed(2) + '"' + (i === 0 ? ' checked' : '') + '>'
-        + '<span><strong>' + label + '</strong><small>' + small + '</small></span></label>';
-    }).join('');
-    deferredBox.querySelectorAll('input[name=installment_count]').forEach(el => el.addEventListener('change', updateDeferredHint));
-    updateDeferredHint();
-  }
-
-  function updateDeferredHint() {
-    if (!deferredHint) return;
-    const selected = document.querySelector('input[name=installment_count]:checked');
-    if (!selected) { deferredHint.textContent = ''; return; }
-    const months = Number(selected.value || 1);
-    const monthly = selected.getAttribute('data-monthly');
-    deferredHint.textContent = months > 1
-      ? ('Se cobrará ahora el pago 1 de ' + months + ' (' + moneyFmt(monthly) + '). Los siguientes quedan en tu calendario.')
-      : 'Se cobrará el monto total en un solo pago.';
-  }
-
 (function () {
   const slug = <?= json_encode($product['slug'], JSON_UNESCAPED_UNICODE) ?>;
   const codeInput = document.getElementById('promo_code');
   const chargedEl = document.getElementById('price-charged');
   const labelEl = document.getElementById('price-label');
   const errEl = document.getElementById('quote-error');
+  const form = document.getElementById('checkout-form');
+  const msiBox = document.getElementById('msi-options');
+  const msiHint = document.getElementById('msi-hint');
+  const msiSection = document.getElementById('msi-section');
+  const cardWrap = document.getElementById('card-wrap');
+  const cardError = document.getElementById('card-error');
+  const submitBtn = document.getElementById('checkout-submit');
+  const openpayCardReady = <?= $openpayCardReady ? 'true' : 'false' ?>;
   let timer = null;
+  let tokenizing = false;
+
+  function moneyFmt(n) {
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(n || 0));
+  }
 
   function money(n) {
     return '$' + Number(n).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+
+  function selectedPayment() {
+    return document.querySelector('input[name=payment_method]:checked');
+  }
+
+  function renderMsiPlans(plans) {
+    if (!msiBox) return;
+    const list = Array.isArray(plans) && plans.length ? plans : [{ months: 1, total: 0, monthly_estimate: 0, label: 'Un solo pago (contado)' }];
+    msiBox.innerHTML = list.map((p, i) => {
+      const months = Number(p.months || 1);
+      const total = Number(p.total || 0);
+      const estimate = Number(p.monthly_estimate || total);
+      const label = p.label || (months === 1 ? 'Un solo pago (contado)' : (months + ' MSI'));
+      const small = months > 1
+        ? ('Cargo hoy: ' + moneyFmt(total) + ' · referencia ~' + moneyFmt(estimate) + '/mes en tu estado de cuenta')
+        : ('Un solo cargo por ' + moneyFmt(total));
+      return '<label class="pay-option">'
+        + '<input type="radio" name="card_msi_months" value="' + months + '" data-total="' + total.toFixed(2) + '" data-estimate="' + estimate.toFixed(2) + '"' + (i === 0 ? ' checked' : '') + '>'
+        + '<span><strong>' + label + '</strong><small>' + small + '</small></span></label>';
+    }).join('');
+    msiBox.querySelectorAll('input[name=card_msi_months]').forEach(el => el.addEventListener('change', updateMsiHint));
+    updateMsiHint();
+  }
+
+  function updateMsiHint() {
+    if (!msiHint) return;
+    const selected = document.querySelector('input[name=card_msi_months]:checked');
+    if (!selected) { msiHint.textContent = ''; return; }
+    const months = Number(selected.value || 1);
+    const total = selected.getAttribute('data-total');
+    const estimate = selected.getAttribute('data-estimate');
+    msiHint.textContent = months > 1
+      ? ('Hoy se autoriza el cargo total de ' + moneyFmt(total) + '. Tu banco puede mostrar ~' + moneyFmt(estimate) + ' mensuales en tu tarjeta.')
+      : 'Se cobrará el monto total en un solo pago.';
   }
 
   function refreshQuote() {
@@ -235,8 +283,8 @@ $step = 1;
         }
         errEl.style.display = 'none';
         chargedEl.textContent = money(data.quote.charged);
-        if (typeof renderDeferredPlans === 'function') renderDeferredPlans(data.quote.deferred_plans || []);
         labelEl.textContent = data.quote.label || '';
+        renderMsiPlans(data.quote.msi_plans || []);
       })
       .catch(() => {});
   }
@@ -248,14 +296,80 @@ $step = 1;
 
   const proofWrap = document.getElementById('proof-wrap');
   const proofInput = document.getElementById('payment_proof');
-  function syncProof() {
-    const selected = document.querySelector('input[name=payment_method]:checked');
-    const needs = selected && selected.getAttribute('data-needs-proof') === '1';
-    proofWrap.style.display = needs ? 'block' : 'none';
-    proofInput.required = !!needs;
+
+  function syncPaymentUi() {
+    const selected = selectedPayment();
+    const needsProof = selected && selected.getAttribute('data-needs-proof') === '1';
+    const needsCard = selected && selected.getAttribute('data-needs-card') === '1';
+    proofWrap.style.display = needsProof ? 'block' : 'none';
+    proofInput.required = !!needsProof;
+    if (msiSection) msiSection.style.display = needsCard ? 'block' : 'none';
+    if (cardWrap) cardWrap.style.display = needsCard ? 'block' : 'none';
+    if (!needsCard) {
+      const contado = document.querySelector('input[name=card_msi_months][value="1"]');
+      if (contado) contado.checked = true;
+    }
+    updateMsiHint();
   }
-  document.querySelectorAll('input[name=payment_method]').forEach(el => el.addEventListener('change', syncProof));
-  syncProof();
-  updateDeferredHint();
+
+  document.querySelectorAll('input[name=payment_method]').forEach(el => el.addEventListener('change', syncPaymentUi));
+  syncPaymentUi();
+  updateMsiHint();
+
+  if (openpayCardReady && typeof OpenPay !== 'undefined') {
+    OpenPay.setId(<?= json_encode($openpayMerchantId) ?>);
+    OpenPay.setApiKey(<?= json_encode($openpayPublicKey) ?>);
+    OpenPay.setSandboxMode(<?= $openpaySandbox ? 'true' : 'false' ?>);
+    if (typeof OpenPay.deviceData !== 'undefined') {
+      OpenPay.deviceData.setup('checkout-form', 'device_session_id');
+    }
+  }
+
+  form.addEventListener('submit', function (ev) {
+    const selected = selectedPayment();
+    if (!selected || selected.value !== 'openpay_card' || !openpayCardReady) return;
+
+    ev.preventDefault();
+    if (tokenizing) return;
+    if (typeof OpenPay === 'undefined') {
+      cardError.style.display = 'block';
+      cardError.textContent = 'OpenPay no está disponible. Recarga la página o elige otro método.';
+      return;
+    }
+
+    cardError.style.display = 'none';
+    const holder = (document.getElementById('card_holder').value || '').trim();
+    const number = (document.getElementById('card_number').value || '').replace(/\s+/g, '');
+    const expiry = (document.getElementById('card_expiry').value || '').trim();
+    const cvv = (document.getElementById('card_cvv').value || '').trim();
+    const m = expiry.match(/^(\d{2})\s*\/?\s*(\d{2})$/);
+    if (!holder || number.length < 13 || !m || cvv.length < 3) {
+      cardError.style.display = 'block';
+      cardError.textContent = 'Completa los datos de la tarjeta.';
+      return;
+    }
+
+    tokenizing = true;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Procesando tarjeta…';
+
+    OpenPay.token.create({
+      card_number: number,
+      holder_name: holder,
+      expiration_month: m[1],
+      expiration_year: m[2],
+      cvv2: cvv
+    }, function (response) {
+      document.getElementById('openpay_token').value = response.data.id;
+      form.submit();
+    }, function (response) {
+      tokenizing = false;
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Confirmar compra';
+      cardError.style.display = 'block';
+      const desc = response.data && response.data.description ? response.data.description : 'No se pudo tokenizar la tarjeta.';
+      cardError.textContent = desc;
+    });
+  });
 })();
 </script>

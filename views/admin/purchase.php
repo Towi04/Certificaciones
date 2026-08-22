@@ -132,17 +132,14 @@ $canConfirm = in_array($purchase['status'], ['awaiting_payment', 'payment_review
 <?php endif; ?>
 
 <?php
-$installments = $installments ?? [];
-$installmentCount = (int) ($purchase['installment_count'] ?? 1);
-if ($installmentCount > 1 || $installments !== []):
+$msiMonths = (int) ($purchase['card_msi_months'] ?? 0);
+if ($msiMonths > 1):
 ?>
 <div class="panel" style="margin-top:1rem">
-    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Pagos diferidos</h2>
-    <p class="muted"><?= (int) ($purchase['paid_installments'] ?? 0) ?>/<?= $installmentCount ?> confirmados</p>
-    <ul class="muted" style="padding-left:1.1rem">
-        <?php foreach ($installments as $inst): ?>
-            <li>#<?= (int) $inst['sequence_no'] ?> · <?= money($inst['amount']) ?> · <?= e((string) $inst['status']) ?><?= !empty($inst['due_date']) ? ' · vence ' . e((string) $inst['due_date']) : '' ?></li>
-        <?php endforeach; ?>
-    </ul>
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">MSI con tarjeta</h2>
+    <p class="muted" style="margin-top:0">
+        El alumno eligió <?= $msiMonths ?> meses sin intereses.
+        DOCEO recibe el total (<?= money($purchase['charged_amount']) ?>) en un solo abono; el banco difiere el cobro al tarjetahabiente.
+    </p>
 </div>
 <?php endif; ?>

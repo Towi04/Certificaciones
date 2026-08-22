@@ -37,6 +37,10 @@ final class CheckoutController
             'quote' => (new PricingService())->quoteProduct($product, null),
             'bank' => $this->bankTransferInfo(),
             'openpayReady' => $this->openPayConfigured(),
+            'openpayCardReady' => $this->openPayCardConfigured(),
+            'openpayMerchantId' => trim((string) (Env::get('OPENPAY_MERCHANT_ID', '') ?? '')),
+            'openpayPublicKey' => trim((string) (Env::get('OPENPAY_PUBLIC_KEY', '') ?? '')),
+            'openpaySandbox' => Env::getBool('OPENPAY_SANDBOX', true),
         ]);
     }
 
@@ -60,9 +64,11 @@ final class CheckoutController
                 : '',
         ];
 
-        $paymentMethod = (string) ($_POST['payment_method'] ?? ($this->openPayConfigured() ? 'openpay_spei' : 'transfer_proof'));
+        $paymentMethod = (string) ($_POST['payment_method'] ?? ($this->openPayCardConfigured() ? 'openpay_card' : ($this->openPayConfigured() ? 'openpay_spei' : 'transfer_proof')));
         $promoCode = trim((string) ($_POST['promo_code'] ?? ''));
-        $installmentCount = max(1, (int) ($_POST['installment_count'] ?? 1));
+        $cardMsiMonths = max(1, (int) ($_POST['card_msi_months'] ?? 1));
+        $openpayToken = trim((string) ($_POST['openpay_token'] ?? ''));
+        $deviceSessionId = trim((string) ($_POST['device_session_id'] ?? ''));
 
         try {
             foreach (CheckoutRequirements::fieldsForProduct($product) as $field) {
@@ -81,7 +87,9 @@ final class CheckoutController
                 $_FILES,
                 $paymentMethod,
                 $promoCode !== '' ? $promoCode : null,
-                $installmentCount
+                $cardMsiMonths,
+                $openpayToken !== '' ? $openpayToken : null,
+                $deviceSessionId !== '' ? $deviceSessionId : null
             );
 
             $matricula = (string) $result['purchase']['matricula'];
@@ -143,7 +151,6 @@ final class CheckoutController
 
         $repo = new PurchaseRepository();
         $items = $repo->items((int) $purchase['id']);
-        $installments = $repo->installments((int) $purchase['id']);
         $openpayPdf = null;
         if (!empty($purchase['openpay_charge_id']) && $this->openPayConfigured()) {
             try {
@@ -157,7 +164,6 @@ final class CheckoutController
             'title' => 'Caso ' . $purchase['matricula'],
             'purchase' => $purchase,
             'items' => $items,
-            'installments' => $installments,
             'bank' => $this->bankTransferInfo(),
             'openpayPdf' => $openpayPdf,
             'user' => $user,
@@ -194,5 +200,12 @@ final class CheckoutController
         $k = trim((string) (Env::get('OPENPAY_PRIVATE_KEY', '') ?? ''));
 
         return $m !== '' && $k !== '';
+    }
+
+    private function openPayCardConfigured(): bool
+    {
+        $p = trim((string) (Env::get('OPENPAY_PUBLIC_KEY', '') ?? ''));
+
+        return $this->openPayConfigured() && $p !== '';
     }
 }

@@ -171,7 +171,6 @@ final class AdminController
         view('admin/purchase', [
             'title' => 'Compra ' . $purchase['matricula'],
             'purchase' => $purchase,
-            'installments' => (new PurchaseRepository())->installments((int) $purchase['id']),
             'items' => $items,
             'trackings' => $trackings,
             'documents' => $docs->fetchAll(),

@@ -49,7 +49,7 @@ final class PricingService
             'discount_code_id' => null,
             'discount_code' => null,
             'label' => 'Precio de lista',
-            'deferred_plans' => [],
+            'msi_plans' => [],
         ];
 
         $codeRaw = strtoupper(trim((string) $codeRaw));
@@ -148,7 +148,7 @@ final class PricingService
     private function withDeferredPlans(array $product, array $quote): array
     {
         $charged = (float) ($quote['charged'] ?? 0);
-        $quote['deferred_plans'] = DeferredPaymentCalculator::plansFor($charged, $product);
+        $quote['msi_plans'] = CardMsiCalculator::optionsFor($charged, $product);
 
         return $quote;
     }
