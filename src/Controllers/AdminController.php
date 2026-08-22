@@ -809,7 +809,6 @@ final class AdminController
         view('admin/mail_templates', [
             'title' => 'Plantillas de correo',
             'templates' => $svc->all(),
-            'uksEmail' => trim(Settings::get('uks_elet_request_email', '') ?? ''),
             'layout' => 'admin',
         ]);
     }
@@ -835,12 +834,17 @@ final class AdminController
 
         $placeholders = $this->mailTemplatePlaceholders();
         $adminUser = Auth::user();
+        $effectiveCode = $code;
+        if ($code === MailTemplateService::UKS_SOLICITUD_LEGACY && $svc->find(MailTemplateService::UKS_SOLICITUD) !== null) {
+            $effectiveCode = MailTemplateService::UKS_SOLICITUD;
+        }
 
         view('admin/mail_template_edit', [
             'title' => 'Editar correo · ' . $template['name'],
             'template' => $template,
             'placeholders' => $placeholders[$code] ?? $placeholders[MailTemplateService::UKS_SOLICITUD] ?? [],
-            'uksEmail' => trim(Settings::get('uks_elet_request_email', '') ?? ''),
+            'routing' => $svc->routing($effectiveCode),
+            'requiresFixedRecipient' => $svc->requiresFixedRecipient($code),
             'testEmailDefault' => trim((string) ($adminUser['email'] ?? '')),
             'previewVars' => MailTemplateService::sampleVarsForCode($code),
             'isUksSolicitud' => $this->isUksSolicitudTemplate($code),
@@ -852,85 +856,56 @@ final class AdminController
     {
         Auth::requireRole(['admin']);
         csrf_verify();
+
+        $svc = new MailTemplateService();
+        $svc->ensureDefaults();
+        $svc->migrateUksSolicitudTemplate();
+        $requiresFixed = $svc->requiresFixedRecipient($code);
+        $effectiveCode = $code;
+        if ($code === MailTemplateService::UKS_SOLICITUD_LEGACY && $svc->find(MailTemplateService::UKS_SOLICITUD) !== null) {
+            $effectiveCode = MailTemplateService::UKS_SOLICITUD;
+        }
+
         try {
-            (new MailTemplateService())->update(
+            $svc->update(
                 $code,
                 trim((string) ($_POST['subject'] ?? '')),
                 (string) ($_POST['body_html'] ?? ''),
                 !empty($_POST['is_active'])
             );
-            flash('success', 'Plantilla guardada.');
-        } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
-        }
-        redirect('/admin/correos/' . $code);
-    }
 
-    public function mailRecipientsUpdate(): void
-    {
-        Auth::requireRole(['admin']);
-        csrf_verify();
-        $email = trim((string) ($_POST['uks_elet_request_email'] ?? ''));
-        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            flash('error', 'Indica un correo válido o déjalo vacío.');
-            redirect('/admin/correos');
-        }
-        Settings::set('uks_elet_request_email', $email);
-        flash('success', $email !== ''
-            ? 'Destinatario UKS guardado: ' . $email
-            : 'Destinatario UKS vacío (se usará contacto del proveedor).');
-        redirect('/admin/correos');
-    }
-
-    public function mailTemplateTest(string $code): void
-    {
-        Auth::requireRole(['admin']);
-        csrf_verify();
-
-        if (!$this->isUksSolicitudTemplate($code)) {
-            flash('error', 'La prueba solo está disponible para la plantilla UKS solicitud.');
-            redirect('/admin/correos');
-        }
-
-        $svc = new MailTemplateService();
-        $svc->ensureDefaults();
-        $svc->migrateUksSolicitudTemplate();
-        $redirectCode = $this->mailTemplateRedirectCode($svc, $code);
-
-        $to = trim((string) ($_POST['test_to'] ?? ''));
-        if ($to === '') {
-            $to = trim(Settings::get('uks_elet_request_email', '') ?? '');
-        }
-        if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
-            flash('error', 'Indica un correo de destino válido para la prueba.');
-            redirect('/admin/correos/' . $redirectCode);
-        }
-
-        try {
-            $result = $svc->sendUksSolicitudTest($to);
-            $endpoint = Mailer::lastEndpoint();
-            $transport = $endpoint['transport'] ?? 'desconocido';
-            $detail = $transport === 'smtp'
-                ? ' vía SMTP (' . ($endpoint['host'] ?? '') . ':' . ($endpoint['port'] ?? '') . ')'
-                : ' vía ' . $transport;
-            $msg = 'Correo de prueba enviado a ' . $to . $detail
-                . '. Asunto: «' . $result['subject'] . '». Revisa bandeja y spam.';
-            if (!empty($result['log_path'])) {
-                $msg .= ' Copia local: storage/logs/mail/' . basename($result['log_path']);
+            if ($requiresFixed) {
+                $toEmail = trim((string) ($_POST['to_email'] ?? ''));
+                if ($toEmail === '' || !filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+                    throw new \InvalidArgumentException('Indica un correo válido en Para (destino UKS).');
+                }
+                $ccEmail = trim((string) ($_POST['cc_email'] ?? ''));
+                if ($ccEmail !== '' && !preg_match('/^[^@\s]+@[^@\s]+\.[^@\s]+(\s*,\s*[^@\s]+@[^@\s]+\.[^@\s]+)*$/', $ccEmail)) {
+                    throw new \InvalidArgumentException('CC inválido. Usa uno o más correos separados por coma.');
+                }
+                $svc->saveRouting($effectiveCode, $toEmail, $ccEmail);
             }
-            flash('success', $msg);
+
+            $messages = ['Plantilla guardada.'];
+
+            if (!empty($_POST['send_test'])) {
+                $testTo = trim((string) ($_POST['test_email'] ?? ''));
+                if ($testTo === '' || !filter_var($testTo, FILTER_VALIDATE_EMAIL)) {
+                    throw new \InvalidArgumentException('Marcaste enviar prueba: indica un correo válido.');
+                }
+                $result = $this->isUksSolicitudTemplate($code)
+                    ? $svc->sendUksSolicitudTest($testTo)
+                    : $svc->sendTemplateTest($code, $testTo);
+                $endpoint = Mailer::lastEndpoint();
+                $transport = $endpoint['transport'] ?? 'mail';
+                $messages[] = 'Prueba enviada a ' . $testTo . ' («' . $result['subject'] . '») vía ' . $transport . '.';
+            }
+
+            flash('success', implode(' ', $messages));
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
-        redirect('/admin/correos/' . $redirectCode);
-    }
 
-    private function mailTemplateRedirectCode(MailTemplateService $svc, string $postedCode): string
-    {
-        if ($svc->find($postedCode) !== null) {
-            return $postedCode;
-        }
-
-        return $svc->uksSolicitudCode();
+        redirect('/admin/correos/' . $effectiveCode);
     }
 }

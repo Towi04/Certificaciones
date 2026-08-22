@@ -1,8 +1,9 @@
 <?php
 /** @var array<string,mixed> $template */
 /** @var list<string> $placeholders */
-/** @var string $uksEmail */
+/** @var array{to:string,cc:string} $routing */
 /** @var string $testEmailDefault */
+/** @var bool $requiresFixedRecipient */
 /** @var bool $isUksSolicitud */
 /** @var array<string, string> $previewVars */
 ?>
@@ -15,8 +16,36 @@
 </p>
 
 <div class="panel" style="margin-top:1rem;max-width:720px">
-    <form method="post" action="<?= e(url('/admin/correos/' . $template['code'])) ?>">
+    <form method="post" action="<?= e(url('/admin/correos/' . $template['code'])) ?>" id="mail-template-form">
         <?= csrf_field() ?>
+
+        <?php if ($requiresFixedRecipient): ?>
+        <div style="margin-bottom:1.25rem;padding:1rem;background:#f4f7fb;border-radius:12px;border:1px solid #dbeafe">
+            <h2 style="margin:0 0 .75rem;font-size:1rem;color:var(--doceo-blue)">Envío (producción)</h2>
+            <p class="muted" style="margin:0 0 .75rem;font-size:.85rem">
+                Este correo va a UKS, no al alumno. Configura aquí el destino real y copias opcionales (partner, buzón interno, etc.).
+            </p>
+            <div style="display:grid;gap:.75rem">
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    Para (destino UKS) *
+                    <input type="email" name="to_email" required value="<?= e($routing['to']) ?>"
+                        placeholder="operaciones@uks.mx"
+                        style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                </label>
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    CC (opcional, separa varios con coma)
+                    <input type="text" name="cc_email" value="<?= e($routing['cc']) ?>"
+                        placeholder="partner@ejemplo.com, copia@institutodoceo.com"
+                        style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                </label>
+            </div>
+        </div>
+        <?php else: ?>
+        <p class="muted" style="margin:0 0 1rem;font-size:.88rem;padding:.75rem;background:#f8fafc;border-radius:10px">
+            Este correo se envía automáticamente al <strong>alumno</strong> (correo de su cuenta). No requiere destinatario fijo.
+        </p>
+        <?php endif; ?>
+
         <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-bottom:1rem">
             Asunto
             <input type="text" name="subject" id="mail-subject" required value="<?= e($template['subject']) ?>"
@@ -60,33 +89,33 @@
             </p>
             <?php if ($isUksSolicitud): ?>
                 <p class="muted" style="font-size:.82rem;margin:0 0 1rem">
-                    <strong>{{certificacion}}</strong> = nombre del producto comprado (ELeT, TOEFL UKS, etc.).
-                    <strong>{{product_name}}</strong> es lo mismo.
+                    <strong>{{certificacion}}</strong> = producto comprado.
+                    <strong>{{documentos_html}}</strong> = enlaces al reglamento (sin adjuntos).
                 </p>
             <?php endif; ?>
         <?php endif; ?>
 
+        <div style="margin:1.25rem 0;padding:1rem;border-top:1px solid #e6ebf2;border-bottom:1px solid #e6ebf2">
+            <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem;font-weight:600">
+                <input type="checkbox" name="send_test" value="1" id="send-test-check">
+                Enviar correo de prueba al guardar
+            </label>
+            <div id="test-email-wrap" hidden style="margin-top:.75rem">
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    Enviar prueba a
+                    <input type="email" name="test_email" id="test-email-input"
+                        value="<?= e($testEmailDefault) ?>"
+                        placeholder="tu-correo@ejemplo.com"
+                        style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;max-width:360px">
+                </label>
+                <p class="muted" style="font-size:.82rem;margin:.45rem 0 0">
+                    Usa datos de ejemplo. Asunto con prefijo <code>[PRUEBA]</code>. Mismo formato que /admin/salud.
+                </p>
+            </div>
+        </div>
+
         <button class="btn btn-accent" type="submit">Guardar plantilla</button>
     </form>
-
-    <?php if ($isUksSolicitud): ?>
-        <form id="prueba" method="post" action="<?= e(url('/admin/correos/' . $template['code'] . '/probar')) ?>" style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid #e6ebf2">
-            <?= csrf_field() ?>
-            <h3 style="margin:0 0 .5rem;font-size:.95rem;color:var(--doceo-blue)">Enviar correo de prueba</h3>
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-bottom:.75rem">
-                Enviar a (tu correo para probar)
-                <input type="email" name="test_to" required
-                    value="<?= e($testEmailDefault !== '' ? $testEmailDefault : $uksEmail) ?>"
-                    placeholder="tu-correo@ejemplo.com"
-                    style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;width:100%;max-width:360px">
-            </label>
-            <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
-                Por defecto usa <strong>tu correo de admin</strong>, no el destinatario UKS de producción.
-                Mismo formato que la prueba de /admin/salud (con logo DOCEO).
-            </p>
-            <button class="btn btn-ghost btn-sm" type="submit">Enviar prueba ahora</button>
-        </form>
-    <?php endif; ?>
 </div>
 
 <style>
@@ -128,6 +157,33 @@
   const subjectInput = document.getElementById('mail-subject');
   const toggleBtn = document.getElementById('mail-preview-toggle');
   const hint = document.getElementById('mail-preview-hint');
+  const sendTestCheck = document.getElementById('send-test-check');
+  const testEmailWrap = document.getElementById('test-email-wrap');
+  const testEmailInput = document.getElementById('test-email-input');
+  const form = document.getElementById('mail-template-form');
+
+  function toggleTestEmail() {
+    if (!sendTestCheck || !testEmailWrap) return;
+    const on = sendTestCheck.checked;
+    testEmailWrap.hidden = !on;
+    if (testEmailInput) {
+      testEmailInput.required = on;
+    }
+  }
+
+  if (sendTestCheck) {
+    sendTestCheck.addEventListener('change', toggleTestEmail);
+    toggleTestEmail();
+  }
+
+  if (form) {
+    form.addEventListener('submit', function () {
+      if (sendTestCheck && sendTestCheck.checked && testEmailInput && !testEmailInput.value.trim()) {
+        testEmailInput.focus();
+      }
+    });
+  }
+
   if (!textarea || !toggleBtn) return;
 
   function interpolate(text) {
