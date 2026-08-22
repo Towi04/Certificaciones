@@ -154,6 +154,20 @@ $statusLabels = [
     </form>
 </div>
 
+<?php require BASE_PATH . '/views/shared/uks_report.php'; ?>
+
+<?php if (!empty($exportTemplateCode) && in_array((string) ($tracking['purchase_status'] ?? ''), ['paid'], true)): ?>
+<div class="panel" style="margin-top:1rem;border:2px solid #dbeafe">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Exportar a UKS</h2>
+    <p class="muted" style="margin-top:0">
+        Genera el CSV con el formato <em>Plantilla Instituto DOCEO</em> para registrar al alumno en la plataforma UKS.
+    </p>
+    <a class="btn btn-primary" href="<?= e(url('/admin/exportaciones/' . $exportTemplateCode . '?tracking_id=' . (int) $tracking['id'])) ?>">
+        Descargar CSV UKS (este alumno)
+    </a>
+</div>
+<?php endif; ?>
+
 <?php if (($tracking['platform_type'] ?? '') === 'moodle' || ($tracking['product_type'] ?? '') === 'course'): ?>
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Campus Moodle</h2>

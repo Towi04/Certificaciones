@@ -117,14 +117,57 @@ No se piden otros campos (sin CURP, fecha de nacimiento, etc.).
 |-------------|------|
 | Moodle | No |
 | Inventario códigos | No (UKS asigna por alumno tras registro) |
-| Export UKS | Sí — plantilla CSV para alta en plataforma UKS |
-| Import UKS | Sí — CSV con folios CENNI |
+| Export UKS | Sí — plantilla `uks_elet_registro` (CSV Instituto DOCEO) |
+| Import UKS | Sí — plantilla `uks_elet_reporte` (resultados + docs CENNI + folio) |
 | Email examen programado | No |
 | Email pago confirmado | No (solo panel); email solo si pago **rechazado** |
 
 ## Partners
 
 Pueden vender ELET y **todos** los demás productos.
+
+## Export UKS (`uks_elet_registro`)
+
+Plantilla oficial **Plantilla Instituto DOCEO.csv** con columnas:
+
+| Columna | Campo DOCEO |
+|---------|-------------|
+| Matrícula | `matricula` |
+| Apellido Paterno | `last_name_p` |
+| Apellido Materno | `last_name_m` |
+| Nombre(s) | `first_name` |
+| Correo Electrónico | `email` |
+
+**Cuándo exportar:** casos ELET-UKS con pago confirmado en pasos `confirm_pago` o `solicitud_uks`.
+
+**Admin:**
+- `/admin/exportaciones` — descarga por lote (fecha de examen) o pendientes
+- Desde el caso del alumno — botón «Descargar CSV UKS (este alumno)»
+
+Archivo de referencia: `storage/templates/uks_elet_registro.csv`
+
+## Import UKS (`uks_elet_reporte`)
+
+Plantilla **Reporte Instituto DOCEO ELET** (CSV que descargas de UKS). Ejemplo: `storage/templates/uks_elet_reporte_ejemplo.csv`
+
+**Datos que importa (por matrícula):**
+
+| Columna UKS | Uso en DOCEO |
+|-------------|--------------|
+| Folio | Folio UKS del examen |
+| Realizado | Fecha examen realizado |
+| Nivel Alcanzado / Puntaje | Resultados |
+| Certificado | URL del certificado |
+| Documentación | Estatus general docs CENNI |
+| Doc. Solicitud Cenni / CURP / INE | Aprobado ✔ o rechazado |
+| Folio CENNI | Folio para consulta SEP (~15 días) |
+
+**Al importar:**
+- Actualiza el caso ELET-UKS (y ELET-CENNI si existe)
+- El alumno ve resultados y estatus CENNI en su panel
+- Correo al alumno si cambian documentos CENNI o se publica folio CENNI
+
+**Admin:** `/admin/exportaciones` → sección «Importar reporte UKS»
 
 ## Implementación pendiente (Fase 1+)
 
@@ -133,5 +176,6 @@ Pueden vender ELET y **todos** los demás productos.
 - [ ] SPEI como método default en UI
 - [ ] Creación tracking CENNI post-examen + plazo 15 días
 - [ ] Campos admin: folio, clave del día, enlace UKS CENNI
-- [ ] Export/import plantillas UKS
+- [x] Export plantilla UKS (`uks_elet_registro`)
+- [x] Import reporte UKS (`uks_elet_reporte`) + panel alumno CENNI
 - [ ] Reagenda alumno

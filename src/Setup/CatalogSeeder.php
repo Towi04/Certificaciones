@@ -145,6 +145,7 @@ HTML;
                 'payment_rejected' => true,
             ],
             'export_template_code' => 'uks_elet_registro',
+            'import_template_code' => 'uks_elet_reporte',
         ];
 
         $eletCenniConfig = [
@@ -160,7 +161,7 @@ HTML;
             'uks_upload' => true,
             'doceo_collects_docs' => false,
             'sep_consulta_url' => 'https://cennisistema.sep.gob.mx/cenni/consulta/consultaEstatus.jsp',
-            'import_template_code' => 'uks_cenni_folios',
+            'import_template_code' => 'uks_elet_reporte',
             'auto_cancel_if_not_started_days' => 15,
         ];
 
@@ -469,6 +470,73 @@ HTML;
             }
             $log[] = "Pipeline: {$code}";
         }
+
+        $uksMapping = [
+            'columns' => [
+                ['header' => 'Matrícula', 'field' => 'matricula'],
+                ['header' => 'Apellido Paterno', 'field' => 'last_name_p'],
+                ['header' => 'Apellido Materno', 'field' => 'last_name_m'],
+                ['header' => 'Nombre(s)', 'field' => 'first_name'],
+                ['header' => 'Correo Electrónico', 'field' => 'email'],
+            ],
+            'filters' => [
+                'product_codes' => ['ELET-UKS'],
+                'purchase_status' => ['paid'],
+                'step_codes' => ['confirm_pago', 'solicitud_uks'],
+            ],
+        ];
+        $exportRepo = new \App\Repositories\ExportTemplateRepository();
+        $exportRepo->upsert('uks_elet_registro', [
+            'name' => 'UKS · Registro ELeT (Instituto DOCEO)',
+            'supplier_id' => $supplierIds['uks'],
+            'file_type' => 'csv',
+            'storage_path' => 'templates/uks_elet_registro.csv',
+            'delivery' => 'download',
+            'batch_by' => 'exam_date',
+            'mapping_json' => json_encode($uksMapping, JSON_UNESCAPED_UNICODE),
+            'is_active' => 1,
+        ]);
+        $log[] = 'Export template: uks_elet_registro';
+
+        $uksImportMapping = [
+            'match_column' => 'Matrícula',
+            'product_code' => 'ELET-UKS',
+            'columns' => [
+                'folio' => 'Folio',
+                'cenni_folio' => 'Folio CENNI',
+                'results_level' => 'Nivel Alcanzado',
+                'results_score' => 'Puntaje',
+                'results_url' => 'Certificado',
+                'exam_completed_at' => 'Realizado',
+                'cenni_documentacion' => 'Documentación',
+                'cenni_doc_solicitud' => 'Doc. Solicitud Cenni',
+                'cenni_doc_curp' => 'Doc. CURP',
+                'cenni_doc_ine' => 'Doc. Identificación Oficial',
+            ],
+            'extra_columns' => [
+                'sede' => 'Sede',
+                'curp' => 'CURP',
+                'payment_status' => 'Pago',
+                'listening_level' => 'Listening Nivel',
+                'listening_percent' => 'Listening %',
+                'reading_level' => 'Reading Nivel',
+                'reading_percent' => 'Reading %',
+                'use_of_english_level' => 'Use of English Nivel',
+                'use_of_english_percent' => 'Use of English %',
+                'writing_level' => 'Writing Nivel',
+                'writing_percent' => 'Writing %',
+            ],
+        ];
+        $importRepo = new \App\Repositories\ImportTemplateRepository();
+        $importRepo->upsert('uks_elet_reporte', [
+            'name' => 'UKS · Reporte ELeT (resultados y CENNI)',
+            'supplier_id' => $supplierIds['uks'],
+            'file_type' => 'csv',
+            'match_field' => 'matricula',
+            'mapping_json' => json_encode($uksImportMapping, JSON_UNESCAPED_UNICODE),
+            'is_active' => 1,
+        ]);
+        $log[] = 'Import template: uks_elet_reporte';
 
         $log[] = 'Seed de catálogo completado.';
 
