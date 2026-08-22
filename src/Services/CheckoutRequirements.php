@@ -91,6 +91,36 @@ final class CheckoutRequirements
     }
 
     /**
+     * Reglamento con firma digital en checkout (PDF plantilla + firma en última página).
+     *
+     * @param array<string, mixed> $product
+     * @return array{
+     *   template_path:string,
+     *   template_url:string,
+     *   doc_code:string,
+     *   required_before_checkout:bool
+     * }|null
+     */
+    public static function reglamentoForProduct(array $product): ?array
+    {
+        $cfg = self::config($product);
+        $reg = $cfg['reglamento'] ?? null;
+        if (!is_array($reg) || empty($reg['template_path'])) {
+            return null;
+        }
+
+        $path = (string) $reg['template_path'];
+        $url = str_starts_with($path, 'http') ? $path : asset($path);
+
+        return [
+            'template_path' => $path,
+            'template_url' => $url,
+            'doc_code' => (string) ($reg['doc_code'] ?? 'reglamento_firmado'),
+            'required_before_checkout' => (bool) ($reg['required_before_checkout'] ?? true),
+        ];
+    }
+
+    /**
      * @param array<string, mixed> $product
      * @return list<array{code:string,label:string,required:bool,accept:string}>
      */
@@ -98,12 +128,39 @@ final class CheckoutRequirements
     {
         $cfg = self::config($product);
         if (array_key_exists('required_docs', $cfg) && is_array($cfg['required_docs'])) {
-            return self::normalizeDocs($cfg['required_docs']);
+            $docs = self::normalizeDocs($cfg['required_docs']);
+            if (self::reglamentoForProduct($product) !== null) {
+                $digitalCode = self::reglamentoForProduct($product)['doc_code'];
+                $docs = array_values(array_filter(
+                    $docs,
+                    static fn (array $d): bool => ($d['code'] ?? '') !== $digitalCode
+                ));
+            }
+
+            return $docs;
         }
 
         // Sin config: no pedir documentos en el checkout.
         // Reglamento, firma, INE, actas, etc. se solicitan en el pipeline cuando aplique.
         return [];
+    }
+
+    /** Paso inicial del pipeline al crear tracking (override en config_json.initial_step_code). */
+    public static function initialStepCode(array $product, string $productType, array $requiredDocs): string
+    {
+        $cfg = self::config($product);
+        $override = $cfg['initial_step_code'] ?? null;
+        if (is_string($override) && $override !== '') {
+            return $override;
+        }
+
+        $hasDocs = $requiredDocs !== [] || self::reglamentoForProduct($product) !== null;
+
+        return match ($productType) {
+            'course' => 'pago',
+            'procedure' => 'docs',
+            default => $hasDocs ? 'docs' : 'pago',
+        };
     }
 
     /**

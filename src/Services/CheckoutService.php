@@ -74,7 +74,11 @@ final class CheckoutService
         }
 
         $required = CheckoutRequirements::docsForProduct($product);
+        $reglamento = CheckoutRequirements::reglamentoForProduct($product);
         $this->assertRequiredDocs($required, $files);
+        if ($reglamento !== null && $reglamento['required_before_checkout']) {
+            $this->assertReglamentoFirmado($reglamento, $files);
+        }
 
         $quote = $this->pricing->quoteProduct($product, $promoCode);
         $partnerId = $quote['partner_id'];
@@ -142,7 +146,7 @@ final class CheckoutService
             );
 
             $pipelineId = $this->resolvePipelineId($product);
-            $stepCode = TrackingService::initialStepCode((string) $product['type'], $required);
+            $stepCode = TrackingService::initialStepCode($product, (string) $product['type'], $required);
             $trackStatus = TrackingService::initialStatus($paymentMethod);
             $trackingId = $this->trackings->create([
                 'purchase_id' => $purchaseId,
@@ -166,6 +170,9 @@ final class CheckoutService
             ]);
 
             $this->saveDocuments($required, $files, $purchaseId, $trackingId, $studentUserId);
+            if ($reglamento !== null) {
+                $this->saveReglamentoFirmado($reglamento, $files, $purchaseId, $trackingId, $studentUserId);
+            }
 
             if ($paymentMethod === 'transfer_proof') {
                 $proof = $files['payment_proof'] ?? null;
@@ -489,6 +496,47 @@ final class CheckoutService
         }
 
         return (int) $id;
+    }
+
+    /** @param array{doc_code:string,label?:string} $reglamento @param array<string, array{tmp_name:string,name:string,error:int,size:int}> $files */
+    private function assertReglamentoFirmado(array $reglamento, array $files): void
+    {
+        $key = 'doc_' . $reglamento['doc_code'];
+        $file = $files[$key] ?? null;
+        if ($file === null || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            throw new \InvalidArgumentException('Debes leer y firmar el reglamento antes de continuar.');
+        }
+    }
+
+    /**
+     * @param array{doc_code:string} $reglamento
+     * @param array<string, array{tmp_name:string,name:string,error:int,size:int}> $files
+     */
+    private function saveReglamentoFirmado(
+        array $reglamento,
+        array $files,
+        int $purchaseId,
+        int $trackingId,
+        int $studentUserId
+    ): void {
+        $key = 'doc_' . $reglamento['doc_code'];
+        $file = $files[$key] ?? null;
+        if ($file === null || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            return;
+        }
+        $stored = $this->documents->storeUploaded($file, 'docs/' . $purchaseId, '.pdf');
+        $this->pdo->prepare(
+            'INSERT INTO documents (tracking_id, purchase_id, student_user_id, doc_type, original_name, storage_path, status, uploaded_by)
+             VALUES (?,?,?,?,?,?,\'approved\',?)'
+        )->execute([
+            $trackingId,
+            $purchaseId,
+            $studentUserId,
+            $reglamento['doc_code'],
+            $stored['original_name'],
+            $stored['path'],
+            $studentUserId,
+        ]);
     }
 
     /**

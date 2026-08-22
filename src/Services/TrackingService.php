@@ -22,17 +22,12 @@ final class TrackingService
     /**
      * Paso inicial al crear el tracking en checkout.
      *
+     * @param array<string, mixed> $product
      * @param list<array{code:string,label:string,required:bool,accept:string}> $requiredDocs
      */
-    public static function initialStepCode(string $productType, array $requiredDocs): string
+    public static function initialStepCode(array $product, string $productType, array $requiredDocs): string
     {
-        $hasDocs = $requiredDocs !== [];
-
-        return match ($productType) {
-            'course' => 'pago',
-            'procedure' => 'docs',
-            default => $hasDocs ? 'docs' : 'pago',
-        };
+        return CheckoutRequirements::initialStepCode($product, $productType, $requiredDocs);
     }
 
     public static function initialStatus(string $paymentMethod): string

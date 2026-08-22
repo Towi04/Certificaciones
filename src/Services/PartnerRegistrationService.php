@@ -122,7 +122,7 @@ final class PartnerRegistrationService
             );
 
             $pipelineId = $this->resolvePipelineId($product);
-            $step = TrackingService::initialStepCode((string) $product['type'], []);
+            $step = TrackingService::initialStepCode($product, (string) $product['type'], []);
 
             $trackingId = $this->trackings->create([
                 'purchase_id' => $purchaseId,

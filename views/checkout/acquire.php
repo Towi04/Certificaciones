@@ -2,6 +2,7 @@
 /** @var array<string,mixed> $product */
 /** @var list<array{code:string,label:string,required:bool,type:string}> $fields */
 /** @var list<array{code:string,label:string,required:bool,accept:string}> $docs */
+/** @var array{template_url:string,doc_code:string,required_before_checkout:bool}|null $reglamento */
 /** @var array<string,string> $prefill */
 /** @var array<string,mixed> $quote */
 /** @var bool $openpayReady */
@@ -14,8 +15,10 @@ $msiPlans = $opts['msi'] ?? $quote['msi_plans'] ?? [];
     <h1 style="margin:.2rem 0 .4rem;color:var(--doceo-blue)">Adquirir</h1>
     <p class="muted" style="margin-top:0">
         Solo te pedimos lo necesario para este producto.
-        <?php if ($docs === []): ?>
+        <?php if ($docs === [] && empty($reglamento)): ?>
             Los documentos del proceso se solicitan después en tu panel, si aplica.
+        <?php elseif (!empty($reglamento)): ?>
+            Debes firmar el reglamento antes de pagar.
         <?php endif; ?>
     </p>
 
@@ -23,6 +26,11 @@ $msiPlans = $opts['msi'] ?? $quote['msi_plans'] ?? [];
         <?= csrf_field() ?>
         <input type="hidden" name="payment_method" id="payment_method" value="<?= $openpayReady ? 'openpay_spei' : 'transfer_proof' ?>">
         <input type="hidden" name="card_msi_months" id="card_msi_months" value="1">
+
+        <?php if (!empty($reglamento)): ?>
+            <?php require BASE_PATH . '/views/checkout/_reglamento_signature.php'; ?>
+            <?php $step++; ?>
+        <?php endif; ?>
 
         <section class="checkout-section">
             <h2><?= $step++ ?>. Tus datos</h2>
