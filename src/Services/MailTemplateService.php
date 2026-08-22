@@ -163,8 +163,8 @@ final class MailTemplateService
     private function deliver(string $to, array $rendered, array $options = []): void
     {
         $bodyHtml = (string) $rendered['body_html'];
-        if (empty($options['raw_html']) && !str_contains(strtolower($bodyHtml), '<!doctype')) {
-            $bodyHtml = MailBranding::wrap($bodyHtml);
+        if (empty($options['raw_html'])) {
+            $bodyHtml = MailBranding::wrapIfNeeded($bodyHtml);
         }
 
         (new Mailer())->send(
@@ -179,7 +179,7 @@ final class MailTemplateService
     }
 
     /**
-     * Prueba UKS: mismo canal que /admin/salud (MailBranding + mail() local).
+     * Prueba: SMTP primero (auto) y HTML sin doble envoltura.
      *
      * @return array{subject: string, log_path: ?string}
      */
@@ -224,16 +224,17 @@ final class MailTemplateService
     private function sendTestRendered(string $to, array $rendered, string $note): array
     {
         $subject = '[PRUEBA] ' . $rendered['subject'];
-        $inner = $rendered['body_html']
-            . '<p style="margin-top:1.25rem;padding:.75rem;background:#fffbeb;border-radius:8px;font-size:.85rem;color:#92400e">'
+        $noteBlock = '<p style="margin-top:1.25rem;padding:.75rem;background:#fffbeb;border-radius:8px;font-size:.85rem;color:#92400e">'
             . htmlspecialchars($note, ENT_QUOTES, 'UTF-8')
             . '</p>';
-        $html = MailBranding::wrap($inner);
+        $inner = MailBranding::appendBlock((string) $rendered['body_html'], $noteBlock);
+        $html = MailBranding::wrapIfNeeded($inner);
         $text = $rendered['body_text'] . "\n\n[" . $note . ']';
 
         (new Mailer())->send($to, $subject, $text, [
             'html' => true,
             'body_html' => $html,
+            'prefer_smtp' => true,
         ]);
 
         $logPath = $this->logOutboundMail($to, $subject, $text, $html);
