@@ -577,8 +577,79 @@ HTML;
             }
         }
 
+        $this->seedMailTemplates($log);
+
         $log[] = 'Seed de catálogo completado.';
 
         return $log;
+    }
+
+    /** @param list<string> $log */
+    private function seedMailTemplates(array &$log): void
+    {
+        $repo = new \App\Repositories\MailTemplateRepository();
+
+        $templates = [
+            [
+                'code' => 'uks_elet_solicitud',
+                'name' => 'UKS · Solicitud examen ELeT',
+                'subject' => 'Solicitud examen ELeT · {{full_name}} · {{matricula}}',
+                'body' => '<p>Solicitud de registro examen <strong>ELeT</strong> — Instituto DOCEO</p>'
+                    . '<ul>'
+                    . '<li><strong>Alumno:</strong> {{full_name}}</li>'
+                    . '<li><strong>Matrícula DOCEO:</strong> {{matricula}}</li>'
+                    . '<li><strong>Correo:</strong> {{student_email}}</li>'
+                    . '<li><strong>Fecha examen:</strong> {{exam_date}}</li>'
+                    . '<li><strong>Hora examen:</strong> {{exam_time}}</li>'
+                    . '</ul>'
+                    . '<p>{{attachment_note}}</p>'
+                    . '<p>— Instituto DOCEO</p>',
+            ],
+            [
+                'code' => 'student_elet_exam_access',
+                'name' => 'Alumno · Accesos examen ELeT',
+                'subject' => 'Accesos a tu examen ELeT · {{matricula}}',
+                'body' => '<p>Hola {{name}},</p>'
+                    . '<p>Tu examen <strong>ELeT</strong> está programado para {{exam_date}} {{exam_time}}.</p>'
+                    . '<p><strong>Acceso al examen:</strong><br>'
+                    . '<a href="{{exam_url}}">{{exam_url}}</a></p>'
+                    . '<ul>'
+                    . '<li><strong>Folio (único):</strong> {{folio}}</li>'
+                    . '<li><strong>Clave del día:</strong> {{access_key}}</li>'
+                    . '</ul>'
+                    . '<p>Matrícula DOCEO: {{matricula}}</p>'
+                    . '<p>— Instituto DOCEO</p>',
+            ],
+            [
+                'code' => 'student_registration',
+                'name' => 'Alumno · Registro / bienvenida',
+                'subject' => 'Tu caso {{matricula}} — Instituto DOCEO',
+                'body' => '<p>Hola {{full_name}},</p>'
+                    . '<p>Registramos tu adquisición de <strong>{{product_name}}</strong>.</p>'
+                    . '<p><strong>Matrícula:</strong> {{matricula}}<br>'
+                    . '<strong>Monto:</strong> {{amount}} MXN</p>'
+                    . '<p>{{pay_instructions_html}}</p>'
+                    . '{{password_block_html}}'
+                    . '<p><a href="{{login_url}}">Iniciar sesión</a></p>'
+                    . '<p>— Instituto DOCEO</p>',
+            ],
+            [
+                'code' => 'student_payment_confirmed',
+                'name' => 'Alumno · Pago confirmado',
+                'subject' => 'Pago confirmado — caso {{matricula}}',
+                'body' => '<p>Hola {{name}},</p>'
+                    . '<p>Confirmamos el pago de tu caso <strong>{{matricula}}</strong> ({{product_name}}).</p>'
+                    . '<p>Ya puedes dar seguimiento desde tu portal.</p>'
+                    . '<p>— Instituto DOCEO</p>',
+            ],
+        ];
+
+        foreach ($templates as $tpl) {
+            if ($repo->findByCode($tpl['code']) !== null) {
+                continue;
+            }
+            $repo->upsert($tpl['code'], $tpl['name'], $tpl['subject'], $tpl['body'], 'automatic');
+            $log[] = 'Plantilla correo creada: ' . $tpl['code'];
+        }
     }
 }

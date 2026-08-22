@@ -12,6 +12,7 @@ use App\Integrations\OpenPayClient;
 use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\TrackingRepository;
+use App\Services\MailTemplateService;
 use App\Support\Settings;
 use PDO;
 
@@ -787,12 +788,35 @@ final class CheckoutService
             $fullName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name_p'] ?? ''));
             $matricula = (string) $purchase['matricula'];
             $amount = money($purchase['charged_amount']);
-
-            $passText = $plainPassword !== null
-                ? "Usuario: {$user['email']}\nContraseña temporal: {$plainPassword}\nCámbiala después de iniciar sesión.\n"
-                : "Usa tu cuenta existente para seguir el caso.\n";
-
             $depositCard = Settings::get('oxxo_deposit_card', Env::get('OXXO_DEPOSIT_CARD', '4555113010972414')) ?? '4555113010972414';
+
+            $payInstructionsHtml = match ($paymentMethod) {
+                'transfer_proof' => 'Recibimos tu comprobante. Validaremos el pago y te avisaremos.',
+                'openpay_card' => 'Completa el pago con tarjeta en la página segura de OpenPay (enlace al confirmar).',
+                'openpay_store' => "Deposita en OXXO o tienda afiliada a la tarjeta {$depositCard}. Incluye tu matrícula en el depósito.",
+                default => 'Tu solicitud quedó registrada. Completa el pago SPEI con los datos de tu caso.',
+            };
+
+            $passwordBlockHtml = $plainPassword !== null
+                ? '<p><strong>Usuario:</strong> ' . htmlspecialchars((string) $user['email'])
+                  . '<br><strong>Contraseña temporal:</strong> ' . htmlspecialchars($plainPassword) . '</p>'
+                : '<p>Usa tu cuenta existente para seguir el caso.</p>';
+
+            $mailTpl = new MailTemplateService();
+            $vars = [
+                'full_name' => $fullName,
+                'matricula' => $matricula,
+                'product_name' => $productName,
+                'amount' => $amount,
+                'pay_instructions_html' => $payInstructionsHtml,
+                'password_block_html' => $passwordBlockHtml,
+                'login_url' => $loginUrl,
+            ];
+
+            if ($mailTpl->render('student_registration', $vars) !== null) {
+                $mailTpl->send('student_registration', (string) $user['email'], $vars);
+                return;
+            }
 
             $payText = match ($paymentMethod) {
                 'transfer_proof' => "Recibimos tu comprobante. Validaremos el pago y te avisaremos.\n",
@@ -800,6 +824,10 @@ final class CheckoutService
                 'openpay_store' => "Deposita en OXXO o tienda afiliada a la tarjeta {$depositCard}. Incluye tu matrícula en el depósito.\n",
                 default => "Tu solicitud quedó registrada. Completa el pago SPEI con los datos de tu caso.\n",
             };
+
+            $passText = $plainPassword !== null
+                ? "Usuario: {$user['email']}\nContraseña temporal: {$plainPassword}\nCámbiala después de iniciar sesión.\n"
+                : "Usa tu cuenta existente para seguir el caso.\n";
 
             $text = "Hola {$fullName},\n\n"
                 . "Registramos tu adquisición de {$productName}.\n"
@@ -851,7 +879,22 @@ final class CheckoutService
                 return;
             }
             $name = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name_p'] ?? ''));
-            $text = "Hola {$name},\n\nConfirmamos el pago de tu caso {$purchase['matricula']} "
+            $matricula = (string) $purchase['matricula'];
+            $productName = (string) $row['product_name'];
+
+            $mailTpl = new MailTemplateService();
+            $vars = [
+                'name' => $name,
+                'matricula' => $matricula,
+                'product_name' => $productName,
+            ];
+
+            if ($mailTpl->render('student_payment_confirmed', $vars) !== null) {
+                $mailTpl->send('student_payment_confirmed', (string) $row['email'], $vars);
+                return;
+            }
+
+            $text = "Hola {$name},\n\nConfirmamos el pago de tu caso {$matricula} "
                 . "({$row['product_name']}).\nYa puedes dar seguimiento desde tu portal.\n\n— Instituto DOCEO\n";
             $html = '<p>Hola ' . htmlspecialchars($name) . ',</p>'
                 . '<p>Confirmamos el pago de tu caso <strong>' . htmlspecialchars((string) $purchase['matricula']) . '</strong>'
