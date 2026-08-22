@@ -3,37 +3,43 @@
 /** @var list<string> $placeholders */
 /** @var string $uksEmail */
 /** @var bool $isUksSolicitud */
-/** @var ?array{subject:string,body_html:string,body_text:string} $preview */
+/** @var array<string, string> $previewVars */
 ?>
 <p class="meta"><a href="<?= e(url('/admin/correos')) ?>">← Plantillas de correo</a></p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)"><?= e($template['name']) ?></h1>
 <p class="muted">Código: <code><?= e($template['code']) ?></code></p>
-
-<?php if ($isUksSolicitud && $preview): ?>
-<div class="panel" style="margin-top:1rem;border:2px solid #dbeafe">
-    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Vista previa (datos de ejemplo)</h2>
-    <p class="muted" style="margin-top:0;font-size:.85rem">Así se verá el correo con las variables de prueba (certificación ELeT).</p>
-    <p style="margin:.5rem 0"><strong>Asunto:</strong> <?= e($preview['subject']) ?></p>
-    <div style="border:1px solid #d5deea;border-radius:12px;padding:1rem;background:#fff">
-        <?= $preview['body_html'] ?>
-    </div>
-</div>
-<?php endif; ?>
 
 <div class="panel" style="margin-top:1rem;max-width:720px">
     <form method="post" action="<?= e(url('/admin/correos/' . $template['code'])) ?>">
         <?= csrf_field() ?>
         <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-bottom:1rem">
             Asunto
-            <input type="text" name="subject" required value="<?= e($template['subject']) ?>"
+            <input type="text" name="subject" id="mail-subject" required value="<?= e($template['subject']) ?>"
                 style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;width:100%">
         </label>
 
-        <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-            Contenido (HTML)
-            <textarea name="body_html" required rows="16"
-                style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;width:100%;font-family:ui-monospace,monospace;font-size:.85rem"><?= e($template['body_html']) ?></textarea>
-        </label>
+        <div style="margin-bottom:1rem">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.35rem">
+                <span class="muted" style="font-size:.88rem;font-weight:600">Contenido (HTML)</span>
+                <button type="button" class="btn btn-ghost btn-sm mail-preview-toggle" id="mail-preview-toggle"
+                    aria-pressed="false" title="Ver vista previa del correo">
+                    &lt;/&gt;
+                </button>
+            </div>
+            <div class="mail-body-editor">
+                <textarea name="body_html" id="mail-body-html" required rows="16"
+                    style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;width:100%;font-family:ui-monospace,monospace;font-size:.85rem;display:block"><?= e($template['body_html']) ?></textarea>
+                <div id="mail-body-preview" class="mail-body-preview" hidden>
+                    <p class="muted" style="font-size:.82rem;margin:0 0 .5rem" id="mail-preview-subject-wrap" hidden>
+                        <strong>Asunto:</strong> <span id="mail-preview-subject"></span>
+                    </p>
+                    <div id="mail-preview-content" class="mail-preview-content"></div>
+                </div>
+            </div>
+            <p class="muted" style="font-size:.78rem;margin:.45rem 0 0" id="mail-preview-hint">
+                Pulsa <code>&lt;/&gt;</code> para ver el correo renderizado (sin etiquetas HTML).
+            </p>
+        </div>
 
         <label class="muted" style="display:flex;gap:.4rem;align-items:center;margin:1rem 0;font-size:.88rem">
             <input type="checkbox" name="is_active" value="1" <?= (int) $template['is_active'] ? 'checked' : '' ?>>
@@ -76,3 +82,81 @@
         </form>
     <?php endif; ?>
 </div>
+
+<style>
+.mail-preview-toggle {
+    font-family: ui-monospace, monospace;
+    font-size: .82rem;
+    min-width: 2.25rem;
+    padding: .35rem .55rem;
+    line-height: 1;
+}
+.mail-preview-toggle[aria-pressed="true"] {
+    background: var(--doceo-blue);
+    color: #fff;
+    border-color: var(--doceo-blue);
+}
+.mail-body-preview {
+    border: 1px solid #cfd8e6;
+    border-radius: 10px;
+    padding: 1rem;
+    background: #fff;
+    min-height: 12rem;
+}
+.mail-preview-content {
+    font-size: .95rem;
+    line-height: 1.5;
+    color: #1a2b42;
+}
+.mail-preview-content a { color: var(--doceo-blue); }
+</style>
+
+<script>
+(function () {
+  const sampleVars = <?= json_encode($previewVars, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+  const textarea = document.getElementById('mail-body-html');
+  const previewWrap = document.getElementById('mail-body-preview');
+  const previewContent = document.getElementById('mail-preview-content');
+  const previewSubjectWrap = document.getElementById('mail-preview-subject-wrap');
+  const previewSubject = document.getElementById('mail-preview-subject');
+  const subjectInput = document.getElementById('mail-subject');
+  const toggleBtn = document.getElementById('mail-preview-toggle');
+  const hint = document.getElementById('mail-preview-hint');
+  if (!textarea || !toggleBtn) return;
+
+  function interpolate(text) {
+    return text.replace(/\{\{(\w+)\}\}/g, function (_, key) {
+      return sampleVars[key] !== undefined ? sampleVars[key] : '{{' + key + '}}';
+    });
+  }
+
+  function updatePreview() {
+    previewContent.innerHTML = interpolate(textarea.value);
+    const subj = interpolate(subjectInput.value || '');
+    previewSubject.textContent = subj;
+    previewSubjectWrap.hidden = !subj;
+  }
+
+  function setPreviewMode(on) {
+    toggleBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    toggleBtn.title = on ? 'Ver código HTML' : 'Ver vista previa del correo';
+    textarea.hidden = on;
+    previewWrap.hidden = !on;
+    hint.textContent = on
+      ? 'Vista previa con datos de ejemplo. Pulsa </> para volver al código HTML.'
+      : 'Pulsa </> para ver el correo renderizado (sin etiquetas HTML).';
+    if (on) updatePreview();
+  }
+
+  toggleBtn.addEventListener('click', function () {
+    setPreviewMode(toggleBtn.getAttribute('aria-pressed') !== 'true');
+  });
+
+  textarea.addEventListener('input', function () {
+    if (toggleBtn.getAttribute('aria-pressed') === 'true') updatePreview();
+  });
+  subjectInput.addEventListener('input', function () {
+    if (toggleBtn.getAttribute('aria-pressed') === 'true') updatePreview();
+  });
+})();
+</script>

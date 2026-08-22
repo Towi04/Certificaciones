@@ -832,18 +832,12 @@ final class AdminController
             return;
         }
 
-        $placeholders = $this->mailTemplatePlaceholders();
-        $preview = null;
-        if ($this->isUksSolicitudTemplate($code)) {
-            $preview = $svc->renderUksSolicitud(MailTemplateService::uksSolicitudSampleVars());
-        }
-
         view('admin/mail_template_edit', [
             'title' => 'Editar correo · ' . $template['name'],
             'template' => $template,
             'placeholders' => $placeholders[$code] ?? $placeholders[MailTemplateService::UKS_SOLICITUD] ?? [],
             'uksEmail' => trim(Settings::get('uks_elet_request_email', '') ?? ''),
-            'preview' => $preview,
+            'previewVars' => MailTemplateService::sampleVarsForCode($code),
             'isUksSolicitud' => $this->isUksSolicitudTemplate($code),
             'layout' => 'admin',
         ]);
