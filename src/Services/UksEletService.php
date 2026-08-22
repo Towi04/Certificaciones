@@ -111,30 +111,21 @@ final class UksEletService
             throw new \RuntimeException('El archivo del reglamento firmado no está disponible en el servidor.');
         }
 
-        $attachmentNote = 'Adjunto: reglamento firmado.';
-        if ($includePaymentProof) {
-            $attachmentNote .= ' Comprobante de pago incluido.';
-        }
-
-        $attachments = [
-            [
-                'path' => $reglamentoPath,
-                'name' => 'reglamento-firmado-' . $matricula . '.pdf',
-            ],
-        ];
-
+        $fileLinks = new SignedFileLinkService();
+        $reglamentoUrl = $fileLinks->documentLink((int) $reglamentoDoc['id']);
+        $comprobanteUrl = '';
         if ($includePaymentProof) {
             $proofPath = (string) ($purchase['payment_proof_path'] ?? '');
             if ($proofPath !== '') {
                 $abs = $this->documents->absolutePath($proofPath);
                 if (is_file($abs)) {
-                    $attachments[] = [
-                        'path' => $abs,
-                        'name' => 'comprobante-' . $matricula . '-' . basename($proofPath),
-                    ];
+                    $comprobanteUrl = $fileLinks->purchaseProofLink($purchaseId);
                 }
             }
         }
+
+        $documentosHtml = $this->uksDocumentosHtml($reglamentoUrl, $comprobanteUrl);
+        $attachmentNote = 'Documentos disponibles por enlace (vigencia ~90 días).';
 
         $mailTpl = new MailTemplateService();
         $vars = [
@@ -145,14 +136,14 @@ final class UksEletService
             'student_email' => (string) ($tracking['student_email'] ?? ''),
             'exam_date' => $examDate,
             'exam_time' => $examTime,
+            'reglamento_url' => $reglamentoUrl,
+            'comprobante_url' => $comprobanteUrl,
+            'documentos_html' => $documentosHtml,
             'attachment_note' => $attachmentNote,
         ];
 
         if ($mailTpl->renderUksSolicitud($vars) !== null) {
-            $mailTpl->sendUksSolicitud($to, $vars, [
-                'attachments' => $attachments,
-                'prefer_smtp' => true,
-            ]);
+            $mailTpl->sendUksSolicitud($to, $vars);
         } else {
             $subject = 'Solicitud ' . $certificacion . ' · ' . $fullName . ' · ' . $matricula;
             $text = "Solicitud de registro examen {$certificacion} — Instituto DOCEO\n\n"
@@ -162,8 +153,9 @@ final class UksEletService
                 . "Correo alumno: " . ($tracking['student_email'] ?? '') . "\n"
                 . "Fecha examen: {$examDate}\n"
                 . "Hora examen: {$examTime}\n\n"
-                . $attachmentNote . "\n\n"
-                . "— Instituto DOCEO\n";
+                . "Reglamento firmado: {$reglamentoUrl}\n"
+                . ($comprobanteUrl !== '' ? "Comprobante: {$comprobanteUrl}\n" : '')
+                . "\n— Instituto DOCEO\n";
             $html = '<p>Solicitud de registro examen <strong>' . htmlspecialchars($certificacion) . '</strong> — Instituto DOCEO</p>'
                 . '<ul>'
                 . '<li><strong>Certificación:</strong> ' . htmlspecialchars($certificacion) . '</li>'
@@ -173,20 +165,31 @@ final class UksEletService
                 . '<li><strong>Fecha examen:</strong> ' . htmlspecialchars($examDate) . '</li>'
                 . '<li><strong>Hora examen:</strong> ' . htmlspecialchars($examTime) . '</li>'
                 . '</ul>'
-                . '<p>' . htmlspecialchars($attachmentNote) . '</p>';
+                . $documentosHtml;
             (new Mailer())->send($to, $subject, $text, [
                 'html' => true,
                 'body_html' => $html,
-                'attachments' => $attachments,
-                'prefer_smtp' => true,
             ]);
         }
 
-        $logNote = 'Correo a UKS (' . $to . ') · reglamento firmado';
-        if ($includePaymentProof) {
+        $logNote = 'Correo a UKS (' . $to . ') · enlaces documentos';
+        if ($comprobanteUrl !== '') {
             $logNote .= ' + comprobante';
         }
         $this->tracking->addLog($trackingId, 'solicitud_uks', $logNote, null);
+    }
+
+    private function uksDocumentosHtml(string $reglamentoUrl, string $comprobanteUrl): string
+    {
+        $html = '<p><strong>Documentos:</strong></p><ul>'
+            . '<li><a href="' . htmlspecialchars($reglamentoUrl) . '">Reglamento firmado</a></li>';
+        if ($comprobanteUrl !== '') {
+            $html .= '<li><a href="' . htmlspecialchars($comprobanteUrl) . '">Comprobante de pago</a></li>';
+        }
+        $html .= '</ul>'
+            . '<p class="muted" style="font-size:.85rem">Enlaces seguros del sistema DOCEO (sin adjuntos en el correo).</p>';
+
+        return $html;
     }
 
     /** @return array<string, mixed>|null */

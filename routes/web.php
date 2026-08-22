@@ -6,6 +6,7 @@ use App\Controllers\AdminController;
 use App\Controllers\AuthController;
 use App\Controllers\CatalogController;
 use App\Controllers\CheckoutController;
+use App\Controllers\FileLinkController;
 use App\Controllers\PartnerController;
 use App\Controllers\SetupController;
 use App\Controllers\StudentController;
@@ -21,6 +22,9 @@ $partner = new PartnerController();
 $setup = new SetupController();
 $checkout = new CheckoutController();
 $webhooks = new WebhookController();
+$fileLinks = new FileLinkController();
+
+$router->get('/archivo/{token}', fn (string $token) => $fileLinks->download($token));
 
 $router->get('/', fn () => $catalog->home());
 $router->get('/catalogo', fn () => $catalog->home());

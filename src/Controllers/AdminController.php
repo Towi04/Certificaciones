@@ -779,7 +779,7 @@ final class AdminController
     {
         $uks = [
             'certificacion', 'product_name', 'full_name', 'matricula', 'student_email',
-            'exam_date', 'exam_time', 'attachment_note',
+            'exam_date', 'exam_time', 'reglamento_url', 'comprobante_url', 'documentos_html', 'attachment_note',
         ];
 
         return [
@@ -818,6 +818,7 @@ final class AdminController
     {
         Auth::requireRole(['admin']);
         $svc = new MailTemplateService();
+        $svc->ensureDefaults();
         $svc->migrateUksSolicitudTemplate();
 
         if ($code === MailTemplateService::UKS_SOLICITUD_LEGACY && $svc->find(MailTemplateService::UKS_SOLICITUD) !== null) {
@@ -831,6 +832,8 @@ final class AdminController
 
             return;
         }
+
+        $placeholders = $this->mailTemplatePlaceholders();
 
         view('admin/mail_template_edit', [
             'title' => 'Editar correo · ' . $template['name'],
@@ -888,8 +891,9 @@ final class AdminController
         }
 
         $svc = new MailTemplateService();
+        $svc->ensureDefaults();
         $svc->migrateUksSolicitudTemplate();
-        $effectiveCode = $svc->uksSolicitudCode();
+        $redirectCode = $this->mailTemplateRedirectCode($svc, $code);
 
         $to = trim((string) ($_POST['test_to'] ?? ''));
         if ($to === '') {
@@ -897,13 +901,12 @@ final class AdminController
         }
         if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
             flash('error', 'Indica un correo de destino válido para la prueba.');
-            redirect('/admin/correos/' . $effectiveCode);
+            redirect('/admin/correos/' . $redirectCode);
         }
 
         try {
-            $svc->sendUksSolicitud($to, MailTemplateService::uksSolicitudSampleVars(), [
-                'prefer_smtp' => true,
-            ]);
+            // Sin adjuntos: mail() local (rápido). Evita colgar la página en SMTP.
+            $svc->sendUksSolicitud($to, MailTemplateService::uksSolicitudSampleVars());
             $endpoint = Mailer::lastEndpoint();
             $transport = $endpoint['transport'] ?? 'desconocido';
             $detail = $transport === 'smtp'
@@ -912,11 +915,20 @@ final class AdminController
             flash(
                 'success',
                 'Correo de prueba enviado a ' . $to . $detail
-                . '. Revisa bandeja y spam. Si usas mail() local y no llega, configura SMTP en .env.'
+                . '. Revisa bandeja y spam. Los documentos van como enlaces, no adjuntos.'
             );
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
-        redirect('/admin/correos/' . $effectiveCode);
+        redirect('/admin/correos/' . $redirectCode);
+    }
+
+    private function mailTemplateRedirectCode(MailTemplateService $svc, string $postedCode): string
+    {
+        if ($svc->find($postedCode) !== null) {
+            return $postedCode;
+        }
+
+        return $svc->uksSolicitudCode();
     }
 }

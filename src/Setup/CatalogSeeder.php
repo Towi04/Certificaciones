@@ -603,7 +603,7 @@ HTML;
                     . '<li><strong>Fecha examen:</strong> {{exam_date}}</li>'
                     . '<li><strong>Hora examen:</strong> {{exam_time}}</li>'
                     . '</ul>'
-                    . '<p>{{attachment_note}}</p>'
+                    . '{{documentos_html}}'
                     . '<p>— Instituto DOCEO</p>',
             ],
             [

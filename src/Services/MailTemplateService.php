@@ -165,6 +165,8 @@ final class MailTemplateService
     /** @return array<string, string> */
     public static function uksSolicitudSampleVars(): array
     {
+        $sampleLink = url('/archivo/ejemplo-vista-previa');
+
         return [
             'certificacion' => 'ELeT',
             'product_name' => 'ELeT',
@@ -173,7 +175,13 @@ final class MailTemplateService
             'student_email' => 'alumno@ejemplo.com',
             'exam_date' => date('Y-m-d', strtotime('+7 days')),
             'exam_time' => '10:00',
-            'attachment_note' => '[Vista previa] Adjunto: reglamento firmado.',
+            'reglamento_url' => $sampleLink,
+            'comprobante_url' => '',
+            'documentos_html' => '<p><strong>Documentos:</strong></p><ul>'
+                . '<li><a href="' . htmlspecialchars($sampleLink) . '">Reglamento firmado</a></li>'
+                . '</ul>'
+                . '<p style="font-size:.85rem;color:#64748b">Enlaces seguros DOCEO (ejemplo en correo de prueba).</p>',
+            'attachment_note' => 'Documentos por enlace (sin adjuntos en el correo).',
         ];
     }
 
@@ -249,7 +257,7 @@ final class MailTemplateService
                 . '<li><strong>Fecha examen:</strong> {{exam_date}}</li>'
                 . '<li><strong>Hora examen:</strong> {{exam_time}}</li>'
                 . '</ul>'
-                . '<p>{{attachment_note}}</p>'
+                . '{{documentos_html}}'
                 . '<p>— Instituto DOCEO</p>',
                 'automatic'
             );
