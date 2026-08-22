@@ -8,7 +8,6 @@ use App\Config\Env;
 use App\Database\Connection;
 use App\Integrations\Mailer;
 use App\Repositories\PurchaseRepository;
-use App\Repositories\SupplierRepository;
 use App\Support\Settings;
 use PDO;
 
@@ -84,7 +83,7 @@ final class UksEletService
         $to = $this->uksRequestEmail();
         if ($to === '') {
             throw new \RuntimeException(
-                'Configura el correo de destino en Admin → Correos (UKS ELeT) o en el proveedor UKS.'
+                'Configura el correo destino en Admin → Correos → UKS · Solicitud (campo Para).'
             );
         }
 
@@ -391,26 +390,14 @@ final class UksEletService
 
     private function uksRequestEmail(): string
     {
-        $fromSettings = trim((string) (Settings::get('uks_elet_request_email') ?? ''));
-        if ($fromSettings !== '') {
-            return $fromSettings;
+        $fromTemplate = (new MailTemplateService())->uksSolicitudRecipient();
+        if ($fromTemplate !== '') {
+            return $fromTemplate;
         }
 
         $fromEnv = trim((string) (Env::get('UKS_ELET_REQUEST_EMAIL', '') ?? ''));
         if ($fromEnv !== '') {
             return $fromEnv;
-        }
-
-        $supplier = $this->pdo->prepare('SELECT id FROM suppliers WHERE code = ? LIMIT 1');
-        $supplier->execute(['uks']);
-        $supplierId = (int) $supplier->fetchColumn();
-        if ($supplierId > 0) {
-            foreach ((new SupplierRepository())->contacts($supplierId) as $contact) {
-                $email = trim((string) ($contact['email'] ?? ''));
-                if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    return $email;
-                }
-            }
         }
 
         return '';

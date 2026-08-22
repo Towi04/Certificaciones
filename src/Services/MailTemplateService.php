@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Config\Env;
 use App\Integrations\Mailer;
 use App\Mail\MailBranding;
 use App\Repositories\MailTemplateRepository;
+use App\Support\Settings;
 
 final class MailTemplateService
 {
@@ -108,7 +110,50 @@ final class MailTemplateService
             throw new \RuntimeException('Plantilla UKS solicitud no encontrada o desactivada.');
         }
 
+        $routing = $this->routing($this->uksSolicitudCode());
+        if ($routing['to'] !== '') {
+            $to = $routing['to'];
+        }
+        if ($routing['cc'] !== '') {
+            $options['cc'] = $routing['cc'];
+        }
+
         $this->deliver($to, $rendered, $options);
+    }
+
+    /** Destinatario UKS configurado en la plantilla (producción). */
+    public function uksSolicitudRecipient(): string
+    {
+        return $this->routing($this->uksSolicitudCode())['to'];
+    }
+
+    /** @return array{to: string, cc: string} */
+    public function routing(string $code): array
+    {
+        $to = trim(Settings::get('mail_tpl_' . $code . '_to', '') ?? '');
+        if ($to === '' && in_array($code, [self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY], true)) {
+            $to = trim(Settings::get('uks_elet_request_email', '') ?? '');
+        }
+
+        return [
+            'to' => $to,
+            'cc' => trim(Settings::get('mail_tpl_' . $code . '_cc', '') ?? ''),
+        ];
+    }
+
+    public function saveRouting(string $code, string $to, string $cc = ''): void
+    {
+        Settings::set('mail_tpl_' . $code . '_to', $to);
+        Settings::set('mail_tpl_' . $code . '_cc', $cc);
+
+        if (in_array($code, [self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY], true)) {
+            Settings::set('uks_elet_request_email', $to);
+        }
+    }
+
+    public function requiresFixedRecipient(string $code): bool
+    {
+        return in_array($code, [self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY], true);
     }
 
     /**
@@ -140,26 +185,55 @@ final class MailTemplateService
      */
     public function sendUksSolicitudTest(string $to): array
     {
-        $vars = self::uksSolicitudSampleVars();
-        $rendered = $this->renderUksSolicitud($vars);
+        $rendered = $this->renderUksSolicitud(self::uksSolicitudSampleVars());
         if ($rendered === null) {
             throw new \RuntimeException(
                 'Plantilla UKS no encontrada o desactivada. Actívala en esta página y guarda.'
             );
         }
 
+        return $this->sendTestRendered(
+            $to,
+            $rendered,
+            'Correo de prueba DOCEO. En producción los documentos van como enlaces seguros, no adjuntos.'
+        );
+    }
+
+    /**
+     * @return array{subject: string, log_path: ?string}
+     */
+    public function sendTemplateTest(string $code, string $to): array
+    {
+        $vars = self::sampleVarsForCode($code);
+        $rendered = $this->render($code, $vars);
+        if ($rendered === null) {
+            throw new \RuntimeException('Plantilla no encontrada, desactivada o sin datos de prueba.');
+        }
+
+        return $this->sendTestRendered(
+            $to,
+            $rendered,
+            'Correo de prueba DOCEO con datos de ejemplo.'
+        );
+    }
+
+    /**
+     * @param array{subject: string, body_html: string, body_text: string} $rendered
+     * @return array{subject: string, log_path: ?string}
+     */
+    private function sendTestRendered(string $to, array $rendered, string $note): array
+    {
         $subject = '[PRUEBA] ' . $rendered['subject'];
         $inner = $rendered['body_html']
             . '<p style="margin-top:1.25rem;padding:.75rem;background:#fffbeb;border-radius:8px;font-size:.85rem;color:#92400e">'
-            . 'Correo de prueba DOCEO. En producción los documentos van como enlaces seguros, no adjuntos.'
+            . htmlspecialchars($note, ENT_QUOTES, 'UTF-8')
             . '</p>';
         $html = MailBranding::wrap($inner);
-        $text = $rendered['body_text'] . "\n\n[Correo de prueba DOCEO]";
+        $text = $rendered['body_text'] . "\n\n[" . $note . ']';
 
         (new Mailer())->send($to, $subject, $text, [
             'html' => true,
             'body_html' => $html,
-            'raw_html' => true,
         ]);
 
         $logPath = $this->logOutboundMail($to, $subject, $text, $html);
