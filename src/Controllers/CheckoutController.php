@@ -32,6 +32,7 @@ final class CheckoutController
             'product' => $product,
             'fields' => CheckoutRequirements::fieldsForProduct($product),
             'docs' => CheckoutRequirements::docsForProduct($product),
+            'reglamento' => CheckoutRequirements::reglamentoForProduct($product),
             'prefill' => $prefill,
             'user' => $user,
             'quote' => (new PricingService())->quoteProduct($product, null),

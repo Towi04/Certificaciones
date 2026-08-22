@@ -171,7 +171,7 @@ Plantilla **Reporte Instituto DOCEO ELET** (CSV que descargas de UKS). Ejemplo: 
 
 ## Implementación pendiente (Fase 1+)
 
-- [ ] UI checkout: reglamento PDF + firma digital + append última página
+- [x] UI checkout: reglamento PDF + firma digital + append última página
 - [ ] Selector fecha/hora (slots 30 min) en checkout
 - [ ] SPEI como método default en UI
 - [ ] Creación tracking CENNI post-examen + plazo 15 días

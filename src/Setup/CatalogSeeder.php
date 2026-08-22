@@ -118,7 +118,9 @@ HTML;
                 'source_url' => 'https://drive.google.com/file/d/1sfP7zSPlqqpBdYaHUmz-_kM_BijRZDHW/view?usp=sharing',
                 'signature_mode' => 'append_to_pdf',
                 'required_before_checkout' => true,
+                'doc_code' => 'reglamento_firmado',
             ],
+            'initial_step_code' => 'registro',
             'exam' => [
                 'mode' => 'online',
                 'url' => 'https://exam.elet.com.mx/',
