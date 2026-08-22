@@ -175,9 +175,21 @@ final class PurchaseRepository
 
     public function setOpenPay(int $purchaseId, string $chargeId, ?string $clabe): void
     {
+        $this->setOpenPayCharge($purchaseId, $chargeId, $clabe, null, null);
+    }
+
+    public function setOpenPayCharge(
+        int $purchaseId,
+        string $chargeId,
+        ?string $clabe = null,
+        ?string $storeReference = null,
+        ?string $barcodeUrl = null
+    ): void {
         $this->pdo->prepare(
-            'UPDATE purchases SET openpay_charge_id = ?, openpay_clabe = ?, status = \'awaiting_payment\' WHERE id = ?'
-        )->execute([$chargeId, $clabe, $purchaseId]);
+            'UPDATE purchases SET openpay_charge_id = ?, openpay_clabe = ?,
+             openpay_store_reference = ?, openpay_barcode_url = ?,
+             status = \'awaiting_payment\' WHERE id = ?'
+        )->execute([$chargeId, $clabe, $storeReference, $barcodeUrl, $purchaseId]);
     }
 
     public function markPaid(int $purchaseId): void

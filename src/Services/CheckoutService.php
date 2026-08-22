@@ -45,7 +45,8 @@ final class CheckoutService
      *   purchase: array<string,mixed>,
      *   created_account: bool,
      *   plain_password: ?string,
-     *   openpay: ?array<string,mixed>
+     *   openpay: ?array<string,mixed>,
+     *   redirect_url: ?string
      * }
      */
     public function complete(
@@ -54,16 +55,20 @@ final class CheckoutService
         array $files,
         string $paymentMethod,
         ?string $promoCode,
-        int $cardMsiMonths = 1,
-        ?string $openpayToken = null,
-        ?string $deviceSessionId = null
+        int $cardMsiMonths = 1
     ): array {
         $product = $this->products->find($productId);
         if ($product === null || !(int) $product['is_active'] || !(int) $product['is_public']) {
             throw new \InvalidArgumentException('Producto no disponible.');
         }
 
-        $allowedPay = ['transfer_proof', 'openpay_spei', 'openpay_card'];
+        $openpayConfigured = trim((string) (Env::get('OPENPAY_MERCHANT_ID', '') ?? '')) !== ''
+            && trim((string) (Env::get('OPENPAY_PRIVATE_KEY', '') ?? '')) !== '';
+
+        $allowedPay = ['openpay_spei', 'openpay_card', 'openpay_store'];
+        if (!$openpayConfigured) {
+            $allowedPay[] = 'transfer_proof';
+        }
         if (!in_array($paymentMethod, $allowedPay, true)) {
             throw new \InvalidArgumentException('Método de pago inválido.');
         }
@@ -84,6 +89,7 @@ final class CheckoutService
                 $tierPrice = $this->pricing->partnerPriceForProduct($product, (string) $partner['tier']);
                 $quote['partner_id'] = (int) $partner['id'];
                 $quote['partner_price'] = $tierPrice;
+                $quote['base'] = $tierPrice;
                 $quote['charged'] = $tierPrice;
                 $quote['partner_credit'] = 0.0;
                 $quote['label'] = 'Precio partner (' . strtoupper((string) $partner['tier']) . ')';
@@ -93,27 +99,16 @@ final class CheckoutService
 
 
         $cardMsiMonths = max(1, $cardMsiMonths);
-        $chargeAmount = (float) $quote['charged'];
-        $storedMsiMonths = null;
-
-        if ($paymentMethod === 'openpay_card') {
-            if (!CardMsiCalculator::isValidMonths($chargeAmount, $product, $cardMsiMonths)) {
-                throw new \InvalidArgumentException('El plan MSI seleccionado no aplica para este producto.');
-            }
-            $token = trim((string) $openpayToken);
-            if ($token === '') {
-                throw new \InvalidArgumentException('No se recibió el token de tarjeta. Intenta de nuevo.');
-            }
-            $storedMsiMonths = $cardMsiMonths > 1 ? $cardMsiMonths : null;
-        } elseif ($cardMsiMonths > 1) {
-            throw new \InvalidArgumentException('Los meses sin intereses solo aplican al pagar con tarjeta.');
-        }
+        $baseAmount = (float) ($quote['base'] ?? $quote['charged']);
+        $pricing = $this->resolvePaymentAmount($baseAmount, $product, $paymentMethod, $cardMsiMonths);
+        $chargeAmount = $pricing['gross'];
+        $storedMsiMonths = $pricing['msi'];
 
         $account = null;
         $purchaseId = 0;
         $studentUserId = 0;
         $openpay = null;
-        $cardChargeCompleted = false;
+        $redirectUrl = null;
 
         $this->pdo->beginTransaction();
         try {
@@ -133,7 +128,7 @@ final class CheckoutService
                 'payment_method' => $paymentMethod,
                 'currency' => 'MXN',
                 'catalog_amount' => $quote['catalog'],
-                'charged_amount' => $quote['charged'],
+                'charged_amount' => $chargeAmount,
                 'card_msi_months' => $storedMsiMonths,
                 'partner_price_amount' => $quote['partner_price'],
                 'partner_credit_earned' => $quote['partner_credit'],
@@ -143,7 +138,7 @@ final class CheckoutService
                 $purchaseId,
                 $productId,
                 (float) $product['public_price'],
-                (float) $quote['charged']
+                $chargeAmount
             );
 
             $pipelineId = $this->resolvePipelineId((string) $product['type']);
@@ -188,17 +183,23 @@ final class CheckoutService
                     $account['user']
                 );
             } elseif ($paymentMethod === 'openpay_card') {
-                $openpay = $this->createCardCharge(
+                $openpay = $this->createCardRedirectCharge(
                     $purchaseId,
                     $matricula,
                     $chargeAmount,
                     (string) $product['name'],
                     $account['user'],
-                    (string) $openpayToken,
-                    $deviceSessionId,
                     $cardMsiMonths
                 );
-                $cardChargeCompleted = strtolower((string) ($openpay['status'] ?? '')) === 'completed';
+                $redirectUrl = (string) ($openpay['redirect_url'] ?? '');
+            } elseif ($paymentMethod === 'openpay_store') {
+                $openpay = $this->createStoreCharge(
+                    $purchaseId,
+                    $matricula,
+                    $chargeAmount,
+                    (string) $product['name'],
+                    $account['user']
+                );
             }
 
             $this->pdo->commit();
@@ -207,14 +208,6 @@ final class CheckoutService
                 $this->pdo->rollBack();
             }
             throw $e;
-        }
-
-        if ($cardChargeCompleted) {
-            $this->confirmPayment(
-                $purchaseId,
-                $studentUserId,
-                'Pago con tarjeta OpenPay' . ($storedMsiMonths ? " ({$storedMsiMonths} MSI)" : '')
-            );
         }
 
         $purchase = $this->purchases->find($purchaseId);
@@ -244,7 +237,93 @@ final class CheckoutService
             'created_account' => $account['created'],
             'plain_password' => $account['plain_password'],
             'openpay' => $openpay,
+            'redirect_url' => $redirectUrl !== '' ? $redirectUrl : null,
         ];
+    }
+
+    /**
+     * Tras regresar de la terminal virtual OpenPay, confirma el pago si el cargo está completed.
+     */
+    public function finalizeOpenPayReturn(string $matricula, ?string $chargeId = null): bool
+    {
+        $purchase = $this->purchases->findByMatricula($matricula);
+        if ($purchase === null) {
+            return false;
+        }
+        if ((string) $purchase['status'] === 'paid') {
+            return true;
+        }
+
+        $chargeId = trim((string) ($chargeId ?? $purchase['openpay_charge_id'] ?? ''));
+        if ($chargeId === '') {
+            return false;
+        }
+
+        $merchant = trim((string) (Env::get('OPENPAY_MERCHANT_ID', '') ?? ''));
+        $key = trim((string) (Env::get('OPENPAY_PRIVATE_KEY', '') ?? ''));
+        if ($merchant === '' || $key === '') {
+            return false;
+        }
+
+        try {
+            $remote = (new OpenPayClient())->getCharge($chargeId);
+        } catch (\Throwable $e) {
+            error_log('[Doceo] OpenPay return verify: ' . $e->getMessage());
+
+            return false;
+        }
+
+        if (strtolower((string) ($remote['status'] ?? '')) !== 'completed') {
+            return false;
+        }
+
+        $actorId = (int) ($purchase['student_user_id'] ?? 0);
+        $msi = !empty($purchase['card_msi_months']) ? (int) $purchase['card_msi_months'] : 0;
+        $note = 'Pago con tarjeta OpenPay (redirect' . ($msi > 1 ? ", {$msi} MSI" : '') . ')';
+        $this->confirmPayment((int) $purchase['id'], $actorId > 0 ? $actorId : $this->systemActorUserId(), $note);
+
+        return true;
+    }
+
+    /**
+     * @return array{gross: float, fee: float, msi: ?int}
+     */
+    private function resolvePaymentAmount(
+        float $base,
+        array $product,
+        string $paymentMethod,
+        int $cardMsiMonths
+    ): array {
+        if ($paymentMethod === 'transfer_proof') {
+            return ['gross' => round($base, 2), 'fee' => 0.0, 'msi' => null];
+        }
+
+        if ($paymentMethod === 'openpay_spei') {
+            $p = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_SPEI);
+
+            return ['gross' => $p['gross'], 'fee' => $p['fee'], 'msi' => null];
+        }
+
+        if ($paymentMethod === 'openpay_store') {
+            $p = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_STORE);
+
+            return ['gross' => $p['gross'], 'fee' => $p['fee'], 'msi' => null];
+        }
+
+        if ($paymentMethod === 'openpay_card') {
+            if (!CardMsiCalculator::isValidMonths($base, $product, $cardMsiMonths)) {
+                throw new \InvalidArgumentException('El plan MSI seleccionado no aplica para este producto.');
+            }
+            $p = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_CARD);
+
+            return [
+                'gross' => $p['gross'],
+                'fee' => $p['fee'],
+                'msi' => $cardMsiMonths > 1 ? $cardMsiMonths : null,
+            ];
+        }
+
+        throw new \InvalidArgumentException('Método de pago inválido.');
     }
 
     public function confirmPayment(int $purchaseId, int $adminUserId, ?string $notes = null): void
@@ -509,53 +588,102 @@ final class CheckoutService
     }
 
     /** @param array<string, mixed> $user */
-    private function createCardCharge(
+    private function createCardRedirectCharge(
         int $purchaseId,
         string $matricula,
         float $amount,
         string $productName,
         array $user,
-        string $token,
-        ?string $deviceSessionId,
         int $msiMonths
     ): array {
         $merchant = trim((string) (Env::get('OPENPAY_MERCHANT_ID', '') ?? ''));
         $key = trim((string) (Env::get('OPENPAY_PRIVATE_KEY', '') ?? ''));
-        $public = trim((string) (Env::get('OPENPAY_PUBLIC_KEY', '') ?? ''));
-        if ($merchant === '' || $key === '' || $public === '') {
-            throw new \RuntimeException('OpenPay no está configurado para pagos con tarjeta.');
+        if ($merchant === '' || $key === '') {
+            throw new \RuntimeException('OpenPay no está configurado.');
         }
 
         $client = new OpenPayClient();
         $name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name_p'] ?? ''));
-        $payload = [
+        $appUrl = rtrim((string) (Env::get('APP_URL', '') ?? ''), '/');
+        $redirectUrl = $appUrl . '/compra/' . rawurlencode($matricula) . '?openpay_return=1';
+
+        $charge = $client->createCardRedirectCharge([
             'amount' => $amount,
             'description' => 'DOCEO ' . $matricula . ' · ' . mb_substr($productName, 0, 80),
             'order_id' => 'doceo-' . $matricula . '-' . time(),
-            'source_id' => $token,
+            'redirect_url' => $redirectUrl,
             'customer' => [
                 'name' => $name !== '' ? $name : 'Alumno DOCEO',
                 'email' => (string) $user['email'],
                 'phone_number' => (string) ($user['phone'] ?? ''),
             ],
             'payments' => $msiMonths > 1 ? $msiMonths : null,
-        ];
-        if ($deviceSessionId !== null && trim($deviceSessionId) !== '') {
-            $payload['device_session_id'] = trim($deviceSessionId);
-        }
+        ]);
 
-        $charge = $client->createCardCharge($payload);
         $chargeId = (string) ($charge['id'] ?? '');
         if ($chargeId === '') {
             throw new \RuntimeException('OpenPay no devolvió identificador de cargo.');
         }
 
-        $this->purchases->setOpenPay($purchaseId, $chargeId, null);
+        $payUrl = (string) ($charge['payment_method']['url'] ?? '');
+        if ($payUrl === '') {
+            throw new \RuntimeException('OpenPay no devolvió URL de pago seguro.');
+        }
+
+        $this->purchases->setOpenPayCharge($purchaseId, $chargeId, null, null, null);
 
         return [
             'charge_id' => $chargeId,
+            'redirect_url' => $payUrl,
             'status' => (string) ($charge['status'] ?? ''),
-            'authorization' => (string) ($charge['authorization'] ?? ''),
+        ];
+    }
+
+    /** @param array<string, mixed> $user */
+    private function createStoreCharge(
+        int $purchaseId,
+        string $matricula,
+        float $amount,
+        string $productName,
+        array $user
+    ): array {
+        $merchant = trim((string) (Env::get('OPENPAY_MERCHANT_ID', '') ?? ''));
+        $key = trim((string) (Env::get('OPENPAY_PRIVATE_KEY', '') ?? ''));
+        if ($merchant === '' || $key === '') {
+            throw new \RuntimeException('OpenPay no está configurado.');
+        }
+
+        $client = new OpenPayClient();
+        $name = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name_p'] ?? ''));
+        $dueDate = (new \DateTimeImmutable('+3 days'))->format('Y-m-d\TH:i:s');
+
+        $charge = $client->createStoreCharge([
+            'amount' => $amount,
+            'description' => 'DOCEO ' . $matricula . ' · ' . mb_substr($productName, 0, 80),
+            'order_id' => 'doceo-' . $matricula . '-' . time(),
+            'due_date' => $dueDate,
+            'customer' => [
+                'name' => $name !== '' ? $name : 'Alumno DOCEO',
+                'email' => (string) $user['email'],
+                'phone_number' => (string) ($user['phone'] ?? ''),
+            ],
+        ]);
+
+        $chargeId = (string) ($charge['id'] ?? '');
+        $reference = (string) ($charge['payment_method']['reference'] ?? '');
+        $barcodeUrl = (string) ($charge['payment_method']['barcode_url'] ?? '');
+        if ($chargeId === '') {
+            throw new \RuntimeException('OpenPay no devolvió referencia OXXO.');
+        }
+
+        $this->purchases->setOpenPayCharge($purchaseId, $chargeId, null, $reference !== '' ? $reference : null, $barcodeUrl !== '' ? $barcodeUrl : null);
+
+        return [
+            'charge_id' => $chargeId,
+            'reference' => $reference,
+            'barcode_url' => $barcodeUrl,
+            'due_date' => (string) ($charge['due_date'] ?? ''),
+            'status' => (string) ($charge['status'] ?? ''),
         ];
     }
 
@@ -591,7 +719,8 @@ final class CheckoutService
 
             $payText = match ($paymentMethod) {
                 'transfer_proof' => "Recibimos tu comprobante. Validaremos el pago y te avisaremos.\n",
-                'openpay_card' => "Recibimos tu pago con tarjeta. Te avisaremos cuando quede confirmado en el sistema.\n",
+                'openpay_card' => "Completa el pago con tarjeta en la página segura de OpenPay (enlace al confirmar).\n",
+                'openpay_store' => "Te enviamos la referencia para pagar en OXXO u otra tienda afiliada.\n",
                 default => "Tu solicitud quedó registrada. Completa el pago SPEI con los datos de tu caso.\n",
             };
 

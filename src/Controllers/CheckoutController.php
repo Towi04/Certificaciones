@@ -35,12 +35,7 @@ final class CheckoutController
             'prefill' => $prefill,
             'user' => $user,
             'quote' => (new PricingService())->quoteProduct($product, null),
-            'bank' => $this->bankTransferInfo(),
             'openpayReady' => $this->openPayConfigured(),
-            'openpayCardReady' => $this->openPayCardConfigured(),
-            'openpayMerchantId' => trim((string) (Env::get('OPENPAY_MERCHANT_ID', '') ?? '')),
-            'openpayPublicKey' => trim((string) (Env::get('OPENPAY_PUBLIC_KEY', '') ?? '')),
-            'openpaySandbox' => Env::getBool('OPENPAY_SANDBOX', true),
         ]);
     }
 
@@ -64,11 +59,9 @@ final class CheckoutController
                 : '',
         ];
 
-        $paymentMethod = (string) ($_POST['payment_method'] ?? ($this->openPayCardConfigured() ? 'openpay_card' : ($this->openPayConfigured() ? 'openpay_spei' : 'transfer_proof')));
+        $paymentMethod = (string) ($_POST['payment_method'] ?? ($this->openPayConfigured() ? 'openpay_spei' : 'transfer_proof'));
         $promoCode = trim((string) ($_POST['promo_code'] ?? ''));
         $cardMsiMonths = max(1, (int) ($_POST['card_msi_months'] ?? 1));
-        $openpayToken = trim((string) ($_POST['openpay_token'] ?? ''));
-        $deviceSessionId = trim((string) ($_POST['device_session_id'] ?? ''));
 
         try {
             foreach (CheckoutRequirements::fieldsForProduct($product) as $field) {
@@ -87,15 +80,22 @@ final class CheckoutController
                 $_FILES,
                 $paymentMethod,
                 $promoCode !== '' ? $promoCode : null,
-                $cardMsiMonths,
-                $openpayToken !== '' ? $openpayToken : null,
-                $deviceSessionId !== '' ? $deviceSessionId : null
+                $cardMsiMonths
             );
 
             $matricula = (string) $result['purchase']['matricula'];
             if ($result['created_account'] && $result['plain_password']) {
                 flash('info', 'Cuenta creada. Contraseña temporal: ' . $result['plain_password']);
             }
+
+            if (!empty($result['redirect_url'])) {
+                if ($result['created_account']) {
+                    $_SESSION['_doceo_pending_flash'] = ['success', 'Matrícula ' . $matricula . ' — completa tu pago en OpenPay.'];
+                }
+                header('Location: ' . $result['redirect_url']);
+                exit;
+            }
+
             flash('success', 'Compra registrada. Matrícula ' . $matricula);
             redirect('/compra/' . rawurlencode($matricula));
         } catch (\InvalidArgumentException $e) {
@@ -149,10 +149,28 @@ final class CheckoutController
             redirect('/login');
         }
 
+        $chargeId = isset($_GET['id']) && is_string($_GET['id']) ? $_GET['id'] : null;
+        if ($chargeId === null && isset($_GET['openpay_return'])) {
+            $chargeId = (string) ($purchase['openpay_charge_id'] ?? '');
+        }
+        if ($chargeId !== null && $chargeId !== '') {
+            if ((new CheckoutService())->finalizeOpenPayReturn($matricula, $chargeId)) {
+                flash('success', 'Pago con tarjeta confirmado.');
+                $purchase = (new PurchaseRepository())->findByMatricula($matricula) ?? $purchase;
+            }
+        }
+
+        if (isset($_SESSION['_doceo_pending_flash'])) {
+            [$type, $msg] = $_SESSION['_doceo_pending_flash'];
+            unset($_SESSION['_doceo_pending_flash']);
+            flash($type, $msg);
+        }
+
         $repo = new PurchaseRepository();
         $items = $repo->items((int) $purchase['id']);
         $openpayPdf = null;
-        if (!empty($purchase['openpay_charge_id']) && $this->openPayConfigured()) {
+        if (!empty($purchase['openpay_charge_id']) && $this->openPayConfigured()
+            && ($purchase['payment_method'] ?? '') === 'openpay_spei') {
             try {
                 $openpayPdf = (new \App\Integrations\OpenPayClient())->speiPdfUrl((string) $purchase['openpay_charge_id']);
             } catch (\Throwable) {
@@ -200,12 +218,5 @@ final class CheckoutController
         $k = trim((string) (Env::get('OPENPAY_PRIVATE_KEY', '') ?? ''));
 
         return $m !== '' && $k !== '';
-    }
-
-    private function openPayCardConfigured(): bool
-    {
-        $p = trim((string) (Env::get('OPENPAY_PUBLIC_KEY', '') ?? ''));
-
-        return $this->openPayConfigured() && $p !== '';
     }
 }

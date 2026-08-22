@@ -111,6 +111,66 @@ final class OpenPayClient
     }
 
     /**
+     * Cargo con tarjeta vía terminal virtual OpenPay (redirect — datos de tarjeta en OpenPay).
+     *
+     * @param array{
+     *   amount: float|int|string,
+     *   description: string,
+     *   order_id: string,
+     *   redirect_url: string,
+     *   customer: array{name: string, email: string, phone_number?: string},
+     *   payments?: int|null
+     * } $data
+     * @return array<string, mixed>
+     */
+    public function createCardRedirectCharge(array $data): array
+    {
+        $payload = [
+            'method' => 'card',
+            'amount' => round((float) $data['amount'], 2),
+            'description' => mb_substr((string) $data['description'], 0, 250),
+            'order_id' => mb_substr((string) $data['order_id'], 0, 100),
+            'confirm' => false,
+            'send_email' => false,
+            'redirect_url' => (string) $data['redirect_url'],
+            'customer' => $data['customer'],
+        ];
+        $payments = isset($data['payments']) ? (int) $data['payments'] : 0;
+        if ($payments > 1) {
+            $payload['payment_plan'] = ['payments' => $payments];
+        }
+
+        return $this->request('POST', 'charges', $payload);
+    }
+
+    /**
+     * Cargo en tienda de conveniencia (OXXO, etc.).
+     *
+     * @param array{
+     *   amount: float|int|string,
+     *   description: string,
+     *   order_id: string,
+     *   customer: array{name: string, email: string, phone_number?: string},
+     *   due_date?: string
+     * } $data
+     */
+    public function createStoreCharge(array $data): array
+    {
+        $payload = [
+            'method' => 'store',
+            'amount' => round((float) $data['amount'], 2),
+            'description' => mb_substr((string) $data['description'], 0, 250),
+            'order_id' => mb_substr((string) $data['order_id'], 0, 100),
+            'customer' => $data['customer'],
+        ];
+        if (!empty($data['due_date'])) {
+            $payload['due_date'] = $data['due_date'];
+        }
+
+        return $this->request('POST', 'charges', $payload);
+    }
+
+    /**
      * Cargo con tarjeta (token) y MSI OpenPay.
      * $payments = número de meses (p.ej. 3, 6, 9, 12). Null = contado.
      *
