@@ -151,14 +151,16 @@ final class PricingService
     {
         $base = round((float) ($quote['charged'] ?? 0), 2);
         $quote['base'] = $base;
-
-        $spei = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_SPEI);
-        $oxxo = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_STORE);
-        $cardContado = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_CARD);
+        $quote['charged'] = $base;
+        $quote['charged_base'] = $base;
+        $quote['charged_fee'] = 0.0;
 
         $msiPlans = [];
         foreach (CardMsiCalculator::optionsFor($base, $product) as $plan) {
             $months = (int) ($plan['months'] ?? 1);
+            if ($months <= 1) {
+                continue;
+            }
             $priced = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_CARD);
             $gross = $priced['gross'];
             $msiPlans[] = [
@@ -166,22 +168,25 @@ final class PricingService
                 'base' => $base,
                 'fee' => $priced['fee'],
                 'total' => $gross,
-                'monthly_estimate' => $months > 1 ? round($gross / $months, 2) : $gross,
-                'label' => $months === 1 ? 'Contado' : ($months . ' MSI'),
+                'monthly_estimate' => round($gross / $months, 2),
+                'label' => $months . ' MSI',
             ];
         }
 
         $quote['msi_plans'] = $msiPlans;
         $quote['payment_options'] = [
             'msi' => $msiPlans,
-            'spei' => $spei,
-            'oxxo' => $oxxo,
-            'card_contado' => $cardContado,
+            'oxxo' => [
+                'net' => $base,
+                'gross' => $base,
+                'fee' => 0.0,
+            ],
+            'transfer' => [
+                'net' => $base,
+                'gross' => $base,
+                'fee' => 0.0,
+            ],
         ];
-        // Total mostrado por defecto (SPEI como referencia neutral)
-        $quote['charged'] = $spei['gross'];
-        $quote['charged_base'] = $base;
-        $quote['charged_fee'] = $spei['fee'];
 
         return $quote;
     }

@@ -14,6 +14,7 @@ use App\Services\CheckoutRequirements;
 use App\Services\ExportService;
 use App\Services\ImportService;
 use App\Services\TrackingService;
+use App\Support\Settings;
 
 final class AdminController
 {
@@ -639,5 +640,69 @@ final class AdminController
         }
 
         redirect('/admin/exportaciones');
+    }
+
+    public function promoCode(): void
+    {
+        Auth::requireRole(['admin']);
+        $pdo = Connection::get();
+        $currentCode = Settings::get('doceo_promo_code', 'DOCEO26') ?? 'DOCEO26';
+        $stmt = $pdo->prepare(
+            'SELECT * FROM discount_codes WHERE type = ? AND is_active = 1 ORDER BY id DESC LIMIT 1'
+        );
+        $stmt->execute(['promo_doceo']);
+        $active = $stmt->fetch() ?: null;
+
+        view('admin/promo_code', [
+            'title' => 'Código promocional DOCEO',
+            'currentCode' => $active ? (string) $active['code'] : $currentCode,
+            'active' => $active,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function promoCodeUpdate(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+
+        $newCode = strtoupper(trim((string) ($_POST['code'] ?? '')));
+        if ($newCode === '' || !preg_match('/^[A-Z0-9_-]{3,40}$/', $newCode)) {
+            flash('error', 'El código debe tener entre 3 y 40 caracteres (letras, números, guión o guión bajo).');
+            redirect('/admin/promo');
+        }
+
+        $pdo = Connection::get();
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare(
+                'UPDATE discount_codes SET is_active = 0 WHERE type = ? AND is_active = 1'
+            )->execute(['promo_doceo']);
+
+            $stmt = $pdo->prepare('SELECT id FROM discount_codes WHERE code = ? LIMIT 1');
+            $stmt->execute([$newCode]);
+            $existingId = $stmt->fetchColumn();
+
+            if ($existingId) {
+                $pdo->prepare(
+                    'UPDATE discount_codes SET type = ?, discount_mode = ?, is_active = 1, partner_id = NULL WHERE id = ?'
+                )->execute(['promo_doceo', 'to_public', (int) $existingId]);
+            } else {
+                $pdo->prepare(
+                    'INSERT INTO discount_codes (code, type, discount_mode, is_active) VALUES (?, ?, ?, 1)'
+                )->execute([$newCode, 'promo_doceo', 'to_public']);
+            }
+
+            Settings::set('doceo_promo_code', $newCode);
+            $pdo->commit();
+            flash('success', 'Código promocional actualizado a ' . $newCode . '.');
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            flash('error', 'No se pudo actualizar el código: ' . $e->getMessage());
+        }
+
+        redirect('/admin/promo');
     }
 }

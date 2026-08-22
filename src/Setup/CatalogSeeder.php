@@ -136,11 +136,11 @@ HTML;
                 'same_day_exception' => ['before' => '16:00', 'requires_admin' => true],
             ],
             'payments' => [
-                'default_method' => 'openpay_spei',
-                'order' => ['openpay_spei', 'openpay_store', 'openpay_card'],
-                'price_includes_fee' => true,
+                'default_method' => 'transfer_proof',
+                'order' => ['transfer_proof', 'openpay_store', 'openpay_card'],
+                'price_includes_fee' => false,
             ],
-            'card_msi' => ['enabled' => true, 'months' => [1, 3, 6, 9, 12], 'min_amount' => 0],
+            'card_msi' => ['enabled' => true, 'months' => [3, 6, 9, 12], 'min_amount' => 0],
             'emails' => [
                 'payment_confirmed' => false,
                 'exam_scheduled' => false,
@@ -539,6 +539,23 @@ HTML;
             'is_active' => 1,
         ]);
         $log[] = 'Import template: uks_elet_reporte';
+
+        $promoCode = Settings::get('doceo_promo_code', 'DOCEO26') ?? 'DOCEO26';
+        $stmt = $pdo->prepare('SELECT id FROM discount_codes WHERE code = ?');
+        $stmt->execute([$promoCode]);
+        $promoId = $stmt->fetchColumn();
+        if ($promoId) {
+            $pdo->prepare(
+                'UPDATE discount_codes SET type = ?, discount_mode = ?, is_active = 1, partner_id = NULL WHERE id = ?'
+            )->execute(['promo_doceo', 'to_public', (int) $promoId]);
+            $log[] = 'Código promo actualizado: ' . $promoCode;
+        } else {
+            $pdo->prepare(
+                'INSERT INTO discount_codes (code, type, discount_mode, is_active) VALUES (?, ?, ?, 1)'
+            )->execute([$promoCode, 'promo_doceo', 'to_public']);
+            $log[] = 'Código promo creado: ' . $promoCode;
+        }
+        Settings::set('doceo_promo_code', $promoCode);
 
         $log[] = 'Seed de catálogo completado.';
 

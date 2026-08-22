@@ -68,6 +68,8 @@ $router->get('/admin/proveedores', fn () => $admin->suppliers());
 $router->get('/admin/exportaciones', fn () => $admin->exports());
 $router->get('/admin/exportaciones/{code}', fn (string $code) => $admin->exportDownload($code));
 $router->post('/admin/importaciones/{code}', fn (string $code) => $admin->importUpload($code));
+$router->get('/admin/promo', fn () => $admin->promoCode());
+$router->post('/admin/promo', fn () => $admin->promoCodeUpdate());
 $router->get('/admin/salud', fn () => $admin->health());
 
 $router->get('/alumno', fn () => $student->dashboard());

@@ -6,31 +6,54 @@
 /** @var array<string,string> $prefill */
 /** @var array<string,mixed> $quote */
 /** @var bool $openpayReady */
+/** @var array{bank:string,clabe:string,holder:string,concept:string} $bank */
 $step = 1;
-$opts = $quote['payment_options'] ?? [];
-$msiPlans = $opts['msi'] ?? $quote['msi_plans'] ?? [];
+$catalogPrice = (float) ($quote['catalog'] ?? $product['catalog_price'] ?? 0);
+$basePrice = (float) ($quote['base'] ?? $catalogPrice);
 ?>
 <article class="panel checkout" style="margin:1.25rem 0 2.5rem">
     <p class="meta"><a href="<?= e(url('/producto/' . $product['slug'])) ?>">← <?= e($product['name']) ?></a></p>
     <h1 style="margin:.2rem 0 .4rem;color:var(--doceo-blue)">Adquirir</h1>
     <p class="muted" style="margin-top:0">
-        Solo te pedimos lo necesario para este producto.
-        <?php if ($docs === [] && empty($reglamento)): ?>
-            Los documentos del proceso se solicitan después en tu panel, si aplica.
-        <?php elseif (!empty($reglamento)): ?>
-            Debes firmar el reglamento antes de pagar.
+        <?php if (!empty($reglamento)): ?>
+            Lee y firma el reglamento, luego completa tus datos y elige cómo pagar.
+        <?php else: ?>
+            Solo te pedimos lo necesario para este producto.
         <?php endif; ?>
     </p>
 
     <form method="post" action="<?= e(url('/adquirir/' . $product['slug'])) ?>" enctype="multipart/form-data" class="checkout-form" id="checkout-form">
         <?= csrf_field() ?>
-        <input type="hidden" name="payment_method" id="payment_method" value="<?= $openpayReady ? 'openpay_spei' : 'transfer_proof' ?>">
-        <input type="hidden" name="card_msi_months" id="card_msi_months" value="1">
+        <input type="hidden" name="payment_method" id="payment_method" value="transfer_proof">
+        <input type="hidden" name="card_msi_months" id="card_msi_months" value="3">
 
         <?php if (!empty($reglamento)): ?>
             <?php require BASE_PATH . '/views/checkout/_reglamento_signature.php'; ?>
             <?php $step++; ?>
         <?php endif; ?>
+
+        <section class="checkout-section">
+            <h2><?= $step++ ?>. Código promocional</h2>
+            <p class="muted" style="margin-top:0;font-size:.88rem">
+                ¿Tienes un código DOCEO? Ingrésalo para obtener el precio preferencial.
+                Sin código aplica el precio de lista.
+            </p>
+            <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end;max-width:420px">
+                <label style="flex:1;min-width:180px">Código
+                    <input type="text" name="promo_code" id="promo_code" placeholder="Opcional" style="text-transform:uppercase;padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;width:100%">
+                </label>
+                <button type="button" class="btn btn-primary btn-sm" id="apply-promo" style="margin-bottom:2px">Aplicar</button>
+            </div>
+            <p class="muted" id="quote-error" style="color:#b00020;display:none;margin:.5rem 0 0"></p>
+            <div class="price-summary" style="margin-top:1rem;padding:.85rem 1rem;background:#f4f7fb;border-radius:12px;max-width:420px">
+                <div class="muted" style="font-size:.82rem" id="price-label"><?= e($quote['label'] ?? 'Precio de lista') ?></div>
+                <div style="display:flex;align-items:baseline;gap:.75rem;flex-wrap:wrap;margin-top:.25rem">
+                    <span class="price" id="price-list" style="font-size:1.35rem;color:var(--doceo-blue)"><?= money($catalogPrice) ?></span>
+                    <span id="price-arrow" style="display:none;color:var(--doceo-muted)">→</span>
+                    <span class="price" id="price-final" style="font-size:1.35rem;color:var(--doceo-blue);display:none"></span>
+                </div>
+            </div>
+        </section>
 
         <section class="checkout-section">
             <h2><?= $step++ ?>. Tus datos</h2>
@@ -54,33 +77,12 @@ $msiPlans = $opts['msi'] ?? $quote['msi_plans'] ?? [];
                         <label><?= e($field['label']) ?><?= $req ? ' *' : '' ?>
                             <input type="<?= e($field['type']) ?>" name="<?= e($code) ?>" value="<?= e((string) $val) ?>"
                                 <?= $req ? 'required' : '' ?>
-                                <?= $code === 'curp' ? 'maxlength="18" style="text-transform:uppercase"' : '' ?>
                                 <?= $code === 'email' ? 'autocomplete="email"' : '' ?>
                                 <?= $code === 'phone' ? 'autocomplete="tel"' : '' ?>>
                         </label>
                     <?php endif; ?>
                 <?php endforeach; ?>
             </div>
-        </section>
-
-        <section class="checkout-section">
-            <h2><?= $step++ ?>. Precio y código</h2>
-            <div class="price-box">
-                <div>
-                    <div class="muted" style="font-size:.85rem">Precio base</div>
-                    <div class="price" id="price-base"><?= money($quote['base'] ?? $quote['catalog']) ?></div>
-                </div>
-                <div>
-                    <div class="muted" style="font-size:.85rem">Total a pagar</div>
-                    <div class="price" id="price-total" style="font-size:1.6rem"><?= money($quote['charged']) ?></div>
-                    <div class="muted" id="price-fee" style="font-size:.8rem"></div>
-                    <div class="muted" id="price-label" style="font-size:.85rem"><?= e($quote['label']) ?></div>
-                </div>
-            </div>
-            <label style="max-width:320px;display:block;margin-top:.75rem">Código promocional o de partner
-                <input type="text" name="promo_code" id="promo_code" placeholder="Opcional" style="text-transform:uppercase">
-            </label>
-            <p class="muted" id="quote-error" style="color:#b00020;display:none"></p>
         </section>
 
         <?php if ($docs !== []): ?>
@@ -97,52 +99,66 @@ $msiPlans = $opts['msi'] ?? $quote['msi_plans'] ?? [];
         <?php endif; ?>
 
         <section class="checkout-section">
-            <h2><?= $step++ ?>. Pago</h2>
-            <?php if ($openpayReady): ?>
-                <p class="muted" style="margin-top:0;font-size:.85rem">Elige cómo pagar. Tarjeta se completa en la página segura de OpenPay — aquí no capturamos datos bancarios.</p>
-                <div class="pay-tiles" role="group" aria-label="Método de pago">
-                    <button type="button" class="pay-tile" data-method="openpay_card" data-ui="msi" aria-pressed="false">
-                        <span class="pay-tile-icon" aria-hidden="true">💳</span>
-                        <span class="pay-tile-label">MSI</span>
-                        <span class="pay-tile-sub">Tarjeta</span>
-                    </button>
-                    <button type="button" class="pay-tile active" data-method="openpay_spei" data-ui="spei" aria-pressed="true">
-                        <span class="pay-tile-icon" aria-hidden="true">🏦</span>
-                        <span class="pay-tile-label">SPEI</span>
-                        <span class="pay-tile-sub">Transferencia</span>
-                    </button>
+            <h2><?= $step++ ?>. Forma de pago</h2>
+            <p class="muted" style="margin-top:0;font-size:.88rem">Elige cómo realizarás tu pago.</p>
+
+            <div class="pay-tiles" role="group" aria-label="Método de pago">
+                <button type="button" class="pay-tile active" data-method="transfer_proof" data-ui="transfer" aria-pressed="true">
+                    <span class="pay-tile-icon" aria-hidden="true">🏦</span>
+                    <span class="pay-tile-label">Transferencia</span>
+                    <span class="pay-tile-sub">SPEI · sube comprobante</span>
+                </button>
+                <?php if ($openpayReady): ?>
                     <button type="button" class="pay-tile" data-method="openpay_store" data-ui="oxxo" aria-pressed="false">
                         <span class="pay-tile-icon" aria-hidden="true">🏪</span>
                         <span class="pay-tile-label">OXXO</span>
-                        <span class="pay-tile-sub">Efectivo</span>
+                        <span class="pay-tile-sub">Efectivo en tienda</span>
                     </button>
-                </div>
+                    <button type="button" class="pay-tile" data-method="openpay_card" data-ui="msi" aria-pressed="false">
+                        <span class="pay-tile-icon" aria-hidden="true">💳</span>
+                        <span class="pay-tile-label">Meses</span>
+                        <span class="pay-tile-sub">MSI con tarjeta</span>
+                    </button>
+                <?php endif; ?>
+            </div>
 
-                <div id="msi-picker" class="msi-picker" hidden>
-                    <p class="muted" style="font-size:.82rem;margin:.65rem 0 .4rem">Meses sin intereses (cargo total hoy; tu banco difiere el cobro):</p>
-                    <div class="msi-chips" id="msi-chips">
-                        <?php foreach ($msiPlans as $i => $plan): ?>
-                            <button type="button" class="msi-chip<?= $i === 0 ? ' active' : '' ?>"
-                                    data-months="<?= (int) $plan['months'] ?>"
-                                    data-total="<?= e(number_format((float) $plan['total'], 2, '.', '')) ?>"
-                                    data-fee="<?= e(number_format((float) ($plan['fee'] ?? 0), 2, '.', '')) ?>">
-                                <?= (int) $plan['months'] === 1 ? 'Contado' : ((int) $plan['months'] . ' MSI') ?>
-                            </button>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-
-                <p class="muted" id="pay-hint" style="font-size:.82rem;margin-top:.65rem"></p>
-            <?php else: ?>
-                <p class="muted">OpenPay no está configurado. Sube comprobante de transferencia a DOCEO.</p>
-                <label>Comprobante *
-                    <input type="file" name="payment_proof" required accept=".pdf,.jpg,.jpeg,.png">
+            <div id="pay-transfer-panel" class="pay-panel">
+                <p class="muted" style="font-size:.88rem;margin:.75rem 0 .5rem">
+                    Realiza la transferencia por el monto indicado y sube tu comprobante ahora.
+                </p>
+                <?php if (!empty($bank['clabe'])): ?>
+                    <ul class="muted" style="font-size:.85rem;margin:.5rem 0 .75rem;padding-left:1.1rem">
+                        <li>Banco: <strong><?= e($bank['bank']) ?></strong></li>
+                        <li>CLABE: <strong style="font-family:ui-monospace,monospace"><?= e($bank['clabe']) ?></strong></li>
+                        <li>Titular: <strong><?= e($bank['holder']) ?></strong></li>
+                    </ul>
+                <?php endif; ?>
+                <label>Comprobante de pago *
+                    <input type="file" name="payment_proof" id="payment_proof" accept=".pdf,.jpg,.jpeg,.png">
                 </label>
-            <?php endif; ?>
+                <p class="muted" style="font-size:.82rem;margin:.35rem 0 0">Total a transferir: <strong id="transfer-amount"><?= money($basePrice) ?></strong></p>
+            </div>
+
+            <div id="pay-oxxo-panel" class="pay-panel" hidden>
+                <p class="muted" style="font-size:.88rem;margin:.75rem 0 0">
+                    Al confirmar tu registro te mostraremos la referencia y código de barras para pagar en OXXO.
+                </p>
+            </div>
+
+            <div id="pay-msi-panel" class="pay-panel" hidden>
+                <p class="muted" style="font-size:.82rem;margin:.75rem 0 .4rem">¿A cuántos meses?</p>
+                <div class="msi-chips" id="msi-chips"></div>
+                <p style="margin:.85rem 0 0;font-size:1.1rem;color:var(--doceo-blue);font-weight:700" id="msi-monthly-line"></p>
+                <p class="muted" style="font-size:.82rem;margin:.35rem 0 0">
+                    Cargo total con tarjeta en OpenPay; tu banco difiere el cobro mensual.
+                </p>
+            </div>
+
+            <p class="muted" id="pay-hint" style="font-size:.82rem;margin-top:.65rem"></p>
         </section>
 
         <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1.25rem">
-            <button class="btn btn-accent" type="submit" id="checkout-submit"><?= $openpayReady ? 'Continuar' : 'Confirmar compra' ?></button>
+            <button class="btn btn-accent" type="submit" id="checkout-submit">Confirmar registro</button>
             <a class="btn btn-ghost" href="<?= e(url('/producto/' . $product['slug'])) ?>">Cancelar</a>
         </div>
     </form>
@@ -153,10 +169,9 @@ $msiPlans = $opts['msi'] ?? $quote['msi_plans'] ?? [];
 .form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:.75rem 1rem; }
 .form-grid label, .checkout-form label { display:flex; flex-direction:column; gap:.35rem; font-size:.88rem; font-weight:600; color:var(--doceo-muted); }
 .form-grid input, .form-grid select { font:inherit; padding:.55rem .7rem; border:1px solid #cfd8e6; border-radius:10px; background:#fff; }
-.price-box { display:flex; gap:2rem; flex-wrap:wrap; align-items:flex-end; }
 .pay-tiles { display:flex; gap:.65rem; flex-wrap:wrap; }
 .pay-tile {
-  flex:1; min-width:88px; max-width:120px; display:flex; flex-direction:column; align-items:center; gap:.2rem;
+  flex:1; min-width:100px; max-width:140px; display:flex; flex-direction:column; align-items:center; gap:.2rem;
   padding:.75rem .5rem; border:2px solid #d5deea; border-radius:14px; background:#fbfcfe; cursor:pointer;
   font:inherit; color:var(--doceo-text); transition:border-color .15s, background .15s;
 }
@@ -164,106 +179,131 @@ $msiPlans = $opts['msi'] ?? $quote['msi_plans'] ?? [];
 .pay-tile.active { border-color:var(--doceo-blue); background:#eef4fc; }
 .pay-tile-icon { font-size:1.45rem; line-height:1; }
 .pay-tile-label { font-weight:700; font-size:.95rem; color:var(--doceo-blue); }
-.pay-tile-sub { font-size:.72rem; color:var(--doceo-muted); font-weight:500; }
+.pay-tile-sub { font-size:.68rem; color:var(--doceo-muted); font-weight:500; text-align:center; line-height:1.2; }
 .msi-chips { display:flex; gap:.45rem; flex-wrap:wrap; }
 .msi-chip {
-  padding:.4rem .85rem; border:1px solid #cfd8e6; border-radius:999px; background:#fff;
-  font:inherit; font-size:.82rem; font-weight:600; cursor:pointer; color:var(--doceo-muted);
+  padding:.45rem .9rem; border:1px solid #cfd8e6; border-radius:999px; background:#fff;
+  font:inherit; font-size:.85rem; font-weight:600; cursor:pointer; color:var(--doceo-muted);
 }
 .msi-chip.active { border-color:var(--doceo-blue); color:var(--doceo-blue); background:#eef4fc; }
+.price-summary .price-strike { text-decoration:line-through; opacity:.55; font-size:1.1rem; }
 </style>
 <script>
 (function () {
   const slug = <?= json_encode($product['slug'], JSON_UNESCAPED_UNICODE) ?>;
   const openpayReady = <?= $openpayReady ? 'true' : 'false' ?>;
   let quoteData = <?= json_encode($quote, JSON_UNESCAPED_UNICODE) ?>;
-  let payUi = 'spei';
+  let payUi = 'transfer';
 
   const codeInput = document.getElementById('promo_code');
-  const baseEl = document.getElementById('price-base');
-  const totalEl = document.getElementById('price-total');
-  const feeEl = document.getElementById('price-fee');
+  const applyBtn = document.getElementById('apply-promo');
+  const priceList = document.getElementById('price-list');
+  const priceFinal = document.getElementById('price-final');
+  const priceArrow = document.getElementById('price-arrow');
   const labelEl = document.getElementById('price-label');
   const errEl = document.getElementById('quote-error');
   const methodInput = document.getElementById('payment_method');
   const msiInput = document.getElementById('card_msi_months');
-  const msiPicker = document.getElementById('msi-picker');
   const msiChips = document.getElementById('msi-chips');
+  const msiMonthlyLine = document.getElementById('msi-monthly-line');
+  const transferAmount = document.getElementById('transfer-amount');
+  const transferPanel = document.getElementById('pay-transfer-panel');
+  const oxxoPanel = document.getElementById('pay-oxxo-panel');
+  const msiPanel = document.getElementById('pay-msi-panel');
+  const proofInput = document.getElementById('payment_proof');
   const payHint = document.getElementById('pay-hint');
   const submitBtn = document.getElementById('checkout-submit');
-  let timer = null;
+  const form = document.getElementById('checkout-form');
 
   function money(n) {
     return '$' + Number(n || 0).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2});
   }
 
-  function activeMsiMonths() {
-    const chip = msiChips && msiChips.querySelector('.msi-chip.active');
-    return chip ? Number(chip.getAttribute('data-months') || 1) : 1;
+  function baseAmount() {
+    return Number(quoteData.base ?? quoteData.catalog ?? 0);
   }
 
-  function updatePriceDisplay() {
-    if (!quoteData) return;
-    const base = Number(quoteData.base || quoteData.charged_base || quoteData.catalog || 0);
-    baseEl.textContent = money(base);
+  function catalogAmount() {
+    return Number(quoteData.catalog ?? 0);
+  }
 
-    let total = base;
-    let fee = 0;
-    const opts = quoteData.payment_options || {};
+  function updatePriceSummary() {
+    const catalog = catalogAmount();
+    const base = baseAmount();
+    const hasDiscount = base > 0 && base < catalog - 0.009;
 
-    if (payUi === 'msi') {
-      const months = activeMsiMonths();
-      const plans = opts.msi || quoteData.msi_plans || [];
-      const plan = plans.find(p => Number(p.months) === months) || plans[0];
-      if (plan) {
-        total = Number(plan.total || 0);
-        fee = Number(plan.fee || 0);
-      }
-    } else if (payUi === 'spei' && opts.spei) {
-      total = Number(opts.spei.gross || base);
-      fee = Number(opts.spei.fee || 0);
-    } else if (payUi === 'oxxo' && opts.oxxo) {
-      total = Number(opts.oxxo.gross || base);
-      fee = Number(opts.oxxo.fee || 0);
+    priceList.textContent = money(catalog);
+    if (hasDiscount) {
+      priceList.classList.add('price-strike');
+      priceArrow.style.display = '';
+      priceFinal.style.display = '';
+      priceFinal.textContent = money(base);
+    } else {
+      priceList.classList.remove('price-strike');
+      priceArrow.style.display = 'none';
+      priceFinal.style.display = 'none';
     }
+    if (transferAmount) transferAmount.textContent = money(base);
+  }
 
-    totalEl.textContent = money(total);
-    feeEl.textContent = fee > 0 ? ('Incluye comisión pasarela ' + money(fee)) : '';
+  function activeMsiMonths() {
+    const chip = msiChips && msiChips.querySelector('.msi-chip.active');
+    return chip ? Number(chip.getAttribute('data-months') || 3) : 3;
+  }
+
+  function updateMsiDisplay() {
+    if (!msiMonthlyLine || !msiChips) return;
+    const months = activeMsiMonths();
+    const plans = quoteData.payment_options?.msi || quoteData.msi_plans || [];
+    const plan = plans.find(p => Number(p.months) === months) || plans[0];
+    if (plan && Number(plan.months) > 1) {
+      msiMonthlyLine.textContent = 'Mensualidades de ' + money(plan.monthly_estimate);
+    } else {
+      msiMonthlyLine.textContent = '';
+    }
   }
 
   function updateHint() {
-    if (!payHint) return;
+    if (!payHint || !submitBtn) return;
     if (payUi === 'msi') {
-      const m = activeMsiMonths();
-      payHint.textContent = m > 1
-        ? 'Al continuar irás a OpenPay para pagar con tarjeta en ' + m + ' MSI.'
-        : 'Al continuar irás a OpenPay para pagar con tarjeta de contado.';
-      if (submitBtn) submitBtn.textContent = 'Continuar al pago seguro';
-    } else if (payUi === 'spei') {
-      payHint.textContent = 'Al confirmar te damos una CLABE SPEI única por el total.';
-      if (submitBtn) submitBtn.textContent = 'Confirmar y ver CLABE';
+      payHint.textContent = 'Al continuar irás a la página segura de OpenPay para pagar con tarjeta.';
+      submitBtn.textContent = 'Continuar al pago con tarjeta';
     } else if (payUi === 'oxxo') {
-      payHint.textContent = 'Al confirmar te damos referencia y código de barras para pagar en tienda.';
-      if (submitBtn) submitBtn.textContent = 'Confirmar y ver referencia OXXO';
+      payHint.textContent = 'Al confirmar verás la referencia para pagar en OXXO.';
+      submitBtn.textContent = 'Confirmar y ver referencia OXXO';
+    } else {
+      payHint.textContent = 'Sube tu comprobante de transferencia para completar el registro.';
+      submitBtn.textContent = 'Confirmar registro';
     }
   }
 
   function selectPayUi(ui, method) {
     payUi = ui;
     if (methodInput) methodInput.value = method;
+
     document.querySelectorAll('.pay-tile').forEach(t => {
       const on = t.getAttribute('data-ui') === ui;
       t.classList.toggle('active', on);
       t.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
-    if (msiPicker) msiPicker.hidden = ui !== 'msi';
+
+    if (transferPanel) transferPanel.hidden = ui !== 'transfer';
+    if (oxxoPanel) oxxoPanel.hidden = ui !== 'oxxo';
+    if (msiPanel) msiPanel.hidden = ui !== 'msi';
+
+    if (proofInput) {
+      proofInput.required = ui === 'transfer';
+      if (ui !== 'transfer') proofInput.value = '';
+    }
+
     if (ui === 'msi' && msiChips) {
       const chip = msiChips.querySelector('.msi-chip.active') || msiChips.querySelector('.msi-chip');
-      if (chip) msiInput.value = chip.getAttribute('data-months') || '1';
+      if (chip) msiInput.value = chip.getAttribute('data-months') || '3';
+      updateMsiDisplay();
     } else {
       msiInput.value = '1';
     }
-    updatePriceDisplay();
+
     updateHint();
   }
 
@@ -277,20 +317,24 @@ $msiPlans = $opts['msi'] ?? $quote['msi_plans'] ?? [];
       if (!chip) return;
       msiChips.querySelectorAll('.msi-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
-      msiInput.value = chip.getAttribute('data-months') || '1';
-      updatePriceDisplay();
-      updateHint();
+      msiInput.value = chip.getAttribute('data-months') || '3';
+      updateMsiDisplay();
     });
   }
 
   function renderMsiChips(plans) {
     if (!msiChips) return;
-    const list = Array.isArray(plans) && plans.length ? plans : [{months:1,total:0,fee:0}];
+    const list = (Array.isArray(plans) ? plans : []).filter(p => Number(p.months) > 1);
+    if (list.length === 0) {
+      msiChips.innerHTML = '<span class="muted">MSI no disponible para este monto.</span>';
+      return;
+    }
     msiChips.innerHTML = list.map((p, i) => {
-      const m = Number(p.months || 1);
-      return '<button type="button" class="msi-chip' + (i === 0 ? ' active' : '') + '" data-months="' + m + '">'
-        + (m === 1 ? 'Contado' : (m + ' MSI')) + '</button>';
+      const m = Number(p.months);
+      return '<button type="button" class="msi-chip' + (i === 0 ? ' active' : '') + '" data-months="' + m + '">' + m + ' meses</button>';
     }).join('');
+    msiInput.value = String(list[0].months || 3);
+    updateMsiDisplay();
   }
 
   function refreshQuote() {
@@ -305,19 +349,30 @@ $msiPlans = $opts['msi'] ?? $quote['msi_plans'] ?? [];
         }
         errEl.style.display = 'none';
         quoteData = data.quote;
-        labelEl.textContent = data.quote.label || '';
+        labelEl.textContent = data.quote.label || 'Precio de lista';
         renderMsiChips(data.quote.payment_options?.msi || data.quote.msi_plans || []);
-        updatePriceDisplay();
-        updateHint();
+        updatePriceSummary();
+        updateMsiDisplay();
       })
       .catch(() => {});
   }
 
-  codeInput.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(refreshQuote, 400); });
+  applyBtn.addEventListener('click', refreshQuote);
+  codeInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); refreshQuote(); }
+  });
 
-  if (openpayReady) {
-    updatePriceDisplay();
-    updateHint();
-  }
+  form.addEventListener('submit', e => {
+    if (payUi === 'transfer' && proofInput && !proofInput.files.length) {
+      e.preventDefault();
+      alert('Sube el comprobante de tu transferencia.');
+      proofInput.focus();
+    }
+  });
+
+  renderMsiChips(quoteData.payment_options?.msi || quoteData.msi_plans || []);
+  updatePriceSummary();
+  updateHint();
+  selectPayUi('transfer', 'transfer_proof');
 })();
 </script>
