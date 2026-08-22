@@ -401,7 +401,10 @@ final class ImportService
                 . htmlspecialchars($matricula) . '.</p>'
                 . '<p><strong>Folio CENNI:</strong> ' . htmlspecialchars($folio) . '</p>'
                 . '<p><a href="' . htmlspecialchars($sepUrl) . '">Consultar estatus en SEP</a></p>';
-            $mailer->send($email, 'Folio CENNI disponible — caso ' . $matricula, $text, $html);
+            $mailer->send($email, 'Folio CENNI disponible — caso ' . $matricula, $text, [
+                'html' => true,
+                'body_html' => $html,
+            ]);
         } catch (\Throwable) {
             return 'Folio CENNI ' . $folio . ' para ' . $matricula . ' (correo no enviado)';
         }
@@ -464,7 +467,10 @@ final class ImportService
                     $html .= '<li>' . htmlspecialchars($line) . '</li>';
                 }
                 $html .= '</ul><p>Revisa los detalles en tu panel de alumno.</p>';
-                $mailer->send($email, 'Estatus documentos CENNI — caso ' . $matricula, $text, $html);
+                $mailer->send($email, 'Estatus documentos CENNI — caso ' . $matricula, $text, [
+                    'html' => true,
+                    'body_html' => $html,
+                ]);
             } catch (\Throwable) {
                 // panel still shows update
             }
