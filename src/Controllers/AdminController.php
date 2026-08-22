@@ -903,8 +903,10 @@ final class AdminController
                     $transportDetail .= ' (' . ($endpoint['host'] ?? '') . ':' . ($endpoint['port'] ?? '') . ')';
                 }
                 $messages[] = 'Prueba enviada a ' . $testTo . ' («' . $result['subject'] . '») vía ' . $transportDetail . '.';
-                if ($transport === 'mail') {
-                    $messages[] = 'Si no llega en 2–3 min, revisa spam o configura SMTP en .env (mail() solo confirma al servidor local).';
+                if (!empty($endpoint['fallback'])) {
+                    flash('error', 'SMTP falló; se usó mail() local (no garantiza entrega). '
+                        . implode(' | ', Mailer::lastErrors()));
+                    redirect('/admin/correos/' . $effectiveCode);
                 }
                 if ($result['log_path'] !== null) {
                     $messages[] = 'Log: ' . basename($result['log_path']);

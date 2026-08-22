@@ -109,8 +109,7 @@
                         style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;max-width:360px">
                 </label>
                 <p class="muted" style="font-size:.82rem;margin:.45rem 0 0">
-                    Usa datos de ejemplo. Asunto con prefijo <code>[PRUEBA]</code>.
-                    Intenta SMTP primero; si falla, usa <code>mail()</code> local. Revisa spam si no llega.
+                    Intenta <strong>SMTP autenticado</strong> (no usa mail() local). Si falla, verás el error en pantalla.
                 </p>
             </div>
         </div>

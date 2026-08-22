@@ -235,6 +235,8 @@ final class MailTemplateService
             'html' => true,
             'body_html' => $html,
             'prefer_smtp' => true,
+            'force_smtp' => true,
+            'smtp_only' => true,
         ]);
 
         $logPath = $this->logOutboundMail($to, $subject, $text, $html);
@@ -256,6 +258,8 @@ final class MailTemplateService
                 'body_text' => $text,
                 'body_html' => $html,
                 'transport' => Mailer::lastEndpoint(),
+                'smtp_transport_env' => Env::get('SMTP_TRANSPORT', 'auto'),
+                'delivery_errors' => Mailer::lastErrors(),
                 'created_at' => date('c'),
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             if ($json !== false && file_put_contents($path, $json) !== false) {
@@ -314,7 +318,7 @@ final class MailTemplateService
             'student_email' => 'alumno@ejemplo.com',
             'exam_date' => date('Y-m-d', strtotime('+7 days')),
             'exam_time' => '10:00',
-            'reglamento_url' => '(enlace en producción)',
+            'reglamento_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/archivo/ejemplo-prueba',
             'comprobante_url' => '',
             'documentos_html' => '<p><strong>Documentos:</strong></p><ul>'
                 . '<li>Reglamento firmado (enlace seguro en el correo real)</li>'

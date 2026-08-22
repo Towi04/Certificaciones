@@ -18,6 +18,15 @@ final class Mailer
     /** @var array{transport: string, host?: string, port?: int, encryption?: string, auth_user?: string}|null */
     private static ?array $lastEndpoint = null;
 
+    /** @var list<string> */
+    private static array $lastErrors = [];
+
+    /** @return list<string> */
+    public static function lastErrors(): array
+    {
+        return self::$lastErrors;
+    }
+
     /** @return array{transport: string, host?: string, port?: int, encryption?: string, auth_user?: string}|null */
     public static function lastEndpoint(): ?array
     {
@@ -48,11 +57,16 @@ final class Mailer
      *   html?: bool,
      *   body_html?: string|null,
      *   attachments?: list<array{path: string, name?: string, mime?: string}>,
-     *   prefer_smtp?: bool
+     *   prefer_smtp?: bool,
+     *   force_smtp?: bool,
+     *   smtp_only?: bool
      * } $options
      */
     public function send(string $to, string $subject, string $bodyText, array $options = []): void
     {
+        self::$lastErrors = [];
+        self::$lastEndpoint = null;
+
         $transport = strtolower(trim(Env::get('SMTP_TRANSPORT', 'auto') ?? 'auto'));
         if (!in_array($transport, ['auto', 'smtp', 'mail', 'log'], true)) {
             $transport = 'auto';
@@ -60,8 +74,10 @@ final class Mailer
 
         $errors = [];
         $hasAttachments = !empty($options['attachments']) && is_array($options['attachments']);
-        // Con adjuntos o prefer_smtp, SMTP suele entregar mejor; mail() a veces “acepta” y el hosting descarta.
-        $preferSmtp = ($transport === 'auto' && $hasAttachments) || !empty($options['prefer_smtp']);
+        $forceSmtp = !empty($options['prefer_smtp']) || !empty($options['force_smtp']);
+        $smtpOnly = !empty($options['smtp_only']);
+        $preferSmtp = ($transport === 'auto' && $hasAttachments) || $forceSmtp;
+        $trySmtp = $transport === 'smtp' || $transport === 'auto' || $forceSmtp;
 
         if ($transport === 'log') {
             $this->sendViaLog($to, $subject, $bodyText, $options);
@@ -79,28 +95,35 @@ final class Mailer
             } catch (\Throwable $e) {
                 $errors[] = 'mail() → ' . $e->getMessage();
                 if ($transport === 'mail') {
+                    self::$lastErrors = $errors;
                     throw $e;
                 }
             }
         }
 
-        if ($transport === 'smtp' || $transport === 'auto') {
+        if ($trySmtp) {
             try {
                 $this->sendViaSmtp($to, $subject, $bodyText, $errors, $options);
 
                 return;
             } catch (\Throwable $e) {
                 $errors[] = 'smtp → ' . $e->getMessage();
-                if ($transport === 'smtp') {
+                if ($transport === 'smtp' || $smtpOnly) {
+                    self::$lastErrors = $errors;
                     throw $this->wrapFinalError($errors);
                 }
             }
         }
 
-        if ($preferSmtp) {
+        if ($preferSmtp && !$smtpOnly) {
             try {
                 $this->sendViaPhpMail($to, $subject, $bodyText, $options);
-                self::$lastEndpoint = ['transport' => 'mail'];
+                self::$lastEndpoint = [
+                    'transport' => 'mail',
+                    'fallback' => true,
+                    'smtp_errors' => $errors,
+                ];
+                self::$lastErrors = $errors;
 
                 return;
             } catch (\Throwable $e) {
@@ -108,6 +131,7 @@ final class Mailer
             }
         }
 
+        self::$lastErrors = $errors;
         throw $this->wrapFinalError($errors);
     }
 
