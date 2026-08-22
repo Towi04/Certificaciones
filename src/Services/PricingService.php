@@ -42,6 +42,7 @@ final class PricingService
         $out = [
             'catalog' => round($catalog, 2),
             'charged' => round($catalog, 2),
+            'base' => round($catalog, 2),
             'public' => round($public, 2),
             'partner_id' => null,
             'partner_price' => null,
@@ -50,6 +51,7 @@ final class PricingService
             'discount_code' => null,
             'label' => 'Precio de lista',
             'msi_plans' => [],
+            'payment_options' => [],
         ];
 
         $codeRaw = strtoupper(trim((string) $codeRaw));
@@ -147,8 +149,39 @@ final class PricingService
      */
     private function withDeferredPlans(array $product, array $quote): array
     {
-        $charged = (float) ($quote['charged'] ?? 0);
-        $quote['msi_plans'] = CardMsiCalculator::optionsFor($charged, $product);
+        $base = round((float) ($quote['charged'] ?? 0), 2);
+        $quote['base'] = $base;
+
+        $spei = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_SPEI);
+        $oxxo = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_STORE);
+        $cardContado = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_CARD);
+
+        $msiPlans = [];
+        foreach (CardMsiCalculator::optionsFor($base, $product) as $plan) {
+            $months = (int) ($plan['months'] ?? 1);
+            $priced = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_CARD);
+            $gross = $priced['gross'];
+            $msiPlans[] = [
+                'months' => $months,
+                'base' => $base,
+                'fee' => $priced['fee'],
+                'total' => $gross,
+                'monthly_estimate' => $months > 1 ? round($gross / $months, 2) : $gross,
+                'label' => $months === 1 ? 'Contado' : ($months . ' MSI'),
+            ];
+        }
+
+        $quote['msi_plans'] = $msiPlans;
+        $quote['payment_options'] = [
+            'msi' => $msiPlans,
+            'spei' => $spei,
+            'oxxo' => $oxxo,
+            'card_contado' => $cardContado,
+        ];
+        // Total mostrado por defecto (SPEI como referencia neutral)
+        $quote['charged'] = $spei['gross'];
+        $quote['charged_base'] = $base;
+        $quote['charged_fee'] = $spei['fee'];
 
         return $quote;
     }

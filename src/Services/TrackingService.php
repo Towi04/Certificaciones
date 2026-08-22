@@ -38,7 +38,7 @@ final class TrackingService
     public static function initialStatus(string $paymentMethod): string
     {
         // Comprobante → admin revisa pago; SPEI → también puede requerir confirmación
-        return in_array($paymentMethod, ['transfer_proof', 'openpay_spei'], true)
+        return in_array($paymentMethod, ['transfer_proof', 'openpay_spei', 'openpay_store'], true)
             ? 'waiting_admin'
             : 'open';
     }

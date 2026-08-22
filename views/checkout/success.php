@@ -12,7 +12,15 @@ $statusLabels = [
     'cancelled' => 'Cancelado',
 ];
 $msiMonths = (int) ($purchase['card_msi_months'] ?? 0);
-$isCard = ($purchase['payment_method'] ?? '') === 'openpay_card';
+$method = (string) ($purchase['payment_method'] ?? '');
+$isCard = $method === 'openpay_card';
+$isStore = $method === 'openpay_store';
+$methodLabels = [
+    'openpay_card' => 'Tarjeta (OpenPay)',
+    'openpay_spei' => 'SPEI',
+    'openpay_store' => 'OXXO / tienda',
+    'transfer_proof' => 'Transferencia DOCEO',
+];
 ?>
 <article class="panel" style="margin:1.25rem 0 2.5rem">
     <p class="meta">Compra registrada</p>
@@ -26,7 +34,7 @@ $isCard = ($purchase['payment_method'] ?? '') === 'openpay_card';
         </div>
         <div>
             <div class="muted" style="font-size:.85rem">Método</div>
-            <div><strong><?= e($purchase['payment_method']) ?></strong></div>
+            <div><strong><?= e($methodLabels[$method] ?? $method) ?></strong></div>
             <?php if ($isCard && $msiMonths > 1): ?>
                 <div class="muted" style="font-size:.85rem;margin-top:.25rem">
                     <?= $msiMonths ?> MSI — cargo total autorizado; tu banco cobra en mensualidades
@@ -68,6 +76,16 @@ $isCard = ($purchase['payment_method'] ?? '') === 'openpay_card';
             <?php if ($openpayPdf): ?>
                 <p><a class="btn btn-primary btn-sm" href="<?= e($openpayPdf) ?>" target="_blank" rel="noopener">Descargar ficha SPEI</a></p>
             <?php endif; ?>
+
+        <?php elseif ($isStore && !empty($purchase['openpay_store_reference'])): ?>
+            <p>Paga en OXXO u otra tienda afiliada antes de que venza la referencia:</p>
+            <p style="font-family:ui-monospace,monospace;font-size:1.05rem;word-break:break-all">
+                <?= e($purchase['openpay_store_reference']) ?>
+            </p>
+            <?php if (!empty($purchase['openpay_barcode_url'])): ?>
+                <p><img src="<?= e($purchase['openpay_barcode_url']) ?>" alt="Código de barras OXXO" style="max-width:100%;height:auto;border:1px solid #e6ebf2;border-radius:8px;background:#fff"></p>
+            <?php endif; ?>
+            <p class="muted" style="font-size:.85rem">Monto exacto: <?= money($purchase['charged_amount']) ?></p>
 
         <?php elseif ($purchase['payment_method'] === 'transfer_proof'): ?>
             <p>Recibimos tu comprobante. Lo revisaremos y te avisaremos por correo.</p>
