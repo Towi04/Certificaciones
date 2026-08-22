@@ -79,9 +79,11 @@ final class PartnerController
                 [
                     'exam_date' => trim((string) ($_POST['exam_date'] ?? '')),
                     'exam_time' => trim((string) ($_POST['exam_time'] ?? '')),
-                ]
+                ],
+                $_FILES
             );
-            $msg = 'Alumno registrado · matrícula ' . $result['matricula'];
+            $msg = 'Alumno registrado · matrícula ' . $result['matricula']
+                . ' · comprobante en revisión (admin confirmará el pago)';
             if ($result['created_account'] && $result['plain_password']) {
                 $msg .= ' · contraseña temporal ' . $result['plain_password'];
             }

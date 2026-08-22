@@ -4,9 +4,13 @@
 ?>
 <p class="meta"><a href="<?= e(url('/partner')) ?>">← Mis alumnos</a></p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">Registrar alumno</h1>
-<p class="muted">Se cobra a tu precio de nivel <strong><?= e(strtoupper((string) $partner['tier'])) ?></strong> (cuenta partner). Para certificaciones la fecha de examen es obligatoria.</p>
+<p class="muted">
+    Precio de tu nivel <strong><?= e(strtoupper((string) $partner['tier'])) ?></strong>.
+    Debes transferir ese monto a DOCEO y subir el comprobante; administración validará el pago antes de avanzar el caso.
+    Para certificaciones la fecha de examen es obligatoria.
+</p>
 
-<form method="post" action="<?= e(url('/partner/registrar')) ?>" class="panel" style="margin-top:1rem">
+<form method="post" action="<?= e(url('/partner/registrar')) ?>" enctype="multipart/form-data" class="panel" style="margin-top:1rem">
     <?= csrf_field() ?>
 
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">1. Producto</h2>
@@ -62,6 +66,13 @@
         </div>
     </div>
 
+    <h2 style="font-size:1.05rem;color:var(--doceo-blue);margin-top:1.25rem">4. Comprobante de pago</h2>
+    <p class="muted" style="font-size:.85rem;margin-top:0">Transfiere el monto de tu nivel a DOCEO e incluye la matrícula en el concepto cuando la tengas. Sube aquí el comprobante (PDF o imagen).</p>
+    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;max-width:420px">
+        Archivo *
+        <input type="file" name="payment_proof" required accept=".pdf,.jpg,.jpeg,.png">
+    </label>
+
     <div style="margin-top:1.25rem;display:flex;gap:.75rem;flex-wrap:wrap">
         <button class="btn btn-accent" type="submit">Registrar alumno</button>
         <a class="btn btn-ghost" href="<?= e(url('/partner')) ?>">Cancelar</a>
@@ -78,7 +89,7 @@
     const opt = sel.options[sel.selectedIndex];
     const type = opt ? opt.getAttribute('data-type') : '';
     const price = opt ? opt.getAttribute('data-price') : '';
-    hint.textContent = price ? ('Tu precio: $' + Number(price).toLocaleString('es-MX', {minimumFractionDigits: 2})) : '';
+    hint.textContent = price ? ('Monto a transferir: $' + Number(price).toLocaleString('es-MX', {minimumFractionDigits: 2})) : '';
     const needsExam = type === 'certification' || type === 'procedure';
     examBlock.style.display = needsExam || type === '' ? 'block' : 'none';
     examDate.required = !!needsExam;
