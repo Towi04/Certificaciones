@@ -142,8 +142,8 @@ HTML;
             ],
             'card_msi' => ['enabled' => true, 'months' => [3, 6, 9, 12], 'min_amount' => 0],
             'emails' => [
-                'payment_confirmed' => false,
-                'exam_scheduled' => false,
+                'payment_confirmed' => true,
+                'exam_scheduled' => true,
                 'payment_rejected' => true,
             ],
             'export_template_code' => 'uks_elet_registro',
@@ -480,11 +480,13 @@ HTML;
                 ['header' => 'Apellido Materno', 'field' => 'last_name_m'],
                 ['header' => 'Nombre(s)', 'field' => 'first_name'],
                 ['header' => 'Correo Electrónico', 'field' => 'email'],
+                ['header' => 'Fecha examen', 'field' => 'exam_date'],
+                ['header' => 'Hora examen', 'field' => 'exam_time'],
             ],
             'filters' => [
                 'product_codes' => ['ELET-UKS'],
                 'purchase_status' => ['paid'],
-                'step_codes' => ['confirm_pago', 'solicitud_uks'],
+                'step_codes' => ['confirm_pago', 'solicitud_uks', 'codigos'],
             ],
         ];
         $exportRepo = new \App\Repositories\ExportTemplateRepository();
@@ -558,6 +560,22 @@ HTML;
         Settings::set('doceo_promo_code', $promoCode);
 
         Settings::set('oxxo_deposit_card', Settings::get('oxxo_deposit_card', '4555113010972414') ?? '4555113010972414');
+        Settings::set('elet_exam_url', Settings::get('elet_exam_url', 'https://exam.elet.com.mx/') ?? 'https://exam.elet.com.mx/');
+        Settings::set('uks_elet_request_email', Settings::get('uks_elet_request_email', '') ?? '');
+
+        $uksId = $supplierIds['uks'] ?? 0;
+        if ($uksId > 0) {
+            $email = Settings::get('uks_elet_request_email', '') ?? '';
+            if ($email !== '') {
+                $chk = $pdo->prepare('SELECT id FROM supplier_contacts WHERE supplier_id = ? AND email = ?');
+                $chk->execute([$uksId, $email]);
+                if (!$chk->fetchColumn()) {
+                    $pdo->prepare(
+                        'INSERT INTO supplier_contacts (supplier_id, role_label, name, email) VALUES (?, ?, ?, ?)'
+                    )->execute([$uksId, 'Registro ELeT', 'Operaciones UKS', $email]);
+                }
+            }
+        }
 
         $log[] = 'Seed de catálogo completado.';
 

@@ -436,6 +436,8 @@ final class TrackingService
 
         foreach ($rows as $row) {
             $trackingId = (int) $row['id'];
+            $productId = (int) $row['product_id'];
+
             $this->log(
                 $trackingId,
                 'confirm_pago',
@@ -443,7 +445,30 @@ final class TrackingService
                 $adminUserId
             );
 
-            $productType = $this->productType((int) $row['product_id']);
+            $product = $this->pdo->prepare('SELECT * FROM products WHERE id = ? LIMIT 1');
+            $product->execute([$productId]);
+            $productRow = $product->fetch();
+            $pipelineCode = $productRow
+                ? CheckoutRequirements::pipelineCode($productRow)
+                : null;
+
+            if ($pipelineCode === 'elet_uks') {
+                try {
+                    (new UksEletService())->onPaymentConfirmed($trackingId, $purchaseId, $adminUserId);
+                } catch (\Throwable $e) {
+                    error_log('[Doceo] UKS solicitud tras pago: ' . $e->getMessage());
+                    $this->setStep(
+                        $trackingId,
+                        'solicitud_uks',
+                        $adminUserId,
+                        'Pago confirmado (correo UKS falló: ' . $e->getMessage() . ')',
+                        'waiting_provider'
+                    );
+                }
+                continue;
+            }
+
+            $productType = $this->productType($productId);
             $target = match ($productType) {
                 'course' => 'alta_moodle',
                 'procedure' => $this->hasPendingDocs($trackingId) ? 'docs' : 'revision',

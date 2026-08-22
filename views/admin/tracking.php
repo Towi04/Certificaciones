@@ -1,6 +1,10 @@
 <?php
 /** @var array<string,mixed> $tracking */
 /** @var list<array<string,mixed>> $steps */
+/** @var bool $isEletUks */
+/** @var string $eletExamUrl */
+/** @var ?string $accessKeyHint */
+/** @var list<array<string,mixed>> $steps */
 /** @var list<array<string,mixed>> $logs */
 /** @var list<array<string,mixed>> $documents */
 $current = (string) ($tracking['current_step_code'] ?? '');
@@ -153,6 +157,61 @@ $statusLabels = [
         <button class="btn btn-accent" type="submit">Guardar examen / accesos</button>
     </form>
 </div>
+
+<?php if ($isEletUks && (string) ($tracking['purchase_status'] ?? '') === 'paid'): ?>
+<?php if (in_array($current, ['registro', 'confirm_pago'], true)): ?>
+<div class="panel" style="margin-top:1rem;border:2px solid #f59e0b;background:#fffbeb">
+    <p style="margin:0;font-size:.9rem">
+        Este caso quedó en <strong><?= e($current) ?></strong> tras confirmar el pago.
+        Usa «Reenviar correo a UKS» para moverlo a solicitud UKS y notificar a UKS.
+    </p>
+</div>
+<?php endif; ?>
+<div class="panel" style="margin-top:1rem;border:2px solid #dbeafe">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Solicitud a UKS</h2>
+    <p class="muted" style="margin-top:0;font-size:.88rem">
+        Al confirmar el pago se envía automáticamente a UKS el nombre del alumno, fecha/hora del examen y el comprobante de pago.
+        Luego descarga el CSV, súbelo en la plataforma UKS y cuando recibas folio y clave del día, captúralos abajo.
+    </p>
+    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/uks-solicitud')) ?>" style="margin-top:.75rem">
+        <?= csrf_field() ?>
+        <button type="submit" class="btn btn-ghost btn-sm">Reenviar correo a UKS</button>
+    </form>
+</div>
+
+<div class="panel" style="margin-top:1rem;border:2px solid var(--doceo-yellow)">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Accesos examen ELeT (folio y clave)</h2>
+    <p class="muted" style="margin-top:0;font-size:.88rem">
+        El <strong>folio</strong> es único por alumno. La <strong>clave del día</strong> es la misma para todos los que presentan en la misma fecha.
+    </p>
+    <?php if ($accessKeyHint): ?>
+        <p class="muted" style="font-size:.85rem;margin:.5rem 0">
+            Referencia misma fecha: clave del día usada en otro caso =
+            <code style="font-family:ui-monospace,monospace"><?= e($accessKeyHint) ?></code>
+        </p>
+    <?php endif; ?>
+    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/elet-accesos')) ?>" style="margin-top:.75rem">
+        <?= csrf_field() ?>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem;max-width:520px">
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                Folio UKS (único) *
+                <input type="text" name="folio" required value="<?= e((string) ($tracking['folio'] ?? '')) ?>" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            </label>
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                Clave del día *
+                <input type="text" name="access_key" required value="<?= e((string) ($tracking['access_key'] ?? $accessKeyHint ?? '')) ?>" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            </label>
+        </div>
+        <label class="muted" style="display:flex;gap:.4rem;align-items:center;margin:.85rem 0;font-size:.88rem">
+            <input type="checkbox" name="notify" value="1" checked> Enviar correo al alumno con link y accesos
+        </label>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
+            Link del examen: <a href="<?= e($eletExamUrl) ?>" target="_blank" rel="noopener"><?= e($eletExamUrl) ?></a>
+        </p>
+        <button class="btn btn-accent" type="submit">Guardar y avisar al alumno</button>
+    </form>
+</div>
+<?php endif; ?>
 
 <?php require BASE_PATH . '/views/shared/uks_report.php'; ?>
 

@@ -124,6 +124,7 @@ final class CheckoutService
         $account = null;
         $purchaseId = 0;
         $studentUserId = 0;
+        $trackingId = 0;
         $openpay = null;
         $redirectUrl = null;
 

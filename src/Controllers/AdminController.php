@@ -14,6 +14,7 @@ use App\Services\CheckoutRequirements;
 use App\Services\ExportService;
 use App\Services\ImportService;
 use App\Services\TrackingService;
+use App\Services\UksEletService;
 use App\Support\Settings;
 
 final class AdminController
@@ -236,6 +237,12 @@ final class AdminController
         $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
         $productCfg = CheckoutRequirements::config($tracking);
         $uksReport = \App\Services\ImportService::uksReportFromTracking($tracking);
+        $uksElet = new UksEletService();
+        $isEletUks = $uksElet->isEletUksTracking($tracking);
+        $accessKeyHint = null;
+        if ($isEletUks && !empty($tracking['exam_date'])) {
+            $accessKeyHint = $uksElet->accessKeyHintForDate((string) $tracking['exam_date'], (int) $tracking['id']);
+        }
         view('admin/tracking', [
             'title' => 'Caso ' . $tracking['matricula'],
             'tracking' => $tracking,
@@ -246,6 +253,9 @@ final class AdminController
             'exportTemplateCode' => $productCfg['export_template_code'] ?? null,
             'importTemplateCode' => $productCfg['import_template_code'] ?? null,
             'uksReport' => $uksReport,
+            'isEletUks' => $isEletUks,
+            'eletExamUrl' => $uksElet->examUrl(),
+            'accessKeyHint' => $accessKeyHint,
             'layout' => 'admin',
         ]);
     }
@@ -316,6 +326,56 @@ final class AdminController
                 'notify' => !empty($_POST['notify']),
             ], (int) Auth::id());
             flash('success', 'Fecha de examen guardada.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/seguimientos/' . $trackingId);
+    }
+
+    public function trackingPublishEletAccess(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        try {
+            (new UksEletService())->publishExamAccess(
+                $trackingId,
+                trim((string) ($_POST['folio'] ?? '')),
+                trim((string) ($_POST['access_key'] ?? '')),
+                (int) Auth::id(),
+                !empty($_POST['notify'])
+            );
+            flash('success', 'Accesos publicados y alumno notificado por correo.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/seguimientos/' . $trackingId);
+    }
+
+    public function trackingResendUksRequest(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        $svc = new TrackingService();
+        $tracking = $svc->find($trackingId);
+        if ($tracking === null) {
+            flash('error', 'Seguimiento no encontrado.');
+            redirect('/admin');
+        }
+        try {
+            $uks = new UksEletService();
+            if (($tracking['current_step_code'] ?? '') !== 'solicitud_uks') {
+                $svc->setStep(
+                    $trackingId,
+                    'solicitud_uks',
+                    (int) Auth::id(),
+                    'Solicitud UKS (manual)',
+                    'waiting_provider'
+                );
+            }
+            $uks->sendSolicitudEmail($trackingId, (int) $tracking['purchase_id']);
+            flash('success', 'Correo enviado a UKS y caso en solicitud UKS.');
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }

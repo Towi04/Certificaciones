@@ -8,6 +8,7 @@ use App\Auth\Auth;
 use App\Repositories\TrackingRepository;
 use App\Services\ImportService;
 use App\Services\TrackingService;
+use App\Services\UksEletService;
 
 final class StudentController
 {
@@ -47,6 +48,7 @@ final class StudentController
             'registrationDocs' => $checklist,
             'logs' => $svc->logs((int) $tracking['id']),
             'uksReport' => ImportService::uksReportFromTracking($tracking),
+            'eletExamUrl' => (new UksEletService())->examUrl(),
             'layout' => 'student',
         ]);
     }
