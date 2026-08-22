@@ -97,6 +97,8 @@ $payLabels = [
 </div>
 <?php endif; ?>
 
+<?php require BASE_PATH . '/views/shared/uks_report.php'; ?>
+
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Documentos del registro</h2>
     <?php

@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Auth\Auth;
 use App\Repositories\TrackingRepository;
+use App\Services\ImportService;
 use App\Services\TrackingService;
 
 final class StudentController
@@ -45,6 +46,7 @@ final class StudentController
             'documents' => $svc->documentsForTracking((int) $tracking['id']),
             'registrationDocs' => $checklist,
             'logs' => $svc->logs((int) $tracking['id']),
+            'uksReport' => ImportService::uksReportFromTracking($tracking),
             'layout' => 'student',
         ]);
     }

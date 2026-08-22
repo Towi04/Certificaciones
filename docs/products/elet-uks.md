@@ -118,7 +118,7 @@ No se piden otros campos (sin CURP, fecha de nacimiento, etc.).
 | Moodle | No |
 | Inventario códigos | No (UKS asigna por alumno tras registro) |
 | Export UKS | Sí — plantilla `uks_elet_registro` (CSV Instituto DOCEO) |
-| Import UKS | Sí — CSV con folios CENNI |
+| Import UKS | Sí — plantilla `uks_elet_reporte` (resultados + docs CENNI + folio) |
 | Email examen programado | No |
 | Email pago confirmado | No (solo panel); email solo si pago **rechazado** |
 
@@ -146,6 +146,29 @@ Plantilla oficial **Plantilla Instituto DOCEO.csv** con columnas:
 
 Archivo de referencia: `storage/templates/uks_elet_registro.csv`
 
+## Import UKS (`uks_elet_reporte`)
+
+Plantilla **Reporte Instituto DOCEO ELET** (CSV que descargas de UKS). Ejemplo: `storage/templates/uks_elet_reporte_ejemplo.csv`
+
+**Datos que importa (por matrícula):**
+
+| Columna UKS | Uso en DOCEO |
+|-------------|--------------|
+| Folio | Folio UKS del examen |
+| Realizado | Fecha examen realizado |
+| Nivel Alcanzado / Puntaje | Resultados |
+| Certificado | URL del certificado |
+| Documentación | Estatus general docs CENNI |
+| Doc. Solicitud Cenni / CURP / INE | Aprobado ✔ o rechazado |
+| Folio CENNI | Folio para consulta SEP (~15 días) |
+
+**Al importar:**
+- Actualiza el caso ELET-UKS (y ELET-CENNI si existe)
+- El alumno ve resultados y estatus CENNI en su panel
+- Correo al alumno si cambian documentos CENNI o se publica folio CENNI
+
+**Admin:** `/admin/exportaciones` → sección «Importar reporte UKS»
+
 ## Implementación pendiente (Fase 1+)
 
 - [ ] UI checkout: reglamento PDF + firma digital + append última página
@@ -153,5 +176,6 @@ Archivo de referencia: `storage/templates/uks_elet_registro.csv`
 - [ ] SPEI como método default en UI
 - [ ] Creación tracking CENNI post-examen + plazo 15 días
 - [ ] Campos admin: folio, clave del día, enlace UKS CENNI
-- [ ] Export/import plantillas UKS
+- [x] Export plantilla UKS (`uks_elet_registro`)
+- [x] Import reporte UKS (`uks_elet_reporte`) + panel alumno CENNI
 - [ ] Reagenda alumno

@@ -12,6 +12,7 @@ use App\Repositories\TrackingRepository;
 use App\Services\CheckoutService;
 use App\Services\CheckoutRequirements;
 use App\Services\ExportService;
+use App\Services\ImportService;
 use App\Services\TrackingService;
 
 final class AdminController
@@ -233,6 +234,7 @@ final class AdminController
         }
         $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
         $productCfg = CheckoutRequirements::config($tracking);
+        $uksReport = \App\Services\ImportService::uksReportFromTracking($tracking);
         view('admin/tracking', [
             'title' => 'Caso ' . $tracking['matricula'],
             'tracking' => $tracking,
@@ -241,6 +243,8 @@ final class AdminController
             'documents' => $svc->documentsForTracking((int) $tracking['id']),
             'moodleConfigured' => \App\Services\MoodleEnrolmentService::isConfigured(),
             'exportTemplateCode' => $productCfg['export_template_code'] ?? null,
+            'importTemplateCode' => $productCfg['import_template_code'] ?? null,
+            'uksReport' => $uksReport,
             'layout' => 'admin',
         ]);
     }
@@ -559,9 +563,11 @@ final class AdminController
     {
         Auth::requireRole(['admin']);
         $templates = (new \App\Repositories\ExportTemplateRepository())->listActive();
+        $importTemplates = (new \App\Repositories\ImportTemplateRepository())->listActive();
         view('admin/exports', [
-            'title' => 'Exportaciones',
+            'title' => 'Exportaciones UKS',
             'templates' => $templates,
+            'importTemplates' => $importTemplates,
             'layout' => 'admin',
         ]);
     }
@@ -586,5 +592,52 @@ final class AdminController
             flash('error', $e->getMessage());
             redirect('/admin/exportaciones');
         }
+    }
+
+    public function importUpload(string $code): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+
+        $file = $_FILES['csv_file'] ?? null;
+        if ($file === null || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            flash('error', 'Selecciona un archivo CSV válido.');
+            redirect('/admin/exportaciones');
+        }
+
+        $ext = strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
+        if ($ext !== 'csv') {
+            flash('error', 'El archivo debe ser CSV.');
+            redirect('/admin/exportaciones');
+        }
+
+        $tmp = (string) ($file['tmp_name'] ?? '');
+        if (!is_readable($tmp)) {
+            flash('error', 'No se pudo leer el archivo subido.');
+            redirect('/admin/exportaciones');
+        }
+
+        try {
+            $result = (new ImportService())->importUksReport($code, $tmp, (int) Auth::id());
+            $msg = sprintf(
+                'Importación completada: %d filas, %d actualizadas, %d omitidas.',
+                $result['processed'],
+                $result['updated'],
+                $result['skipped']
+            );
+            if ($result['notifications'] !== []) {
+                $msg .= ' Avisos: ' . implode('; ', array_slice($result['notifications'], 0, 5));
+            }
+            if ($result['errors'] !== []) {
+                flash('info', $msg);
+                flash('error', 'Errores: ' . implode(' | ', array_slice($result['errors'], 0, 5)));
+            } else {
+                flash('success', $msg);
+            }
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+
+        redirect('/admin/exportaciones');
     }
 }

@@ -689,6 +689,11 @@ final class TrackingService
         };
     }
 
+    public function addLog(int $trackingId, string $stepCode, ?string $note, ?int $actorUserId = null): void
+    {
+        $this->log($trackingId, $stepCode, $note, $actorUserId);
+    }
+
     private function log(int $trackingId, string $stepCode, ?string $note, ?int $actorUserId): void
     {
         $this->pdo->prepare(

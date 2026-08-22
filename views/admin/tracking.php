@@ -154,6 +154,8 @@ $statusLabels = [
     </form>
 </div>
 
+<?php require BASE_PATH . '/views/shared/uks_report.php'; ?>
+
 <?php if (!empty($exportTemplateCode) && in_array((string) ($tracking['purchase_status'] ?? ''), ['paid'], true)): ?>
 <div class="panel" style="margin-top:1rem;border:2px solid #dbeafe">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Exportar a UKS</h2>
