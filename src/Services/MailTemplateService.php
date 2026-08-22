@@ -9,6 +9,11 @@ use App\Repositories\MailTemplateRepository;
 
 final class MailTemplateService
 {
+    public const UKS_SOLICITUD = 'uks_solicitud';
+
+    /** @deprecated alias migrado a uks_solicitud */
+    public const UKS_SOLICITUD_LEGACY = 'uks_elet_solicitud';
+
     private MailTemplateRepository $repo;
 
     public function __construct()
@@ -26,6 +31,16 @@ final class MailTemplateService
     public function find(string $code): ?array
     {
         return $this->repo->findByCode($code);
+    }
+
+    /** Código efectivo de plantilla UKS (nueva o legada). */
+    public function uksSolicitudCode(): string
+    {
+        if ($this->repo->findByCode(self::UKS_SOLICITUD) !== null) {
+            return self::UKS_SOLICITUD;
+        }
+
+        return self::UKS_SOLICITUD_LEGACY;
     }
 
     /**
@@ -51,9 +66,24 @@ final class MailTemplateService
 
     /**
      * @param array<string, string> $vars
+     * @return array{subject: string, body_html: string, body_text: string}|null
+     */
+    public function renderUksSolicitud(array $vars): ?array
+    {
+        $rendered = $this->render(self::UKS_SOLICITUD, $vars);
+        if ($rendered !== null) {
+            return $rendered;
+        }
+
+        return $this->render(self::UKS_SOLICITUD_LEGACY, $vars);
+    }
+
+    /**
+     * @param array<string, string> $vars
      * @param array{
      *   cc?: string|null,
-     *   attachments?: list<array{path: string, name?: string, mime?: string}>
+     *   attachments?: list<array{path: string, name?: string, mime?: string}>,
+     *   prefer_smtp?: bool
      * } $options
      */
     public function send(string $code, string $to, array $vars, array $options = []): void
@@ -63,6 +93,29 @@ final class MailTemplateService
             throw new \RuntimeException('Plantilla de correo no encontrada o desactivada: ' . $code);
         }
 
+        $this->deliver($to, $rendered, $options);
+    }
+
+    /**
+     * @param array<string, string> $vars
+     * @param array<string, mixed> $options
+     */
+    public function sendUksSolicitud(string $to, array $vars, array $options = []): void
+    {
+        $rendered = $this->renderUksSolicitud($vars);
+        if ($rendered === null) {
+            throw new \RuntimeException('Plantilla UKS solicitud no encontrada o desactivada.');
+        }
+
+        $this->deliver($to, $rendered, $options);
+    }
+
+    /**
+     * @param array{subject: string, body_html: string, body_text: string} $rendered
+     * @param array<string, mixed> $options
+     */
+    private function deliver(string $to, array $rendered, array $options = []): void
+    {
         (new Mailer())->send(
             $to,
             $rendered['subject'],
@@ -72,6 +125,21 @@ final class MailTemplateService
                 'body_html' => $rendered['body_html'],
             ])
         );
+    }
+
+    /** @return array<string, string> */
+    public static function uksSolicitudSampleVars(): array
+    {
+        return [
+            'certificacion' => 'ELeT',
+            'product_name' => 'ELeT',
+            'full_name' => 'Alumno de prueba DOCEO',
+            'matricula' => '9999',
+            'student_email' => 'alumno@ejemplo.com',
+            'exam_date' => date('Y-m-d', strtotime('+7 days')),
+            'exam_time' => '10:00',
+            'attachment_note' => '[Vista previa] Adjunto: reglamento firmado.',
+        ];
     }
 
     /** @param array<string, string> $vars */
@@ -107,20 +175,62 @@ final class MailTemplateService
         $this->repo->update($code, $subject, $bodyHtml, $isActive);
     }
 
-    /** Crea plantillas por defecto si la tabla está vacía (instalaciones existentes). */
+    /** Plantillas por defecto + migración UKS genérica. */
     public function ensureDefaults(): void
     {
+        $this->migrateUksSolicitudTemplate();
+
         if ($this->repo->all() !== []) {
             return;
         }
 
+        $this->seedDefaultTemplates();
+    }
+
+    public function migrateUksSolicitudTemplate(): void
+    {
+        $legacy = $this->repo->findByCode(self::UKS_SOLICITUD_LEGACY);
+        $current = $this->repo->findByCode(self::UKS_SOLICITUD);
+
+        if ($legacy !== null && $current === null) {
+            $this->repo->renameCode(
+                self::UKS_SOLICITUD_LEGACY,
+                self::UKS_SOLICITUD,
+                'UKS · Solicitud de examen (certificaciones)'
+            );
+        }
+
+        if ($this->repo->findByCode(self::UKS_SOLICITUD) === null) {
+            $this->repo->upsert(
+                self::UKS_SOLICITUD,
+                'UKS · Solicitud de examen (certificaciones)',
+                'Solicitud {{certificacion}} · {{full_name}} · {{matricula}}',
+                '<p>Solicitud de registro examen <strong>{{certificacion}}</strong> — Instituto DOCEO</p>'
+                . '<ul>'
+                . '<li><strong>Certificación:</strong> {{certificacion}}</li>'
+                . '<li><strong>Alumno:</strong> {{full_name}}</li>'
+                . '<li><strong>Matrícula DOCEO:</strong> {{matricula}}</li>'
+                . '<li><strong>Correo:</strong> {{student_email}}</li>'
+                . '<li><strong>Fecha examen:</strong> {{exam_date}}</li>'
+                . '<li><strong>Hora examen:</strong> {{exam_time}}</li>'
+                . '</ul>'
+                . '<p>{{attachment_note}}</p>'
+                . '<p>— Instituto DOCEO</p>',
+                'automatic'
+            );
+        }
+    }
+
+    private function seedDefaultTemplates(): void
+    {
         $defaults = [
             [
-                'code' => 'uks_elet_solicitud',
-                'name' => 'UKS · Solicitud examen ELeT',
-                'subject' => 'Solicitud examen ELeT · {{full_name}} · {{matricula}}',
-                'body' => '<p>Solicitud de registro examen <strong>ELeT</strong> — Instituto DOCEO</p>'
+                'code' => self::UKS_SOLICITUD,
+                'name' => 'UKS · Solicitud de examen (certificaciones)',
+                'subject' => 'Solicitud {{certificacion}} · {{full_name}} · {{matricula}}',
+                'body' => '<p>Solicitud de registro examen <strong>{{certificacion}}</strong> — Instituto DOCEO</p>'
                     . '<ul>'
+                    . '<li><strong>Certificación:</strong> {{certificacion}}</li>'
                     . '<li><strong>Alumno:</strong> {{full_name}}</li>'
                     . '<li><strong>Matrícula DOCEO:</strong> {{matricula}}</li>'
                     . '<li><strong>Correo:</strong> {{student_email}}</li>'
@@ -170,7 +280,9 @@ final class MailTemplateService
         ];
 
         foreach ($defaults as $tpl) {
-            $this->repo->upsert($tpl['code'], $tpl['name'], $tpl['subject'], $tpl['body'], 'automatic');
+            if ($this->repo->findByCode($tpl['code']) === null) {
+                $this->repo->upsert($tpl['code'], $tpl['name'], $tpl['subject'], $tpl['body'], 'automatic');
+            }
         }
     }
 }

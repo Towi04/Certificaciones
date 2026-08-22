@@ -47,7 +47,8 @@ final class Mailer
      *   cc?: string|null,
      *   html?: bool,
      *   body_html?: string|null,
-     *   attachments?: list<array{path: string, name?: string, mime?: string}>
+     *   attachments?: list<array{path: string, name?: string, mime?: string}>,
+     *   prefer_smtp?: bool
      * } $options
      */
     public function send(string $to, string $subject, string $bodyText, array $options = []): void
@@ -59,8 +60,8 @@ final class Mailer
 
         $errors = [];
         $hasAttachments = !empty($options['attachments']) && is_array($options['attachments']);
-        // Con adjuntos, SMTP suele entregar mejor el MIME; mail() a veces “acepta” y el hosting descarta.
-        $preferSmtp = $transport === 'auto' && $hasAttachments;
+        // Con adjuntos o prefer_smtp, SMTP suele entregar mejor; mail() a veces “acepta” y el hosting descarta.
+        $preferSmtp = ($transport === 'auto' && $hasAttachments) || !empty($options['prefer_smtp']);
 
         if ($transport === 'log') {
             $this->sendViaLog($to, $subject, $bodyText, $options);

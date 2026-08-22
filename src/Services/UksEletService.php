@@ -97,6 +97,7 @@ final class UksEletService
         $examDate = (string) ($tracking['exam_date'] ?? '');
         $examTime = !empty($tracking['exam_time']) ? substr((string) $tracking['exam_time'], 0, 5) : '';
         $matricula = (string) ($tracking['matricula'] ?? $purchase['matricula']);
+        $certificacion = trim((string) ($tracking['product_name'] ?? 'Certificación UKS'));
 
         $reglamentoDoc = $this->findSignedReglamentoDocument($trackingId, $purchaseId);
         if ($reglamentoDoc === null) {
@@ -137,6 +138,8 @@ final class UksEletService
 
         $mailTpl = new MailTemplateService();
         $vars = [
+            'certificacion' => $certificacion,
+            'product_name' => $certificacion,
             'full_name' => $fullName,
             'matricula' => $matricula,
             'student_email' => (string) ($tracking['student_email'] ?? ''),
@@ -145,11 +148,15 @@ final class UksEletService
             'attachment_note' => $attachmentNote,
         ];
 
-        if ($mailTpl->render('uks_elet_solicitud', $vars) !== null) {
-            $mailTpl->send('uks_elet_solicitud', $to, $vars, ['attachments' => $attachments]);
+        if ($mailTpl->renderUksSolicitud($vars) !== null) {
+            $mailTpl->sendUksSolicitud($to, $vars, [
+                'attachments' => $attachments,
+                'prefer_smtp' => true,
+            ]);
         } else {
-            $subject = 'Solicitud examen ELeT · ' . $fullName . ' · ' . $matricula;
-            $text = "Solicitud de registro examen ELeT — Instituto DOCEO\n\n"
+            $subject = 'Solicitud ' . $certificacion . ' · ' . $fullName . ' · ' . $matricula;
+            $text = "Solicitud de registro examen {$certificacion} — Instituto DOCEO\n\n"
+                . "Certificación: {$certificacion}\n"
                 . "Alumno: {$fullName}\n"
                 . "Matrícula DOCEO: {$matricula}\n"
                 . "Correo alumno: " . ($tracking['student_email'] ?? '') . "\n"
@@ -157,8 +164,9 @@ final class UksEletService
                 . "Hora examen: {$examTime}\n\n"
                 . $attachmentNote . "\n\n"
                 . "— Instituto DOCEO\n";
-            $html = '<p>Solicitud de registro examen <strong>ELeT</strong> — Instituto DOCEO</p>'
+            $html = '<p>Solicitud de registro examen <strong>' . htmlspecialchars($certificacion) . '</strong> — Instituto DOCEO</p>'
                 . '<ul>'
+                . '<li><strong>Certificación:</strong> ' . htmlspecialchars($certificacion) . '</li>'
                 . '<li><strong>Alumno:</strong> ' . htmlspecialchars($fullName) . '</li>'
                 . '<li><strong>Matrícula DOCEO:</strong> ' . htmlspecialchars($matricula) . '</li>'
                 . '<li><strong>Correo:</strong> ' . htmlspecialchars((string) ($tracking['student_email'] ?? '')) . '</li>'
@@ -170,6 +178,7 @@ final class UksEletService
                 'html' => true,
                 'body_html' => $html,
                 'attachments' => $attachments,
+                'prefer_smtp' => true,
             ]);
         }
 
