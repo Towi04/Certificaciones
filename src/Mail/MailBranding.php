@@ -28,6 +28,39 @@ final class MailBranding
         return 'https://institutodoceo.com/img/emails/logo.png';
     }
 
+    /** Plantilla HTML completa (p. ej. pegada desde Outlook) — no volver a envolver. */
+    public static function isStandaloneHtml(string $html): bool
+    {
+        $lower = strtolower($html);
+        if (str_contains($lower, '<!doctype') || str_contains($lower, '<html')) {
+            return true;
+        }
+
+        // Correos armados con tablas de presentación (típico de plantillas copiadas).
+        return str_contains($lower, 'role="presentation"')
+            && strlen($html) > 800
+            && (str_contains($lower, '<table') || str_contains($lower, 'instituto doceo'));
+    }
+
+    /** Envuelve solo fragmentos; respeta plantillas HTML completas. */
+    public static function wrapIfNeeded(string $innerHtml): string
+    {
+        if (self::isStandaloneHtml($innerHtml)) {
+            return $innerHtml;
+        }
+
+        return self::wrap($innerHtml);
+    }
+
+    public static function appendBlock(string $html, string $block): string
+    {
+        if (preg_match('/<\/body>/i', $html) === 1) {
+            return (string) preg_replace('/<\/body>/i', $block . '</body>', $html, 1);
+        }
+
+        return $html . $block;
+    }
+
     public static function wrap(string $innerHtml): string
     {
         $logo = htmlspecialchars(self::logoUrl(), ENT_QUOTES, 'UTF-8');

@@ -898,7 +898,17 @@ final class AdminController
                     : $svc->sendTemplateTest($code, $testTo);
                 $endpoint = Mailer::lastEndpoint();
                 $transport = $endpoint['transport'] ?? 'mail';
-                $messages[] = 'Prueba enviada a ' . $testTo . ' («' . $result['subject'] . '») vía ' . $transport . '.';
+                $transportDetail = $transport;
+                if ($transport === 'smtp' && !empty($endpoint['host'])) {
+                    $transportDetail .= ' (' . ($endpoint['host'] ?? '') . ':' . ($endpoint['port'] ?? '') . ')';
+                }
+                $messages[] = 'Prueba enviada a ' . $testTo . ' («' . $result['subject'] . '») vía ' . $transportDetail . '.';
+                if ($transport === 'mail') {
+                    $messages[] = 'Si no llega en 2–3 min, revisa spam o configura SMTP en .env (mail() solo confirma al servidor local).';
+                }
+                if ($result['log_path'] !== null) {
+                    $messages[] = 'Log: ' . basename($result['log_path']);
+                }
             }
 
             flash('success', implode(' ', $messages));
