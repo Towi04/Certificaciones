@@ -146,6 +146,15 @@ final class CheckoutRequirements
         return [];
     }
 
+    /** Resuelve pipeline por config_json.pipeline_code o null si no hay override. */
+    public static function pipelineCode(array $product): ?string
+    {
+        $cfg = self::config($product);
+        $code = $cfg['pipeline_code'] ?? null;
+
+        return is_string($code) && $code !== '' ? $code : null;
+    }
+
     /**
      * @param list<mixed> $rows
      * @return list<array{code:string,label:string,required:bool,accept:string}>
@@ -173,7 +182,7 @@ final class CheckoutRequirements
     private static function defaultAcceptFor(string $code): string
     {
         return match ($code) {
-            'ine', 'reglamento' => '.pdf',
+            'ine', 'reglamento', 'reglamento_firmado' => '.pdf',
             'photo', 'signature' => '.jpg,.jpeg,.png',
             default => '.pdf,.jpg,.jpeg,.png',
         };
@@ -185,7 +194,7 @@ final class CheckoutRequirements
             'ine' => 'INE / identificación (PDF)',
             'photo' => 'Fotografía',
             'birth_certificate' => 'Acta de nacimiento',
-            'reglamento' => 'Reglamento firmado (PDF)',
+            'reglamento', 'reglamento_firmado' => 'Reglamento firmado (PDF)',
             'signature' => 'Firma',
             default => $code,
         };

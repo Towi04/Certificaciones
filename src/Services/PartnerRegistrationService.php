@@ -121,7 +121,7 @@ final class PartnerRegistrationService
                 $tierPrice
             );
 
-            $pipelineId = $this->resolvePipelineId((string) $product['type']);
+            $pipelineId = $this->resolvePipelineId($product);
             $step = TrackingService::initialStepCode((string) $product['type'], []);
 
             $trackingId = $this->trackings->create([
@@ -172,8 +172,20 @@ final class PartnerRegistrationService
         ];
     }
 
-    private function resolvePipelineId(string $productType): ?int
+    /** @param array<string, mixed> $product */
+    private function resolvePipelineId(array $product): ?int
     {
+        $code = CheckoutRequirements::pipelineCode($product);
+        if ($code !== null) {
+            $stmt = $this->pdo->prepare('SELECT id FROM pipeline_templates WHERE code = ? LIMIT 1');
+            $stmt->execute([$code]);
+            $id = $stmt->fetchColumn();
+            if ($id !== false) {
+                return (int) $id;
+            }
+        }
+
+        $productType = (string) ($product['type'] ?? 'certification');
         $stmt = $this->pdo->prepare(
             'SELECT id FROM pipeline_templates WHERE product_type = ? ORDER BY id ASC LIMIT 1'
         );

@@ -80,26 +80,132 @@ final class CatalogSeeder
             return "Producto creado: {$code}";
         };
 
+        $eletDescription = <<<'TXT'
+El ELeT es un examen de acreditación del nivel de inglés computarizado y con resultados inmediatos. Se encuentra alineado al marco común europeo y al programa de Certificación Nacional del Nivel de Idioma (CENNI) de la SEP.
+
+Características:
+• Examen de acreditación para personas de 14 años en adelante.
+• Reactivos alineados al Marco Común Europeo (CEFR), niveles A1− a C1+ (CENNI niveles 2–16).
+• Inglés adaptado a necesidades de uso global.
+• Resultado al instante al terminar el examen.
+• Aprobado por el Colegio de Profesionales en la Enseñanza del Inglés (COPEI).
+• Duración aproximada: 75 minutos.
+• Cuatro secciones: Comprensión de lectura (Reading), Comprensión auditiva (Listening), Uso del idioma (Use of English), Producción escrita (Writing).
+TXT;
+
+        $eletBenefits = <<<'HTML'
+<ul>
+<li><strong>Resultados inmediatos</strong></li>
+<li><strong>Constancia UKS</strong></li>
+<li>Combo opcional: trámite CENNI sin costo adicional (constancia CENNI validez 1 año)</li>
+</ul>
+HTML;
+
+        $eletUksConfig = [
+            'pipeline_code' => 'elet_uks',
+            'checkout_fields' => ['email', 'first_name', 'last_name_p', 'last_name_m', 'phone'],
+            'required_docs' => [
+                [
+                    'code' => 'reglamento_firmado',
+                    'label' => 'Reglamento firmado (PDF con firma en última página)',
+                    'required' => true,
+                    'accept' => '.pdf',
+                ],
+            ],
+            'registration_docs' => [],
+            'reglamento' => [
+                'template_path' => '/assets/reglamentos/elet-reglamento.pdf',
+                'source_url' => 'https://drive.google.com/file/d/1sfP7zSPlqqpBdYaHUmz-_kM_BijRZDHW/view?usp=sharing',
+                'signature_mode' => 'append_to_pdf',
+                'required_before_checkout' => true,
+            ],
+            'exam' => [
+                'mode' => 'online',
+                'url' => 'https://exam.elet.com.mx/',
+                'choose_at_checkout' => true,
+                'slot_minutes' => 30,
+                'allow_reschedule' => true,
+                'admin_fields' => ['folio', 'clave_dia'],
+            ],
+            'schedule' => [
+                'weekdays' => ['start' => '10:00', 'end' => '17:30'],
+                'saturday' => ['start' => '08:00', 'end' => '12:00'],
+                'min_advance_days' => 2,
+                'same_day_exception' => ['before' => '16:00', 'requires_admin' => true],
+            ],
+            'payments' => [
+                'default_method' => 'openpay_spei',
+                'order' => ['openpay_spei', 'openpay_store', 'openpay_card'],
+                'price_includes_fee' => true,
+            ],
+            'card_msi' => ['enabled' => true, 'months' => [1, 3, 6, 9, 12], 'min_amount' => 0],
+            'emails' => [
+                'payment_confirmed' => false,
+                'exam_scheduled' => false,
+                'payment_rejected' => true,
+            ],
+            'export_template_code' => 'uks_elet_registro',
+        ];
+
+        $eletCenniConfig = [
+            'pipeline_code' => 'elet_cenni_uks',
+            'checkout_fields' => [],
+            'required_docs' => [],
+            'registration_docs' => [],
+            'card_msi' => ['enabled' => false, 'months' => [], 'min_amount' => 0],
+            'bundled_with' => 'ELET-UKS',
+            'starts_after' => 'exam_completed',
+            'deadline_days' => 15,
+            'performed_by' => 'uks',
+            'uks_upload' => true,
+            'doceo_collects_docs' => false,
+            'sep_consulta_url' => 'https://cennisistema.sep.gob.mx/cenni/consulta/consultaEstatus.jsp',
+            'import_template_code' => 'uks_cenni_folios',
+            'auto_cancel_if_not_started_days' => 15,
+        ];
+
         $products = [
             [
-                'code' => 'ELET-CENNI',
-                'name' => 'ELeT + CENNI',
-                'slug' => 'elet-cenni',
+                'code' => 'ELET-UKS',
+                'name' => 'ELET',
+                'slug' => 'elet',
                 'type' => 'certification',
                 'category' => 'english_adult',
                 'supplier_id' => $supplierIds['uks'],
                 'certifier_id' => $certifierIds['uks'],
-                'short_description' => 'Certificación UKS con trámite CENNI incluido vía proveedor.',
-                'public_price' => 1890,
-                'cost_price' => 0,
-                'price_partner_a' => 1650,
-                'price_partner_b' => 1600,
-                'price_partner_c' => 1550,
-                'price_cncm' => 1600,
+                'short_description' => 'Examen ELeT computarizado con resultados inmediatos. Alineado CEFR y CENNI.',
+                'description' => $eletDescription,
+                'benefits_html' => $eletBenefits,
+                'catalog_price' => 1500,
+                'public_price' => 1350,
+                'cost_price' => 846,
+                'price_partner_a' => 1300,
+                'price_partner_b' => 1250,
+                'price_partner_c' => 1200,
+                'price_cncm' => 846,
                 'is_star' => 1,
                 'audience' => 'adult',
                 'platform_type' => 'none',
                 'sort_order' => 1,
+                'config_json' => json_encode($eletUksConfig, JSON_UNESCAPED_UNICODE),
+            ],
+            [
+                'code' => 'ELET-CENNI',
+                'name' => 'Trámite CENNI (ELeT)',
+                'slug' => 'elet-cenni-tramite',
+                'type' => 'procedure',
+                'category' => 'english_adult',
+                'supplier_id' => $supplierIds['uks'],
+                'certifier_id' => $certifierIds['cenni'],
+                'short_description' => 'Trámite CENNI vía UKS incluido en ELET (opcional post-examen).',
+                'public_price' => 0,
+                'cost_price' => 0,
+                'is_star' => 0,
+                'is_public' => 0,
+                'audience' => 'adult',
+                'platform_type' => 'none',
+                'sort_order' => 99,
+                'config_json' => json_encode($eletCenniConfig, JSON_UNESCAPED_UNICODE),
             ],
             [
                 'code' => 'ITEP-CENNI',
@@ -221,10 +327,12 @@ final class CatalogSeeder
         ];
 
         foreach ($products as $p) {
-            $public = (float) $p['public_price'];
-            $p['catalog_price'] = Settings::catalogPriceFromPublic($public);
-            $p['is_active'] = 1;
-            $p['is_public'] = 1;
+            if (!isset($p['catalog_price'])) {
+                $public = (float) $p['public_price'];
+                $p['catalog_price'] = Settings::catalogPriceFromPublic($public);
+            }
+            $p['is_active'] = $p['is_active'] ?? 1;
+            $p['is_public'] = $p['is_public'] ?? 1;
             $p['cost_price'] = $p['cost_price'] ?? 0;
             // Checkout mínimo por defecto: contacto + pago.
             // Reglamento/firma se piden después en el caso del alumno (registration_docs).
@@ -300,6 +408,21 @@ final class CatalogSeeder
         }
 
         $pipelines = [
+            ['elet_uks', 'ELeT / UKS', 'certification', [
+                ['registro', 'Registro (reglamento, datos y pago)', 'student'],
+                ['confirm_pago', 'Confirmación de pago', 'admin'],
+                ['solicitud_uks', 'Solicitud a UKS', 'admin'],
+                ['codigos', 'Asignación de códigos (folio y clave)', 'admin'],
+                ['resultados', 'Publicación de resultados', 'admin'],
+                ['fin', 'Completado', 'system'],
+            ]],
+            ['elet_cenni_uks', 'Trámite CENNI ELeT (UKS)', 'procedure', [
+                ['opt_in', 'Inicio trámite (post-examen)', 'student'],
+                ['uks_upload', 'Documentos en plataforma UKS', 'student'],
+                ['folio', 'Folio CENNI asignado', 'admin'],
+                ['seguimiento', 'Seguimiento SEP', 'student'],
+                ['fin', 'Completado / cancelado', 'system'],
+            ]],
             ['cert_basic', 'Certificación básica', 'certification', [
                 ['registro', 'Registro completado', 'system'],
                 ['docs', 'Documentos del alumno', 'student'],

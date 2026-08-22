@@ -141,7 +141,7 @@ final class CheckoutService
                 $chargeAmount
             );
 
-            $pipelineId = $this->resolvePipelineId((string) $product['type']);
+            $pipelineId = $this->resolvePipelineId($product);
             $stepCode = TrackingService::initialStepCode((string) $product['type'], $required);
             $trackStatus = TrackingService::initialStatus($paymentMethod);
             $trackingId = $this->trackings->create([
@@ -687,8 +687,20 @@ final class CheckoutService
         ];
     }
 
-    private function resolvePipelineId(string $productType): ?int
+    /** @param array<string, mixed> $product */
+    private function resolvePipelineId(array $product): ?int
     {
+        $code = CheckoutRequirements::pipelineCode($product);
+        if ($code !== null) {
+            $stmt = $this->pdo->prepare('SELECT id FROM pipeline_templates WHERE code = ? LIMIT 1');
+            $stmt->execute([$code]);
+            $id = $stmt->fetchColumn();
+            if ($id !== false) {
+                return (int) $id;
+            }
+        }
+
+        $productType = (string) ($product['type'] ?? 'certification');
         $stmt = $this->pdo->prepare(
             'SELECT id FROM pipeline_templates WHERE product_type = ? ORDER BY id ASC LIMIT 1'
         );
