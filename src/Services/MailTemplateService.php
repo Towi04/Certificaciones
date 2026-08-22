@@ -128,6 +128,41 @@ final class MailTemplateService
     }
 
     /** @return array<string, string> */
+    public static function sampleVarsForCode(string $code): array
+    {
+        if (in_array($code, [self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY], true)) {
+            return self::uksSolicitudSampleVars();
+        }
+
+        return match ($code) {
+            'student_elet_exam_access' => [
+                'name' => 'María Ejemplo',
+                'matricula' => '9999',
+                'exam_url' => 'https://exam.elet.com.mx/',
+                'exam_date' => date('Y-m-d', strtotime('+7 days')),
+                'exam_time' => '10:00',
+                'folio' => 'FOLIO-12345',
+                'access_key' => 'CLAVE-DIA',
+            ],
+            'student_registration' => [
+                'full_name' => 'María Ejemplo',
+                'matricula' => '9999',
+                'product_name' => 'ELeT',
+                'amount' => '$1,350.00',
+                'pay_instructions_html' => 'Recibimos tu comprobante. Validaremos el pago y te avisaremos.',
+                'password_block_html' => '<p><strong>Usuario:</strong> alumno@ejemplo.com<br><strong>Contraseña temporal:</strong> Doceo*1234</p>',
+                'login_url' => rtrim((string) (\App\Config\Env::get('APP_URL', '') ?? ''), '/') . '/login',
+            ],
+            'student_payment_confirmed' => [
+                'name' => 'María Ejemplo',
+                'matricula' => '9999',
+                'product_name' => 'ELeT',
+            ],
+            default => [],
+        };
+    }
+
+    /** @return array<string, string> */
     public static function uksSolicitudSampleVars(): array
     {
         return [
