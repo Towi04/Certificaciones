@@ -102,39 +102,66 @@ TXT;
 HTML;
 
         $eletUksConfig = [
+            'pipeline_code' => 'elet_uks',
             'checkout_fields' => ['email', 'first_name', 'last_name_p', 'last_name_m', 'phone'],
-            'required_docs' => [],
-            'registration_docs' => [
-                ['code' => 'reglamento', 'label' => 'Reglamento firmado (PDF)', 'required' => true, 'accept' => '.pdf'],
-                ['code' => 'signature', 'label' => 'Firma (imagen)', 'required' => true, 'accept' => '.jpg,.jpeg,.png'],
+            'required_docs' => [
+                [
+                    'code' => 'reglamento_firmado',
+                    'label' => 'Reglamento firmado (PDF con firma en última página)',
+                    'required' => true,
+                    'accept' => '.pdf',
+                ],
             ],
-            'card_msi' => ['enabled' => true, 'months' => [1, 3, 6], 'min_amount' => 500],
+            'registration_docs' => [],
+            'reglamento' => [
+                'template_path' => '/assets/reglamentos/elet-reglamento.pdf',
+                'source_url' => 'https://drive.google.com/file/d/1sfP7zSPlqqpBdYaHUmz-_kM_BijRZDHW/view?usp=sharing',
+                'signature_mode' => 'append_to_pdf',
+                'required_before_checkout' => true,
+            ],
+            'exam' => [
+                'mode' => 'online',
+                'url' => 'https://exam.elet.com.mx/',
+                'choose_at_checkout' => true,
+                'slot_minutes' => 30,
+                'allow_reschedule' => true,
+                'admin_fields' => ['folio', 'clave_dia'],
+            ],
             'schedule' => [
                 'weekdays' => ['start' => '10:00', 'end' => '17:30'],
                 'saturday' => ['start' => '08:00', 'end' => '12:00'],
                 'min_advance_days' => 2,
                 'same_day_exception' => ['before' => '16:00', 'requires_admin' => true],
             ],
-            'optional_addons' => [
-                [
-                    'product_code' => 'ELET-CENNI',
-                    'label' => 'Incluir trámite CENNI (sin costo adicional)',
-                    'description' => 'Constancia CENNI con validez 1 año. Trámite gestionado por DOCEO.',
-                    'default' => false,
-                    'price' => 0,
-                ],
+            'payments' => [
+                'default_method' => 'openpay_spei',
+                'order' => ['openpay_spei', 'openpay_store', 'openpay_card'],
+                'price_includes_fee' => true,
             ],
+            'card_msi' => ['enabled' => true, 'months' => [1, 3, 6, 9, 12], 'min_amount' => 0],
+            'emails' => [
+                'payment_confirmed' => false,
+                'exam_scheduled' => false,
+                'payment_rejected' => true,
+            ],
+            'export_template_code' => 'uks_elet_registro',
         ];
 
         $eletCenniConfig = [
+            'pipeline_code' => 'elet_cenni_uks',
             'checkout_fields' => [],
             'required_docs' => [],
-            'registration_docs' => [
-                ['code' => 'reglamento', 'label' => 'Reglamento firmado (PDF)', 'required' => true, 'accept' => '.pdf'],
-                ['code' => 'signature', 'label' => 'Firma (imagen)', 'required' => true, 'accept' => '.jpg,.jpeg,.png'],
-            ],
+            'registration_docs' => [],
             'card_msi' => ['enabled' => false, 'months' => [], 'min_amount' => 0],
             'bundled_with' => 'ELET-UKS',
+            'starts_after' => 'exam_completed',
+            'deadline_days' => 15,
+            'performed_by' => 'uks',
+            'uks_upload' => true,
+            'doceo_collects_docs' => false,
+            'sep_consulta_url' => 'https://cennisistema.sep.gob.mx/cenni/consulta/consultaEstatus.jsp',
+            'import_template_code' => 'uks_cenni_folios',
+            'auto_cancel_if_not_started_days' => 15,
         ];
 
         $products = [
@@ -168,9 +195,9 @@ HTML;
                 'slug' => 'elet-cenni-tramite',
                 'type' => 'procedure',
                 'category' => 'english_adult',
-                'supplier_id' => $supplierIds['doceo'],
+                'supplier_id' => $supplierIds['uks'],
                 'certifier_id' => $certifierIds['cenni'],
-                'short_description' => 'Trámite CENNI incluido sin costo al adquirir ELET (opcional).',
+                'short_description' => 'Trámite CENNI vía UKS incluido en ELET (opcional post-examen).',
                 'public_price' => 0,
                 'cost_price' => 0,
                 'is_star' => 0,
@@ -381,6 +408,21 @@ HTML;
         }
 
         $pipelines = [
+            ['elet_uks', 'ELeT / UKS', 'certification', [
+                ['registro', 'Registro (reglamento, datos y pago)', 'student'],
+                ['confirm_pago', 'Confirmación de pago', 'admin'],
+                ['solicitud_uks', 'Solicitud a UKS', 'admin'],
+                ['codigos', 'Asignación de códigos (folio y clave)', 'admin'],
+                ['resultados', 'Publicación de resultados', 'admin'],
+                ['fin', 'Completado', 'system'],
+            ]],
+            ['elet_cenni_uks', 'Trámite CENNI ELeT (UKS)', 'procedure', [
+                ['opt_in', 'Inicio trámite (post-examen)', 'student'],
+                ['uks_upload', 'Documentos en plataforma UKS', 'student'],
+                ['folio', 'Folio CENNI asignado', 'admin'],
+                ['seguimiento', 'Seguimiento SEP', 'student'],
+                ['fin', 'Completado / cancelado', 'system'],
+            ]],
             ['cert_basic', 'Certificación básica', 'certification', [
                 ['registro', 'Registro completado', 'system'],
                 ['docs', 'Documentos del alumno', 'student'],
