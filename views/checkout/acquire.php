@@ -50,7 +50,7 @@ $stepLabels = [
                 <?php endforeach; ?>
             </nav>
 
-            <form method="post" action="<?= e(url('/adquirir/' . $product['slug'])) ?>" enctype="multipart/form-data" class="checkout-form panel" id="checkout-form">
+            <form method="post" action="<?= e(url('/adquirir/' . $product['slug'])) ?>" enctype="multipart/form-data" class="checkout-form panel" id="checkout-form" novalidate>
                 <?= csrf_field() ?>
                 <input type="hidden" name="payment_method" id="payment_method" value="transfer_proof">
                 <input type="hidden" name="card_msi_months" id="card_msi_months" value="3">
@@ -108,12 +108,12 @@ $stepLabels = [
                         </p>
                         <div class="form-grid" style="max-width:480px">
                             <label>Fecha del examen *
-                                <select id="exam_date_select" required>
+                                <select id="exam_date_select">
                                     <option value="">— elige fecha —</option>
                                 </select>
                             </label>
                             <label>Hora *
-                                <select id="exam_time_select" required disabled>
+                                <select id="exam_time_select" disabled>
                                     <option value="">— elige hora —</option>
                                 </select>
                             </label>
@@ -343,6 +343,7 @@ $stepLabels = [
 .wizard-nav {
   display:flex; gap:.65rem; flex-wrap:wrap; margin-top:1.35rem; padding-top:1rem; border-top:1px solid #e6ebf2;
 }
+.wizard-nav button[hidden] { display: none !important; }
 
 @media (max-width: 860px) {
   .checkout-layout { grid-template-columns:1fr; }
@@ -391,6 +392,11 @@ $stepLabels = [
   const examDateSelect = document.getElementById('exam_date_select');
   const examTimeSelect = document.getElementById('exam_time_select');
   const examSlotHint = document.getElementById('exam-slot-hint');
+
+  if (!form || !prevBtn || !nextBtn || !submitBtn) {
+    console.error('[checkout] Formulario o botones del wizard no encontrados.');
+    return;
+  }
 
   function money(n) {
     return '$' + Number(n || 0).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -457,7 +463,59 @@ $stepLabels = [
     return '';
   }
 
+  function validateFieldsInStep(stepName) {
+    const stepEl = form.querySelector('.wizard-step[data-step="' + stepName + '"]');
+    if (!stepEl) return true;
+    const fields = stepEl.querySelectorAll('input:not([type="hidden"]), select, textarea');
+    for (const el of fields) {
+      if (el.disabled) continue;
+      if (!el.checkValidity()) {
+        el.reportValidity();
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function validateStep(step) {
+    if (step === 'datos') {
+      return validateFieldsInStep('datos');
+    }
+    if (step === 'reglamento' && window.reglamentoWizard) {
+      try { window.reglamentoWizard.validateStep(); } catch (e) { alert(e.message); return false; }
+    }
+    if (step === 'agenda' && needsExam) {
+      if (!examDateHidden?.value || !examTimeHidden?.value) {
+        alert('Selecciona fecha y hora del examen.');
+        return false;
+      }
+    }
+    if (step === 'pago') {
+      if (payUi === 'transfer' && proofInput && !proofInput.files.length) {
+        alert('Sube el comprobante de tu transferencia.');
+        if (proofPicker) proofPicker.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function validateAllBeforeSubmit() {
+    for (const step of wizardSteps) {
+      if (step === 'confirmar') continue;
+      if (!validateStep(step)) {
+        const idx = wizardSteps.indexOf(step);
+        if (idx >= 0) showStep(idx);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  window.checkoutWizardValidateAll = validateAllBeforeSubmit;
+
   function buildConfirmSummary() {
+    if (!confirmSummary) return;
     let html = '<dl>';
     html += '<dt>Alumno</dt><dd>' + (fullName() || '—') + '</dd>';
     html += '<dt>Correo</dt><dd>' + (fieldValue('email') || '—') + '</dd>';
@@ -472,29 +530,6 @@ $stepLabels = [
     }
     html += '</dl>';
     confirmSummary.innerHTML = html;
-  }
-
-  function validateStep(step) {
-    if (step === 'datos') {
-      if (!form.reportValidity()) return false;
-    }
-    if (step === 'reglamento' && window.reglamentoWizard) {
-      try { window.reglamentoWizard.validateStep(); } catch (e) { alert(e.message); return false; }
-    }
-    if (step === 'agenda' && needsExam) {
-      if (!examDateHidden.value || !examTimeHidden.value) {
-        alert('Selecciona fecha y hora del examen.');
-        return false;
-      }
-    }
-    if (step === 'pago') {
-      if (payUi === 'transfer' && proofInput && !proofInput.files.length) {
-        alert('Sube el comprobante de tu transferencia.');
-        proofPicker.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        return false;
-      }
-    }
-    return true;
   }
 
   prevBtn.addEventListener('click', () => showStep(stepIndex - 1));
@@ -620,11 +655,20 @@ $stepLabels = [
   });
 
   if (proofPicker && proofInput) {
-    proofPicker.querySelector('.file-picker-btn').addEventListener('click', () => proofInput.click());
+    const pickBtn = proofPicker.querySelector('.file-picker-btn');
+    if (pickBtn) pickBtn.addEventListener('click', () => proofInput.click());
     proofInput.addEventListener('change', () => {
-      proofFilename.textContent = proofInput.files.length
-        ? proofInput.files[0].name
-        : 'Ningún archivo seleccionado';
+      if (proofFilename) {
+        proofFilename.textContent = proofInput.files.length
+          ? proofInput.files[0].name
+          : 'Ningún archivo seleccionado';
+      }
+    });
+  }
+
+  if (!window.reglamentoWizard) {
+    form.addEventListener('submit', function (e) {
+      if (!validateAllBeforeSubmit()) e.preventDefault();
     });
   }
 

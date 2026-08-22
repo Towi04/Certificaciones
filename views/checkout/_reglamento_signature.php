@@ -214,6 +214,9 @@ $docField = 'doc_' . $docCode;
   form.addEventListener('submit', async function (e) {
     if (reglamentoAttached) return;
     e.preventDefault();
+    if (window.checkoutWizardValidateAll && !window.checkoutWizardValidateAll()) {
+      return;
+    }
     statusEl.textContent = 'Generando PDF firmado…';
     try {
       const file = await buildSignedPdf();
