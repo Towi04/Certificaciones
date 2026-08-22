@@ -30,6 +30,7 @@ $router->get('/adquirir/{slug}', fn (string $slug) => $checkout->show($slug));
 $router->post('/adquirir/{slug}', fn (string $slug) => $checkout->submit($slug));
 $router->get('/compra/{matricula}', fn (string $matricula) => $checkout->success($matricula));
 $router->get('/api/cotizar/{slug}', fn (string $slug) => $checkout->quote($slug));
+$router->get('/api/examen-slots/{slug}', fn (string $slug) => $checkout->examSlots($slug));
 
 // Instalador web (funciona aunque setup.php no esté en el docroot)
 $router->get('/setup', fn () => $setup->run());
