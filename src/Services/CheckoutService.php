@@ -53,7 +53,8 @@ final class CheckoutService
         array $buyer,
         array $files,
         string $paymentMethod,
-        ?string $promoCode
+        ?string $promoCode,
+        int $installmentCount = 1
     ): array {
         $product = $this->products->find($productId);
         if ($product === null || !(int) $product['is_active'] || !(int) $product['is_public']) {
@@ -88,6 +89,16 @@ final class CheckoutService
             }
         }
 
+
+        $installmentCount = max(1, $installmentCount);
+        $deferredPlans = DeferredPaymentCalculator::plansFor((float) $quote['charged'], $product);
+        $allowedMonths = array_column($deferredPlans, 'months');
+        if (!in_array($installmentCount, $allowedMonths, true)) {
+            throw new \InvalidArgumentException('El plan de pagos diferidos seleccionado no es válido para este producto.');
+        }
+        $plan = DeferredPaymentCalculator::split((float) $quote['charged'], $installmentCount);
+        $chargeNow = (float) $plan['first'];
+
         $this->pdo->beginTransaction();
         try {
             $account = $this->students->findOrCreate($buyer);
@@ -107,9 +118,24 @@ final class CheckoutService
                 'currency' => 'MXN',
                 'catalog_amount' => $quote['catalog'],
                 'charged_amount' => $quote['charged'],
+                'installment_count' => $installmentCount,
+                'installment_amount' => $chargeNow,
+                'paid_installments' => 0,
                 'partner_price_amount' => $quote['partner_price'],
                 'partner_credit_earned' => $quote['partner_credit'],
             ]);
+
+            $installmentRows = [];
+            $due = new \DateTimeImmutable('today');
+            foreach ($plan['schedule'] as $row) {
+                $installmentRows[] = [
+                    'seq' => (int) $row['seq'],
+                    'amount' => (float) $row['amount'],
+                    'due_date' => $due->modify('+' . (((int) $row['seq']) - 1) . ' month')->format('Y-m-d'),
+                    'status' => ((int) $row['seq'] === 1) ? 'awaiting_payment' : 'pending',
+                ];
+            }
+            $this->purchases->createInstallments($purchaseId, $installmentRows);
 
             $itemId = $this->purchases->addItem(
                 $purchaseId,
@@ -156,9 +182,10 @@ final class CheckoutService
                 $openpay = $this->createSpeiCharge(
                     $purchaseId,
                     $matricula,
-                    (float) $quote['charged'],
+                    $chargeNow,
                     (string) $product['name'],
-                    $account['user']
+                    $account['user'],
+                    $installmentCount > 1 ? 1 : null
                 );
             }
 
@@ -210,15 +237,56 @@ final class CheckoutService
             return;
         }
 
+        $installmentCount = max(1, (int) ($purchase['installment_count'] ?? 1));
+        $installments = $this->purchases->installments($purchaseId);
+
         $this->pdo->beginTransaction();
         try {
-            $this->purchases->markPaid($purchaseId);
-
-            $credit = (float) $purchase['partner_credit_earned'];
-            if ($credit > 0 && !empty($purchase['partner_id'])) {
-                $this->pdo->prepare(
-                    'UPDATE partners SET credit_balance = credit_balance + ? WHERE id = ?'
-                )->execute([$credit, (int) $purchase['partner_id']]);
+            if ($installmentCount > 1 && $installments !== []) {
+                $current = null;
+                foreach ($installments as $inst) {
+                    if ((string) $inst['status'] !== 'paid') {
+                        $current = $inst;
+                        break;
+                    }
+                }
+                if ($current === null) {
+                    $this->purchases->markPaid($purchaseId);
+                } else {
+                    $this->purchases->markInstallmentPaid((int) $current['id']);
+                    $this->purchases->incrementPaidInstallments($purchaseId);
+                    $paid = (int) ($purchase['paid_installments'] ?? 0) + 1;
+                    if ($paid >= $installmentCount) {
+                        $this->purchases->markPaid($purchaseId);
+                        $credit = (float) $purchase['partner_credit_earned'];
+                        if ($credit > 0 && !empty($purchase['partner_id'])) {
+                            $this->pdo->prepare(
+                                'UPDATE partners SET credit_balance = credit_balance + ? WHERE id = ?'
+                            )->execute([$credit, (int) $purchase['partner_id']]);
+                        }
+                    } else {
+                        // Aún hay parcialidades: deja la compra en espera del siguiente pago
+                        $this->pdo->prepare(
+                            "UPDATE purchases SET status = 'awaiting_payment' WHERE id = ?"
+                        )->execute([$purchaseId]);
+                        foreach ($installments as $inst) {
+                            if ((int) $inst['sequence_no'] === ((int) $current['sequence_no'] + 1)) {
+                                $this->pdo->prepare(
+                                    "UPDATE purchase_installments SET status = 'awaiting_payment' WHERE id = ?"
+                                )->execute([(int) $inst['id']]);
+                                break;
+                            }
+                        }
+                    }
+                }
+            } else {
+                $this->purchases->markPaid($purchaseId);
+                $credit = (float) $purchase['partner_credit_earned'];
+                if ($credit > 0 && !empty($purchase['partner_id'])) {
+                    $this->pdo->prepare(
+                        'UPDATE partners SET credit_balance = credit_balance + ? WHERE id = ?'
+                    )->execute([$credit, (int) $purchase['partner_id']]);
+                }
             }
 
             $this->pdo->commit();
@@ -229,10 +297,9 @@ final class CheckoutService
             throw $e;
         }
 
-        (new TrackingService())->onPaymentConfirmed($purchaseId, $adminUserId, $notes);
-
         $fresh = $this->purchases->find($purchaseId);
-        if ($fresh) {
+        if ($fresh && (string) $fresh['status'] === 'paid') {
+            (new TrackingService())->onPaymentConfirmed($purchaseId, $adminUserId, $notes);
             $this->sendPaymentConfirmedEmail($fresh);
         }
     }
@@ -271,6 +338,12 @@ final class CheckoutService
         }
 
         $purchase = $this->purchases->findByOpenPayChargeId($chargeId);
+        if ($purchase === null) {
+            $installment = $this->purchases->findInstallmentByOpenPayChargeId($chargeId);
+            if ($installment !== null) {
+                $purchase = $this->purchases->find((int) $installment['purchase_id']);
+            }
+        }
         if ($purchase === null) {
             $orderId = (string) ($tx['order_id'] ?? '');
             $matricula = $this->matriculaFromOpenPayOrderId($orderId);
@@ -322,9 +395,11 @@ final class CheckoutService
             'Pago SPEI confirmado por OpenPay (' . $type . ', cargo ' . $chargeId . ')'
         );
 
+        $fresh = $this->purchases->find((int) $purchase['id']);
+
         return [
             'ok' => true,
-            'action' => 'confirmed',
+            'action' => $fresh && (string) $fresh['status'] === 'paid' ? 'confirmed' : 'installment_confirmed',
             'type' => $type,
             'purchase_id' => (int) $purchase['id'],
             'matricula' => (string) $purchase['matricula'],
@@ -426,7 +501,8 @@ final class CheckoutService
         string $matricula,
         float $amount,
         string $productName,
-        array $user
+        array $user,
+        ?int $installmentSeq = null
     ): ?array {
         $merchant = trim((string) (Env::get('OPENPAY_MERCHANT_ID', '') ?? ''));
         $key = trim((string) (Env::get('OPENPAY_PRIVATE_KEY', '') ?? ''));
@@ -451,6 +527,19 @@ final class CheckoutService
         $chargeId = (string) ($charge['id'] ?? '');
         $clabe = (string) ($charge['payment_method']['clabe'] ?? $charge['clabe'] ?? '');
         $this->purchases->setOpenPay($purchaseId, $chargeId, $clabe !== '' ? $clabe : null);
+
+        if ($installmentSeq !== null) {
+            foreach ($this->purchases->installments($purchaseId) as $inst) {
+                if ((int) $inst['sequence_no'] === $installmentSeq) {
+                    $this->purchases->setInstallmentOpenPay(
+                        (int) $inst['id'],
+                        $chargeId,
+                        $clabe !== '' ? $clabe : null
+                    );
+                    break;
+                }
+            }
+        }
 
         return [
             'charge_id' => $chargeId,

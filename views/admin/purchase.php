@@ -130,3 +130,19 @@ $canConfirm = in_array($purchase['status'], ['awaiting_payment', 'payment_review
 <?php if (!$canConfirm && $purchase['status'] === 'paid'): ?>
     <p class="flash flash-success" style="margin-top:1rem">Pago confirmado<?= !empty($purchase['paid_at']) ? ' el ' . e($purchase['paid_at']) : '' ?>.</p>
 <?php endif; ?>
+
+<?php
+$installments = $installments ?? [];
+$installmentCount = (int) ($purchase['installment_count'] ?? 1);
+if ($installmentCount > 1 || $installments !== []):
+?>
+<div class="panel" style="margin-top:1rem">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Pagos diferidos</h2>
+    <p class="muted"><?= (int) ($purchase['paid_installments'] ?? 0) ?>/<?= $installmentCount ?> confirmados</p>
+    <ul class="muted" style="padding-left:1.1rem">
+        <?php foreach ($installments as $inst): ?>
+            <li>#<?= (int) $inst['sequence_no'] ?> · <?= money($inst['amount']) ?> · <?= e((string) $inst['status']) ?><?= !empty($inst['due_date']) ? ' · vence ' . e((string) $inst['due_date']) : '' ?></li>
+        <?php endforeach; ?>
+    </ul>
+</div>
+<?php endif; ?>

@@ -49,11 +49,12 @@ final class PricingService
             'discount_code_id' => null,
             'discount_code' => null,
             'label' => 'Precio de lista',
+            'deferred_plans' => [],
         ];
 
         $codeRaw = strtoupper(trim((string) $codeRaw));
         if ($codeRaw === '') {
-            return $out;
+            return $this->withDeferredPlans($product, $out);
         }
 
         $stmt = $this->pdo->prepare(
@@ -102,7 +103,7 @@ final class PricingService
             $out['partner_credit'] = max(0, round($charged - $tierPrice, 2));
             $out['label'] = 'Código partner · precio público';
 
-            return $out;
+            return $this->withDeferredPlans($product, $out);
         }
 
         // Promo DOCEO / campaña → bajar a público u otro descuento
@@ -118,7 +119,7 @@ final class PricingService
             $out['label'] = 'Descuento fijo';
         }
 
-        return $out;
+        return $this->withDeferredPlans($product, $out);
     }
 
     /** @param array<string, mixed> $product */
@@ -137,5 +138,18 @@ final class PricingService
         }
 
         return (float) $val;
+    }
+
+    /**
+     * @param array<string, mixed> $product
+     * @param array<string, mixed> $quote
+     * @return array<string, mixed>
+     */
+    private function withDeferredPlans(array $product, array $quote): array
+    {
+        $charged = (float) ($quote['charged'] ?? 0);
+        $quote['deferred_plans'] = DeferredPaymentCalculator::plansFor($charged, $product);
+
+        return $quote;
     }
 }

@@ -50,6 +50,53 @@ $statusLabels = [
             <?php if ($openpayPdf): ?>
                 <p><a class="btn btn-primary btn-sm" href="<?= e($openpayPdf) ?>" target="_blank" rel="noopener">Descargar ficha SPEI</a></p>
             <?php endif; ?>
+
+    <?php
+    /** @var list<array<string,mixed>> $installments */
+    $installments = $installments ?? [];
+    $installmentCount = (int) ($purchase['installment_count'] ?? 1);
+    ?>
+    <?php if ($installmentCount > 1 || $installments !== []): ?>
+        <div class="panel" style="margin-top:1rem">
+            <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Calendario de pagos diferidos</h2>
+            <p class="muted" style="margin-top:0">
+                Total del caso <?= money($purchase['charged_amount']) ?>
+                · <?= (int) ($purchase['paid_installments'] ?? 0) ?>/<?= $installmentCount ?> pagos confirmados
+            </p>
+            <div style="overflow-x:auto">
+                <table class="table" style="width:100%;font-size:.9rem">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Monto</th>
+                            <th>Vence</th>
+                            <th>Estado</th>
+                            <th>CLABE</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($installments as $inst): ?>
+                            <tr>
+                                <td><?= (int) $inst['sequence_no'] ?></td>
+                                <td><?= money($inst['amount']) ?></td>
+                                <td><?= e((string) ($inst['due_date'] ?? '—')) ?></td>
+                                <td><span class="pill"><?= e((string) $inst['status']) ?></span></td>
+                                <td style="font-family:ui-monospace,monospace;font-size:.8rem">
+                                    <?= e((string) ($inst['openpay_clabe'] ?? '—')) ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php if ($installmentCount > 1): ?>
+                <p class="muted" style="font-size:.85rem">
+                    El SPEI mostrado arriba corresponde al pago en curso. Al confirmarse, administración habilita el siguiente.
+                </p>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
+
         <?php elseif ($purchase['payment_method'] === 'transfer_proof'): ?>
             <p>Recibimos tu comprobante. Lo revisaremos y te avisaremos por correo.</p>
             <?php if ($bank['clabe'] !== ''): ?>
