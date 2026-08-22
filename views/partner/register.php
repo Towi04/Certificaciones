@@ -48,21 +48,16 @@
 
     <div id="exam-block">
         <h2 style="font-size:1.05rem;color:var(--doceo-blue);margin-top:1.25rem">3. Fecha de examen</h2>
+        <p class="muted" style="font-size:.85rem;margin:.25rem 0 .75rem">
+            Solo la fecha y hora programadas. La 2ª fecha se usa al reagendar;
+            el enlace Zoom lo asigna administración y se envía al alumno con los accesos.
+        </p>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem">
             <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">Fecha *
                 <input type="date" name="exam_date" id="exam_date" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
             </label>
             <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">Hora *
                 <input type="time" name="exam_time" id="exam_time" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-            </label>
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">2ª fecha (opcional)
-                <input type="date" name="exam_date_2" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-            </label>
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">2ª hora
-                <input type="time" name="exam_time_2" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-            </label>
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;grid-column:1/-1">Zoom / enlace (si ya lo tienes)
-                <input type="url" name="zoom_url" placeholder="https://…" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
             </label>
         </div>
     </div>

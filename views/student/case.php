@@ -64,7 +64,7 @@ $payLabels = [
     </p>
     <?php if (!empty($tracking['exam_date_2'])): ?>
         <p class="muted">
-            Alternativa:
+            Reagenda:
             <?= e((string) $tracking['exam_date_2']) ?>
             <?php if (!empty($tracking['exam_time_2'])): ?>
                 <?= e(substr((string) $tracking['exam_time_2'], 0, 5)) ?>
@@ -72,9 +72,9 @@ $payLabels = [
         </p>
     <?php endif; ?>
     <?php if (!empty($tracking['zoom_url'])): ?>
-        <p><a class="btn btn-accent" href="<?= e((string) $tracking['zoom_url']) ?>" target="_blank" rel="noopener">Abrir enlace de reunión</a></p>
+        <p><a class="btn btn-accent" href="<?= e((string) $tracking['zoom_url']) ?>" target="_blank" rel="noopener">Abrir acceso Zoom</a></p>
     <?php else: ?>
-        <p class="muted">El enlace de Zoom se publicará aquí cuando esté listo.</p>
+        <p class="muted">El enlace Zoom (acceso a la certificación) lo publicará administración aquí cuando esté listo.</p>
     <?php endif; ?>
 </div>
 <?php endif; ?>

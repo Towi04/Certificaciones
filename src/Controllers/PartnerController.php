@@ -79,9 +79,6 @@ final class PartnerController
                 [
                     'exam_date' => trim((string) ($_POST['exam_date'] ?? '')),
                     'exam_time' => trim((string) ($_POST['exam_time'] ?? '')),
-                    'exam_date_2' => trim((string) ($_POST['exam_date_2'] ?? '')),
-                    'exam_time_2' => trim((string) ($_POST['exam_time_2'] ?? '')),
-                    'zoom_url' => trim((string) ($_POST['zoom_url'] ?? '')),
                 ]
             );
             $msg = 'Alumno registrado · matrícula ' . $result['matricula'];
@@ -134,12 +131,10 @@ final class PartnerController
             if ($tracking === null || (int) ($tracking['partner_id'] ?? 0) !== (int) $partner['id']) {
                 throw new \InvalidArgumentException('No puedes editar este caso.');
             }
+            // Partner solo define fecha/hora principal; reagenda y Zoom los maneja admin.
             (new TrackingService())->saveExamSchedule($trackingId, [
                 'exam_date' => $_POST['exam_date'] ?? null,
                 'exam_time' => $_POST['exam_time'] ?? null,
-                'exam_date_2' => $_POST['exam_date_2'] ?? null,
-                'exam_time_2' => $_POST['exam_time_2'] ?? null,
-                'zoom_url' => $_POST['zoom_url'] ?? null,
                 'notify' => !empty($_POST['notify']),
             ], (int) Auth::id());
             flash('success', 'Fecha de examen guardada.');

@@ -32,6 +32,20 @@ $current = (string) ($tracking['current_step_code'] ?? '');
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Fecha de examen</h2>
     <?php if (in_array((string) ($tracking['product_type'] ?? ''), ['certification', 'procedure'], true) || !empty($tracking['exam_date'])): ?>
+    <?php if (!empty($tracking['exam_date_2']) || !empty($tracking['zoom_url'])): ?>
+        <p class="muted" style="font-size:.85rem;margin-top:0">
+            <?php if (!empty($tracking['exam_date_2'])): ?>
+                Reagenda (admin): <?= e((string) $tracking['exam_date_2']) ?>
+                <?php if (!empty($tracking['exam_time_2'])): ?>
+                    <?= e(substr((string) $tracking['exam_time_2'], 0, 5)) ?>
+                <?php endif; ?>
+            <?php endif; ?>
+            <?php if (!empty($tracking['zoom_url'])): ?>
+                <?php if (!empty($tracking['exam_date_2'])): ?> · <?php endif; ?>
+                Zoom asignado por admin
+            <?php endif; ?>
+        </p>
+    <?php endif; ?>
     <form method="post" action="<?= e(url('/partner/caso/' . $tracking['id'] . '/examen')) ?>">
         <?= csrf_field() ?>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem">
@@ -41,16 +55,10 @@ $current = (string) ($tracking['current_step_code'] ?? '');
             <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">Hora *
                 <input type="time" name="exam_time" required value="<?= e(isset($tracking['exam_time']) ? substr((string) $tracking['exam_time'], 0, 5) : '') ?>" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
             </label>
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">2ª fecha
-                <input type="date" name="exam_date_2" value="<?= e($tracking['exam_date_2'] ?? '') ?>" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-            </label>
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">2ª hora
-                <input type="time" name="exam_time_2" value="<?= e(isset($tracking['exam_time_2']) ? substr((string) $tracking['exam_time_2'], 0, 5) : '') ?>" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-            </label>
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;grid-column:1/-1">Zoom / enlace
-                <input type="url" name="zoom_url" value="<?= e($tracking['zoom_url'] ?? '') ?>" placeholder="https://…" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-            </label>
         </div>
+        <p class="muted" style="font-size:.82rem;margin:.75rem 0 0">
+            La 2ª fecha (reagenda) y el enlace Zoom los gestiona administración.
+        </p>
         <label class="muted" style="display:flex;gap:.4rem;align-items:center;margin:.85rem 0;font-size:.88rem">
             <input type="checkbox" name="notify" value="1" checked> Avisar al alumno por correo
         </label>

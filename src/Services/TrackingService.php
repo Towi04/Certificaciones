@@ -377,15 +377,31 @@ final class TrackingService
             throw new \InvalidArgumentException('Seguimiento no encontrado.');
         }
 
-        $examDate = $this->normalizeDate($data['exam_date'] ?? null);
-        $examTime = $this->normalizeTime($data['exam_time'] ?? null);
-        $examDate2 = $this->normalizeDate($data['exam_date_2'] ?? null);
-        $examTime2 = $this->normalizeTime($data['exam_time_2'] ?? null);
-        $zoom = trim((string) ($data['zoom_url'] ?? ''));
-        if ($zoom === '') {
-            $zoom = null;
-        } elseif (!filter_var($zoom, FILTER_VALIDATE_URL)) {
-            throw new \InvalidArgumentException('La URL de Zoom/meet no es válida.');
+        $examDate = array_key_exists('exam_date', $data)
+            ? $this->normalizeDate($data['exam_date'])
+            : $this->normalizeDate($tracking['exam_date'] ?? null);
+        $examTime = array_key_exists('exam_time', $data)
+            ? $this->normalizeTime($data['exam_time'])
+            : $this->normalizeTime($tracking['exam_time'] ?? null);
+        // 2ª fecha/hora = reagenda (solo si viene en el payload; si no, se conserva)
+        $examDate2 = array_key_exists('exam_date_2', $data)
+            ? $this->normalizeDate($data['exam_date_2'])
+            : $this->normalizeDate($tracking['exam_date_2'] ?? null);
+        $examTime2 = array_key_exists('exam_time_2', $data)
+            ? $this->normalizeTime($data['exam_time_2'])
+            : $this->normalizeTime($tracking['exam_time_2'] ?? null);
+        // Zoom = acceso que carga admin; no borrar si el partner solo actualiza fecha
+        if (array_key_exists('zoom_url', $data)) {
+            $zoom = trim((string) ($data['zoom_url'] ?? ''));
+            if ($zoom === '') {
+                $zoom = null;
+            } elseif (!filter_var($zoom, FILTER_VALIDATE_URL)) {
+                throw new \InvalidArgumentException('La URL de Zoom/meet no es válida.');
+            }
+        } else {
+            $zoom = isset($tracking['zoom_url']) && $tracking['zoom_url'] !== ''
+                ? (string) $tracking['zoom_url']
+                : null;
         }
 
         if ($examDate === null) {
@@ -400,10 +416,10 @@ final class TrackingService
 
         $note = 'Examen: ' . $examDate . ($examTime ? ' ' . substr($examTime, 0, 5) : '');
         if ($examDate2) {
-            $note .= ' · 2ª opción: ' . $examDate2 . ($examTime2 ? ' ' . substr($examTime2, 0, 5) : '');
+            $note .= ' · reagenda: ' . $examDate2 . ($examTime2 ? ' ' . substr($examTime2, 0, 5) : '');
         }
-        if ($zoom) {
-            $note .= ' · enlace asignado';
+        if ($zoom && array_key_exists('zoom_url', $data)) {
+            $note .= ' · enlace Zoom asignado';
         }
         $this->log($trackingId, 'examen', $note, $actorUserId);
 

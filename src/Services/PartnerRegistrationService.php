@@ -50,7 +50,7 @@ final class PartnerRegistrationService
      *   email:string,first_name:string,last_name_p:string,last_name_m?:string,phone?:string
      * } $buyer
      * @param array{
-     *   exam_date?:string,exam_time?:string,exam_date_2?:string,exam_time_2?:string,zoom_url?:string
+     *   exam_date?:string,exam_time?:string
      * } $exam
      * @return array{purchase_id:int,tracking_id:int,matricula:string,created_account:bool,plain_password:?string}
      */
@@ -148,12 +148,10 @@ final class PartnerRegistrationService
         }
 
         if ($needsExam) {
+            // Solo fecha/hora principal en el alta. Reagenda (2ª fecha) y Zoom los carga admin.
             (new TrackingService())->saveExamSchedule($trackingId, [
                 'exam_date' => $exam['exam_date'] ?? null,
                 'exam_time' => $exam['exam_time'] ?? null,
-                'exam_date_2' => $exam['exam_date_2'] ?? null,
-                'exam_time_2' => $exam['exam_time_2'] ?? null,
-                'zoom_url' => $exam['zoom_url'] ?? null,
                 'notify' => true,
             ], $partnerUserId);
         }
