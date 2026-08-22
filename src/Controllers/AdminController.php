@@ -10,6 +10,8 @@ use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\TrackingRepository;
 use App\Services\CheckoutService;
+use App\Services\CheckoutRequirements;
+use App\Services\ExportService;
 use App\Services\TrackingService;
 
 final class AdminController
@@ -230,6 +232,7 @@ final class AdminController
             return;
         }
         $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
+        $productCfg = CheckoutRequirements::config($tracking);
         view('admin/tracking', [
             'title' => 'Caso ' . $tracking['matricula'],
             'tracking' => $tracking,
@@ -237,6 +240,7 @@ final class AdminController
             'logs' => $svc->logs((int) $tracking['id']),
             'documents' => $svc->documentsForTracking((int) $tracking['id']),
             'moodleConfigured' => \App\Services\MoodleEnrolmentService::isConfigured(),
+            'exportTemplateCode' => $productCfg['export_template_code'] ?? null,
             'layout' => 'admin',
         ]);
     }
@@ -549,5 +553,38 @@ final class AdminController
             'maestraFix' => $maestraFix,
             'layout' => 'admin',
         ]);
+    }
+
+    public function exports(): void
+    {
+        Auth::requireRole(['admin']);
+        $templates = (new \App\Repositories\ExportTemplateRepository())->listActive();
+        view('admin/exports', [
+            'title' => 'Exportaciones',
+            'templates' => $templates,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function exportDownload(string $code): void
+    {
+        Auth::requireRole(['admin']);
+        $options = [];
+        if (!empty($_GET['tracking_id'])) {
+            $options['tracking_id'] = (int) $_GET['tracking_id'];
+        }
+        if (!empty($_GET['exam_date']) && is_string($_GET['exam_date'])) {
+            $options['exam_date'] = trim($_GET['exam_date']);
+        }
+        if (!empty($_GET['all_paid'])) {
+            $options['step_codes'] = [];
+        }
+
+        try {
+            (new ExportService())->sendDownload($code, $options);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/admin/exportaciones');
+        }
     }
 }

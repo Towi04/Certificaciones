@@ -470,6 +470,33 @@ HTML;
             $log[] = "Pipeline: {$code}";
         }
 
+        $uksMapping = [
+            'columns' => [
+                ['header' => 'Matrícula', 'field' => 'matricula'],
+                ['header' => 'Apellido Paterno', 'field' => 'last_name_p'],
+                ['header' => 'Apellido Materno', 'field' => 'last_name_m'],
+                ['header' => 'Nombre(s)', 'field' => 'first_name'],
+                ['header' => 'Correo Electrónico', 'field' => 'email'],
+            ],
+            'filters' => [
+                'product_codes' => ['ELET-UKS'],
+                'purchase_status' => ['paid'],
+                'step_codes' => ['confirm_pago', 'solicitud_uks'],
+            ],
+        ];
+        $exportRepo = new \App\Repositories\ExportTemplateRepository();
+        $exportRepo->upsert('uks_elet_registro', [
+            'name' => 'UKS · Registro ELeT (Instituto DOCEO)',
+            'supplier_id' => $supplierIds['uks'],
+            'file_type' => 'csv',
+            'storage_path' => 'templates/uks_elet_registro.csv',
+            'delivery' => 'download',
+            'batch_by' => 'exam_date',
+            'mapping_json' => json_encode($uksMapping, JSON_UNESCAPED_UNICODE),
+            'is_active' => 1,
+        ]);
+        $log[] = 'Export template: uks_elet_registro';
+
         $log[] = 'Seed de catálogo completado.';
 
         return $log;
