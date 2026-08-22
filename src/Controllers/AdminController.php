@@ -834,12 +834,14 @@ final class AdminController
         }
 
         $placeholders = $this->mailTemplatePlaceholders();
+        $adminUser = Auth::user();
 
         view('admin/mail_template_edit', [
             'title' => 'Editar correo · ' . $template['name'],
             'template' => $template,
             'placeholders' => $placeholders[$code] ?? $placeholders[MailTemplateService::UKS_SOLICITUD] ?? [],
             'uksEmail' => trim(Settings::get('uks_elet_request_email', '') ?? ''),
+            'testEmailDefault' => trim((string) ($adminUser['email'] ?? '')),
             'previewVars' => MailTemplateService::sampleVarsForCode($code),
             'isUksSolicitud' => $this->isUksSolicitudTemplate($code),
             'layout' => 'admin',
@@ -905,18 +907,18 @@ final class AdminController
         }
 
         try {
-            // Sin adjuntos: mail() local (rápido). Evita colgar la página en SMTP.
-            $svc->sendUksSolicitud($to, MailTemplateService::uksSolicitudSampleVars());
+            $result = $svc->sendUksSolicitudTest($to);
             $endpoint = Mailer::lastEndpoint();
             $transport = $endpoint['transport'] ?? 'desconocido';
             $detail = $transport === 'smtp'
                 ? ' vía SMTP (' . ($endpoint['host'] ?? '') . ':' . ($endpoint['port'] ?? '') . ')'
                 : ' vía ' . $transport;
-            flash(
-                'success',
-                'Correo de prueba enviado a ' . $to . $detail
-                . '. Revisa bandeja y spam. Los documentos van como enlaces, no adjuntos.'
-            );
+            $msg = 'Correo de prueba enviado a ' . $to . $detail
+                . '. Asunto: «' . $result['subject'] . '». Revisa bandeja y spam.';
+            if (!empty($result['log_path'])) {
+                $msg .= ' Copia local: storage/logs/mail/' . basename($result['log_path']);
+            }
+            flash('success', $msg);
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }

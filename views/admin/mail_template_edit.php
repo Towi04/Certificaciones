@@ -2,6 +2,7 @@
 /** @var array<string,mixed> $template */
 /** @var list<string> $placeholders */
 /** @var string $uksEmail */
+/** @var string $testEmailDefault */
 /** @var bool $isUksSolicitud */
 /** @var array<string, string> $previewVars */
 ?>
@@ -69,14 +70,15 @@
             <?= csrf_field() ?>
             <h3 style="margin:0 0 .5rem;font-size:.95rem;color:var(--doceo-blue)">Enviar correo de prueba</h3>
             <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-bottom:.75rem">
-                Enviar a
+                Enviar a (tu correo para probar)
                 <input type="email" name="test_to" required
-                    value="<?= e($uksEmail) ?>"
+                    value="<?= e($testEmailDefault !== '' ? $testEmailDefault : $uksEmail) ?>"
                     placeholder="tu-correo@ejemplo.com"
                     style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;width:100%;max-width:360px">
             </label>
             <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
-                Correo ligero (sin adjuntos). Usa el mismo canal que el registro al alumno.
+                Por defecto usa <strong>tu correo de admin</strong>, no el destinatario UKS de producción.
+                Mismo formato que la prueba de /admin/salud (con logo DOCEO).
             </p>
             <button class="btn btn-ghost btn-sm" type="submit">Enviar prueba ahora</button>
         </form>

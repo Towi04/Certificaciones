@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Integrations\Mailer;
+use App\Mail\MailBranding;
 use App\Repositories\MailTemplateRepository;
 
 final class MailTemplateService
@@ -116,15 +117,80 @@ final class MailTemplateService
      */
     private function deliver(string $to, array $rendered, array $options = []): void
     {
+        $bodyHtml = (string) $rendered['body_html'];
+        if (empty($options['raw_html']) && !str_contains(strtolower($bodyHtml), '<!doctype')) {
+            $bodyHtml = MailBranding::wrap($bodyHtml);
+        }
+
         (new Mailer())->send(
             $to,
             $rendered['subject'],
             $rendered['body_text'],
             array_merge($options, [
                 'html' => true,
-                'body_html' => $rendered['body_html'],
+                'body_html' => $bodyHtml,
             ])
         );
+    }
+
+    /**
+     * Prueba UKS: mismo canal que /admin/salud (MailBranding + mail() local).
+     *
+     * @return array{subject: string, log_path: ?string}
+     */
+    public function sendUksSolicitudTest(string $to): array
+    {
+        $vars = self::uksSolicitudSampleVars();
+        $rendered = $this->renderUksSolicitud($vars);
+        if ($rendered === null) {
+            throw new \RuntimeException(
+                'Plantilla UKS no encontrada o desactivada. Actívala en esta página y guarda.'
+            );
+        }
+
+        $subject = '[PRUEBA] ' . $rendered['subject'];
+        $inner = $rendered['body_html']
+            . '<p style="margin-top:1.25rem;padding:.75rem;background:#fffbeb;border-radius:8px;font-size:.85rem;color:#92400e">'
+            . 'Correo de prueba DOCEO. En producción los documentos van como enlaces seguros, no adjuntos.'
+            . '</p>';
+        $html = MailBranding::wrap($inner);
+        $text = $rendered['body_text'] . "\n\n[Correo de prueba DOCEO]";
+
+        (new Mailer())->send($to, $subject, $text, [
+            'html' => true,
+            'body_html' => $html,
+            'raw_html' => true,
+        ]);
+
+        $logPath = $this->logOutboundMail($to, $subject, $text, $html);
+
+        return ['subject' => $subject, 'log_path' => $logPath];
+    }
+
+    private function logOutboundMail(string $to, string $subject, string $text, string $html): ?string
+    {
+        try {
+            $dir = BASE_PATH . '/storage/logs/mail';
+            if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
+                return null;
+            }
+            $path = $dir . '/test-' . date('Ymd-His') . '-' . bin2hex(random_bytes(3)) . '.json';
+            $json = json_encode([
+                'to' => $to,
+                'subject' => $subject,
+                'body_text' => $text,
+                'body_html' => $html,
+                'transport' => Mailer::lastEndpoint(),
+                'created_at' => date('c'),
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if ($json !== false && file_put_contents($path, $json) !== false) {
+                return $path;
+            }
+        } catch (\Throwable) {
+            // no bloquear envío
+        }
+
+        return null;
     }
 
     /** @return array<string, string> */
@@ -165,22 +231,19 @@ final class MailTemplateService
     /** @return array<string, string> */
     public static function uksSolicitudSampleVars(): array
     {
-        $sampleLink = url('/archivo/ejemplo-vista-previa');
-
         return [
             'certificacion' => 'ELeT',
             'product_name' => 'ELeT',
-            'full_name' => 'Alumno de prueba DOCEO',
+            'full_name' => 'María Ejemplo',
             'matricula' => '9999',
             'student_email' => 'alumno@ejemplo.com',
             'exam_date' => date('Y-m-d', strtotime('+7 days')),
             'exam_time' => '10:00',
-            'reglamento_url' => $sampleLink,
+            'reglamento_url' => '(enlace en producción)',
             'comprobante_url' => '',
             'documentos_html' => '<p><strong>Documentos:</strong></p><ul>'
-                . '<li><a href="' . htmlspecialchars($sampleLink) . '">Reglamento firmado</a></li>'
-                . '</ul>'
-                . '<p style="font-size:.85rem;color:#64748b">Enlaces seguros DOCEO (ejemplo en correo de prueba).</p>',
+                . '<li>Reglamento firmado (enlace seguro en el correo real)</li>'
+                . '</ul>',
             'attachment_note' => 'Documentos por enlace (sin adjuntos en el correo).',
         ];
     }
@@ -280,7 +343,7 @@ final class MailTemplateService
                     . '<li><strong>Fecha examen:</strong> {{exam_date}}</li>'
                     . '<li><strong>Hora examen:</strong> {{exam_time}}</li>'
                     . '</ul>'
-                    . '<p>{{attachment_note}}</p>'
+                    . '{{documentos_html}}'
                     . '<p>— Instituto DOCEO</p>',
             ],
             [
