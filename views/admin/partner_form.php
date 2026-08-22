@@ -101,6 +101,12 @@ $action = $isEdit
                 <?= (!$isEdit || (int) ($partner['must_change_password'] ?? 0) === 1) ? 'checked' : '' ?>>
             Debe cambiar contraseña al entrar
         </label>
+        <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
+            <input type="checkbox" name="send_email" value="1" <?= $isEdit ? '' : 'checked' ?>>
+            <?= $isEdit
+                ? 'Enviar correo con la nueva contraseña (solo si la cambias)'
+                : 'Enviar correo con usuario y contraseña' ?>
+        </label>
     </div>
 
     <?php if ($isEdit): ?>
@@ -111,7 +117,7 @@ $action = $isEdit
     <?php else: ?>
         <p class="muted" style="font-size:.85rem;margin-top:.75rem">
             Si dejas la contraseña vacía se usa la por defecto del sistema.
-            Tras crear verás la contraseña una vez en el mensaje de éxito.
+            Con el correo activado, el partner recibe enlace de login, usuario y contraseña.
         </p>
     <?php endif; ?>
 
@@ -120,3 +126,25 @@ $action = $isEdit
         <a class="btn btn-ghost" href="<?= e(url('/admin/partners')) ?>">Cancelar</a>
     </div>
 </form>
+
+<?php if ($isEdit): ?>
+<form method="post" action="<?= e(url('/admin/partners/' . $partner['id'] . '/reenviar-acceso')) ?>"
+      class="panel" style="margin-top:1rem;max-width:640px"
+      onsubmit="return confirm('Se generará una nueva contraseña temporal y se enviará al correo del partner. ¿Continuar?');">
+    <?= csrf_field() ?>
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Reenviar acceso por correo</h2>
+    <p class="muted" style="margin-top:0">
+        Útil si el partner no recibió el correo al crearlo. Genera contraseña temporal
+        (o usa la que indiques), la guarda y la envía a <strong><?= e((string) $partner['email']) ?></strong>.
+    </p>
+    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;max-width:280px">
+        Contraseña temporal (opcional)
+        <input type="text" name="password" minlength="8" autocomplete="new-password"
+               placeholder="Vacío = por defecto del sistema"
+               style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+    </label>
+    <div style="margin-top:1rem">
+        <button class="btn btn-primary" type="submit">Generar y enviar correo</button>
+    </div>
+</form>
+<?php endif; ?>
