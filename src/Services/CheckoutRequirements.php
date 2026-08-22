@@ -107,6 +107,46 @@ final class CheckoutRequirements
     }
 
     /**
+     * Documentos del expediente (después del checkout), p.ej. reglamento firmado.
+     * En config_json:
+     * "registration_docs": [{"code":"reglamento","label":"...","required":true,"accept":".pdf"}]
+     *
+     * Defaults:
+     * - certification / procedure → reglamento + firma
+     * - course → ninguno
+     *
+     * @param array<string, mixed> $product
+     * @return list<array{code:string,label:string,required:bool,accept:string}>
+     */
+    public static function registrationDocsForProduct(array $product): array
+    {
+        $cfg = self::config($product);
+        if (array_key_exists('registration_docs', $cfg) && is_array($cfg['registration_docs'])) {
+            return self::normalizeDocs($cfg['registration_docs']);
+        }
+
+        $type = (string) ($product['type'] ?? $product['product_type'] ?? '');
+        if (in_array($type, ['certification', 'procedure'], true)) {
+            return self::normalizeDocs([
+                [
+                    'code' => 'reglamento',
+                    'label' => 'Reglamento firmado (PDF)',
+                    'required' => true,
+                    'accept' => '.pdf',
+                ],
+                [
+                    'code' => 'signature',
+                    'label' => 'Firma (imagen)',
+                    'required' => true,
+                    'accept' => '.jpg,.jpeg,.png',
+                ],
+            ]);
+        }
+
+        return [];
+    }
+
+    /**
      * @param list<mixed> $rows
      * @return list<array{code:string,label:string,required:bool,accept:string}>
      */
