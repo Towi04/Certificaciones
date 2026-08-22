@@ -364,8 +364,18 @@ final class AdminController
             redirect('/admin');
         }
         try {
-            (new UksEletService())->sendSolicitudEmail($trackingId, (int) $tracking['purchase_id']);
-            flash('success', 'Correo reenviado a UKS.');
+            $uks = new UksEletService();
+            if (($tracking['current_step_code'] ?? '') !== 'solicitud_uks') {
+                $svc->setStep(
+                    $trackingId,
+                    'solicitud_uks',
+                    (int) Auth::id(),
+                    'Solicitud UKS (manual)',
+                    'waiting_provider'
+                );
+            }
+            $uks->sendSolicitudEmail($trackingId, (int) $tracking['purchase_id']);
+            flash('success', 'Correo enviado a UKS y caso en solicitud UKS.');
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }

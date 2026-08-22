@@ -119,8 +119,9 @@ No se piden otros campos (sin CURP, fecha de nacimiento, etc.).
 | Inventario códigos | No (UKS asigna por alumno tras registro) |
 | Export UKS | Sí — plantilla `uks_elet_registro` (CSV Instituto DOCEO) |
 | Import UKS | Sí — plantilla `uks_elet_reporte` (resultados + docs CENNI + folio) |
-| Email examen programado | No |
-| Email pago confirmado | No (solo panel); email solo si pago **rechazado** |
+| Email examen programado | No (accesos van en correo de folio/clave) |
+| Email pago confirmado | Sí — al alumno tras confirmar pago |
+| Email solicitud UKS | Sí — automático a UKS al confirmar pago |
 
 ## Partners
 
@@ -172,10 +173,10 @@ Plantilla **Reporte Instituto DOCEO ELET** (CSV que descargas de UKS). Ejemplo: 
 ## Implementación pendiente (Fase 1+)
 
 - [x] UI checkout: reglamento PDF + firma digital + append última página
-- [ ] Selector fecha/hora (slots 30 min) en checkout
+- [x] Selector fecha/hora (slots 30 min) en checkout
 - [ ] SPEI como método default en UI
 - [ ] Creación tracking CENNI post-examen + plazo 15 días
-- [ ] Campos admin: folio, clave del día, enlace UKS CENNI
+- [x] Campos admin: folio, clave del día (+ correo accesos examen)
 - [x] Export plantilla UKS (`uks_elet_registro`)
 - [x] Import reporte UKS (`uks_elet_reporte`) + panel alumno CENNI
 - [ ] Reagenda alumno

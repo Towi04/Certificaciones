@@ -159,6 +159,14 @@ $statusLabels = [
 </div>
 
 <?php if ($isEletUks && (string) ($tracking['purchase_status'] ?? '') === 'paid'): ?>
+<?php if (in_array($current, ['registro', 'confirm_pago'], true)): ?>
+<div class="panel" style="margin-top:1rem;border:2px solid #f59e0b;background:#fffbeb">
+    <p style="margin:0;font-size:.9rem">
+        Este caso quedó en <strong><?= e($current) ?></strong> tras confirmar el pago.
+        Usa «Reenviar correo a UKS» para moverlo a solicitud UKS y notificar a UKS.
+    </p>
+</div>
+<?php endif; ?>
 <div class="panel" style="margin-top:1rem;border:2px solid #dbeafe">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Solicitud a UKS</h2>
     <p class="muted" style="margin-top:0;font-size:.88rem">

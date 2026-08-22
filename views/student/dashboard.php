@@ -1,5 +1,6 @@
 <?php
 /** @var list<array<string,mixed>> $trackings */
+$uksElet = new \App\Services\UksEletService();
 $stepLabels = [
     'registro' => 'Registro',
     'confirm_pago' => 'Confirmación de pago',
@@ -40,16 +41,16 @@ $payLabels = [
                 <tbody>
                 <?php foreach ($trackings as $t): ?>
                     <?php
-                    $stepCode = (string) ($t['current_step_code'] ?? '');
-                    $stepLabel = $stepLabels[$stepCode] ?? $stepCode;
-                    $statusKey = (string) ($t['status'] ?? '');
+                    $portalLabels = $uksElet->studentPortalLabels($t, $stepLabels, $statusLabels);
+                    $stepLabel = $portalLabels['step'];
+                    $statusLabel = $portalLabels['status'];
                     $payKey = (string) ($t['purchase_status'] ?? '');
                     ?>
                     <tr>
                         <td><?= e($t['matricula']) ?></td>
                         <td><?= e($t['product_name']) ?></td>
                         <td><span class="pill"><?= e($payLabels[$payKey] ?? $payKey) ?></span></td>
-                        <td><span class="pill"><?= e($statusLabels[$statusKey] ?? $statusKey) ?></span></td>
+                        <td><span class="pill"><?= e($statusLabel) ?></span></td>
                         <td><?= e($stepLabel) ?></td>
                         <td><?= e($t['exam_date'] ?? '—') ?></td>
                         <td><a href="<?= e(url('/alumno/caso/' . $t['id'])) ?>">Abrir caso</a></td>

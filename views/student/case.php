@@ -18,12 +18,20 @@ $payLabels = [
     'payment_review' => 'Comprobante en revisión',
     'paid' => 'Pagado',
 ];
+$portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($tracking, [
+    'registro' => 'Registro',
+    'confirm_pago' => 'Confirmación de pago',
+    'solicitud_uks' => 'Solicitud a UKS',
+    'codigos' => 'Accesos al examen',
+    'resultados' => 'Resultados',
+    'fin' => 'Completado',
+], $statusLabels);
 ?>
 <p class="meta"><a href="<?= e(url('/alumno')) ?>">← Mi panel</a></p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)"><?= e($tracking['product_name']) ?></h1>
 <p>
     Matrícula <strong><?= e($tracking['matricula']) ?></strong>
-    · <span class="pill"><?= e($statusLabels[$tracking['status']] ?? $tracking['status']) ?></span>
+    · <span class="pill"><?= e($portalLabels['status']) ?></span>
 </p>
 <p class="muted">
     Pago: <?= e($payLabels[$tracking['purchase_status']] ?? $tracking['purchase_status']) ?>

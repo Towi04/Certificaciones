@@ -254,6 +254,49 @@ final class UksEletService
         return $key ? (string) $key : null;
     }
 
+    /**
+     * Etiquetas amigables para el panel del alumno (ELET-UKS).
+     *
+     * @param array<string, mixed> $tracking
+     * @return array{step: string, status: string}
+     */
+    public function studentPortalLabels(array $tracking, array $stepLabels, array $statusLabels): array
+    {
+        $stepCode = (string) ($tracking['current_step_code'] ?? '');
+        $statusKey = (string) ($tracking['status'] ?? '');
+        $payKey = (string) ($tracking['purchase_status'] ?? '');
+
+        $step = $stepLabels[$stepCode] ?? $stepCode;
+        $status = $statusLabels[$statusKey] ?? $statusKey;
+
+        if (!$this->isEletUksTracking($tracking)) {
+            return ['step' => $step, 'status' => $status];
+        }
+
+        if ($payKey === 'paid') {
+            if (in_array($stepCode, ['registro', 'confirm_pago'], true)) {
+                return [
+                    'step' => 'Coordinación con UKS',
+                    'status' => 'Pago confirmado · esperando UKS',
+                ];
+            }
+            if ($stepCode === 'solicitud_uks') {
+                return [
+                    'step' => 'Solicitud a UKS',
+                    'status' => 'En proceso con UKS',
+                ];
+            }
+            if ($stepCode === 'codigos' && empty($tracking['folio'])) {
+                return [
+                    'step' => 'Accesos al examen',
+                    'status' => 'Asignando folio y clave',
+                ];
+            }
+        }
+
+        return ['step' => $step, 'status' => $status];
+    }
+
     private function uksRequestEmail(): string
     {
         $fromSettings = trim((string) (Settings::get('uks_elet_request_email') ?? ''));

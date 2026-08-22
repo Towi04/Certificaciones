@@ -20,11 +20,13 @@ final class TrackingRepository
     public function forStudent(int $userId): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT t.*, pr.name AS product_name, pr.type AS product_type, pu.matricula,
-                    pu.status AS purchase_status, pu.charged_amount, pu.payment_method
+            'SELECT t.*, pr.name AS product_name, pr.type AS product_type, pr.code AS product_code,
+                    pu.matricula, pu.status AS purchase_status, pu.charged_amount, pu.payment_method,
+                    pt.code AS pipeline_code
              FROM trackings t
              JOIN products pr ON pr.id = t.product_id
              JOIN purchases pu ON pu.id = t.purchase_id
+             LEFT JOIN pipeline_templates pt ON pt.id = t.pipeline_template_id
              WHERE t.student_user_id = ?
              ORDER BY t.created_at DESC'
         );
