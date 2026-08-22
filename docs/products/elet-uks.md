@@ -96,12 +96,15 @@ No se piden otros campos (sin CURP, fecha de nacimiento, etc.).
 
 ## Pipeline ELET-UKS (`elet_uks`)
 
-1. **Registro** — reglamento firmado + datos + pago (checkout)
-2. **Confirmación de pago** (admin)
-3. **Solicitud a UKS** (admin)
-4. **Asignación de códigos** — folio + clave del día (admin)
-5. **Publicación de resultados** (admin)
-6. **Completado**
+1. **Registro** — alumno: reglamento, datos, fecha/hora examen y pago
+2. **Confirmación de pago** — admin confirma comprobante o SPEI/OXXO
+3. **Solicitud a UKS** — **automático** al confirmar pago: correo a UKS (nombre completo, fecha/hora examen, **reglamento firmado**; comprobante opcional al reenviar)
+4. **CSV UKS** — admin descarga CSV del sistema y lo sube en la plataforma UKS (manual)
+5. **Accesos examen** (`codigos`) — admin captura folio (único) y clave del día (misma fecha); correo al alumno con link, folio y clave
+6. **Resultados** — import CSV reporte UKS
+7. **Completado**
+
+**Correos al alumno:** registro (acceso campus), confirmación de pago, accesos al examen. No hay correo aparte de «examen programado».
 
 ## Pipeline CENNI ELET (`elet_cenni_uks`)
 

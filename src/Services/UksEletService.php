@@ -49,7 +49,7 @@ final class UksEletService
     }
 
     /**
-     * Tras confirmar pago: correo a UKS (nombre, fecha/hora, comprobante) y paso solicitud_uks.
+     * Tras confirmar pago: correo a UKS (nombre, fecha/hora, reglamento firmado) y paso solicitud_uks.
      */
     public function onPaymentConfirmed(int $trackingId, int $purchaseId, int $adminUserId): void
     {
@@ -66,10 +66,10 @@ final class UksEletService
             'waiting_provider'
         );
 
-        $this->sendSolicitudEmail($trackingId, $purchaseId);
+        $this->sendSolicitudEmail($trackingId, $purchaseId, false);
     }
 
-    public function sendSolicitudEmail(int $trackingId, int $purchaseId): void
+    public function sendSolicitudEmail(int $trackingId, int $purchaseId, bool $includePaymentProof = false): void
     {
         $tracking = $this->tracking->find($trackingId);
         if ($tracking === null) {
@@ -98,14 +98,31 @@ final class UksEletService
         $examTime = !empty($tracking['exam_time']) ? substr((string) $tracking['exam_time'], 0, 5) : '';
         $matricula = (string) ($tracking['matricula'] ?? $purchase['matricula']);
 
+        $reglamentoDoc = $this->findSignedReglamentoDocument($trackingId, $purchaseId);
+        if ($reglamentoDoc === null) {
+            throw new \RuntimeException(
+                'No se encontró el reglamento firmado del alumno. No se puede enviar la solicitud a UKS.'
+            );
+        }
+
+        $reglamentoPath = $this->documents->absolutePath((string) $reglamentoDoc['storage_path']);
+        if (!is_file($reglamentoPath)) {
+            throw new \RuntimeException('El archivo del reglamento firmado no está disponible en el servidor.');
+        }
+
         $subject = 'Solicitud examen ELeT · ' . $fullName . ' · ' . $matricula;
+        $attachmentNote = 'Adjunto: reglamento firmado.';
+        if ($includePaymentProof) {
+            $attachmentNote .= ' Comprobante de pago incluido.';
+        }
+
         $text = "Solicitud de registro examen ELeT — Instituto DOCEO\n\n"
             . "Alumno: {$fullName}\n"
             . "Matrícula DOCEO: {$matricula}\n"
             . "Correo alumno: " . ($tracking['student_email'] ?? '') . "\n"
             . "Fecha examen: {$examDate}\n"
             . "Hora examen: {$examTime}\n\n"
-            . "Adjunto comprobante de pago a DOCEO.\n\n"
+            . $attachmentNote . "\n\n"
             . "— Instituto DOCEO\n";
 
         $html = '<p>Solicitud de registro examen <strong>ELeT</strong> — Instituto DOCEO</p>'
@@ -116,17 +133,25 @@ final class UksEletService
             . '<li><strong>Fecha examen:</strong> ' . htmlspecialchars($examDate) . '</li>'
             . '<li><strong>Hora examen:</strong> ' . htmlspecialchars($examTime) . '</li>'
             . '</ul>'
-            . '<p>Comprobante de pago adjunto.</p>';
+            . '<p>' . htmlspecialchars($attachmentNote) . '</p>';
 
-        $attachments = [];
-        $proofPath = (string) ($purchase['payment_proof_path'] ?? '');
-        if ($proofPath !== '') {
-            $abs = $this->documents->absolutePath($proofPath);
-            if (is_file($abs)) {
-                $attachments[] = [
-                    'path' => $abs,
-                    'name' => 'comprobante-' . $matricula . '-' . basename($proofPath),
-                ];
+        $attachments = [
+            [
+                'path' => $reglamentoPath,
+                'name' => 'reglamento-firmado-' . $matricula . '.pdf',
+            ],
+        ];
+
+        if ($includePaymentProof) {
+            $proofPath = (string) ($purchase['payment_proof_path'] ?? '');
+            if ($proofPath !== '') {
+                $abs = $this->documents->absolutePath($proofPath);
+                if (is_file($abs)) {
+                    $attachments[] = [
+                        'path' => $abs,
+                        'name' => 'comprobante-' . $matricula . '-' . basename($proofPath),
+                    ];
+                }
             }
         }
 
@@ -136,12 +161,39 @@ final class UksEletService
             'attachments' => $attachments,
         ]);
 
-        $this->tracking->addLog(
-            $trackingId,
-            'solicitud_uks',
-            'Correo enviado a UKS (' . $to . ')',
-            null
-        );
+        $logNote = 'Correo a UKS (' . $to . ') · reglamento firmado';
+        if ($includePaymentProof) {
+            $logNote .= ' + comprobante';
+        }
+        $this->tracking->addLog($trackingId, 'solicitud_uks', $logNote, null);
+    }
+
+    /** @return array<string, mixed>|null */
+    private function findSignedReglamentoDocument(int $trackingId, int $purchaseId): ?array
+    {
+        foreach (['reglamento_firmado', 'reglamento'] as $docType) {
+            $stmt = $this->pdo->prepare(
+                'SELECT * FROM documents WHERE tracking_id = ? AND doc_type = ? ORDER BY id DESC LIMIT 1'
+            );
+            $stmt->execute([$trackingId, $docType]);
+            $row = $stmt->fetch();
+            if ($row) {
+                return $row;
+            }
+        }
+
+        foreach (['reglamento_firmado', 'reglamento'] as $docType) {
+            $stmt = $this->pdo->prepare(
+                'SELECT * FROM documents WHERE purchase_id = ? AND doc_type = ? ORDER BY id DESC LIMIT 1'
+            );
+            $stmt->execute([$purchaseId, $docType]);
+            $row = $stmt->fetch();
+            if ($row) {
+                return $row;
+            }
+        }
+
+        return null;
     }
 
     /**
