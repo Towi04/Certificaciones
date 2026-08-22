@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Config\Env;
 use App\Database\Connection;
+use App\Integrations\Mailer;
+use App\Mail\MailBranding;
 use App\Repositories\PartnerRepository;
 use App\Support\Settings;
 use PDO;
@@ -40,9 +43,9 @@ final class PartnerAdminService
      * @param array{
      *   email:string,password?:string,first_name:string,last_name_p:string,last_name_m?:string,phone?:string,
      *   code:string,display_name:string,tier:string,notes?:string,is_active?:bool|int|string,
-     *   must_change_password?:bool|int|string
+     *   must_change_password?:bool|int|string,send_email?:bool|int|string
      * } $data
-     * @return array{partner_id:int,user_id:int,plain_password:string}
+     * @return array{partner_id:int,user_id:int,plain_password:string,email_sent:bool,email_error:?string}
      */
     public function create(array $data): array
     {
@@ -131,10 +134,28 @@ final class PartnerAdminService
             throw $e;
         }
 
+        $emailSent = false;
+        $emailError = null;
+        $shouldEmail = array_key_exists('send_email', $data) ? !empty($data['send_email']) : true;
+        if ($shouldEmail) {
+            $mail = $this->sendAccessEmail([
+                'email' => $email,
+                'first_name' => $first,
+                'last_name_p' => $lastP,
+                'display_name' => $display,
+                'code' => $code,
+                'tier' => $tier,
+            ], $plain, true);
+            $emailSent = $mail['ok'];
+            $emailError = $mail['error'];
+        }
+
         return [
             'partner_id' => $partnerId,
             'user_id' => $userId,
             'plain_password' => $plain,
+            'email_sent' => $emailSent,
+            'email_error' => $emailError,
         ];
     }
 
@@ -142,9 +163,9 @@ final class PartnerAdminService
      * @param array{
      *   email:string,password?:string,first_name:string,last_name_p:string,last_name_m?:string,phone?:string,
      *   code:string,display_name:string,tier:string,notes?:string,is_active?:bool|int|string,
-     *   must_change_password?:bool|int|string
+     *   must_change_password?:bool|int|string,send_email?:bool|int|string
      * } $data
-     * @return array{plain_password:?string}
+     * @return array{plain_password:?string,email_sent:bool,email_error:?string}
      */
     public function update(int $partnerId, array $data): array
     {
@@ -253,6 +274,126 @@ final class PartnerAdminService
             throw $e;
         }
 
-        return ['plain_password' => $plain !== '' ? $plain : null];
+        $emailSent = false;
+        $emailError = null;
+        $shouldEmail = !empty($data['send_email']) && $plain !== '';
+        if ($shouldEmail) {
+            $mail = $this->sendAccessEmail([
+                'email' => $email,
+                'first_name' => $first,
+                'last_name_p' => $lastP,
+                'display_name' => $display,
+                'code' => $code,
+                'tier' => $tier,
+            ], $plain, false);
+            $emailSent = $mail['ok'];
+            $emailError = $mail['error'];
+        }
+
+        return [
+            'plain_password' => $plain !== '' ? $plain : null,
+            'email_sent' => $emailSent,
+            'email_error' => $emailError,
+        ];
+    }
+
+    /**
+     * @param array{
+     *   email:string,first_name:string,last_name_p:string,display_name:string,code:string,tier:string
+     * } $partner
+     * @return array{ok:bool,error:?string}
+     */
+    private function sendAccessEmail(array $partner, string $plainPassword, bool $isNew): array
+    {
+        try {
+            $name = trim($partner['first_name'] . ' ' . $partner['last_name_p']);
+            $loginUrl = rtrim((string) (Env::get('APP_URL', '') ?? ''), '/') . '/login';
+            $tierLabel = self::tierLabels()[$partner['tier']] ?? strtoupper($partner['tier']);
+            $appName = (string) (Env::get('APP_NAME', 'Instituto DOCEO') ?? 'Instituto DOCEO');
+
+            if ($isNew) {
+                $subject = 'Acceso portal partner — ' . $appName;
+                $intro = "Te creamos una cuenta de partner en {$appName}.";
+            } else {
+                $subject = 'Nueva contraseña portal partner — ' . $appName;
+                $intro = "Actualizamos el acceso de tu cuenta partner en {$appName}.";
+            }
+
+            $text = "Hola {$name},\n\n"
+                . "{$intro}\n\n"
+                . "Partner: {$partner['display_name']} ({$partner['code']})\n"
+                . "Nivel de precio: {$tierLabel}\n\n"
+                . "Inicia sesión aquí: {$loginUrl}\n"
+                . "Usuario (correo): {$partner['email']}\n"
+                . "Contraseña temporal: {$plainPassword}\n\n"
+                . "Te recomendamos cambiar la contraseña al entrar.\n\n"
+                . "— {$appName}\n";
+
+            $inner = '<p>Hola ' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . ',</p>'
+                . '<p>' . htmlspecialchars($intro, ENT_QUOTES, 'UTF-8') . '</p>'
+                . '<p><strong>Partner:</strong> ' . htmlspecialchars($partner['display_name'], ENT_QUOTES, 'UTF-8')
+                . ' (' . htmlspecialchars($partner['code'], ENT_QUOTES, 'UTF-8') . ')<br>'
+                . '<strong>Nivel de precio:</strong> ' . htmlspecialchars($tierLabel, ENT_QUOTES, 'UTF-8') . '</p>'
+                . '<p><strong>Usuario:</strong> ' . htmlspecialchars($partner['email'], ENT_QUOTES, 'UTF-8') . '<br>'
+                . '<strong>Contraseña temporal:</strong> ' . htmlspecialchars($plainPassword, ENT_QUOTES, 'UTF-8') . '</p>'
+                . '<p><a href="' . htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8') . '" style="display:inline-block;background:#315285;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;">Iniciar sesión</a></p>'
+                . '<p style="font-size:13px;color:#667;">Te recomendamos cambiar la contraseña al entrar.</p>';
+
+            (new Mailer())->send(
+                $partner['email'],
+                $subject,
+                $text,
+                ['html' => true, 'body_html' => MailBranding::wrap($inner)]
+            );
+
+            return ['ok' => true, 'error' => null];
+        } catch (\Throwable $e) {
+            error_log('[Doceo] Partner access email: ' . $e->getMessage());
+
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Genera nueva contraseña temporal y la envía por correo (para partners ya creados).
+     *
+     * @return array{plain_password:string,email_sent:bool,email_error:?string}
+     */
+    public function resetPasswordAndEmail(int $partnerId, ?string $password = null): array
+    {
+        $partner = $this->partners->find($partnerId);
+        if ($partner === null) {
+            throw new \InvalidArgumentException('Partner no encontrado.');
+        }
+
+        $plain = trim((string) ($password ?? ''));
+        if ($plain === '') {
+            $plain = Settings::defaultStudentPassword();
+        }
+        if (strlen($plain) < 8) {
+            throw new \InvalidArgumentException('La contraseña debe tener al menos 8 caracteres.');
+        }
+
+        $this->pdo->prepare(
+            'UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?'
+        )->execute([
+            password_hash($plain, PASSWORD_DEFAULT),
+            (int) $partner['user_id'],
+        ]);
+
+        $mail = $this->sendAccessEmail([
+            'email' => (string) $partner['email'],
+            'first_name' => (string) $partner['first_name'],
+            'last_name_p' => (string) $partner['last_name_p'],
+            'display_name' => (string) $partner['display_name'],
+            'code' => (string) $partner['code'],
+            'tier' => (string) $partner['tier'],
+        ], $plain, false);
+
+        return [
+            'plain_password' => $plain,
+            'email_sent' => $mail['ok'],
+            'email_error' => $mail['error'],
+        ];
     }
 }

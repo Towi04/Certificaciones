@@ -412,12 +412,19 @@ final class AdminController
                 'notes' => (string) ($_POST['notes'] ?? ''),
                 'is_active' => !empty($_POST['is_active']),
                 'must_change_password' => !empty($_POST['must_change_password']),
+                'send_email' => !empty($_POST['send_email']),
             ]);
-            flash(
-                'success',
-                'Partner creado. Contraseña temporal: ' . $result['plain_password']
-                . ' — guárdala; el partner entra en /login.'
-            );
+            $msg = 'Partner creado. Contraseña temporal: ' . $result['plain_password'];
+            if (!empty($result['email_sent'])) {
+                $msg .= ' · Correo de acceso enviado.';
+            } elseif (!empty($_POST['send_email'])) {
+                $msg .= ' · No se pudo enviar el correo'
+                    . (!empty($result['email_error']) ? ': ' . $result['email_error'] : '.')
+                    . ' Comparte la contraseña manualmente.';
+            } else {
+                $msg .= ' · Correo no solicitado; guárdala y compártela.';
+            }
+            flash('success', $msg);
             redirect('/admin/partners/' . $result['partner_id']);
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
@@ -462,12 +469,48 @@ final class AdminController
                 'notes' => (string) ($_POST['notes'] ?? ''),
                 'is_active' => !empty($_POST['is_active']),
                 'must_change_password' => !empty($_POST['must_change_password']),
+                'send_email' => !empty($_POST['send_email']),
             ]);
             $msg = 'Partner actualizado.';
             if (!empty($result['plain_password'])) {
                 $msg .= ' Nueva contraseña: ' . $result['plain_password'];
+                if (!empty($result['email_sent'])) {
+                    $msg .= ' · Correo enviado.';
+                } elseif (!empty($_POST['send_email'])) {
+                    $msg .= ' · No se pudo enviar el correo'
+                        . (!empty($result['email_error']) ? ': ' . $result['email_error'] : '.');
+                }
             }
             flash('success', $msg);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/partners/' . $partnerId);
+    }
+
+    public function partnerResendAccess(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $partnerId = (int) $id;
+        try {
+            $password = trim((string) ($_POST['password'] ?? ''));
+            $result = (new \App\Services\PartnerAdminService())->resetPasswordAndEmail(
+                $partnerId,
+                $password !== '' ? $password : null
+            );
+            $msg = 'Contraseña temporal: ' . $result['plain_password'];
+            if (!empty($result['email_sent'])) {
+                $msg = 'Correo de acceso reenviado. ' . $msg;
+                flash('success', $msg);
+            } else {
+                flash(
+                    'error',
+                    'No se pudo enviar el correo'
+                    . (!empty($result['email_error']) ? ': ' . $result['email_error'] : '.')
+                    . ' ' . $msg
+                );
+            }
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
