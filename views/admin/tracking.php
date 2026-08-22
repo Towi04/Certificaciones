@@ -170,15 +170,14 @@ $statusLabels = [
 <div class="panel" style="margin-top:1rem;border:2px solid #dbeafe">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Solicitud a UKS</h2>
     <p class="muted" style="margin-top:0;font-size:.88rem">
-        Al confirmar el pago se envía automáticamente a UKS el nombre del alumno, fecha/hora del examen y el <strong>reglamento firmado</strong>.
-        El comprobante de pago no se adjunta por defecto (sueles enviarlo por WhatsApp); puedes incluirlo al reenviar.
-        Luego descarga el CSV, súbelo en la plataforma UKS y cuando recibas folio y clave del día, captúralos abajo.
+        Al confirmar el pago se envía a UKS el nombre del alumno, fecha/hora del examen y un <strong>enlace al reglamento firmado</strong> (sin adjuntos en el correo).
+        Opcionalmente incluye enlace al comprobante. Luego descarga el CSV, súbelo en UKS y captura folio y clave abajo.
     </p>
     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/uks-solicitud')) ?>" style="margin-top:.75rem;display:flex;flex-wrap:wrap;gap:.75rem;align-items:center">
         <?= csrf_field() ?>
         <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
             <input type="checkbox" name="include_payment_proof" value="1">
-            Incluir comprobante de pago
+            Incluir enlace al comprobante de pago
         </label>
         <button type="submit" class="btn btn-ghost btn-sm">Reenviar correo a UKS</button>
     </form>

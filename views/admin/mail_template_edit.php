@@ -76,7 +76,7 @@
                     style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;width:100%;max-width:360px">
             </label>
             <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
-                Usa SMTP (no mail() local). Sin adjuntos — solo el texto como lo vería UKS.
+                Correo ligero (sin adjuntos). Usa el mismo canal que el registro al alumno.
             </p>
             <button class="btn btn-ghost btn-sm" type="submit">Enviar prueba ahora</button>
         </form>
