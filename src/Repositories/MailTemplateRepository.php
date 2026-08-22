@@ -70,4 +70,11 @@ final class MailTemplateRepository
             'UPDATE mail_templates SET subject = ?, body_html = ?, is_active = ? WHERE code = ?'
         )->execute([$subject, $bodyHtml, $isActive ? 1 : 0, $code]);
     }
+
+    public function renameCode(string $fromCode, string $toCode, string $newName): void
+    {
+        $this->pdo->prepare(
+            'UPDATE mail_templates SET code = ?, name = ? WHERE code = ?'
+        )->execute([$toCode, $newName, $fromCode]);
+    }
 }

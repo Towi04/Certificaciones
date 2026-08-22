@@ -1,16 +1,17 @@
 <?php
 /** @var list<array<string,mixed>> $templates */
 /** @var string $uksEmail */
+$uksCode = \App\Services\MailTemplateService::UKS_SOLICITUD;
 ?>
 <h1 style="margin-top:0;color:var(--doceo-blue)">Plantillas de correo</h1>
 <p class="muted">
-    Edita el asunto y el contenido HTML de los correos automáticos. Usa variables con doble llave, por ejemplo <code>{{matricula}}</code>.
+    Edita el asunto y el contenido HTML. Variables con doble llave, por ejemplo <code>{{matricula}}</code> o <code>{{certificacion}}</code>.
 </p>
 
 <div class="panel" style="margin-top:1rem;max-width:560px;border:2px solid #dbeafe">
-    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Destinatario UKS (ELeT)</h2>
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Destinatario UKS (solicitud examen)</h2>
     <p class="muted" style="margin-top:0;font-size:.88rem">
-        Correo al que se envía la solicitud de examen ELeT. Pon tu correo personal aquí para pruebas antes de usar el de UKS en producción.
+        Correo por defecto para solicitudes a UKS (todas las certificaciones). Pon tu correo para pruebas.
     </p>
     <form method="post" action="<?= e(url('/admin/correos/destinatarios')) ?>">
         <?= csrf_field() ?>
@@ -30,10 +31,7 @@
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Plantillas</h2>
   <?php if ($templates === []): ?>
-    <p class="muted">
-        No hay plantillas en la base de datos. Ejecuta el <a href="<?= e(url('/setup')) ?>">instalador / seed de catálogo</a>
-        para crear las plantillas por defecto.
-    </p>
+    <p class="muted">No hay plantillas. Abre esta página de nuevo o ejecuta el seed de catálogo.</p>
   <?php else: ?>
     <div class="table-wrap">
         <table class="data">
@@ -50,9 +48,8 @@
                     <td><?= (int) $t['is_active'] ? 'Sí' : 'No' ?></td>
                     <td>
                         <a href="<?= e(url('/admin/correos/' . $t['code'])) ?>">Editar</a>
-                        <?php if ($t['code'] === 'uks_elet_solicitud' && $uksEmail !== ''): ?>
-                            · <a href="<?= e(url('/admin/correos/' . $t['code'] . '/probar')) ?>"
-                                onclick="event.preventDefault(); document.getElementById('test-uks-form').submit();">Enviar prueba</a>
+                        <?php if ($t['code'] === $uksCode): ?>
+                            · <a href="<?= e(url('/admin/correos/' . $uksCode)) ?>#prueba">Probar</a>
                         <?php endif; ?>
                     </td>
                 </tr>
@@ -62,9 +59,3 @@
     </div>
   <?php endif; ?>
 </div>
-
-<?php if ($uksEmail !== ''): ?>
-<form id="test-uks-form" method="post" action="<?= e(url('/admin/correos/uks_elet_solicitud/probar')) ?>" hidden>
-    <?= csrf_field() ?>
-</form>
-<?php endif; ?>

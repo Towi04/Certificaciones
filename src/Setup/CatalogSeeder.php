@@ -591,11 +591,12 @@ HTML;
 
         $templates = [
             [
-                'code' => 'uks_elet_solicitud',
-                'name' => 'UKS · Solicitud examen ELeT',
-                'subject' => 'Solicitud examen ELeT · {{full_name}} · {{matricula}}',
-                'body' => '<p>Solicitud de registro examen <strong>ELeT</strong> — Instituto DOCEO</p>'
+                'code' => 'uks_solicitud',
+                'name' => 'UKS · Solicitud de examen (certificaciones)',
+                'subject' => 'Solicitud {{certificacion}} · {{full_name}} · {{matricula}}',
+                'body' => '<p>Solicitud de registro examen <strong>{{certificacion}}</strong> — Instituto DOCEO</p>'
                     . '<ul>'
+                    . '<li><strong>Certificación:</strong> {{certificacion}}</li>'
                     . '<li><strong>Alumno:</strong> {{full_name}}</li>'
                     . '<li><strong>Matrícula DOCEO:</strong> {{matricula}}</li>'
                     . '<li><strong>Correo:</strong> {{student_email}}</li>'
