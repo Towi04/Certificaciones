@@ -7,6 +7,10 @@ $stepLabels = [
     'solicitud_uks' => 'Solicitud a UKS',
     'codigos' => 'Accesos al examen',
     'resultados' => 'Resultados',
+    'opt_in' => 'Inicio trámite CENNI',
+    'uks_upload' => 'Documentos CENNI con UKS',
+    'folio' => 'Folio CENNI',
+    'seguimiento' => 'Seguimiento SEP',
     'fin' => 'Completado',
 ];
 $statusLabels = [

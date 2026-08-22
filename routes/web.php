@@ -84,6 +84,7 @@ $router->get('/admin/salud', fn () => $admin->health());
 
 $router->get('/alumno', fn () => $student->dashboard());
 $router->get('/alumno/caso/{id}', fn (string $id) => $student->caseShow($id));
+$router->post('/alumno/caso/{id}/reagenda', fn (string $id) => $student->requestReschedule($id));
 $router->post('/alumno/caso/{id}/documentos', fn (string $id) => $student->uploadRegistrationDocument($id));
 $router->post('/alumno/documentos/{id}/reenviar', fn (string $id) => $student->reuploadDocument($id));
 $router->get('/alumno/documentos/{id}/ver', fn (string $id) => $student->documentDownload($id));

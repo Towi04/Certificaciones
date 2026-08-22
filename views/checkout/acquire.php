@@ -52,7 +52,7 @@ $stepLabels = [
 
             <form method="post" action="<?= e(url('/adquirir/' . $product['slug'])) ?>" enctype="multipart/form-data" class="checkout-form panel" id="checkout-form" novalidate>
                 <?= csrf_field() ?>
-                <input type="hidden" name="payment_method" id="payment_method" value="transfer_proof">
+                <input type="hidden" name="payment_method" id="payment_method" value="<?= $openpayReady ? 'openpay_spei' : 'transfer_proof' ?>">
                 <input type="hidden" name="card_msi_months" id="card_msi_months" value="3">
                 <?php if ($needsExam): ?>
                     <input type="hidden" name="exam_date" id="exam_date" value="">
@@ -127,7 +127,14 @@ $stepLabels = [
                     <p class="muted" style="margin-top:0;font-size:.88rem">Elige cómo realizarás tu pago.</p>
 
                     <div class="pay-tiles" role="group" aria-label="Método de pago">
-                        <button type="button" class="pay-tile active" data-method="transfer_proof" data-ui="transfer" aria-pressed="true">
+                        <?php if ($openpayReady): ?>
+                            <button type="button" class="pay-tile active" data-method="openpay_spei" data-ui="spei" aria-pressed="true">
+                                <span class="pay-tile-icon" aria-hidden="true">🏦</span>
+                                <span class="pay-tile-label">SPEI</span>
+                                <span class="pay-tile-sub">CLABE única OpenPay</span>
+                            </button>
+                        <?php endif; ?>
+                        <button type="button" class="pay-tile<?= $openpayReady ? '' : ' active' ?>" data-method="transfer_proof" data-ui="transfer" aria-pressed="<?= $openpayReady ? 'false' : 'true' ?>">
                             <span class="pay-tile-icon" aria-hidden="true">🏦</span>
                             <span class="pay-tile-label">Transferencia</span>
                             <span class="pay-tile-sub">SPEI · comprobante</span>
@@ -146,7 +153,18 @@ $stepLabels = [
                         <?php endif; ?>
                     </div>
 
-                    <div id="pay-transfer-panel" class="pay-panel">
+                    <?php if ($openpayReady): ?>
+                        <div id="pay-spei-panel" class="pay-panel">
+                            <p class="muted" style="font-size:.88rem;margin:.75rem 0 .5rem">
+                                Al confirmar tu registro generaremos una CLABE SPEI única para este caso. No necesitas subir comprobante.
+                            </p>
+                            <p class="muted" style="font-size:.82rem;margin:.5rem 0 0">
+                                OpenPay notificará automáticamente a DOCEO cuando el pago quede aplicado.
+                            </p>
+                        </div>
+                    <?php endif; ?>
+
+                    <div id="pay-transfer-panel" class="pay-panel" <?= $openpayReady ? 'hidden' : '' ?>>
                         <p class="muted" style="font-size:.88rem;margin:.75rem 0 .5rem">
                             Transfiere el monto indicado en el panel derecho y sube tu comprobante.
                         </p>
@@ -361,7 +379,7 @@ $stepLabels = [
   const depositCard = <?= json_encode($depositCard, JSON_UNESCAPED_UNICODE) ?>;
 
   let quoteData = <?= json_encode($quote, JSON_UNESCAPED_UNICODE) ?>;
-  let payUi = 'transfer';
+  let payUi = openpayReady ? 'spei' : 'transfer';
   let stepIndex = 0;
 
   const form = document.getElementById('checkout-form');
@@ -376,6 +394,7 @@ $stepLabels = [
   const msiInput = document.getElementById('card_msi_months');
   const msiChips = document.getElementById('msi-chips');
   const msiMonthlyLine = document.getElementById('msi-monthly-line');
+  const speiPanel = document.getElementById('pay-spei-panel');
   const transferPanel = document.getElementById('pay-transfer-panel');
   const oxxoPanel = document.getElementById('pay-oxxo-panel');
   const msiPanel = document.getElementById('pay-msi-panel');
@@ -454,6 +473,7 @@ $stepLabels = [
   }
 
   function payMethodLabel() {
+    if (payUi === 'spei') return 'SPEI OpenPay (CLABE única)';
     if (payUi === 'transfer') return 'Transferencia SPEI (con comprobante)';
     if (payUi === 'oxxo') return 'Depósito OXXO · tarjeta ' + depositCard;
     if (payUi === 'msi') {
@@ -564,6 +584,9 @@ $stepLabels = [
     if (payUi === 'msi') {
       payHint.textContent = 'Al confirmar irás a OpenPay para pagar con tarjeta.';
       submitBtn.textContent = 'Confirmar y pagar con tarjeta';
+    } else if (payUi === 'spei') {
+      payHint.textContent = 'Al confirmar verás tu CLABE SPEI única para completar el pago.';
+      submitBtn.textContent = 'Confirmar y obtener CLABE';
     } else if (payUi === 'oxxo') {
       payHint.textContent = 'Al confirmar verás las instrucciones de depósito con tu matrícula.';
       submitBtn.textContent = 'Confirmar registro';
@@ -581,6 +604,7 @@ $stepLabels = [
       t.classList.toggle('active', on);
       t.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
+    if (speiPanel) speiPanel.hidden = ui !== 'spei';
     if (transferPanel) transferPanel.hidden = ui !== 'transfer';
     if (oxxoPanel) oxxoPanel.hidden = ui !== 'oxxo';
     if (msiPanel) msiPanel.hidden = ui !== 'msi';
@@ -727,7 +751,7 @@ $stepLabels = [
 
   renderMsiChips(quoteData.payment_options?.msi || quoteData.msi_plans || []);
   updatePriceSummary();
-  selectPayUi('transfer', 'transfer_proof');
+  selectPayUi(openpayReady ? 'spei' : 'transfer', openpayReady ? 'openpay_spei' : 'transfer_proof');
   showStep(0);
   loadExamDates();
 })();

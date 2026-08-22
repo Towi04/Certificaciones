@@ -47,10 +47,30 @@ final class StudentController
             'documents' => $svc->documentsForTracking((int) $tracking['id']),
             'registrationDocs' => $checklist,
             'logs' => $svc->logs((int) $tracking['id']),
+            'canReschedule' => $svc->canStudentRequestReschedule($tracking),
             'uksReport' => ImportService::uksReportFromTracking($tracking),
             'eletExamUrl' => (new UksEletService())->examUrl(),
             'layout' => 'student',
         ]);
+    }
+
+    public function requestReschedule(string $id): void
+    {
+        Auth::requireRole(['student']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        try {
+            (new TrackingService())->requestStudentReschedule(
+                $trackingId,
+                (int) Auth::id(),
+                trim((string) ($_POST['exam_date'] ?? '')),
+                trim((string) ($_POST['exam_time'] ?? ''))
+            );
+            flash('success', 'Solicitud de reagenda enviada. DOCEO revisará y confirmará el cambio.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/alumno/caso/' . $trackingId);
     }
 
     public function uploadRegistrationDocument(string $id): void

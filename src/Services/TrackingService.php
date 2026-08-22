@@ -427,6 +427,77 @@ final class TrackingService
         }
     }
 
+    /** @param array<string, mixed> $tracking */
+    public function canStudentRequestReschedule(array $tracking): bool
+    {
+        if ((string) ($tracking['purchase_status'] ?? '') !== 'paid') {
+            return false;
+        }
+        if (empty($tracking['exam_date']) || !empty($tracking['exam_date_2'])) {
+            return false;
+        }
+        if (!empty($tracking['results_level']) || !empty($tracking['results_url']) || !empty($tracking['cenni_folio'])) {
+            return false;
+        }
+        if (in_array((string) ($tracking['current_step_code'] ?? ''), ['resultados', 'fin'], true)) {
+            return false;
+        }
+
+        $cfg = CheckoutRequirements::config([
+            'type' => $tracking['product_type'] ?? '',
+            'config_json' => $tracking['config_json'] ?? null,
+        ]);
+        $exam = is_array($cfg['exam'] ?? null) ? $cfg['exam'] : [];
+
+        return (bool) ($exam['allow_reschedule'] ?? false);
+    }
+
+    public function requestStudentReschedule(
+        int $trackingId,
+        int $studentUserId,
+        string $examDate,
+        string $examTime
+    ): void {
+        $tracking = $this->find($trackingId);
+        if ($tracking === null || (int) $tracking['student_user_id'] !== $studentUserId) {
+            throw new \InvalidArgumentException('Caso no encontrado.');
+        }
+        if (!$this->canStudentRequestReschedule($tracking)) {
+            throw new \InvalidArgumentException('Este caso no permite solicitar reagenda desde el panel del alumno.');
+        }
+
+        $product = [
+            'type' => $tracking['product_type'] ?? '',
+            'config_json' => $tracking['config_json'] ?? null,
+        ];
+        (new ExamScheduleService())->validateSlot($product, $examDate, $examTime);
+
+        $date = $this->normalizeDate($examDate);
+        $time = $this->normalizeTime($examTime);
+        if ($date === null || $time === null) {
+            throw new \InvalidArgumentException('Selecciona fecha y hora válidas para reagendar.');
+        }
+
+        $currentDate = $this->normalizeDate($tracking['exam_date'] ?? null);
+        $currentTime = $this->normalizeTime($tracking['exam_time'] ?? null);
+        if ($date === $currentDate && $time === $currentTime) {
+            throw new \InvalidArgumentException('La nueva fecha debe ser distinta a la fecha actual.');
+        }
+
+        $this->pdo->prepare(
+            'UPDATE trackings
+             SET exam_date_2 = ?, exam_time_2 = ?, status = \'waiting_admin\'
+             WHERE id = ?'
+        )->execute([$date, $time, $trackingId]);
+
+        $this->log(
+            $trackingId,
+            'reagenda',
+            'Alumno solicitó reagenda: ' . $date . ' ' . substr($time, 0, 5),
+            $studentUserId
+        );
+    }
+
     /** Tras confirmar pago de la compra: mueve cada tracking al paso operativo. */
     public function onPaymentConfirmed(int $purchaseId, int $adminUserId, ?string $notes = null): void
     {

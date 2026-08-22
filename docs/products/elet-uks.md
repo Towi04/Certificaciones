@@ -177,9 +177,9 @@ Plantilla **Reporte Instituto DOCEO ELET** (CSV que descargas de UKS). Ejemplo: 
 
 - [x] UI checkout: reglamento PDF + firma digital + append última página
 - [x] Selector fecha/hora (slots 30 min) en checkout
-- [ ] SPEI como método default en UI
-- [ ] Creación tracking CENNI post-examen + plazo 15 días
+- [x] SPEI como método default en UI
+- [x] Creación tracking CENNI post-examen + plazo 15 días
 - [x] Campos admin: folio, clave del día (+ correo accesos examen)
 - [x] Export plantilla UKS (`uks_elet_registro`)
 - [x] Import reporte UKS (`uks_elet_reporte`) + panel alumno CENNI
-- [ ] Reagenda alumno
+- [x] Reagenda alumno

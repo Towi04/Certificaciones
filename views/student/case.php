@@ -3,7 +3,14 @@
 /** @var list<array<string,mixed>> $steps */
 /** @var list<array<string,mixed>> $documents */
 /** @var list<array<string,mixed>> $logs */
+/** @var bool $canReschedule */
 $current = (string) ($tracking['current_step_code'] ?? '');
+$extra = [];
+if (!empty($tracking['extra_json']) && is_string($tracking['extra_json'])) {
+    $decodedExtra = json_decode($tracking['extra_json'], true);
+    $extra = is_array($decodedExtra) ? $decodedExtra : [];
+}
+$cenniMeta = is_array($extra['cenni_tracking'] ?? null) ? $extra['cenni_tracking'] : [];
 $statusLabels = [
     'open' => 'En proceso',
     'waiting_admin' => 'En revisión DOCEO',
@@ -24,6 +31,10 @@ $portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($track
     'solicitud_uks' => 'Solicitud a UKS',
     'codigos' => 'Accesos al examen',
     'resultados' => 'Resultados',
+    'opt_in' => 'Inicio trámite CENNI',
+    'uks_upload' => 'Documentos CENNI con UKS',
+    'folio' => 'Folio CENNI',
+    'seguimiento' => 'Seguimiento SEP',
     'fin' => 'Completado',
 ], $statusLabels);
 ?>
@@ -61,6 +72,23 @@ $portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($track
     <?php endif; ?>
 </div>
 
+<?php if ($cenniMeta !== []): ?>
+<div class="panel" style="margin-top:1rem;border:2px solid #dbeafe">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Trámite CENNI</h2>
+    <p style="margin-top:0">
+        Inicio post-examen:
+        <strong><?= e((string) ($cenniMeta['started_at'] ?? '—')) ?></strong>
+        <?php if (!empty($cenniMeta['deadline_at'])): ?>
+            · Fecha estimada / límite UKS:
+            <strong><?= e((string) $cenniMeta['deadline_at']) ?></strong>
+        <?php endif; ?>
+    </p>
+    <p class="muted" style="font-size:.85rem;margin:0">
+        El folio CENNI suele publicarse alrededor de <?= e((string) ($cenniMeta['deadline_days'] ?? 15)) ?> días después del examen.
+    </p>
+</div>
+<?php endif; ?>
+
 <?php if (!empty($tracking['exam_date'])): ?>
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Fecha de examen</h2>
@@ -77,7 +105,32 @@ $portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($track
             <?php if (!empty($tracking['exam_time_2'])): ?>
                 <?= e(substr((string) $tracking['exam_time_2'], 0, 5)) ?>
             <?php endif; ?>
+            · pendiente de confirmación DOCEO/UKS
         </p>
+    <?php endif; ?>
+    <?php if (!empty($canReschedule)): ?>
+        <hr style="border:0;border-top:1px solid #e6ebf2;margin:1rem 0">
+        <h3 style="margin:0 0 .5rem;font-size:.95rem;color:var(--doceo-blue)">Solicitar reagenda</h3>
+        <p class="muted" style="font-size:.85rem;margin-top:0">
+            Puedes proponer una segunda fecha disponible. DOCEO revisará la solicitud con UKS antes de confirmarla.
+        </p>
+        <form method="post" action="<?= e(url('/alumno/caso/' . $tracking['id'] . '/reagenda')) ?>" id="student-reschedule-form">
+            <?= csrf_field() ?>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;max-width:520px">
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">Nueva fecha *
+                    <select name="exam_date" id="reschedule-date" required style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                        <option value="">— elige fecha —</option>
+                    </select>
+                </label>
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">Nueva hora *
+                    <select name="exam_time" id="reschedule-time" required disabled style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                        <option value="">— elige hora —</option>
+                    </select>
+                </label>
+            </div>
+            <p class="muted" id="reschedule-hint" style="font-size:.82rem;margin:.5rem 0 .85rem"></p>
+            <button class="btn btn-accent btn-sm" type="submit">Enviar solicitud de reagenda</button>
+        </form>
     <?php endif; ?>
     <?php if (!empty($tracking['zoom_url'])): ?>
         <p><a class="btn btn-accent" href="<?= e((string) $tracking['zoom_url']) ?>" target="_blank" rel="noopener">Abrir acceso Zoom</a></p>
@@ -214,4 +267,59 @@ $portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($track
             <?php endforeach; ?>
         </ul>
     </div>
+<?php endif; ?>
+
+<?php if (!empty($canReschedule)): ?>
+<script>
+(function () {
+  const slug = <?= json_encode((string) ($tracking['product_slug'] ?? ''), JSON_UNESCAPED_UNICODE) ?>;
+  const dateSelect = document.getElementById('reschedule-date');
+  const timeSelect = document.getElementById('reschedule-time');
+  const hint = document.getElementById('reschedule-hint');
+  if (!slug || !dateSelect || !timeSelect) return;
+
+  function resetTimes() {
+    timeSelect.innerHTML = '<option value="">— elige hora —</option>';
+    timeSelect.disabled = true;
+  }
+
+  fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(slug))
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok || !Array.isArray(data.dates)) return;
+      data.dates.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d;
+        opt.textContent = new Date(d + 'T12:00:00').toLocaleDateString('es-MX', {
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric'
+        });
+        dateSelect.appendChild(opt);
+      });
+      if (hint) hint.textContent = 'Anticipo mínimo: desde ' + (data.min_date || '');
+    })
+    .catch(() => {});
+
+  dateSelect.addEventListener('change', () => {
+    const date = dateSelect.value;
+    resetTimes();
+    if (!date) return;
+    fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(slug) + '?date=' + encodeURIComponent(date))
+      .then(r => r.json())
+      .then(data => {
+        if (!data.ok || !Array.isArray(data.slots)) return;
+        data.slots.forEach(slot => {
+          const opt = document.createElement('option');
+          opt.value = slot.value;
+          opt.textContent = slot.label;
+          timeSelect.appendChild(opt);
+        });
+        timeSelect.disabled = data.slots.length === 0;
+      })
+      .catch(() => {});
+  });
+})();
+</script>
 <?php endif; ?>

@@ -179,6 +179,9 @@ final class ImportService
         ]);
 
         $cenniTracking = $this->findCenniTracking((int) $tracking['purchase_id']);
+        if ($cenniTracking === null && $this->shouldStartCenniTracking($uksReport, $resultsLevel, $resultsUrl, $resultsScore)) {
+            $cenniTracking = $this->createCenniTracking($tracking, $uksReport, $adminUserId);
+        }
         if ($cenniTracking !== null) {
             $cenniExtra = $this->decodeExtra($cenniTracking['extra_json'] ?? null);
             $cenniExtra['uks_report'] = $uksReport['cenni'];
@@ -323,6 +326,204 @@ final class ImportService
         $row = $stmt->fetch();
 
         return $row ?: null;
+    }
+
+    /** @param array<string, mixed> $uksReport */
+    private function shouldStartCenniTracking(
+        array $uksReport,
+        string $resultsLevel,
+        string $resultsUrl,
+        ?float $resultsScore
+    ): bool {
+        if (trim((string) ($uksReport['exam_completed_at'] ?? '')) !== '') {
+            return true;
+        }
+        if ($resultsLevel !== '' || $resultsUrl !== '' || $resultsScore !== null) {
+            return true;
+        }
+
+        $cenni = is_array($uksReport['cenni'] ?? null) ? $uksReport['cenni'] : [];
+        if (trim((string) ($cenni['folio'] ?? '')) !== '' || trim((string) ($cenni['documentacion'] ?? '')) !== '') {
+            return true;
+        }
+        $docs = is_array($cenni['docs'] ?? null) ? $cenni['docs'] : [];
+        foreach ($docs as $doc) {
+            if (is_array($doc) && trim((string) ($doc['raw'] ?? '')) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $sourceTracking
+     * @param array<string, mixed> $uksReport
+     * @return array<string, mixed>|null
+     */
+    private function createCenniTracking(array $sourceTracking, array $uksReport, ?int $adminUserId): ?array
+    {
+        $product = $this->findProductByCode('ELET-CENNI');
+        if ($product === null) {
+            return null;
+        }
+
+        $purchaseId = (int) $sourceTracking['purchase_id'];
+        $purchaseItemId = $this->ensurePurchaseItem($purchaseId, (int) $product['id']);
+        $pipelineId = $this->resolvePipelineId($product);
+        $stepCode = $this->pipelineHasStep($pipelineId, 'uks_upload') ? 'uks_upload' : 'opt_in';
+
+        $cfg = CheckoutRequirements::config($product);
+        $deadlineDays = max(1, (int) ($cfg['deadline_days'] ?? 15));
+        $startedAt = $this->reportDateOrToday((string) ($uksReport['exam_completed_at'] ?? ''));
+        $deadlineAt = (new \DateTimeImmutable($startedAt))
+            ->modify('+' . $deadlineDays . ' days')
+            ->format('Y-m-d');
+
+        $extra = [
+            'cenni_tracking' => [
+                'source_tracking_id' => (int) $sourceTracking['id'],
+                'source_product_code' => (string) ($sourceTracking['product_code'] ?? 'ELET-UKS'),
+                'started_at' => $startedAt,
+                'deadline_at' => $deadlineAt,
+                'deadline_days' => $deadlineDays,
+            ],
+            'uks_report' => is_array($uksReport['cenni'] ?? null) ? $uksReport['cenni'] : [],
+        ];
+
+        $this->pdo->prepare(
+            'INSERT INTO trackings (
+                purchase_id, purchase_item_id, product_id, student_user_id, partner_id,
+                pipeline_template_id, current_step_code, status, extra_json
+             ) VALUES (?,?,?,?,?,?,?,?,?)'
+        )->execute([
+            $purchaseId,
+            $purchaseItemId,
+            (int) $product['id'],
+            (int) $sourceTracking['student_user_id'],
+            $sourceTracking['partner_id'] ?? null,
+            $pipelineId,
+            $stepCode,
+            'waiting_provider',
+            json_encode($extra, JSON_UNESCAPED_UNICODE),
+        ]);
+
+        $trackingId = (int) $this->pdo->lastInsertId();
+        $this->tracking->addLog(
+            $trackingId,
+            $stepCode,
+            'Tracking CENNI creado post-examen · plazo hasta ' . $deadlineAt,
+            $adminUserId
+        );
+        $this->tracking->addLog(
+            (int) $sourceTracking['id'],
+            'resultados',
+            'Tracking CENNI creado · plazo hasta ' . $deadlineAt,
+            $adminUserId
+        );
+
+        return $this->findCenniTracking($purchaseId);
+    }
+
+    /** @return array<string, mixed>|null */
+    private function findProductByCode(string $code): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM products WHERE code = ? AND is_active = 1 LIMIT 1');
+        $stmt->execute([$code]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    private function ensurePurchaseItem(int $purchaseId, int $productId): int
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT id FROM purchase_items WHERE purchase_id = ? AND product_id = ? LIMIT 1'
+        );
+        $stmt->execute([$purchaseId, $productId]);
+        $id = $stmt->fetchColumn();
+        if ($id !== false) {
+            return (int) $id;
+        }
+
+        $this->pdo->prepare(
+            'INSERT INTO purchase_items (purchase_id, product_id, unit_public_price, unit_charged_price)
+             VALUES (?, ?, 0, 0)'
+        )->execute([$purchaseId, $productId]);
+
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    /** @param array<string, mixed> $product */
+    private function resolvePipelineId(array $product): ?int
+    {
+        $pipelineCode = CheckoutRequirements::pipelineCode($product);
+        if ($pipelineCode !== null) {
+            $stmt = $this->pdo->prepare('SELECT id FROM pipeline_templates WHERE code = ? LIMIT 1');
+            $stmt->execute([$pipelineCode]);
+            $id = $stmt->fetchColumn();
+            if ($id !== false) {
+                return (int) $id;
+            }
+        }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT id FROM pipeline_templates WHERE product_type = ? ORDER BY id ASC LIMIT 1'
+        );
+        $stmt->execute([(string) ($product['type'] ?? 'procedure')]);
+        $id = $stmt->fetchColumn();
+
+        return $id !== false ? (int) $id : null;
+    }
+
+    private function pipelineHasStep(?int $pipelineId, string $stepCode): bool
+    {
+        if ($pipelineId === null || $pipelineId < 1) {
+            return false;
+        }
+        $stmt = $this->pdo->prepare(
+            'SELECT COUNT(*) FROM pipeline_steps WHERE pipeline_template_id = ? AND code = ?'
+        );
+        $stmt->execute([$pipelineId, $stepCode]);
+
+        return (int) $stmt->fetchColumn() > 0;
+    }
+
+    private function reportDateOrToday(string $raw): string
+    {
+        return $this->normalizeReportDate($raw) ?? date('Y-m-d');
+    }
+
+    private function normalizeReportDate(string $raw): ?string
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return null;
+        }
+
+        $candidates = [$raw];
+        if (str_contains($raw, 'T')) {
+            $candidates[] = str_replace('T', ' ', $raw);
+        }
+        if (preg_match('/^(.+?)\s+/', $raw, $m)) {
+            $candidates[] = $m[1];
+        }
+
+        $formats = ['Y-m-d', 'd/m/Y', 'd-m-Y', 'Y/m/d', 'm/d/Y', 'd.m.Y'];
+        foreach (array_unique($candidates) as $candidate) {
+            foreach ($formats as $format) {
+                $dt = \DateTimeImmutable::createFromFormat('!' . $format, $candidate);
+                if ($dt !== false) {
+                    return $dt->format('Y-m-d');
+                }
+            }
+        }
+
+        try {
+            return (new \DateTimeImmutable($raw))->format('Y-m-d');
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /** @param array<string, string> $row */
@@ -492,6 +693,9 @@ final class ImportService
             $decoded = is_array($extra) ? $extra : [];
         }
         $report = $decoded['uks_report'] ?? null;
+        if (is_array($report) && ($tracking['pipeline_code'] ?? '') === 'elet_cenni_uks' && !isset($report['cenni'])) {
+            return ['cenni' => $report];
+        }
 
         return is_array($report) ? $report : null;
     }
