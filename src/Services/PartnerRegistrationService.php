@@ -21,6 +21,7 @@ final class PartnerRegistrationService
     private TrackingRepository $trackings;
     private PricingService $pricing;
     private StudentAccountService $students;
+    private DocumentService $documents;
 
     public function __construct()
     {
@@ -30,6 +31,7 @@ final class PartnerRegistrationService
         $this->trackings = new TrackingRepository();
         $this->pricing = new PricingService();
         $this->students = new StudentAccountService();
+        $this->documents = new DocumentService();
     }
 
     /** @return array<string, mixed> */
@@ -52,9 +54,10 @@ final class PartnerRegistrationService
      * @param array{
      *   exam_date?:string,exam_time?:string
      * } $exam
+     * @param array<string, array{tmp_name:string,name:string,error:int,size:int}> $files
      * @return array{purchase_id:int,tracking_id:int,matricula:string,created_account:bool,plain_password:?string}
      */
-    public function register(int $partnerUserId, int $productId, array $buyer, array $exam): array
+    public function register(int $partnerUserId, int $productId, array $buyer, array $exam, array $files = []): array
     {
         $partner = $this->partnerForUser($partnerUserId);
         $product = $this->products->find($productId);
@@ -82,6 +85,11 @@ final class PartnerRegistrationService
             throw new \InvalidArgumentException('Indica la hora del examen.');
         }
 
+        $proof = $files['payment_proof'] ?? null;
+        if ($proof === null || ($proof['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            throw new \InvalidArgumentException('Sube el comprobante de pago (transferencia a DOCEO).');
+        }
+
         $this->pdo->beginTransaction();
         try {
             $account = $this->students->findOrCreate($buyer);
@@ -94,15 +102,17 @@ final class PartnerRegistrationService
                 'partner_id' => (int) $partner['id'],
                 'discount_code_id' => null,
                 'combo_id' => null,
-                'status' => 'paid',
-                'payment_method' => 'partner_account',
+                'status' => 'payment_review',
+                'payment_method' => 'transfer_proof',
                 'currency' => 'MXN',
                 'catalog_amount' => $catalog,
                 'charged_amount' => $tierPrice,
                 'partner_price_amount' => $tierPrice,
                 'partner_credit_earned' => 0.0,
             ]);
-            $this->pdo->prepare('UPDATE purchases SET paid_at = NOW() WHERE id = ?')->execute([$purchaseId]);
+
+            $stored = $this->documents->storeUploaded($proof, 'payments/' . $purchaseId, '.pdf,.jpg,.jpeg,.png');
+            $this->purchases->setPaymentProof($purchaseId, $stored['path']);
 
             $itemId = $this->purchases->addItem(
                 $purchaseId,
@@ -112,11 +122,7 @@ final class PartnerRegistrationService
             );
 
             $pipelineId = $this->resolvePipelineId((string) $product['type']);
-            $step = match ((string) $product['type']) {
-                'course' => 'alta_moodle',
-                'procedure' => 'revision',
-                default => 'examen',
-            };
+            $step = TrackingService::initialStepCode((string) $product['type'], []);
 
             $trackingId = $this->trackings->create([
                 'purchase_id' => $purchaseId,
@@ -126,7 +132,7 @@ final class PartnerRegistrationService
                 'partner_id' => (int) $partner['id'],
                 'pipeline_template_id' => $pipelineId,
                 'current_step_code' => $step,
-                'status' => $needsExam ? 'waiting_student' : 'waiting_admin',
+                'status' => TrackingService::initialStatus('transfer_proof'),
             ]);
 
             $this->pdo->prepare(
@@ -134,8 +140,9 @@ final class PartnerRegistrationService
                  VALUES (?,?,?,?)'
             )->execute([
                 $trackingId,
-                'registro',
-                'Alta partner ' . $partner['code'] . ' · matrícula ' . $matricula . ' · $' . number_format($tierPrice, 2),
+                $step,
+                'Alta partner ' . $partner['code'] . ' · matrícula ' . $matricula
+                    . ' · $' . number_format($tierPrice, 2) . ' · comprobante en revisión',
                 $partnerUserId,
             ]);
 
@@ -148,20 +155,12 @@ final class PartnerRegistrationService
         }
 
         if ($needsExam) {
-            // Solo fecha/hora principal en el alta. Reagenda (2ª fecha) y Zoom los carga admin.
+            // Guarda fecha/hora; aviso al alumno cuando admin confirme el pago.
             (new TrackingService())->saveExamSchedule($trackingId, [
                 'exam_date' => $exam['exam_date'] ?? null,
                 'exam_time' => $exam['exam_time'] ?? null,
-                'notify' => true,
+                'notify' => false,
             ], $partnerUserId);
-        }
-
-        if ((string) $product['type'] === 'course' && ($product['platform_type'] ?? '') === 'moodle') {
-            try {
-                (new MoodleEnrolmentService())->syncTracking($trackingId, $partnerUserId, true);
-            } catch (\Throwable $e) {
-                error_log('[Doceo] Partner Moodle: ' . $e->getMessage());
-            }
         }
 
         return [

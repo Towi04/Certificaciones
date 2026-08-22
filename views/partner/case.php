@@ -10,6 +10,11 @@ $current = (string) ($tracking['current_step_code'] ?? '');
     · <span class="pill"><?= e($tracking['status']) ?></span>
     · pago <?= e($tracking['purchase_status']) ?> · <?= money($tracking['charged_amount']) ?>
 </p>
+<?php if (in_array($tracking['purchase_status'] ?? '', ['awaiting_payment', 'payment_review'], true)): ?>
+    <p class="flash flash-info" style="margin-top:.75rem">
+        El comprobante está en revisión. El caso avanzará cuando administración confirme el pago.
+    </p>
+<?php endif; ?>
 <p class="muted">
     <?= e(trim(($tracking['first_name'] ?? '') . ' ' . ($tracking['last_name_p'] ?? ''))) ?>
     · <?= e($tracking['student_email']) ?>
