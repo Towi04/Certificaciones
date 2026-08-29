@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Auth\Auth;
 use App\Database\Connection;
+use App\Repositories\ProductMediaRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\TrackingRepository;
@@ -15,6 +16,7 @@ use App\Services\ExportService;
 use App\Services\ImportService;
 use App\Integrations\Mailer;
 use App\Services\MailTemplateService;
+use App\Services\ProductMediaService;
 use App\Services\TrackingService;
 use App\Services\UksEletService;
 use App\Support\Settings;
@@ -81,9 +83,17 @@ final class AdminController
 
             return;
         }
+        $media = [];
+        try {
+            $media = (new ProductMediaRepository())->forProduct((int) $product['id']);
+        } catch (\Throwable $e) {
+            error_log('[Doceo] Product media admin: ' . $e->getMessage());
+        }
+
         view('admin/product_edit', [
             'title' => 'Editar · ' . $product['name'],
             'product' => $product,
+            'media' => $media,
             'layout' => 'admin',
         ]);
     }
@@ -127,6 +137,63 @@ final class AdminController
             flash('error', $e->getMessage());
         }
         redirect('/admin/productos/' . (int) $id);
+    }
+
+    public function productLogoUpload(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $productId = (int) $id;
+        try {
+            $file = $_FILES['logo'] ?? null;
+            if ($file === null || !is_array($file)) {
+                throw new \InvalidArgumentException('Selecciona una imagen para el logo.');
+            }
+            (new ProductMediaService())->uploadLogo($productId, $file);
+            flash('success', 'Logo del producto actualizado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/productos/' . $productId);
+    }
+
+    public function productMediaStore(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $productId = (int) $id;
+        try {
+            $file = $_FILES['media_file'] ?? null;
+            if ($file === null || !is_array($file)) {
+                throw new \InvalidArgumentException('Selecciona una imagen o video.');
+            }
+            (new ProductMediaService())->addMedia(
+                $productId,
+                $file,
+                trim((string) ($_POST['title'] ?? '')),
+                trim((string) ($_POST['caption'] ?? '')),
+                (int) ($_POST['sort_order'] ?? 0),
+                !empty($_POST['is_active'])
+            );
+            flash('success', 'Multimedia agregada al producto.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/productos/' . $productId);
+    }
+
+    public function productMediaDelete(string $id, string $mediaId): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $productId = (int) $id;
+        try {
+            (new ProductMediaService())->deleteMedia($productId, (int) $mediaId);
+            flash('success', 'Multimedia eliminada.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/productos/' . $productId);
     }
 
     public function master(): void

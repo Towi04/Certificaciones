@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Auth\Auth;
+use App\Repositories\ProductMediaRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\TrackingRepository;
@@ -50,9 +51,17 @@ final class CatalogController
             return;
         }
 
+        $media = [];
+        try {
+            $media = (new ProductMediaRepository())->forProduct((int) $product['id'], true);
+        } catch (\Throwable $e) {
+            error_log('[Doceo] Product media: ' . $e->getMessage());
+        }
+
         view('catalog/show', [
             'title' => $product['name'],
             'product' => $product,
+            'media' => $media,
             'user' => Auth::user(),
         ]);
     }
