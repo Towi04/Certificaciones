@@ -6,7 +6,8 @@
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)"><?= e($product['name']) ?></h1>
 <p class="muted"><?= e($product['code']) ?> · <?= e($product['type']) ?></p>
 
-<form method="post" action="<?= e(url('/admin/productos/' . $product['id'])) ?>" class="panel" style="margin-top:1rem;max-width:560px">
+<div class="product-edit-grid">
+<form method="post" action="<?= e(url('/admin/productos/' . $product['id'])) ?>" class="panel product-edit-card">
     <?= csrf_field() ?>
 
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Campus Moodle</h2>
@@ -56,7 +57,7 @@
     </div>
 </form>
 
-<div class="panel" style="margin-top:1rem;max-width:760px">
+<div class="panel product-edit-card">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Logo / imagen de certificación</h2>
     <p class="muted" style="font-size:.88rem;margin-top:0">
         Esta imagen se muestra en la tarjeta del catálogo y en la ficha del producto.
@@ -76,7 +77,7 @@
     </div>
 </div>
 
-<div class="panel" style="margin-top:1rem;max-width:900px">
+<div class="panel product-edit-card">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Galería del producto</h2>
     <p class="muted" style="font-size:.88rem;margin-top:0">
         Agrega ejemplos de certificados, badges, CENNI o videos explicativos. Se muestran al costado derecho de la descripción pública.
@@ -141,15 +142,29 @@
     <?php endif; ?>
 </div>
 
-<div class="panel" style="margin-top:1rem;max-width:560px">
+<div class="panel product-edit-card">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Después de guardar</h2>
     <ol style="margin:0;padding-left:1.2rem" class="muted">
         <li>Confirma que /admin/salud → Moodle está OK.</li>
         <li>En un caso de ese curso: <strong>Sincronizar Moodle</strong>, o confirma un pago nuevo.</li>
     </ol>
 </div>
+</div>
 
 <style>
+.product-edit-grid {
+    display:grid;
+    grid-template-columns:repeat(2,minmax(320px,1fr));
+    gap:1rem;
+    align-items:start;
+    max-width:1180px;
+    margin-top:1rem;
+}
+.product-edit-card {
+    margin:0;
+    max-width:none;
+    min-width:0;
+}
 .product-media-admin-grid {
     display:grid;
     grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
@@ -176,5 +191,10 @@
     width:100%;
     height:100%;
     object-fit:contain;
+}
+@media (max-width: 860px) {
+    .product-edit-grid {
+        grid-template-columns:1fr;
+    }
 }
 </style>
