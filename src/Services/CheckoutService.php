@@ -13,7 +13,6 @@ use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\TrackingRepository;
 use App\Services\MailTemplateService;
-use App\Support\Settings;
 use PDO;
 
 final class CheckoutService
@@ -71,7 +70,7 @@ final class CheckoutService
 
         $allowedPay = ['transfer_proof', 'openpay_spei', 'openpay_card', 'openpay_store'];
         if (!$openpayConfigured) {
-            $allowedPay = ['transfer_proof'];
+            $allowedPay = ['transfer_proof', 'openpay_store'];
         }
         if (!in_array($paymentMethod, $allowedPay, true)) {
             throw new \InvalidArgumentException('Método de pago inválido.');
@@ -128,6 +127,7 @@ final class CheckoutService
         $trackingId = 0;
         $openpay = null;
         $redirectUrl = null;
+        $cardPaymentUrl = null;
 
         $this->pdo->beginTransaction();
         try {
@@ -135,7 +135,9 @@ final class CheckoutService
             $studentUserId = (int) $account['user']['id'];
 
             $matricula = $this->purchases->nextMatricula();
-            $status = $paymentMethod === 'transfer_proof' ? 'payment_review' : 'awaiting_payment';
+            $status = in_array($paymentMethod, ['transfer_proof', 'openpay_store'], true)
+                ? 'payment_review'
+                : 'awaiting_payment';
 
             $purchaseId = $this->purchases->create([
                 'matricula' => $matricula,
@@ -189,10 +191,10 @@ final class CheckoutService
                 $this->saveReglamentoFirmado($reglamento, $files, $purchaseId, $trackingId, $studentUserId);
             }
 
-            if ($paymentMethod === 'transfer_proof') {
+            if (in_array($paymentMethod, ['transfer_proof', 'openpay_store'], true)) {
                 $proof = $files['payment_proof'] ?? null;
                 if ($proof === null || ($proof['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
-                    throw new \InvalidArgumentException('Sube el comprobante de transferencia.');
+                    throw new \InvalidArgumentException('Sube el comprobante de pago.');
                 }
                 $stored = $this->documents->storeUploaded($proof, 'payments/' . $purchaseId, '.pdf,.jpg,.jpeg,.png');
                 $this->purchases->setPaymentProof($purchaseId, $stored['path']);
@@ -213,9 +215,7 @@ final class CheckoutService
                     $account['user'],
                     $cardMsiMonths
                 );
-                $redirectUrl = (string) ($openpay['redirect_url'] ?? '');
-            } elseif ($paymentMethod === 'openpay_store') {
-                // Depósito OXXO / tienda: número de tarjeta fijo DOCEO (sin referencia OpenPay).
+                $cardPaymentUrl = (string) ($openpay['redirect_url'] ?? '');
             }
 
             $this->pdo->commit();
@@ -244,7 +244,8 @@ final class CheckoutService
             $purchase,
             (string) $product['name'],
             $account['created'] ? $account['plain_password'] : null,
-            $paymentMethod
+            $paymentMethod,
+            $paymentMethod === 'openpay_card' ? $cardPaymentUrl : null
         );
 
         if ($account['created']) {
@@ -261,7 +262,7 @@ final class CheckoutService
             'created_account' => $account['created'],
             'plain_password' => $account['plain_password'],
             'openpay' => $openpay,
-            'redirect_url' => $redirectUrl !== '' ? $redirectUrl : null,
+            'redirect_url' => is_string($redirectUrl) && $redirectUrl !== '' ? $redirectUrl : null,
         ];
     }
 
@@ -332,12 +333,12 @@ final class CheckoutService
 
         if ($paymentMethod === 'openpay_card') {
             if (!CardMsiCalculator::isValidMonths($base, $product, $cardMsiMonths)) {
-                throw new \InvalidArgumentException('El plan MSI seleccionado no aplica para este producto.');
+                throw new \InvalidArgumentException('El plan de tarjeta seleccionado no aplica para este producto.');
             }
             if ($cardMsiMonths <= 1) {
                 return ['gross' => round($base, 2), 'fee' => 0.0, 'msi' => null];
             }
-            $p = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_CARD);
+            $p = OpenPayFeeCalculator::grossCardFromNet($base, $cardMsiMonths);
 
             return [
                 'gross' => $p['gross'],
@@ -780,7 +781,8 @@ final class CheckoutService
         array $purchase,
         string $productName,
         ?string $plainPassword,
-        string $paymentMethod
+        string $paymentMethod,
+        ?string $paymentUrl = null
     ): void {
         try {
             $mailer = new Mailer();
@@ -788,12 +790,13 @@ final class CheckoutService
             $fullName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name_p'] ?? ''));
             $matricula = (string) $purchase['matricula'];
             $amount = money($purchase['charged_amount']);
-            $depositCard = Settings::get('oxxo_deposit_card', Env::get('OXXO_DEPOSIT_CARD', '4555113010972414')) ?? '4555113010972414';
 
             $payInstructionsHtml = match ($paymentMethod) {
                 'transfer_proof' => 'Recibimos tu comprobante. Validaremos el pago y te avisaremos.',
-                'openpay_card' => 'Completa el pago con tarjeta en la página segura de OpenPay (enlace al confirmar).',
-                'openpay_store' => "Deposita en OXXO o tienda afiliada a la tarjeta {$depositCard}. Incluye tu matrícula en el depósito.",
+                'openpay_card' => $paymentUrl !== null && $paymentUrl !== ''
+                    ? 'Te enviamos el link de pago para proceder de manera segura desde el portal OpenPay de BBVA: <a href="' . htmlspecialchars($paymentUrl) . '">abrir link de pago</a>.'
+                    : 'Te enviaremos por correo el link de pago para proceder de manera segura desde el portal OpenPay de BBVA.',
+                'openpay_store' => 'Recibimos tu comprobante de depósito OXXO. Validaremos el pago y te avisaremos.',
                 default => 'Tu solicitud quedó registrada. Completa el pago SPEI con los datos de tu caso.',
             };
 
@@ -820,8 +823,10 @@ final class CheckoutService
 
             $payText = match ($paymentMethod) {
                 'transfer_proof' => "Recibimos tu comprobante. Validaremos el pago y te avisaremos.\n",
-                'openpay_card' => "Completa el pago con tarjeta en la página segura de OpenPay (enlace al confirmar).\n",
-                'openpay_store' => "Deposita en OXXO o tienda afiliada a la tarjeta {$depositCard}. Incluye tu matrícula en el depósito.\n",
+                'openpay_card' => $paymentUrl !== null && $paymentUrl !== ''
+                    ? "Te enviamos el link de pago para proceder de manera segura desde el portal OpenPay de BBVA:\n{$paymentUrl}\n"
+                    : "Te enviaremos por correo el link de pago para proceder de manera segura desde el portal OpenPay de BBVA.\n",
+                'openpay_store' => "Recibimos tu comprobante de depósito OXXO. Validaremos el pago y te avisaremos.\n",
                 default => "Tu solicitud quedó registrada. Completa el pago SPEI con los datos de tu caso.\n",
             };
 

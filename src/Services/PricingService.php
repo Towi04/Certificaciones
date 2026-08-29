@@ -161,15 +161,17 @@ final class PricingService
             if ($months <= 1) {
                 continue;
             }
-            $priced = OpenPayFeeCalculator::grossFromNet($base, OpenPayFeeCalculator::METHOD_CARD);
+            $priced = OpenPayFeeCalculator::grossCardFromNet($base, $months);
             $gross = $priced['gross'];
             $msiPlans[] = [
                 'months' => $months,
                 'base' => $base,
                 'fee' => $priced['fee'],
+                'fee_percent' => $priced['fee_percent'],
+                'fee_fixed' => $priced['fee_fixed'],
                 'total' => $gross,
                 'monthly_estimate' => round($gross / $months, 2),
-                'label' => $months . ' MSI',
+                'label' => $months . ' meses',
             ];
         }
 

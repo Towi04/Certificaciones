@@ -136,8 +136,8 @@ HTML;
                 'same_day_exception' => ['before' => '16:00', 'requires_admin' => true],
             ],
             'payments' => [
-                'default_method' => 'openpay_spei',
-                'order' => ['openpay_spei', 'transfer_proof', 'openpay_store', 'openpay_card'],
+                'default_method' => 'transfer_proof',
+                'order' => ['transfer_proof', 'openpay_store', 'openpay_card'],
                 'price_includes_fee' => false,
             ],
             'card_msi' => ['enabled' => true, 'months' => [3, 6, 9, 12], 'min_amount' => 0],
