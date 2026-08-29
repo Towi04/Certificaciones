@@ -53,6 +53,7 @@ $router->get('/admin/productos/{id}', fn (string $id) => $admin->productEdit($id
 $router->post('/admin/productos/{id}', fn (string $id) => $admin->productUpdate($id));
 $router->post('/admin/productos/{id}/logo', fn (string $id) => $admin->productLogoUpload($id));
 $router->post('/admin/productos/{id}/media', fn (string $id) => $admin->productMediaStore($id));
+$router->post('/admin/productos/{id}/media/{mediaId}', fn (string $id, string $mediaId) => $admin->productMediaUpdate($id, $mediaId));
 $router->post('/admin/productos/{id}/media/{mediaId}/eliminar', fn (string $id, string $mediaId) => $admin->productMediaDelete($id, $mediaId));
 $router->get('/admin/maestra', fn () => $admin->master());
 $router->get('/admin/pagos', fn () => $admin->payments());

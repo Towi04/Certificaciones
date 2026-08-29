@@ -211,6 +211,27 @@ final class AdminController
         redirect('/admin/productos/' . $productId);
     }
 
+    public function productMediaUpdate(string $id, string $mediaId): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $productId = (int) $id;
+        try {
+            (new ProductMediaService())->updateMedia(
+                $productId,
+                (int) $mediaId,
+                trim((string) ($_POST['title'] ?? '')),
+                trim((string) ($_POST['caption'] ?? '')),
+                (int) ($_POST['sort_order'] ?? 0),
+                !empty($_POST['is_active'])
+            );
+            flash('success', 'Multimedia actualizada.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/productos/' . $productId);
+    }
+
     public function master(): void
     {
         Auth::requireRole(['admin']);

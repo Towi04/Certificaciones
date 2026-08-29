@@ -118,6 +118,34 @@ final class ProductMediaService
         }
     }
 
+    public function updateMedia(
+        int $productId,
+        int $mediaId,
+        string $title,
+        string $caption,
+        int $sortOrder,
+        bool $isActive
+    ): void {
+        $media = $this->media->find($mediaId);
+        if ($media === null || (int) $media['product_id'] !== $productId) {
+            throw new \InvalidArgumentException('Multimedia no encontrada para este producto.');
+        }
+
+        $title = trim($title);
+        if ($title === '') {
+            $title = (string) ($media['media_type'] ?? '') === 'video'
+                ? 'Video del producto'
+                : 'Imagen del producto';
+        }
+
+        $this->media->update($mediaId, [
+            'title' => mb_substr($title, 0, 190),
+            'caption' => trim($caption) !== '' ? mb_substr(trim($caption), 0, 255) : null,
+            'sort_order' => max(0, $sortOrder),
+            'is_active' => $isActive,
+        ]);
+    }
+
     /**
      * @param array{tmp_name:string,name:string,error:int,size:int,type?:string} $file
      * @param list<string> $allowedExtensions

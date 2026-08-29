@@ -2,6 +2,14 @@
 /** @var array<string,mixed> $product */
 /** @var list<array<string,mixed>> $media */
 $media = $media ?? [];
+$youtubeThumb = static function (array $item): ?string {
+    $url = (string) ($item['external_url'] ?? '');
+    if ($url !== '' && preg_match('#/embed/([A-Za-z0-9_-]+)#', $url, $m)) {
+        return 'https://img.youtube.com/vi/' . $m[1] . '/hqdefault.jpg';
+    }
+
+    return null;
+};
 ?>
 <article class="panel" style="margin:1.25rem 0 2rem">
     <div style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:flex-start">
@@ -40,35 +48,50 @@ $media = $media ?? [];
             <?php if ($media !== []): ?>
                 <aside class="product-media-gallery" aria-label="Multimedia del producto">
                     <h2>Galería</h2>
-                    <p class="muted">Ejemplos de certificados, badges, CENNI o videos del examen.</p>
-                    <?php foreach ($media as $item): ?>
-                        <article class="product-media-card">
-                            <?php if (($item['media_type'] ?? '') === 'video' && !empty($item['external_url'])): ?>
-                                <div class="product-video-embed">
-                                    <iframe src="<?= e((string) $item['external_url']) ?>" title="<?= e((string) ($item['title'] ?? 'Video')) ?>" allowfullscreen loading="lazy"></iframe>
-                                </div>
-                            <?php elseif (($item['media_type'] ?? '') === 'video'): ?>
-                                <video src="<?= e(asset((string) $item['storage_path'])) ?>" controls preload="metadata"></video>
-                            <?php else: ?>
-                                <img src="<?= e(asset((string) $item['storage_path'])) ?>" alt="<?= e((string) ($item['title'] ?? '')) ?>">
-                            <?php endif; ?>
-                            <?php if (!empty($item['title']) || !empty($item['caption'])): ?>
-                                <div class="product-media-copy">
-                                    <?php if (!empty($item['title'])): ?>
-                                        <strong><?= e((string) $item['title']) ?></strong>
-                                    <?php endif; ?>
-                                    <?php if (!empty($item['caption'])): ?>
-                                        <p class="muted"><?= e((string) $item['caption']) ?></p>
-                                    <?php endif; ?>
-                                </div>
-                            <?php endif; ?>
-                        </article>
-                    <?php endforeach; ?>
+                    <div class="product-media-thumb-grid">
+                        <?php foreach ($media as $item): ?>
+                            <?php
+                            $isVideo = (string) ($item['media_type'] ?? '') === 'video';
+                            $externalUrl = (string) ($item['external_url'] ?? '');
+                            $mediaSrc = $externalUrl !== '' ? $externalUrl : asset((string) $item['storage_path']);
+                            $thumbSrc = $isVideo
+                                ? ($youtubeThumb($item) ?? '')
+                                : asset((string) $item['storage_path']);
+                            ?>
+                            <button
+                                type="button"
+                                class="product-media-thumb<?= $isVideo ? ' is-video' : '' ?>"
+                                data-media-type="<?= $isVideo ? 'video' : 'image' ?>"
+                                data-media-src="<?= e($mediaSrc) ?>"
+                                data-media-title="<?= e((string) ($item['title'] ?? '')) ?>"
+                                data-media-caption="<?= e((string) ($item['caption'] ?? '')) ?>"
+                            >
+                                <?php if ($thumbSrc !== ''): ?>
+                                    <img src="<?= e($thumbSrc) ?>" alt="<?= e((string) ($item['title'] ?? '')) ?>">
+                                <?php else: ?>
+                                    <span class="product-media-video-placeholder">Video</span>
+                                <?php endif; ?>
+                                <?php if ($isVideo): ?><span class="product-media-play">▶</span><?php endif; ?>
+                            </button>
+                        <?php endforeach; ?>
+                    </div>
                 </aside>
             <?php endif; ?>
         </div>
     <?php endif; ?>
 </article>
+
+<?php if ($media !== []): ?>
+<div class="product-media-modal" id="product-media-modal" hidden role="dialog" aria-modal="true" aria-label="Multimedia del producto">
+    <button type="button" class="product-media-modal-backdrop" data-media-close aria-label="Cerrar"></button>
+    <div class="product-media-modal-card">
+        <button type="button" class="product-media-modal-close" data-media-close aria-label="Cerrar">×</button>
+        <div class="product-media-modal-body" id="product-media-modal-body"></div>
+        <h3 id="product-media-modal-title"></h3>
+        <p class="muted" id="product-media-modal-caption"></p>
+    </div>
+</div>
+<?php endif; ?>
 
 <style>
 .product-detail-layout {
@@ -88,40 +111,123 @@ $media = $media ?? [];
     font-size:1.05rem;
     margin:0 0 .25rem;
 }
-.product-media-card {
-    background:#fff;
-    border:1px solid #e6ebf2;
-    border-radius:14px;
-    overflow:hidden;
-    margin-top:.85rem;
+.product-media-thumb-grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(92px,1fr));
+    gap:.65rem;
+    margin-top:.75rem;
 }
-.product-media-card img,
-.product-media-card video {
+.product-media-thumb {
+    position:relative;
+    aspect-ratio:1 / 1;
+    border:1px solid #e6ebf2;
+    border-radius:12px;
+    background:#fff;
+    padding:.35rem;
+    cursor:pointer;
+    overflow:hidden;
+}
+.product-media-thumb img {
     width:100%;
-    max-height:260px;
+    height:100%;
+    object-fit:cover;
+    border-radius:9px;
+    display:block;
+}
+.product-media-thumb:hover {
+    border-color:var(--doceo-blue);
+}
+.product-media-video-placeholder {
+    display:flex;
+    width:100%;
+    height:100%;
+    align-items:center;
+    justify-content:center;
+    color:var(--doceo-blue);
+    font-weight:700;
+    background:#eef4fc;
+    border-radius:9px;
+}
+.product-media-play {
+    position:absolute;
+    inset:auto .45rem .45rem auto;
+    width:2rem;
+    height:2rem;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:rgba(0,0,0,.72);
+    color:#fff;
+    font-size:.8rem;
+}
+.product-media-modal[hidden] {
+    display:none;
+}
+.product-media-modal {
+    position:fixed;
+    inset:0;
+    z-index:1000;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:1.25rem;
+}
+.product-media-modal-backdrop {
+    position:absolute;
+    inset:0;
+    border:0;
+    background:rgba(5,18,38,.72);
+    cursor:pointer;
+}
+.product-media-modal-card {
+    position:relative;
+    width:min(960px,100%);
+    max-height:90vh;
+    overflow:auto;
+    background:#fff;
+    border-radius:18px;
+    padding:1rem;
+    box-shadow:0 24px 80px rgba(0,0,0,.28);
+}
+.product-media-modal-close {
+    position:absolute;
+    top:.65rem;
+    right:.65rem;
+    z-index:2;
+    border:0;
+    border-radius:50%;
+    width:2rem;
+    height:2rem;
+    cursor:pointer;
+    background:#fff;
+    box-shadow:0 2px 10px rgba(0,0,0,.15);
+    font-size:1.35rem;
+    line-height:1;
+}
+.product-media-modal-body img,
+.product-media-modal-body video {
+    width:100%;
+    max-height:72vh;
     object-fit:contain;
     display:block;
     background:#f4f7fb;
+    border-radius:12px;
 }
-.product-video-embed {
-    position:relative;
+.product-media-modal-body iframe {
     width:100%;
     aspect-ratio:16 / 9;
-    background:#f4f7fb;
-}
-.product-video-embed iframe {
-    position:absolute;
-    inset:0;
-    width:100%;
-    height:100%;
     border:0;
+    display:block;
+    border-radius:12px;
+    background:#000;
 }
-.product-media-copy {
-    padding:.75rem;
+.product-media-modal-card h3 {
+    margin:.85rem 0 .25rem;
+    color:var(--doceo-blue);
 }
-.product-media-copy p {
-    margin:.25rem 0 0;
-    font-size:.85rem;
+.product-media-modal-card p {
+    margin:0;
 }
 @media (max-width: 860px) {
     .product-detail-layout {
@@ -129,3 +235,65 @@ $media = $media ?? [];
     }
 }
 </style>
+
+<?php if ($media !== []): ?>
+<script>
+(function () {
+  const modal = document.getElementById('product-media-modal');
+  const body = document.getElementById('product-media-modal-body');
+  const title = document.getElementById('product-media-modal-title');
+  const caption = document.getElementById('product-media-modal-caption');
+  if (!modal || !body || !title || !caption) return;
+
+  function openMedia(btn) {
+    const type = btn.getAttribute('data-media-type') || 'image';
+    const src = btn.getAttribute('data-media-src') || '';
+    const mediaTitle = btn.getAttribute('data-media-title') || '';
+    const mediaCaption = btn.getAttribute('data-media-caption') || '';
+    body.innerHTML = '';
+    if (type === 'video') {
+      if (src.indexOf('youtube.com/embed/') !== -1) {
+        const iframe = document.createElement('iframe');
+        iframe.src = src;
+        iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+        iframe.allowFullscreen = true;
+        body.appendChild(iframe);
+      } else {
+        const video = document.createElement('video');
+        video.src = src;
+        video.controls = true;
+        video.autoplay = true;
+        body.appendChild(video);
+      }
+    } else {
+      const img = document.createElement('img');
+      img.src = src;
+      img.alt = mediaTitle;
+      body.appendChild(img);
+    }
+    title.textContent = mediaTitle;
+    title.hidden = mediaTitle === '';
+    caption.textContent = mediaCaption;
+    caption.hidden = mediaCaption === '';
+    modal.hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeMedia() {
+    modal.hidden = true;
+    body.innerHTML = '';
+    document.body.style.overflow = '';
+  }
+
+  document.querySelectorAll('.product-media-thumb').forEach(btn => {
+    btn.addEventListener('click', () => openMedia(btn));
+  });
+  modal.querySelectorAll('[data-media-close]').forEach(btn => {
+    btn.addEventListener('click', closeMedia);
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !modal.hidden) closeMedia();
+  });
+})();
+</script>
+<?php endif; ?>

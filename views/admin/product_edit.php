@@ -74,75 +74,101 @@
     </div>
 </div>
 
-<div class="panel product-edit-card">
+<div class="panel product-edit-card product-gallery-card">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Galería del producto</h2>
 
-    <form method="post" action="<?= e(url('/admin/productos/' . $product['id'] . '/media')) ?>" enctype="multipart/form-data" style="padding:1rem;background:#f8fafc;border:1px solid #e6ebf2;border-radius:12px;margin-bottom:1rem">
-        <?= csrf_field() ?>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem">
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-                Archivo de imagen
-                <input type="file" name="media_file" accept=".jpg,.jpeg,.png,.webp,.gif,.svg">
+    <div class="product-media-admin-layout">
+        <form method="post" action="<?= e(url('/admin/productos/' . $product['id'] . '/media')) ?>" enctype="multipart/form-data" class="product-media-upload-form">
+            <?= csrf_field() ?>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem">
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    Archivo de imagen
+                    <input type="file" name="media_file" accept=".jpg,.jpeg,.png,.webp,.gif,.svg">
+                </label>
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    Video YouTube
+                    <input type="url" name="youtube_url" placeholder="https://youtu.be/..." style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                </label>
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    Título
+                    <input type="text" name="title" placeholder="Ej. Ejemplo de certificado" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                </label>
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    Orden
+                    <input type="number" name="sort_order" min="0" value="0" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                </label>
+            </div>
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-top:.75rem">
+                Descripción breve
+                <input type="text" name="caption" placeholder="Opcional" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
             </label>
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-                Video YouTube
-                <input type="url" name="youtube_url" placeholder="https://youtu.be/..." style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            <label class="muted" style="display:flex;gap:.4rem;align-items:center;margin:.85rem 0;font-size:.88rem">
+                <input type="checkbox" name="is_active" value="1" checked> Mostrar en catálogo
             </label>
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-                Título
-                <input type="text" name="title" placeholder="Ej. Ejemplo de certificado" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-            </label>
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-                Orden
-                <input type="number" name="sort_order" min="0" value="0" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-            </label>
-        </div>
-        <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-top:.75rem">
-            Descripción breve
-            <input type="text" name="caption" placeholder="Opcional" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-        </label>
-        <label class="muted" style="display:flex;gap:.4rem;align-items:center;margin:.85rem 0;font-size:.88rem">
-            <input type="checkbox" name="is_active" value="1" checked> Mostrar en catálogo
-        </label>
-        <p class="muted" style="font-size:.82rem;margin:.5rem 0 .85rem">
-            Sube una imagen o pega un link de YouTube. Si llenas ambos, se usará el video de YouTube.
-        </p>
-        <button class="btn btn-accent btn-sm" type="submit">Agregar multimedia</button>
-    </form>
+            <p class="muted" style="font-size:.82rem;margin:.5rem 0 .85rem">
+                Sube una imagen o pega un link de YouTube. Si llenas ambos, se usará el video de YouTube.
+            </p>
+            <button class="btn btn-accent btn-sm" type="submit">Agregar multimedia</button>
+        </form>
 
-    <?php if ($media === []): ?>
-        <p class="muted" style="margin:0">Aún no hay multimedia para este producto.</p>
-    <?php else: ?>
-        <div class="product-media-admin-grid">
-            <?php foreach ($media as $item): ?>
-                <article class="product-media-admin-item">
-                    <div class="product-media-admin-preview">
-                        <?php if (($item['media_type'] ?? '') === 'video' && !empty($item['external_url'])): ?>
-                            <iframe src="<?= e((string) $item['external_url']) ?>" title="<?= e((string) ($item['title'] ?? 'Video')) ?>" allowfullscreen loading="lazy"></iframe>
-                        <?php elseif (($item['media_type'] ?? '') === 'video'): ?>
-                            <video src="<?= e(asset((string) $item['storage_path'])) ?>" controls preload="metadata"></video>
-                        <?php else: ?>
-                            <img src="<?= e(asset((string) $item['storage_path'])) ?>" alt="">
-                        <?php endif; ?>
-                    </div>
-                    <div>
-                        <strong><?= e((string) ($item['title'] ?: 'Sin título')) ?></strong>
-                        <p class="muted" style="font-size:.82rem;margin:.25rem 0">
-                            <?= e((string) $item['media_type']) ?> · orden <?= (int) $item['sort_order'] ?>
-                            · <?= !empty($item['is_active']) ? 'visible' : 'oculto' ?>
-                        </p>
-                        <?php if (!empty($item['caption'])): ?>
-                            <p class="muted" style="font-size:.82rem;margin:.25rem 0"><?= e((string) $item['caption']) ?></p>
-                        <?php endif; ?>
-                        <form method="post" action="<?= e(url('/admin/productos/' . $product['id'] . '/media/' . $item['id'] . '/eliminar')) ?>" onsubmit="return confirm('¿Eliminar este recurso multimedia?')" style="margin-top:.5rem">
-                            <?= csrf_field() ?>
-                            <button class="btn btn-ghost btn-sm" type="submit">Eliminar</button>
-                        </form>
-                    </div>
-                </article>
-            <?php endforeach; ?>
+        <div class="product-media-admin-list">
+            <?php if ($media === []): ?>
+                <p class="muted" style="margin:0">Aún no hay multimedia para este producto.</p>
+            <?php else: ?>
+                <div class="product-media-admin-grid">
+                    <?php foreach ($media as $item): ?>
+                        <article class="product-media-admin-item">
+                            <div class="product-media-admin-preview">
+                                <?php if (($item['media_type'] ?? '') === 'video' && !empty($item['external_url'])): ?>
+                                    <iframe src="<?= e((string) $item['external_url']) ?>" title="<?= e((string) ($item['title'] ?? 'Video')) ?>" allowfullscreen loading="lazy"></iframe>
+                                <?php elseif (($item['media_type'] ?? '') === 'video'): ?>
+                                    <video src="<?= e(asset((string) $item['storage_path'])) ?>" controls preload="metadata"></video>
+                                <?php else: ?>
+                                    <img src="<?= e(asset((string) $item['storage_path'])) ?>" alt="">
+                                <?php endif; ?>
+                            </div>
+                            <div>
+                                <strong><?= e((string) ($item['title'] ?: 'Sin título')) ?></strong>
+                                <p class="muted" style="font-size:.82rem;margin:.25rem 0">
+                                    <?= e((string) $item['media_type']) ?> · orden <?= (int) $item['sort_order'] ?>
+                                    · <?= !empty($item['is_active']) ? 'visible' : 'oculto' ?>
+                                </p>
+                                <?php if (!empty($item['caption'])): ?>
+                                    <p class="muted" style="font-size:.82rem;margin:.25rem 0"><?= e((string) $item['caption']) ?></p>
+                                <?php endif; ?>
+                                <div class="product-media-actions">
+                                    <details class="product-media-edit">
+                                        <summary class="btn btn-primary btn-sm">Editar</summary>
+                                        <form method="post" action="<?= e(url('/admin/productos/' . $product['id'] . '/media/' . $item['id'])) ?>" class="product-media-edit-form">
+                                            <?= csrf_field() ?>
+                                            <label>Título
+                                                <input type="text" name="title" value="<?= e((string) ($item['title'] ?? '')) ?>">
+                                            </label>
+                                            <label>Orden
+                                                <input type="number" name="sort_order" min="0" value="<?= (int) ($item['sort_order'] ?? 0) ?>">
+                                            </label>
+                                            <label>Descripción breve
+                                                <input type="text" name="caption" value="<?= e((string) ($item['caption'] ?? '')) ?>">
+                                            </label>
+                                            <label class="product-media-check">
+                                                <input type="checkbox" name="is_active" value="1" <?= !empty($item['is_active']) ? 'checked' : '' ?>>
+                                                Mostrar en catálogo
+                                            </label>
+                                            <button class="btn btn-accent btn-sm" type="submit">Guardar cambios</button>
+                                        </form>
+                                    </details>
+                                    <form method="post" action="<?= e(url('/admin/productos/' . $product['id'] . '/media/' . $item['id'] . '/eliminar')) ?>" onsubmit="return confirm('¿Eliminar este recurso multimedia?')">
+                                        <?= csrf_field() ?>
+                                        <button class="btn btn-ghost btn-sm" type="submit">Eliminar</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
         </div>
-    <?php endif; ?>
+    </div>
 </div>
 </div>
 
@@ -158,6 +184,24 @@
 .product-edit-card {
     margin:0;
     max-width:none;
+    min-width:0;
+}
+.product-gallery-card {
+    grid-column:1 / -1;
+}
+.product-media-admin-layout {
+    display:grid;
+    grid-template-columns:minmax(280px,420px) minmax(0,1fr);
+    gap:1rem;
+    align-items:start;
+}
+.product-media-upload-form {
+    padding:1rem;
+    background:#f8fafc;
+    border:1px solid #e6ebf2;
+    border-radius:12px;
+}
+.product-media-admin-list {
     min-width:0;
 }
 .product-media-admin-grid {
@@ -189,8 +233,60 @@
     object-fit:contain;
     border:0;
 }
+.product-media-actions {
+    display:flex;
+    align-items:flex-start;
+    gap:.5rem;
+    flex-wrap:wrap;
+    margin-top:.55rem;
+}
+.product-media-edit {
+    flex:1 1 100%;
+}
+.product-media-edit summary {
+    cursor:pointer;
+    display:inline-flex;
+    list-style:none;
+}
+.product-media-edit summary::-webkit-details-marker {
+    display:none;
+}
+.product-media-edit[open] summary {
+    margin-bottom:.6rem;
+}
+.product-media-edit-form {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+    gap:.55rem;
+    padding:.75rem;
+    border:1px solid #e6ebf2;
+    border-radius:10px;
+    background:#f8fafc;
+}
+.product-media-edit-form label {
+    display:flex;
+    flex-direction:column;
+    gap:.25rem;
+    font-size:.78rem;
+    color:var(--doceo-muted);
+    font-weight:600;
+}
+.product-media-edit-form input[type="text"],
+.product-media-edit-form input[type="number"] {
+    padding:.45rem .55rem;
+    border:1px solid #cfd8e6;
+    border-radius:8px;
+}
+.product-media-check {
+    flex-direction:row !important;
+    align-items:center;
+    grid-column:1 / -1;
+}
 @media (max-width: 860px) {
     .product-edit-grid {
+        grid-template-columns:1fr;
+    }
+    .product-media-admin-layout {
         grid-template-columns:1fr;
     }
 }
