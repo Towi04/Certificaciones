@@ -335,15 +335,12 @@ final class CheckoutService
             if (!CardMsiCalculator::isValidMonths($base, $product, $cardMsiMonths)) {
                 throw new \InvalidArgumentException('El plan de tarjeta seleccionado no aplica para este producto.');
             }
-            if ($cardMsiMonths <= 1) {
-                return ['gross' => round($base, 2), 'fee' => 0.0, 'msi' => null];
-            }
             $p = OpenPayFeeCalculator::grossCardFromNet($base, $cardMsiMonths);
 
             return [
                 'gross' => $p['gross'],
                 'fee' => $p['fee'],
-                'msi' => $cardMsiMonths,
+                'msi' => $cardMsiMonths > 1 ? $cardMsiMonths : null,
             ];
         }
 
