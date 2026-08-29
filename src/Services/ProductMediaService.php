@@ -9,8 +9,8 @@ use App\Repositories\ProductRepository;
 
 final class ProductMediaService
 {
-    private const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-    private const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    private const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'];
+    private const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml', 'text/plain', 'application/xml', 'text/xml'];
 
     private ProductMediaRepository $media;
     private ProductRepository $products;
@@ -148,6 +148,10 @@ final class ProductMediaService
         if (!in_array($mime, self::IMAGE_MIMES, true)) {
             throw new \InvalidArgumentException('Tipo MIME no permitido para multimedia de producto.');
         }
+        if ($extension === 'svg') {
+            $this->assertSafeSvg((string) $file['tmp_name']);
+            $mime = 'image/svg+xml';
+        }
 
         $relativeDir = '/uploads/products/' . $productId;
         $targetDir = BASE_PATH . '/public' . $relativeDir;
@@ -202,6 +206,34 @@ final class ProductMediaService
         }
 
         return 'https://www.youtube.com/embed/' . $videoId;
+    }
+
+    private function assertSafeSvg(string $path): void
+    {
+        $content = file_get_contents($path);
+        if ($content === false || trim($content) === '') {
+            throw new \InvalidArgumentException('No se pudo leer el SVG.');
+        }
+
+        $lower = strtolower($content);
+        $blocked = [
+            '<script',
+            '<foreignobject',
+            'javascript:',
+            'data:text/html',
+        ];
+        foreach ($blocked as $needle) {
+            if (str_contains($lower, $needle)) {
+                throw new \InvalidArgumentException('El SVG contiene contenido no permitido.');
+            }
+        }
+        if (preg_match('/\son[a-z]+\s*=/i', $content)) {
+            throw new \InvalidArgumentException('El SVG contiene eventos no permitidos.');
+        }
+
+        if (!str_contains($lower, '<svg')) {
+            throw new \InvalidArgumentException('El archivo no parece ser un SVG válido.');
+        }
     }
 
     private function absolutePublicPath(string $path): string
