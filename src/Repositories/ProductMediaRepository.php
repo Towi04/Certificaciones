@@ -72,6 +72,22 @@ final class ProductMediaRepository
         $this->pdo->prepare('DELETE FROM product_media WHERE id = ?')->execute([$id]);
     }
 
+    /** @param array<string, mixed> $data */
+    public function update(int $id, array $data): void
+    {
+        $this->pdo->prepare(
+            'UPDATE product_media
+             SET title = ?, caption = ?, sort_order = ?, is_active = ?
+             WHERE id = ?'
+        )->execute([
+            $data['title'],
+            $data['caption'],
+            $data['sort_order'],
+            !empty($data['is_active']) ? 1 : 0,
+            $id,
+        ]);
+    }
+
     private function ensureSchema(): void
     {
         if (self::$schemaEnsured) {
