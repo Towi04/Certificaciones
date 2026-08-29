@@ -51,7 +51,30 @@ final class OpenPayFeeCalculator
         $net = round(max(0, $net), 2);
         [$percent, $fixed] = self::ratesForCardMonths($months);
 
-        return self::grossFromNetWithRates($net, $percent, $fixed);
+        $pass = self::passToCustomer();
+        if (!$pass || ($percent <= 0 && $fixed <= 0)) {
+            return [
+                'net' => $net,
+                'fee' => 0.0,
+                'gross' => $net,
+                'fee_percent' => $percent,
+                'fee_fixed' => $fixed,
+                'pass_to_customer' => false,
+            ];
+        }
+
+        $feeBase = ($net * ($percent / 100)) + $fixed;
+        $feeWithTax = round($feeBase + ($feeBase * 0.16), 2);
+        $gross = round($net + $feeWithTax, 2);
+
+        return [
+            'net' => $net,
+            'fee' => round(max(0, $gross - $net), 2),
+            'gross' => $gross,
+            'fee_percent' => $percent,
+            'fee_fixed' => $fixed,
+            'pass_to_customer' => true,
+        ];
     }
 
     /**
@@ -97,22 +120,25 @@ final class OpenPayFeeCalculator
     private static function ratesForCardMonths(int $months): array
     {
         $months = max(1, $months);
-        $defaultPercent = self::floatSetting('openpay_fee_card_percent', 'OPENPAY_FEE_CARD_PERCENT', 3.5);
-        $defaultFixed = self::floatSetting('openpay_fee_card_fixed', 'OPENPAY_FEE_CARD_FIXED', 0.0);
-        if ($months <= 1) {
-            return [$defaultPercent, $defaultFixed];
-        }
+        $defaultByMonths = [
+            1 => 2.9,
+            3 => 7.7,
+            6 => 10.7,
+            9 => 13.7,
+            12 => 16.7,
+        ];
+        $defaultPercentForMonths = $defaultByMonths[$months] ?? 2.9;
 
         return [
             self::floatSetting(
                 'openpay_fee_card_msi_' . $months . '_percent',
                 'OPENPAY_FEE_CARD_MSI_' . $months . '_PERCENT',
-                $defaultPercent
+                $defaultPercentForMonths
             ),
             self::floatSetting(
                 'openpay_fee_card_msi_' . $months . '_fixed',
                 'OPENPAY_FEE_CARD_MSI_' . $months . '_FIXED',
-                $defaultFixed
+                2.5
             ),
         ];
     }
@@ -130,8 +156,8 @@ final class OpenPayFeeCalculator
                 self::floatSetting('openpay_fee_store_fixed', 'OPENPAY_FEE_STORE_FIXED', 10.0),
             ],
             default => [
-                self::floatSetting('openpay_fee_card_percent', 'OPENPAY_FEE_CARD_PERCENT', 3.5),
-                self::floatSetting('openpay_fee_card_fixed', 'OPENPAY_FEE_CARD_FIXED', 0.0),
+                self::floatSetting('openpay_fee_card_percent', 'OPENPAY_FEE_CARD_PERCENT', 2.9),
+                self::floatSetting('openpay_fee_card_fixed', 'OPENPAY_FEE_CARD_FIXED', 2.5),
             ],
         };
     }

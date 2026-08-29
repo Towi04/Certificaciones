@@ -158,9 +158,6 @@ final class PricingService
         $msiPlans = [];
         foreach (CardMsiCalculator::optionsFor($base, $product) as $plan) {
             $months = (int) ($plan['months'] ?? 1);
-            if ($months <= 1) {
-                continue;
-            }
             $priced = OpenPayFeeCalculator::grossCardFromNet($base, $months);
             $gross = $priced['gross'];
             $msiPlans[] = [
@@ -171,7 +168,7 @@ final class PricingService
                 'fee_fixed' => $priced['fee_fixed'],
                 'total' => $gross,
                 'monthly_estimate' => round($gross / $months, 2),
-                'label' => $months . ' meses',
+                'label' => $months === 1 ? '1 exhibición' : $months . ' meses',
             ];
         }
 

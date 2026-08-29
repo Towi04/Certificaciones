@@ -53,7 +53,7 @@ $stepLabels = [
             <form method="post" action="<?= e(url('/adquirir/' . $product['slug'])) ?>" enctype="multipart/form-data" class="checkout-form panel" id="checkout-form" novalidate>
                 <?= csrf_field() ?>
                 <input type="hidden" name="payment_method" id="payment_method" value="transfer_proof">
-                <input type="hidden" name="card_msi_months" id="card_msi_months" value="3">
+                <input type="hidden" name="card_msi_months" id="card_msi_months" value="1">
                 <?php if ($needsExam): ?>
                     <input type="hidden" name="exam_date" id="exam_date" value="">
                     <input type="hidden" name="exam_time" id="exam_time" value="">
@@ -442,10 +442,7 @@ $stepLabels = [
       priceFinal.style.display = 'none';
     }
     if (sidebarPayNote) {
-      const plan = payUi === 'msi' ? selectedCardPlan() : null;
-      sidebarPayNote.textContent = plan
-        ? 'Total con tarjeta de crédito' + (Number(plan.fee || 0) > 0 ? ' (incluye comisión OpenPay)' : '')
-        : 'Total a pagar';
+      sidebarPayNote.textContent = 'Total a pagar';
     }
   }
 
@@ -567,7 +564,7 @@ $stepLabels = [
 
   function activeMsiMonths() {
     const chip = msiChips && msiChips.querySelector('.msi-chip.active');
-    return chip ? Number(chip.getAttribute('data-months') || 3) : 3;
+    return chip ? Number(chip.getAttribute('data-months') || 1) : 1;
   }
 
   function updateMsiDisplay() {
@@ -575,9 +572,11 @@ $stepLabels = [
     const months = activeMsiMonths();
     const plans = cardPlans();
     const plan = plans.find(p => Number(p.months) === months) || plans[0];
-    if (plan && Number(plan.months) > 1) {
-      msiMonthlyLine.textContent = Number(plan.months) + ' pagos aprox. de ' + money(plan.monthly_estimate)
-        + ' · Total ' + money(plan.total);
+    if (plan) {
+      const months = Number(plan.months);
+      msiMonthlyLine.textContent = months <= 1
+        ? '1 exhibición · Total ' + money(plan.total)
+        : months + ' pagos aprox. de ' + money(plan.monthly_estimate) + ' · Total ' + money(plan.total);
     } else {
       msiMonthlyLine.textContent = '';
     }
@@ -590,7 +589,7 @@ $stepLabels = [
       return;
     }
     if (payUi === 'msi') {
-      payHint.textContent = 'Te enviaremos por correo el link de pago seguro de OpenPay BBVA.';
+      payHint.textContent = '';
       submitBtn.textContent = 'Confirmar registro';
     } else if (payUi === 'oxxo') {
       payHint.textContent = 'Sube tu comprobante de depósito para revisión.';
@@ -621,7 +620,7 @@ $stepLabels = [
     }
     if (ui === 'msi' && msiChips) {
       const chip = msiChips.querySelector('.msi-chip.active') || msiChips.querySelector('.msi-chip');
-      if (chip) msiInput.value = chip.getAttribute('data-months') || '3';
+      if (chip) msiInput.value = chip.getAttribute('data-months') || '1';
       updateMsiDisplay();
     } else {
       msiInput.value = '1';
@@ -648,17 +647,18 @@ $stepLabels = [
 
   function renderMsiChips(plans) {
     if (!msiChips) return;
-    const list = (Array.isArray(plans) ? plans : []).filter(p => Number(p.months) > 1);
+    const list = (Array.isArray(plans) ? plans : []).filter(p => Number(p.months) >= 1);
     if (list.length === 0) {
       msiChips.innerHTML = '<span class="muted">Tarjeta no disponible.</span>';
       return;
     }
     msiChips.innerHTML = list.map((p, i) => {
       const m = Number(p.months);
+      const label = m <= 1 ? '1 exhibición' : m + ' meses';
       return '<button type="button" class="msi-chip' + (i === 0 ? ' active' : '') + '" data-months="' + m + '">'
-        + '<span>' + m + ' meses</span><small>Total ' + money(p.total) + '</small></button>';
+        + '<span>' + label + '</span><small>Total ' + money(p.total) + '</small></button>';
     }).join('');
-    msiInput.value = String(list[0].months || 3);
+    msiInput.value = String(list[0].months || 1);
     updateMsiDisplay();
   }
 

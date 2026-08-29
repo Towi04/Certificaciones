@@ -17,13 +17,11 @@ $youtubeThumb = static function (array $item): ?string {
             <img src="<?= e(asset(!empty($product['logo_path']) ? (string) $product['logo_path'] : '/assets/brand/logo.png')) ?>" alt="" style="max-height:120px;max-width:100%;object-fit:contain">
         </div>
         <div style="flex:1;min-width:240px">
-            <div class="meta"><?= e($product['certifier_name'] ?? '') ?> · <?= e(category_label((string) $product['category'])) ?></div>
             <h1 style="margin:.25rem 0 .5rem;color:var(--doceo-blue)"><?= e($product['name']) ?></h1>
             <?php if (!empty($product['short_description'])): ?>
                 <p class="muted"><?= e($product['short_description']) ?></p>
             <?php endif; ?>
             <p class="price" style="font-size:1.6rem;margin:.5rem 0"><?= money($product['catalog_price']) ?></p>
-            <p class="muted" style="font-size:.85rem">Precio de lista en catálogo. Al adquirir podrás aplicar un código promocional o de partner.</p>
             <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem">
                 <a class="btn btn-accent" href="<?= e(url('/adquirir/' . $product['slug'])) ?>">Adquirir</a>
                 <a class="btn btn-ghost" href="<?= e(url('/catalogo')) ?>">Volver al catálogo</a>

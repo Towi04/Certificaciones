@@ -140,7 +140,7 @@ HTML;
                 'order' => ['transfer_proof', 'openpay_store', 'openpay_card'],
                 'price_includes_fee' => false,
             ],
-            'card_msi' => ['enabled' => true, 'months' => [3, 6, 9, 12], 'min_amount' => 0],
+            'card_msi' => ['enabled' => true, 'months' => [1, 3, 6, 9, 12], 'min_amount' => 0],
             'emails' => [
                 'payment_confirmed' => true,
                 'exam_scheduled' => true,
