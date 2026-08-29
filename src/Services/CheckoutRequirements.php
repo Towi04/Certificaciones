@@ -166,16 +166,28 @@ final class CheckoutRequirements
     {
         $cfg = self::config($product);
         $reg = $cfg['reglamento'] ?? null;
-        if (!is_array($reg) || empty($reg['template_path'])) {
+        if (!is_array($reg)) {
             return null;
         }
 
-        $path = (string) $reg['template_path'];
-        $url = str_starts_with($path, 'http') ? $path : asset($path);
+        $path = trim((string) ($reg['template_path'] ?? ''));
+        $sourceUrl = trim((string) ($reg['source_url'] ?? ''));
+        if ($path === '' && $sourceUrl === '') {
+            return null;
+        }
+
+        if ($path !== '' && str_starts_with($path, 'http')) {
+            $url = $path;
+        } elseif ($path !== '') {
+            $url = asset($path);
+        } else {
+            $url = $sourceUrl;
+        }
 
         return [
-            'template_path' => $path,
+            'template_path' => $path !== '' ? $path : $sourceUrl,
             'template_url' => $url,
+            'source_url' => $sourceUrl !== '' ? $sourceUrl : null,
             'doc_code' => (string) ($reg['doc_code'] ?? 'reglamento_firmado'),
             'required_before_checkout' => (bool) ($reg['required_before_checkout'] ?? true),
         ];

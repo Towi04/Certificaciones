@@ -17,6 +17,19 @@ CheckoutRequirements::config($product)
 El merge es profundo: las claves del producto pisan las del grupo. Las listas
 (indexadas) se reemplazan completas.
 
+## Qué se configura desde Admin (sin tocar código)
+
+En **Admin → Grupos → Editar** puedes ajustar con formularios:
+
+| Área | Campos |
+|------|--------|
+| Horarios de aplicación | Pedir fecha/hora en checkout, minutos por bloque, anticipo, Lun–Vie, sábado |
+| Fechas bloqueadas | Vacaciones/cierres (`YYYY-MM-DD`, una por línea). Solo afectan a grupos que piden agenda |
+| Reglamento | Activar/desactivar, ruta o URL de la plantilla PDF, link externo, código de documento |
+
+Los grupos que deben estar “siempre disponibles” dejan desmarcada la opción de agenda
+en checkout; las fechas bloqueadas no les aplican.
+
 ## Grupos sembrados
 
 | Código | Uso |
@@ -31,12 +44,31 @@ El merge es profundo: las claves del producto pisan las del grupo. Las listas
 
 ## Cómo agregar un producto nuevo sin empezar de cero
 
-1. Elige (o crea) el grupo del proveedor con el proceso deseado.
-2. Crea el producto con `product_group_id` apuntando a ese grupo.
-3. Deja `products.config_json` vacío (`{}`) salvo overrides puntuales.
-4. Sube logo/galería y edita descripción/precios en admin.
+1. Crea o elige el **proveedor** en Admin → Proveedores.
+2. Desde el proveedor (o en Grupos) crea el **grupo de proceso** (horarios, reglamento, pagos).
+3. Opcional: sube un CSV de certificaciones desde la ficha del proveedor.
+4. Afina cada producto en Admin → Productos (descripción, logo, galería).
+5. Ajusta precios en lote en Admin → Precios (tabla o CSV).
 
-En admin: **Productos → Editar → Grupo de proceso (proveedor)**.
+## Precios masivos
+
+| Acción | Ruta |
+|--------|------|
+| Tabla editable | `/admin/precios` |
+| Plantilla CSV | `/admin/precios/plantilla.csv` |
+| Importar CSV | POST `/admin/precios/import` |
+
+Columnas CSV: `code,name,public_price,catalog_price,cost_price,price_cncm,price_partner_a,price_partner_b,price_partner_c`.
+
+La edición de precios por producto individual se mantiene.
+
+## Proveedores
+
+| Acción | Ruta |
+|--------|------|
+| Listado / alta / edición | `/admin/proveedores` |
+| Alta masiva de certificaciones | ficha del proveedor + CSV |
+| Plantilla de certificaciones | `/admin/proveedores/{id}/plantilla-certificaciones.csv` |
 
 ## Pagos unificados
 
@@ -48,15 +80,13 @@ Todos los grupos de certificación/trámite heredan las mismas condiciones de co
 
 Tras desplegar, entra a **Admin → Grupos** y pulsa **Cargar grupos sugeridos**
 (o vuelve a ejecutar el seed de catálogo) para crear los grupos y poder asignarlos
-a cada producto. También puedes crear grupos nuevos desde esa misma pantalla.
+a cada producto.
 
-## Admin
+## Admin (mapa rápido)
 
 | Pantalla | Ruta | Para qué |
 |----------|------|----------|
-| Grupos de proceso | `/admin/grupos` | Crear/editar grupos y cargar sugeridos |
-| Nuevo grupo | `/admin/grupos/nuevo` | Alta manual de un proceso de proveedor |
-| Productos | `/admin/productos` | Listado |
-| Nuevo producto | `/admin/productos/nuevo` | Alta (código, nombre, precios, grupo…) |
-| Editar producto | `/admin/productos/{id}` | Cambiar código/nombre/grupo/precios + media |
-
+| Grupos de proceso | `/admin/grupos` | Horarios, fechas bloqueadas, reglamento, pagos/MSI |
+| Precios masivos | `/admin/precios` | Subir costos/lista/partners en lote (+ CSV) |
+| Proveedores | `/admin/proveedores` | CRUD + carga masiva de certificaciones |
+| Productos | `/admin/productos` | Detalle, media y precios individuales |

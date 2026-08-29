@@ -142,6 +142,346 @@ final class ProductAdminService
     }
 
     /**
+     * Extrae campos de UI a partir del config_json del grupo.
+     *
+     * @return array{
+     *   exam_choose_at_checkout:bool,
+     *   exam_slot_minutes:int,
+     *   schedule_min_advance_days:int,
+     *   schedule_weekdays_start:string,
+     *   schedule_weekdays_end:string,
+     *   schedule_saturday_start:string,
+     *   schedule_saturday_end:string,
+     *   schedule_blocked_dates:string,
+     *   reglamento_enabled:bool,
+     *   reglamento_template_path:string,
+     *   reglamento_source_url:string,
+     *   reglamento_doc_code:string,
+     *   reglamento_required_before_checkout:bool
+     * }
+     */
+    public static function groupFormExtrasFromConfig(?string $configJson): array
+    {
+        $cfg = [];
+        if ($configJson !== null && trim($configJson) !== '') {
+            $decoded = json_decode($configJson, true);
+            if (is_array($decoded)) {
+                $cfg = $decoded;
+            }
+        }
+        $exam = is_array($cfg['exam'] ?? null) ? $cfg['exam'] : [];
+        $schedule = is_array($cfg['schedule'] ?? null) ? $cfg['schedule'] : [];
+        $weekdays = is_array($schedule['weekdays'] ?? null) ? $schedule['weekdays'] : [];
+        $saturday = is_array($schedule['saturday'] ?? null) ? $schedule['saturday'] : [];
+        $reg = is_array($cfg['reglamento'] ?? null) ? $cfg['reglamento'] : [];
+        $blocked = ExamScheduleService::normalizeBlockedDates($schedule['blocked_dates'] ?? []);
+
+        return [
+            'exam_choose_at_checkout' => (bool) ($exam['choose_at_checkout'] ?? false),
+            'exam_slot_minutes' => max(15, (int) ($exam['slot_minutes'] ?? 30)),
+            'schedule_min_advance_days' => max(0, (int) ($schedule['min_advance_days'] ?? 2)),
+            'schedule_weekdays_start' => (string) ($weekdays['start'] ?? '10:00'),
+            'schedule_weekdays_end' => (string) ($weekdays['end'] ?? '17:30'),
+            'schedule_saturday_start' => (string) ($saturday['start'] ?? '08:00'),
+            'schedule_saturday_end' => (string) ($saturday['end'] ?? '12:00'),
+            'schedule_blocked_dates' => implode("\n", $blocked),
+            'reglamento_enabled' => $reg !== [] && (
+                trim((string) ($reg['template_path'] ?? '')) !== ''
+                || trim((string) ($reg['source_url'] ?? '')) !== ''
+            ),
+            'reglamento_template_path' => (string) ($reg['template_path'] ?? ''),
+            'reglamento_source_url' => (string) ($reg['source_url'] ?? ''),
+            'reglamento_doc_code' => (string) ($reg['doc_code'] ?? 'reglamento_firmado'),
+            'reglamento_required_before_checkout' => (bool) ($reg['required_before_checkout'] ?? true),
+        ];
+    }
+
+    /**
+     * Actualiza precios de varios productos desde el formulario tabular.
+     *
+     * @param array<string, mixed> $rows keyed by product id
+     * @return int cantidad actualizada
+     */
+    public function updatePricesBulk(array $rows): int
+    {
+        $updated = 0;
+        foreach ($rows as $idRaw => $fields) {
+            if (!is_array($fields)) {
+                continue;
+            }
+            $id = (int) $idRaw;
+            if ($id < 1) {
+                continue;
+            }
+            $existing = $this->products->find($id);
+            if ($existing === null) {
+                continue;
+            }
+            $payload = $this->pricePayloadFromInput($fields, $existing);
+            $this->products->update($id, $payload);
+            $updated++;
+        }
+
+        return $updated;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function priceCsvHeaders(): array
+    {
+        return [
+            'code',
+            'name',
+            'public_price',
+            'catalog_price',
+            'cost_price',
+            'price_cncm',
+            'price_partner_a',
+            'price_partner_b',
+            'price_partner_c',
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $products
+     */
+    public function sendPriceTemplateCsv(array $products, string $filename = 'plantilla-precios.csv'): void
+    {
+        $headers = self::priceCsvHeaders();
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        echo "\xEF\xBB\xBF";
+        $out = fopen('php://output', 'w');
+        if ($out === false) {
+            throw new \RuntimeException('No se pudo generar el CSV.');
+        }
+        fputcsv($out, $headers);
+        foreach ($products as $p) {
+            $row = [];
+            foreach ($headers as $h) {
+                $val = $p[$h] ?? '';
+                $row[] = $val === null ? '' : (string) $val;
+            }
+            fputcsv($out, $row);
+        }
+        fclose($out);
+        exit;
+    }
+
+    /**
+     * Importa precios desde CSV (columna code obligatoria).
+     *
+     * @return array{updated:int,skipped:int,errors:list<string>}
+     */
+    public function importPricesFromCsv(string $tmpPath): array
+    {
+        $handle = fopen($tmpPath, 'rb');
+        if ($handle === false) {
+            throw new \InvalidArgumentException('No se pudo leer el archivo CSV.');
+        }
+
+        $header = fgetcsv($handle);
+        if ($header === false) {
+            fclose($handle);
+            throw new \InvalidArgumentException('El CSV no tiene encabezados.');
+        }
+        $header = array_map(
+            static fn ($h) => strtolower(trim((string) $h, " \t\n\r\0\x0B\"")),
+            $header
+        );
+        if (isset($header[0])) {
+            $header[0] = preg_replace('/^\xEF\xBB\xBF/', '', $header[0]) ?? $header[0];
+        }
+        $map = array_flip($header);
+        if (!isset($map['code'])) {
+            fclose($handle);
+            throw new \InvalidArgumentException('El CSV debe incluir la columna code.');
+        }
+
+        $updated = 0;
+        $skipped = 0;
+        $errors = [];
+        $line = 1;
+        while (($data = fgetcsv($handle)) !== false) {
+            $line++;
+            if ($this->csvRowEmpty($data)) {
+                continue;
+            }
+            $code = self::normalizeProductCode((string) ($data[$map['code']] ?? ''));
+            if ($code === '') {
+                $errors[] = "Fila {$line}: código vacío.";
+                $skipped++;
+                continue;
+            }
+            $product = $this->products->findByCode($code);
+            if ($product === null) {
+                $errors[] = "Fila {$line}: no existe el producto {$code}.";
+                $skipped++;
+                continue;
+            }
+            $fields = [];
+            foreach (['public_price', 'catalog_price', 'cost_price', 'price_cncm', 'price_partner_a', 'price_partner_b', 'price_partner_c'] as $col) {
+                if (!isset($map[$col])) {
+                    continue;
+                }
+                $fields[$col] = $data[$map[$col]] ?? '';
+            }
+            try {
+                $payload = $this->pricePayloadFromInput($fields, $product);
+                $this->products->update((int) $product['id'], $payload);
+                $updated++;
+            } catch (\Throwable $e) {
+                $errors[] = "Fila {$line} ({$code}): " . $e->getMessage();
+                $skipped++;
+            }
+        }
+        fclose($handle);
+
+        return ['updated' => $updated, 'skipped' => $skipped, 'errors' => $errors];
+    }
+
+    /**
+     * Alta masiva de certificaciones/productos (p.ej. desde un proveedor).
+     *
+     * @return array{created:int,skipped:int,errors:list<string>}
+     */
+    public function importProductsFromCsv(string $tmpPath, ?int $defaultGroupId, ?int $defaultSupplierId): array
+    {
+        $handle = fopen($tmpPath, 'rb');
+        if ($handle === false) {
+            throw new \InvalidArgumentException('No se pudo leer el archivo CSV.');
+        }
+        $header = fgetcsv($handle);
+        if ($header === false) {
+            fclose($handle);
+            throw new \InvalidArgumentException('El CSV no tiene encabezados.');
+        }
+        $header = array_map(
+            static fn ($h) => strtolower(trim((string) $h, " \t\n\r\0\x0B\"")),
+            $header
+        );
+        if (isset($header[0])) {
+            $header[0] = preg_replace('/^\xEF\xBB\xBF/', '', $header[0]) ?? $header[0];
+        }
+        $map = array_flip($header);
+        foreach (['code', 'name'] as $required) {
+            if (!isset($map[$required])) {
+                fclose($handle);
+                throw new \InvalidArgumentException('El CSV debe incluir las columnas code y name.');
+            }
+        }
+
+        $created = 0;
+        $skipped = 0;
+        $errors = [];
+        $line = 1;
+        while (($data = fgetcsv($handle)) !== false) {
+            $line++;
+            if ($this->csvRowEmpty($data)) {
+                continue;
+            }
+            $get = static function (string $col, mixed $default = '') use ($map, $data): mixed {
+                if (!isset($map[$col])) {
+                    return $default;
+                }
+
+                return $data[$map[$col]] ?? $default;
+            };
+            $input = [
+                'code' => $get('code', ''),
+                'name' => $get('name', ''),
+                'type' => $get('type', 'certification'),
+                'category' => $get('category', 'other'),
+                'audience' => $get('audience', 'any'),
+                'public_price' => $get('public_price', 0),
+                'catalog_price' => $get('catalog_price', ''),
+                'cost_price' => $get('cost_price', 0),
+                'price_cncm' => $get('price_cncm', ''),
+                'price_partner_a' => $get('price_partner_a', ''),
+                'price_partner_b' => $get('price_partner_b', ''),
+                'price_partner_c' => $get('price_partner_c', ''),
+                'is_active' => 1,
+                'is_public' => 1,
+                'product_group_id' => $defaultGroupId,
+                'supplier_id' => $defaultSupplierId,
+            ];
+            if (isset($map['product_group_code'])) {
+                $gCode = self::normalizeGroupCode((string) $get('product_group_code', ''));
+                if ($gCode !== '') {
+                    $group = $this->groups->findByCode($gCode);
+                    if ($group === null) {
+                        $errors[] = "Fila {$line}: grupo {$gCode} no existe.";
+                        $skipped++;
+                        continue;
+                    }
+                    $input['product_group_id'] = (int) $group['id'];
+                    if ($defaultSupplierId === null && !empty($group['supplier_id'])) {
+                        $input['supplier_id'] = (int) $group['supplier_id'];
+                    }
+                }
+            }
+            try {
+                $this->createProduct($input);
+                $created++;
+            } catch (\Throwable $e) {
+                $errors[] = "Fila {$line}: " . $e->getMessage();
+                $skipped++;
+            }
+        }
+        fclose($handle);
+
+        return ['created' => $created, 'skipped' => $skipped, 'errors' => $errors];
+    }
+
+    /** @return list<string> */
+    public static function productBulkCsvHeaders(): array
+    {
+        return [
+            'code',
+            'name',
+            'type',
+            'category',
+            'public_price',
+            'catalog_price',
+            'cost_price',
+            'price_cncm',
+            'price_partner_a',
+            'price_partner_b',
+            'price_partner_c',
+            'product_group_code',
+        ];
+    }
+
+    public function sendProductBulkTemplateCsv(string $filename = 'plantilla-certificaciones.csv'): void
+    {
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        echo "\xEF\xBB\xBF";
+        $out = fopen('php://output', 'w');
+        if ($out === false) {
+            throw new \RuntimeException('No se pudo generar el CSV.');
+        }
+        fputcsv($out, self::productBulkCsvHeaders());
+        fputcsv($out, [
+            'EJEMPLO-B1',
+            'Certificación ejemplo B1',
+            'certification',
+            'english_adult',
+            '2500',
+            '3000',
+            '1800',
+            '2200',
+            '2300',
+            '2400',
+            '2450',
+            'itep-exams',
+        ]);
+        fclose($out);
+        exit;
+    }
+
+    /**
      * Crea/actualiza grupos sugeridos (si no existen) con pagos tipo ELeT.
      *
      * @return list<string>
@@ -313,20 +653,9 @@ final class ProductAdminService
             throw new \InvalidArgumentException('El proveedor seleccionado no existe.');
         }
 
-        $configRaw = trim((string) ($input['config_json'] ?? ''));
-        if ($configRaw === '') {
-            $enableMsi = ($input['template'] ?? 'cert') !== 'course';
-            $configRaw = (string) json_encode(
-                ProductGroupRepository::defaultCheckoutConfig($enableMsi),
-                JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
-            );
-        } else {
-            $decoded = json_decode($configRaw, true);
-            if (!is_array($decoded)) {
-                throw new \InvalidArgumentException('El JSON de configuración del grupo no es válido.');
-            }
-            $configRaw = (string) json_encode($decoded, JSON_UNESCAPED_UNICODE);
-        }
+        $config = $this->decodeConfigInput($input);
+        $config = $this->applyStructuredGroupConfig($config, $input);
+        $configRaw = (string) json_encode($config, JSON_UNESCAPED_UNICODE);
 
         return [
             'name' => $name,
@@ -334,6 +663,160 @@ final class ProductAdminService
             'supplier_id' => $supplierId,
             'config_json' => $configRaw,
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @return array<string, mixed>
+     */
+    private function decodeConfigInput(array $input): array
+    {
+        $configRaw = trim((string) ($input['config_json'] ?? ''));
+        if ($configRaw === '') {
+            $enableMsi = ($input['template'] ?? 'cert') !== 'course';
+
+            return ProductGroupRepository::defaultCheckoutConfig($enableMsi);
+        }
+        $decoded = json_decode($configRaw, true);
+        if (!is_array($decoded)) {
+            throw new \InvalidArgumentException('El JSON de configuración del grupo no es válido.');
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * Mezcla campos de UI (horarios, reglamento, fechas bloqueadas) sobre el JSON base.
+     *
+     * @param array<string, mixed> $config
+     * @param array<string, mixed> $input
+     * @return array<string, mixed>
+     */
+    private function applyStructuredGroupConfig(array $config, array $input): array
+    {
+        if (empty($input['apply_structured_config'])) {
+            return $config;
+        }
+
+        $exam = is_array($config['exam'] ?? null) ? $config['exam'] : [];
+        $exam['choose_at_checkout'] = !empty($input['exam_choose_at_checkout']);
+        $slot = (int) ($input['exam_slot_minutes'] ?? ($exam['slot_minutes'] ?? 30));
+        $exam['slot_minutes'] = max(15, $slot);
+        $config['exam'] = $exam;
+
+        $schedule = is_array($config['schedule'] ?? null) ? $config['schedule'] : [];
+        $schedule['min_advance_days'] = max(0, (int) ($input['schedule_min_advance_days'] ?? ($schedule['min_advance_days'] ?? 2)));
+        $schedule['weekdays'] = [
+            'start' => $this->normalizeClock((string) ($input['schedule_weekdays_start'] ?? '10:00'), '10:00'),
+            'end' => $this->normalizeClock((string) ($input['schedule_weekdays_end'] ?? '17:30'), '17:30'),
+        ];
+        $schedule['saturday'] = [
+            'start' => $this->normalizeClock((string) ($input['schedule_saturday_start'] ?? '08:00'), '08:00'),
+            'end' => $this->normalizeClock((string) ($input['schedule_saturday_end'] ?? '12:00'), '12:00'),
+        ];
+        $schedule['blocked_dates'] = ExamScheduleService::normalizeBlockedDates(
+            (string) ($input['schedule_blocked_dates'] ?? '')
+        );
+        $config['schedule'] = $schedule;
+
+        if (!empty($input['reglamento_enabled'])) {
+            $path = trim((string) ($input['reglamento_template_path'] ?? ''));
+            $source = trim((string) ($input['reglamento_source_url'] ?? ''));
+            if ($path === '' && $source === '') {
+                throw new \InvalidArgumentException(
+                    'Si activas el reglamento, indica la ruta/plantilla PDF o el link externo.'
+                );
+            }
+            $docCode = trim((string) ($input['reglamento_doc_code'] ?? 'reglamento_firmado'));
+            if ($docCode === '') {
+                $docCode = 'reglamento_firmado';
+            }
+            $config['reglamento'] = [
+                'template_path' => $path,
+                'source_url' => $source,
+                'signature_mode' => 'append_to_pdf',
+                'required_before_checkout' => !empty($input['reglamento_required_before_checkout']),
+                'doc_code' => $docCode,
+            ];
+        } else {
+            unset($config['reglamento']);
+        }
+
+        return $config;
+    }
+
+    private function normalizeClock(string $clock, string $fallback): string
+    {
+        $clock = trim($clock);
+        if (!preg_match('/^\d{1,2}:\d{2}$/', $clock)) {
+            return $fallback;
+        }
+        [$h, $m] = array_map('intval', explode(':', $clock));
+        if ($h < 0 || $h > 23 || $m < 0 || $m > 59) {
+            return $fallback;
+        }
+
+        return sprintf('%02d:%02d', $h, $m);
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @param array<string, mixed> $existing
+     * @return array<string, mixed>
+     */
+    private function pricePayloadFromInput(array $input, array $existing): array
+    {
+        $publicRaw = $input['public_price'] ?? null;
+        $publicPrice = ($publicRaw === null || $publicRaw === '')
+            ? round(max(0, (float) ($existing['public_price'] ?? 0)), 2)
+            : round(max(0, (float) $publicRaw), 2);
+
+        $catalogRaw = $input['catalog_price'] ?? null;
+        if ($catalogRaw === null || $catalogRaw === '') {
+            $catalogPrice = isset($existing['catalog_price']) && $existing['catalog_price'] !== null && $existing['catalog_price'] !== ''
+                ? round(max(0, (float) $existing['catalog_price']), 2)
+                : Settings::catalogPriceFromPublic($publicPrice);
+        } else {
+            $catalogPrice = round(max(0, (float) $catalogRaw), 2);
+        }
+
+        $costRaw = $input['cost_price'] ?? null;
+        $costPrice = ($costRaw === null || $costRaw === '')
+            ? round(max(0, (float) ($existing['cost_price'] ?? 0)), 2)
+            : round(max(0, (float) $costRaw), 2);
+
+        return [
+            'public_price' => $publicPrice,
+            'catalog_price' => $catalogPrice,
+            'cost_price' => $costPrice,
+            'price_cncm' => array_key_exists('price_cncm', $input)
+                ? $this->nullableMoney($input['price_cncm'])
+                : $this->nullableMoney($existing['price_cncm'] ?? null),
+            'price_partner_a' => array_key_exists('price_partner_a', $input)
+                ? $this->nullableMoney($input['price_partner_a'])
+                : $this->nullableMoney($existing['price_partner_a'] ?? null),
+            'price_partner_b' => array_key_exists('price_partner_b', $input)
+                ? $this->nullableMoney($input['price_partner_b'])
+                : $this->nullableMoney($existing['price_partner_b'] ?? null),
+            'price_partner_c' => array_key_exists('price_partner_c', $input)
+                ? $this->nullableMoney($input['price_partner_c'])
+                : $this->nullableMoney($existing['price_partner_c'] ?? null),
+        ];
+    }
+
+    /** @param list<mixed>|false $data */
+    private function csvRowEmpty(array|false $data): bool
+    {
+        if ($data === false) {
+            return true;
+        }
+        foreach ($data as $cell) {
+            if (trim((string) $cell) !== '') {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function nullableInt(mixed $value): ?int
