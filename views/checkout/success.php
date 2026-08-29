@@ -17,7 +17,7 @@ $method = (string) ($purchase['payment_method'] ?? '');
 $isCard = $method === 'openpay_card';
 $isStore = $method === 'openpay_store';
 $methodLabels = [
-    'openpay_card' => 'Tarjeta (OpenPay)',
+    'openpay_card' => 'TDC (OpenPay)',
     'openpay_spei' => 'SPEI',
     'openpay_store' => 'OXXO / tienda',
     'transfer_proof' => 'Transferencia DOCEO',

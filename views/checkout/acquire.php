@@ -138,7 +138,7 @@ $stepLabels = [
                         <?php if ($openpayReady): ?>
                             <button type="button" class="pay-tile" data-method="openpay_card" data-ui="msi" aria-pressed="false">
                                 <span class="pay-tile-icon" aria-hidden="true">💳</span>
-                                <span class="pay-tile-label">Tarjeta de crédito</span>
+                                <span class="pay-tile-label">TDC</span>
                                 <span class="pay-tile-sub">Link seguro OpenPay BBVA</span>
                             </button>
                         <?php endif; ?>
@@ -190,7 +190,7 @@ $stepLabels = [
                     </div>
 
                     <div id="pay-msi-panel" class="pay-panel" hidden>
-                        <p class="muted" style="font-size:.82rem;margin:.75rem 0 .4rem">Tarjeta de crédito</p>
+                        <p class="muted" style="font-size:.82rem;margin:.75rem 0 .4rem">TDC</p>
                         <div class="msi-chips" id="msi-chips"></div>
                         <p class="msi-monthly-line" id="msi-monthly-line"></p>
                         <p class="muted" style="font-size:.82rem;margin:.35rem 0 0">
@@ -482,7 +482,7 @@ $stepLabels = [
     if (payUi === 'oxxo') return 'Depósito OXXO · tarjeta ' + depositCard;
     if (payUi === 'msi') {
       const m = activeMsiMonths();
-      return 'Tarjeta de crédito · ' + m + ' meses';
+      return 'TDC · ' + m + ' meses';
     }
     return '';
   }
