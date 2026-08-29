@@ -42,6 +42,7 @@ img { max-width: 100%; height: auto; }
 .brand span { display: block; color: var(--doceo-muted); font-size: .78rem; }
 .nav { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
 .nav a { color: var(--doceo-text); font-weight: 600; font-size: .92rem; }
+.nav a.btn-primary, .nav a.btn-primary:hover { color: #fff; }
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
   gap: .4rem; border: 0; cursor: pointer; border-radius: 999px;

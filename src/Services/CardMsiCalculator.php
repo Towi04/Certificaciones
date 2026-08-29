@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 /**
- * Meses sin intereses (MSI) con tarjeta vía OpenPay.
+ * Meses con tarjeta vía OpenPay.
  *
  * El alumno paga el TOTAL con tarjeta; OpenPay liquida el monto completo
  * (menos comisión) al comercio. El banco difiere el cobro mensual al tarjetahabiente.
@@ -69,7 +69,7 @@ final class CardMsiCalculator
     }
 
     /**
-     * Opciones MSI para mostrar en checkout con tarjeta.
+     * Opciones por meses para mostrar en checkout con tarjeta.
      * Siempre cobra el total al comercio; monthly_estimate es solo referencia al alumno.
      *
      * @param array<string, mixed> $product
@@ -100,7 +100,7 @@ final class CardMsiCalculator
                 'label' => $months === 1
                     ? 'Un solo pago (contado)'
                     : sprintf(
-                        '%d MSI — tú pagas %s; tu banco cobra ~%s/mes',
+                        '%d meses — tú pagas %s; referencia ~%s/mes',
                         $months,
                         '$' . number_format($total, 2, '.', ','),
                         '$' . number_format($estimate, 2, '.', ',')

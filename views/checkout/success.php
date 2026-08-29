@@ -68,7 +68,12 @@ $methodLabels = [
         <hr style="border:0;border-top:1px solid #e6ebf2;margin:1.25rem 0">
         <h2 style="font-size:1.05rem;color:var(--doceo-blue)">Instrucciones de pago</h2>
 
-        <?php if (!empty($purchase['openpay_clabe'])): ?>
+        <?php if ((string) ($purchase['status'] ?? '') === 'payment_review'
+            && !empty($purchase['payment_proof_path'])
+            && in_array($method, ['transfer_proof', 'openpay_store'], true)): ?>
+            <p>Recibimos tu comprobante de pago. Lo revisaremos y te avisaremos por correo.</p>
+
+        <?php elseif (!empty($purchase['openpay_clabe'])): ?>
             <p>Realiza una transferencia SPEI por el <strong>monto total</strong> a esta CLABE única:</p>
             <p style="font-family:ui-monospace,monospace;font-size:1.15rem;letter-spacing:.04em">
                 <?= e($purchase['openpay_clabe']) ?>
@@ -105,7 +110,7 @@ $methodLabels = [
                 <p class="muted">Cuenta DOCEO de referencia: <?= e($bank['bank']) ?> · CLABE <?= e($bank['clabe']) ?> · <?= e($bank['holder']) ?></p>
             <?php endif; ?>
         <?php elseif ($isCard): ?>
-            <p>Estamos procesando tu pago con tarjeta. Si no se confirma en unos minutos, contacta a administración con tu matrícula.</p>
+            <p>Te enviamos por correo el link de pago seguro para completar tu pago con tarjeta desde OpenPay de BBVA.</p>
         <?php else: ?>
             <p>Transfiere el monto total a la cuenta DOCEO e incluye tu matrícula en el concepto:</p>
             <?php if ($bank['clabe'] !== ''): ?>

@@ -52,7 +52,7 @@ $stepLabels = [
 
             <form method="post" action="<?= e(url('/adquirir/' . $product['slug'])) ?>" enctype="multipart/form-data" class="checkout-form panel" id="checkout-form" novalidate>
                 <?= csrf_field() ?>
-                <input type="hidden" name="payment_method" id="payment_method" value="<?= $openpayReady ? 'openpay_spei' : 'transfer_proof' ?>">
+                <input type="hidden" name="payment_method" id="payment_method" value="transfer_proof">
                 <input type="hidden" name="card_msi_months" id="card_msi_months" value="3">
                 <?php if ($needsExam): ?>
                     <input type="hidden" name="exam_date" id="exam_date" value="">
@@ -108,9 +108,7 @@ $stepLabels = [
                         </p>
                         <div class="form-grid" style="max-width:480px">
                             <label>Fecha del examen *
-                                <select id="exam_date_select">
-                                    <option value="">— elige fecha —</option>
-                                </select>
+                                <input type="date" id="exam_date_select" min="<?= e($examMinDate ?? '') ?>">
                             </label>
                             <label>Hora *
                                 <select id="exam_time_select" disabled>
@@ -118,7 +116,7 @@ $stepLabels = [
                                 </select>
                             </label>
                         </div>
-                        <p class="muted" id="exam-slot-hint" style="font-size:.82rem;margin-top:.5rem"></p>
+                        <p class="muted" id="exam-slot-hint" style="font-size:.82rem;margin-top:.5rem">Agendar con 2 días de antelación</p>
                     </div>
                 <?php endif; ?>
 
@@ -127,14 +125,7 @@ $stepLabels = [
                     <p class="muted" style="margin-top:0;font-size:.88rem">Elige cómo realizarás tu pago.</p>
 
                     <div class="pay-tiles" role="group" aria-label="Método de pago">
-                        <?php if ($openpayReady): ?>
-                            <button type="button" class="pay-tile active" data-method="openpay_spei" data-ui="spei" aria-pressed="true">
-                                <span class="pay-tile-icon" aria-hidden="true">🏦</span>
-                                <span class="pay-tile-label">SPEI</span>
-                                <span class="pay-tile-sub">CLABE única OpenPay</span>
-                            </button>
-                        <?php endif; ?>
-                        <button type="button" class="pay-tile<?= $openpayReady ? '' : ' active' ?>" data-method="transfer_proof" data-ui="transfer" aria-pressed="<?= $openpayReady ? 'false' : 'true' ?>">
+                        <button type="button" class="pay-tile active" data-method="transfer_proof" data-ui="transfer" aria-pressed="true">
                             <span class="pay-tile-icon" aria-hidden="true">🏦</span>
                             <span class="pay-tile-label">Transferencia</span>
                             <span class="pay-tile-sub">SPEI · comprobante</span>
@@ -147,34 +138,43 @@ $stepLabels = [
                         <?php if ($openpayReady): ?>
                             <button type="button" class="pay-tile" data-method="openpay_card" data-ui="msi" aria-pressed="false">
                                 <span class="pay-tile-icon" aria-hidden="true">💳</span>
-                                <span class="pay-tile-label">Meses</span>
-                                <span class="pay-tile-sub">MSI con tarjeta</span>
+                                <span class="pay-tile-label">Tarjeta de crédito</span>
+                                <span class="pay-tile-sub">Link seguro OpenPay BBVA</span>
                             </button>
                         <?php endif; ?>
                     </div>
 
-                    <?php if ($openpayReady): ?>
-                        <div id="pay-spei-panel" class="pay-panel">
-                            <p class="muted" style="font-size:.88rem;margin:.75rem 0 .5rem">
-                                Al confirmar tu registro generaremos una CLABE SPEI única para este caso. No necesitas subir comprobante.
-                            </p>
-                            <p class="muted" style="font-size:.82rem;margin:.5rem 0 0">
-                                OpenPay notificará automáticamente a DOCEO cuando el pago quede aplicado.
-                            </p>
-                        </div>
-                    <?php endif; ?>
-
-                    <div id="pay-transfer-panel" class="pay-panel" <?= $openpayReady ? 'hidden' : '' ?>>
+                    <div id="pay-transfer-panel" class="pay-panel">
                         <p class="muted" style="font-size:.88rem;margin:.75rem 0 .5rem">
                             Transfiere el monto indicado en el panel derecho y sube tu comprobante.
                         </p>
                         <?php if (!empty($bank['clabe'])): ?>
                             <ul class="deposit-info">
                                 <li>Banco: <strong><?= e($bank['bank']) ?></strong></li>
-                                <li>CLABE: <strong class="mono"><?= e($bank['clabe']) ?></strong></li>
+                                <li class="copy-line">
+                                    CLABE: <strong class="mono"><?= e($bank['clabe']) ?></strong>
+                                    <button type="button" class="btn btn-ghost btn-sm copy-btn" data-copy="<?= e($bank['clabe']) ?>">Copiar</button>
+                                </li>
                                 <li>Titular: <strong><?= e($bank['holder']) ?></strong></li>
                             </ul>
                         <?php endif; ?>
+                    </div>
+
+                    <div id="pay-oxxo-panel" class="pay-panel" hidden>
+                        <p class="muted" style="font-size:.88rem;margin:.75rem 0 .5rem">
+                            Realiza un depósito en OXXO (o tienda afiliada) a esta tarjeta:
+                        </p>
+                        <div class="deposit-card-box">
+                            <span class="muted" style="font-size:.82rem">Número de tarjeta</span>
+                            <span class="mono deposit-card-num"><?= e($depositCard) ?></span>
+                            <button type="button" class="btn btn-ghost btn-sm copy-btn" data-copy="<?= e($depositCard) ?>">Copiar</button>
+                        </div>
+                        <p class="muted" style="font-size:.82rem;margin:.5rem 0 0">
+                            Deposita el monto exacto del panel derecho y sube el comprobante.
+                        </p>
+                    </div>
+
+                    <div id="payment-proof-panel" class="pay-panel payment-proof-panel">
                         <div class="file-picker" id="proof-picker">
                             <input type="file" name="payment_proof" id="payment_proof" accept=".pdf,.jpg,.jpeg,.png">
                             <div class="file-picker-body">
@@ -189,25 +189,12 @@ $stepLabels = [
                         </div>
                     </div>
 
-                    <div id="pay-oxxo-panel" class="pay-panel" hidden>
-                        <p class="muted" style="font-size:.88rem;margin:.75rem 0 .5rem">
-                            Realiza un depósito en OXXO (o tienda afiliada) a esta tarjeta:
-                        </p>
-                        <div class="deposit-card-box">
-                            <span class="muted" style="font-size:.82rem">Número de tarjeta</span>
-                            <span class="mono deposit-card-num"><?= e($depositCard) ?></span>
-                        </div>
-                        <p class="muted" style="font-size:.82rem;margin:.5rem 0 0">
-                            Deposita el monto exacto del panel derecho. Al confirmar tu registro recibirás las instrucciones con tu matrícula.
-                        </p>
-                    </div>
-
                     <div id="pay-msi-panel" class="pay-panel" hidden>
-                        <p class="muted" style="font-size:.82rem;margin:.75rem 0 .4rem">¿A cuántos meses?</p>
+                        <p class="muted" style="font-size:.82rem;margin:.75rem 0 .4rem">Tarjeta de crédito</p>
                         <div class="msi-chips" id="msi-chips"></div>
                         <p class="msi-monthly-line" id="msi-monthly-line"></p>
                         <p class="muted" style="font-size:.82rem;margin:.35rem 0 0">
-                            Tu banco difiere el cobro mensual; OpenPay autoriza el total con tarjeta.
+                            Te enviaremos por correo el link de pago para proceder de manera segura desde el portal OpenPay de BBVA.
                         </p>
                     </div>
                     <p class="muted" id="pay-hint" style="font-size:.82rem;margin-top:.65rem"></p>
@@ -325,10 +312,12 @@ $stepLabels = [
 .pay-tile-sub { font-size:.68rem; color:var(--doceo-muted); font-weight:500; text-align:center; line-height:1.2; }
 
 .deposit-info { font-size:.85rem; margin:.5rem 0 .75rem; padding-left:1.1rem; }
+.copy-line { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+.copy-btn { padding:.25rem .65rem; font-size:.75rem; }
 .mono { font-family:ui-monospace,monospace; letter-spacing:.03em; }
 .deposit-card-box {
   padding:1rem 1.15rem; border-radius:12px; background:#f4f7fb; border:1px solid #d5deea;
-  display:flex; flex-direction:column; gap:.35rem;
+  display:flex; flex-direction:column; align-items:flex-start; gap:.45rem;
 }
 .deposit-card-num { font-size:1.15rem; font-weight:700; color:var(--doceo-blue); }
 
@@ -346,7 +335,9 @@ $stepLabels = [
 .msi-chip {
   padding:.45rem .9rem; border:1px solid #cfd8e6; border-radius:999px; background:#fff;
   font:inherit; font-size:.85rem; font-weight:600; cursor:pointer; color:var(--doceo-muted);
+  display:flex; flex-direction:column; align-items:center; gap:.1rem;
 }
+.msi-chip small { font-size:.68rem; font-weight:600; }
 .msi-chip.active { border-color:var(--doceo-blue); color:var(--doceo-blue); background:#eef4fc; }
 .msi-monthly-line { margin:.85rem 0 0; font-size:1.1rem; color:var(--doceo-blue); font-weight:700; }
 
@@ -379,7 +370,7 @@ $stepLabels = [
   const depositCard = <?= json_encode($depositCard, JSON_UNESCAPED_UNICODE) ?>;
 
   let quoteData = <?= json_encode($quote, JSON_UNESCAPED_UNICODE) ?>;
-  let payUi = openpayReady ? 'spei' : 'transfer';
+  let payUi = 'transfer';
   let stepIndex = 0;
 
   const form = document.getElementById('checkout-form');
@@ -389,14 +380,15 @@ $stepLabels = [
   const priceFinal = document.getElementById('price-final');
   const priceArrow = document.getElementById('price-arrow');
   const labelEl = document.getElementById('price-label');
+  const sidebarPayNote = document.getElementById('sidebar-pay-note');
   const errEl = document.getElementById('quote-error');
   const methodInput = document.getElementById('payment_method');
   const msiInput = document.getElementById('card_msi_months');
   const msiChips = document.getElementById('msi-chips');
   const msiMonthlyLine = document.getElementById('msi-monthly-line');
-  const speiPanel = document.getElementById('pay-spei-panel');
   const transferPanel = document.getElementById('pay-transfer-panel');
   const oxxoPanel = document.getElementById('pay-oxxo-panel');
+  const proofPanel = document.getElementById('payment-proof-panel');
   const msiPanel = document.getElementById('pay-msi-panel');
   const proofInput = document.getElementById('payment_proof');
   const proofPicker = document.getElementById('proof-picker');
@@ -423,21 +415,37 @@ $stepLabels = [
 
   function baseAmount() { return Number(quoteData.base ?? quoteData.catalog ?? 0); }
   function catalogAmount() { return Number(quoteData.catalog ?? 0); }
+  function cardPlans() { return quoteData.payment_options?.msi || quoteData.msi_plans || []; }
+  function selectedCardPlan() {
+    const months = activeMsiMonths();
+    const plans = cardPlans();
+    return plans.find(p => Number(p.months) === months) || plans[0] || null;
+  }
+  function selectedPayTotal() {
+    const plan = payUi === 'msi' ? selectedCardPlan() : null;
+    return plan ? Number(plan.total || plan.base || baseAmount()) : baseAmount();
+  }
 
   function updatePriceSummary() {
     const catalog = catalogAmount();
-    const base = baseAmount();
-    const hasDiscount = base > 0 && base < catalog - 0.009;
+    const total = selectedPayTotal();
+    const hasAdjustment = Math.abs(total - catalog) > 0.009;
     priceList.textContent = money(catalog);
-    if (hasDiscount) {
+    if (hasAdjustment) {
       priceList.classList.add('price-strike');
       priceArrow.style.display = '';
       priceFinal.style.display = '';
-      priceFinal.textContent = money(base);
+      priceFinal.textContent = money(total);
     } else {
       priceList.classList.remove('price-strike');
       priceArrow.style.display = 'none';
       priceFinal.style.display = 'none';
+    }
+    if (sidebarPayNote) {
+      const plan = payUi === 'msi' ? selectedCardPlan() : null;
+      sidebarPayNote.textContent = plan
+        ? 'Total con tarjeta de crédito' + (Number(plan.fee || 0) > 0 ? ' (incluye comisión OpenPay)' : '')
+        : 'Total a pagar';
     }
   }
 
@@ -473,12 +481,11 @@ $stepLabels = [
   }
 
   function payMethodLabel() {
-    if (payUi === 'spei') return 'SPEI OpenPay (CLABE única)';
     if (payUi === 'transfer') return 'Transferencia SPEI (con comprobante)';
     if (payUi === 'oxxo') return 'Depósito OXXO · tarjeta ' + depositCard;
     if (payUi === 'msi') {
       const m = activeMsiMonths();
-      return 'Tarjeta · ' + m + ' MSI';
+      return 'Tarjeta de crédito · ' + m + ' meses';
     }
     return '';
   }
@@ -511,8 +518,8 @@ $stepLabels = [
       }
     }
     if (step === 'pago') {
-      if (payUi === 'transfer' && proofInput && !proofInput.files.length) {
-        alert('Sube el comprobante de tu transferencia.');
+      if ((payUi === 'transfer' || payUi === 'oxxo') && proofInput && !proofInput.files.length) {
+        alert('Sube el comprobante de pago.');
         if (proofPicker) proofPicker.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return false;
       }
@@ -544,8 +551,8 @@ $stepLabels = [
       html += '<dt>Examen</dt><dd>' + (examDateHidden.value || '—') + ' ' + (examTimeHidden.value ? examTimeHidden.value.substring(0, 5) : '') + '</dd>';
     }
     html += '<dt>Forma de pago</dt><dd>' + payMethodLabel() + '</dd>';
-    html += '<dt>Monto</dt><dd><strong>' + money(baseAmount()) + '</strong></dd>';
-    if (payUi === 'transfer' && proofInput && proofInput.files.length) {
+    html += '<dt>Monto</dt><dd><strong>' + money(selectedPayTotal()) + '</strong></dd>';
+    if ((payUi === 'transfer' || payUi === 'oxxo') && proofInput && proofInput.files.length) {
       html += '<dt>Comprobante</dt><dd>' + proofInput.files[0].name + '</dd>';
     }
     html += '</dl>';
@@ -566,10 +573,11 @@ $stepLabels = [
   function updateMsiDisplay() {
     if (!msiMonthlyLine || !msiChips) return;
     const months = activeMsiMonths();
-    const plans = quoteData.payment_options?.msi || quoteData.msi_plans || [];
+    const plans = cardPlans();
     const plan = plans.find(p => Number(p.months) === months) || plans[0];
     if (plan && Number(plan.months) > 1) {
-      msiMonthlyLine.textContent = 'Mensualidades de ' + money(plan.monthly_estimate);
+      msiMonthlyLine.textContent = Number(plan.months) + ' pagos aprox. de ' + money(plan.monthly_estimate)
+        + ' · Total ' + money(plan.total);
     } else {
       msiMonthlyLine.textContent = '';
     }
@@ -582,13 +590,10 @@ $stepLabels = [
       return;
     }
     if (payUi === 'msi') {
-      payHint.textContent = 'Al confirmar irás a OpenPay para pagar con tarjeta.';
-      submitBtn.textContent = 'Confirmar y pagar con tarjeta';
-    } else if (payUi === 'spei') {
-      payHint.textContent = 'Al confirmar verás tu CLABE SPEI única para completar el pago.';
-      submitBtn.textContent = 'Confirmar y obtener CLABE';
+      payHint.textContent = 'Te enviaremos por correo el link de pago seguro de OpenPay BBVA.';
+      submitBtn.textContent = 'Confirmar registro';
     } else if (payUi === 'oxxo') {
-      payHint.textContent = 'Al confirmar verás las instrucciones de depósito con tu matrícula.';
+      payHint.textContent = 'Sube tu comprobante de depósito para revisión.';
       submitBtn.textContent = 'Confirmar registro';
     } else {
       payHint.textContent = '';
@@ -604,13 +609,14 @@ $stepLabels = [
       t.classList.toggle('active', on);
       t.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
-    if (speiPanel) speiPanel.hidden = ui !== 'spei';
     if (transferPanel) transferPanel.hidden = ui !== 'transfer';
     if (oxxoPanel) oxxoPanel.hidden = ui !== 'oxxo';
     if (msiPanel) msiPanel.hidden = ui !== 'msi';
     if (proofInput) {
-      proofInput.required = ui === 'transfer' && currentStep() === 'pago';
-      if (ui !== 'transfer') proofInput.value = '';
+      const needsProof = ui === 'transfer' || ui === 'oxxo';
+      if (proofPanel) proofPanel.hidden = !needsProof;
+      proofInput.required = needsProof && currentStep() === 'pago';
+      if (!needsProof) proofInput.value = '';
       if (proofFilename) proofFilename.textContent = 'Ningún archivo seleccionado';
     }
     if (ui === 'msi' && msiChips) {
@@ -620,6 +626,7 @@ $stepLabels = [
     } else {
       msiInput.value = '1';
     }
+    updatePriceSummary();
     updateHint();
   }
 
@@ -635,6 +642,7 @@ $stepLabels = [
       chip.classList.add('active');
       msiInput.value = chip.getAttribute('data-months') || '3';
       updateMsiDisplay();
+      updatePriceSummary();
     });
   }
 
@@ -642,12 +650,13 @@ $stepLabels = [
     if (!msiChips) return;
     const list = (Array.isArray(plans) ? plans : []).filter(p => Number(p.months) > 1);
     if (list.length === 0) {
-      msiChips.innerHTML = '<span class="muted">MSI no disponible.</span>';
+      msiChips.innerHTML = '<span class="muted">Tarjeta no disponible.</span>';
       return;
     }
     msiChips.innerHTML = list.map((p, i) => {
       const m = Number(p.months);
-      return '<button type="button" class="msi-chip' + (i === 0 ? ' active' : '') + '" data-months="' + m + '">' + m + ' meses</button>';
+      return '<button type="button" class="msi-chip' + (i === 0 ? ' active' : '') + '" data-months="' + m + '">'
+        + '<span>' + m + ' meses</span><small>Total ' + money(p.total) + '</small></button>';
     }).join('');
     msiInput.value = String(list[0].months || 3);
     updateMsiDisplay();
@@ -692,6 +701,31 @@ $stepLabels = [
     });
   }
 
+  document.querySelectorAll('[data-copy]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const text = btn.getAttribute('data-copy') || '';
+      const done = () => {
+        const prev = btn.textContent;
+        btn.textContent = 'Copiado';
+        setTimeout(() => { btn.textContent = prev; }, 1400);
+      };
+      const fallback = () => {
+        const tmp = document.createElement('textarea');
+        tmp.value = text;
+        document.body.appendChild(tmp);
+        tmp.select();
+        document.execCommand('copy');
+        document.body.removeChild(tmp);
+        done();
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(fallback);
+      } else {
+        fallback();
+      }
+    });
+  });
+
   if (!window.reglamentoWizard) {
     form.addEventListener('submit', function (e) {
       if (!validateAllBeforeSubmit()) e.preventDefault();
@@ -703,16 +737,9 @@ $stepLabels = [
     fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(slug))
       .then(r => r.json())
       .then(data => {
-        if (!data.ok || !data.dates) return;
-        examDateSelect.innerHTML = '<option value="">— elige fecha —</option>';
-        data.dates.forEach(d => {
-          const opt = document.createElement('option');
-          opt.value = d;
-          const label = new Date(d + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-          opt.textContent = label;
-          examDateSelect.appendChild(opt);
-        });
-        if (examSlotHint) examSlotHint.textContent = 'Anticipo mínimo: desde ' + (data.min_date || '');
+        if (!data.ok) return;
+        if (data.min_date) examDateSelect.min = data.min_date;
+        if (examSlotHint) examSlotHint.textContent = 'Agendar con 2 días de antelación';
       });
   }
 
@@ -751,7 +778,7 @@ $stepLabels = [
 
   renderMsiChips(quoteData.payment_options?.msi || quoteData.msi_plans || []);
   updatePriceSummary();
-  selectPayUi(openpayReady ? 'spei' : 'transfer', openpayReady ? 'openpay_spei' : 'transfer_proof');
+  selectPayUi('transfer', 'transfer_proof');
   showStep(0);
   loadExamDates();
 })();

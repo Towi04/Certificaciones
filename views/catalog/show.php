@@ -86,7 +86,10 @@ $youtubeThumb = static function (array $item): ?string {
     <button type="button" class="product-media-modal-backdrop" data-media-close aria-label="Cerrar"></button>
     <div class="product-media-modal-card">
         <button type="button" class="product-media-modal-close" data-media-close aria-label="Cerrar">×</button>
-        <button type="button" class="product-media-modal-zoom" data-media-zoom aria-label="Zoom" hidden>&#128269;</button>
+        <label class="product-media-modal-zoom" data-media-zoom-wrap hidden>
+            <span aria-hidden="true">&#128269;</span>
+            <input type="range" min="100" max="300" step="10" value="100" data-media-zoom aria-label="Zoom de imagen">
+        </label>
         <button type="button" class="product-media-modal-nav product-media-modal-prev" data-media-prev aria-label="Anterior">&lt;</button>
         <button type="button" class="product-media-modal-nav product-media-modal-next" data-media-next aria-label="Siguiente">&gt;</button>
         <div class="product-media-modal-body" id="product-media-modal-body"></div>
@@ -213,13 +216,22 @@ $youtubeThumb = static function (array $item): ?string {
     top:.65rem;
     right:3rem;
     z-index:2;
-    border:0;
+    display:flex;
+    align-items:center;
+    gap:.35rem;
+    padding:.25rem .5rem;
     border-radius:999px;
-    min-width:2rem;
+    width:min(220px, calc(100% - 6rem));
     height:2rem;
-    cursor:pointer;
     background:#fff;
     box-shadow:0 2px 10px rgba(0,0,0,.15);
+}
+.product-media-modal-zoom[hidden] {
+    display:none;
+}
+.product-media-modal-zoom input {
+    width:100%;
+    accent-color:var(--doceo-blue);
 }
 .product-media-modal-nav {
     position:absolute;
@@ -259,10 +271,9 @@ $youtubeThumb = static function (array $item): ?string {
     border-radius:12px;
 }
 .product-media-modal-body.is-zoomed img {
-    width:auto;
+    width:var(--media-zoom-width, 150%);
     max-width:none;
     max-height:none;
-    min-width:150%;
     cursor:zoom-out;
 }
 .product-media-modal-body iframe {
@@ -294,7 +305,8 @@ $youtubeThumb = static function (array $item): ?string {
   const body = document.getElementById('product-media-modal-body');
   const title = document.getElementById('product-media-modal-title');
   const caption = document.getElementById('product-media-modal-caption');
-  const zoomBtn = modal ? modal.querySelector('[data-media-zoom]') : null;
+  const zoomWrap = modal ? modal.querySelector('[data-media-zoom-wrap]') : null;
+  const zoomRange = modal ? modal.querySelector('[data-media-zoom]') : null;
   const prevBtn = modal ? modal.querySelector('[data-media-prev]') : null;
   const nextBtn = modal ? modal.querySelector('[data-media-next]') : null;
   if (!modal || !body || !title || !caption) return;
@@ -310,9 +322,10 @@ $youtubeThumb = static function (array $item): ?string {
     const mediaCaption = btn.getAttribute('data-media-caption') || '';
     body.innerHTML = '';
     body.classList.remove('is-zoomed');
-    if (zoomBtn) {
-      zoomBtn.hidden = type === 'video';
-      zoomBtn.setAttribute('aria-pressed', 'false');
+    body.style.removeProperty('--media-zoom-width');
+    if (zoomWrap) zoomWrap.hidden = type === 'video';
+    if (zoomRange) {
+      zoomRange.value = '100';
     }
     if (type === 'video') {
       if (src.indexOf('youtube.com/embed/') !== -1) {
@@ -332,7 +345,6 @@ $youtubeThumb = static function (array $item): ?string {
       const img = document.createElement('img');
       img.src = src;
       img.alt = mediaTitle;
-      img.addEventListener('click', toggleZoom);
       body.appendChild(img);
     }
     title.textContent = mediaTitle;
@@ -349,13 +361,19 @@ $youtubeThumb = static function (array $item): ?string {
     modal.hidden = true;
     body.innerHTML = '';
     body.classList.remove('is-zoomed');
+    body.style.removeProperty('--media-zoom-width');
     document.body.style.overflow = '';
   }
 
-  function toggleZoom() {
-    const on = !body.classList.contains('is-zoomed');
+  function setZoom(value) {
+    const pct = Math.max(100, Math.min(300, Number(value || 100)));
+    const on = pct > 100;
     body.classList.toggle('is-zoomed', on);
-    if (zoomBtn) zoomBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (on) {
+      body.style.setProperty('--media-zoom-width', pct + '%');
+    } else {
+      body.style.removeProperty('--media-zoom-width');
+    }
   }
 
   thumbs.forEach((btn, index) => {
@@ -370,8 +388,8 @@ $youtubeThumb = static function (array $item): ?string {
   if (nextBtn) {
     nextBtn.addEventListener('click', () => openMedia(currentIndex + 1));
   }
-  if (zoomBtn) {
-    zoomBtn.addEventListener('click', toggleZoom);
+  if (zoomRange) {
+    zoomRange.addEventListener('input', () => setZoom(zoomRange.value));
   }
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && !modal.hidden) closeMedia();
