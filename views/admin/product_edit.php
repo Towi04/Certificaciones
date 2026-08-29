@@ -139,7 +139,7 @@
                                 <div class="product-media-actions">
                                     <details class="product-media-edit">
                                         <summary class="btn btn-primary btn-sm">Editar</summary>
-                                        <form method="post" action="<?= e(url('/admin/productos/' . $product['id'] . '/media/' . $item['id'])) ?>" class="product-media-edit-form">
+                                        <form method="post" action="<?= e(url('/admin/productos/' . $product['id'] . '/media/' . $item['id'])) ?>" enctype="multipart/form-data" class="product-media-edit-form">
                                             <?= csrf_field() ?>
                                             <label>Título
                                                 <input type="text" name="title" value="<?= e((string) ($item['title'] ?? '')) ?>">
@@ -150,6 +150,11 @@
                                             <label>Descripción breve
                                                 <input type="text" name="caption" value="<?= e((string) ($item['caption'] ?? '')) ?>">
                                             </label>
+                                            <?php if (($item['media_type'] ?? '') === 'image'): ?>
+                                                <label class="product-media-edit-file">Reemplazar imagen
+                                                    <input type="file" name="media_file" accept=".jpg,.jpeg,.png,.webp,.gif,.svg">
+                                                </label>
+                                            <?php endif; ?>
                                             <label class="product-media-check">
                                                 <input type="checkbox" name="is_active" value="1" <?= !empty($item['is_active']) ? 'checked' : '' ?>>
                                                 Mostrar en catálogo
@@ -241,6 +246,9 @@
     margin-top:.55rem;
 }
 .product-media-edit {
+    flex:0 0 auto;
+}
+.product-media-edit[open] {
     flex:1 1 100%;
 }
 .product-media-edit summary {
@@ -280,6 +288,9 @@
 .product-media-check {
     flex-direction:row !important;
     align-items:center;
+    grid-column:1 / -1;
+}
+.product-media-edit-file {
     grid-column:1 / -1;
 }
 @media (max-width: 860px) {
