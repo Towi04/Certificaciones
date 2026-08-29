@@ -6,10 +6,12 @@ namespace App\Controllers;
 
 use App\Auth\Auth;
 use App\Database\Connection;
+use App\Repositories\CertifierRepository;
 use App\Repositories\ProductGroupRepository;
 use App\Repositories\ProductMediaRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
+use App\Repositories\SupplierRepository;
 use App\Repositories\TrackingRepository;
 use App\Services\CheckoutService;
 use App\Services\CheckoutRequirements;
@@ -17,6 +19,7 @@ use App\Services\ExportService;
 use App\Services\ImportService;
 use App\Integrations\Mailer;
 use App\Services\MailTemplateService;
+use App\Services\ProductAdminService;
 use App\Services\ProductMediaService;
 use App\Services\TrackingService;
 use App\Services\UksEletService;
@@ -66,12 +69,39 @@ final class AdminController
         Auth::requireRole(['admin']);
         $q = isset($_GET['q']) && is_string($_GET['q']) ? $_GET['q'] : null;
         $products = (new ProductRepository())->adminList($q);
+        $groupsCount = 0;
+        try {
+            $groupsCount = count((new ProductGroupRepository())->all());
+        } catch (\Throwable $e) {
+            // ignore
+        }
         view('admin/products', [
             'title' => 'Productos',
             'products' => $products,
             'q' => $q ?? '',
+            'groupsCount' => $groupsCount,
             'layout' => 'admin',
         ]);
+    }
+
+    public function productCreateForm(): void
+    {
+        Auth::requireRole(['admin']);
+        view('admin/product_form', $this->productFormData(null));
+    }
+
+    public function productCreate(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            $id = (new ProductAdminService())->createProduct($_POST);
+            flash('success', 'Producto creado. Ya puedes subir logo/galería y asignarlo al catálogo.');
+            redirect('/admin/productos/' . $id);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/admin/productos/nuevo');
+        }
     }
 
     public function productEdit(string $id): void
@@ -91,65 +121,151 @@ final class AdminController
             error_log('[Doceo] Product media admin: ' . $e->getMessage());
         }
 
-        $groups = (new ProductGroupRepository())->all();
-
-        view('admin/product_edit', [
-            'title' => 'Editar · ' . $product['name'],
-            'product' => $product,
-            'media' => $media,
-            'groups' => $groups,
-            'layout' => 'admin',
-        ]);
+        $data = $this->productFormData($product);
+        $data['media'] = $media;
+        $data['title'] = 'Editar · ' . $product['name'];
+        view('admin/product_form', $data);
     }
 
     public function productUpdate(string $id): void
     {
         Auth::requireRole(['admin']);
         csrf_verify();
-        $repo = new ProductRepository();
-        $product = $repo->find((int) $id);
-        if ($product === null) {
+        $productId = (int) $id;
+        if ((new ProductRepository())->find($productId) === null) {
             flash('error', 'Producto no encontrado.');
             redirect('/admin/productos');
         }
 
-        $platform = (string) ($_POST['platform_type'] ?? $product['platform_type'] ?? 'none');
-        if (!in_array($platform, ['none', 'moodle', 'provider'], true)) {
-            $platform = 'none';
-        }
-        $groupRaw = trim((string) ($_POST['product_group_id'] ?? ''));
-        $groupId = $groupRaw === '' ? null : (int) $groupRaw;
-        if ($groupId !== null && $groupId < 1) {
-            $groupId = null;
-        }
-        if ($groupId !== null && (new ProductGroupRepository())->find($groupId) === null) {
-            $groupId = null;
-        }
-        $courseIdRaw = trim((string) ($_POST['moodle_course_id'] ?? ''));
-        $courseId = $courseIdRaw === '' ? null : (int) $courseIdRaw;
-        if ($courseId !== null && $courseId < 1) {
-            $courseId = null;
-        }
-        $months = (int) ($_POST['access_months'] ?? ($product['access_months'] ?? 6));
-        if ($months < 1) {
-            $months = 6;
-        }
-        if ($months > 60) {
-            $months = 60;
-        }
-
         try {
-            $repo->update((int) $id, [
-                'platform_type' => $platform,
-                'moodle_course_id' => $courseId,
-                'access_months' => $months,
-                'product_group_id' => $groupId,
-            ]);
-            flash('success', 'Producto actualizado. Si es Moodle, usa Sincronizar Moodle en el caso o confirma un pago de prueba.');
+            (new ProductAdminService())->updateProduct($productId, $_POST);
+            flash('success', 'Producto actualizado.');
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
-        redirect('/admin/productos/' . (int) $id);
+        redirect('/admin/productos/' . $productId);
+    }
+
+    public function productGroups(): void
+    {
+        Auth::requireRole(['admin']);
+        $groups = (new ProductGroupRepository())->all();
+        $counts = [];
+        $repo = new ProductGroupRepository();
+        foreach ($groups as $g) {
+            $counts[(int) $g['id']] = $repo->countProducts((int) $g['id']);
+        }
+        view('admin/product_groups', [
+            'title' => 'Grupos de producto',
+            'groups' => $groups,
+            'counts' => $counts,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function productGroupCreateForm(): void
+    {
+        Auth::requireRole(['admin']);
+        view('admin/product_group_form', [
+            'title' => 'Nuevo grupo de proceso',
+            'group' => null,
+            'suppliers' => (new SupplierRepository())->all(),
+            'defaultConfig' => json_encode(
+                ProductGroupRepository::defaultCheckoutConfig(true),
+                JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
+            ),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function productGroupCreate(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            $id = (new ProductAdminService())->createGroup($_POST);
+            flash('success', 'Grupo creado. Ya puedes asignarlo a productos.');
+            redirect('/admin/grupos/' . $id);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/admin/grupos/nuevo');
+        }
+    }
+
+    public function productGroupEdit(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $group = (new ProductGroupRepository())->find((int) $id);
+        if ($group === null) {
+            http_response_code(404);
+            view('errors/404', ['title' => 'Grupo no encontrado', 'layout' => 'admin']);
+
+            return;
+        }
+        $config = (string) ($group['config_json'] ?? '');
+        if ($config !== '') {
+            $decoded = json_decode($config, true);
+            if (is_array($decoded)) {
+                $config = (string) json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+            }
+        }
+        view('admin/product_group_form', [
+            'title' => 'Editar grupo · ' . $group['name'],
+            'group' => $group,
+            'suppliers' => (new SupplierRepository())->all(),
+            'defaultConfig' => $config !== '' ? $config : json_encode(
+                ProductGroupRepository::defaultCheckoutConfig(true),
+                JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
+            ),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function productGroupUpdate(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $groupId = (int) $id;
+        try {
+            (new ProductAdminService())->updateGroup($groupId, $_POST);
+            flash('success', 'Grupo actualizado. Los productos del grupo heredan estos cambios.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/grupos/' . $groupId);
+    }
+
+    public function productGroupsSeed(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            $log = (new ProductAdminService())->ensureSuggestedGroups();
+            flash('success', 'Grupos sugeridos listos: ' . implode(' · ', $log));
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/grupos');
+    }
+
+    /**
+     * @param array<string, mixed>|null $product
+     * @return array<string, mixed>
+     */
+    private function productFormData(?array $product): array
+    {
+        return [
+            'title' => $product ? ('Editar · ' . $product['name']) : 'Nuevo producto',
+            'product' => $product,
+            'groups' => (new ProductGroupRepository())->all(),
+            'suppliers' => (new SupplierRepository())->all(),
+            'certifiers' => (new CertifierRepository())->all(),
+            'typeOptions' => ProductAdminService::typeOptions(),
+            'categoryOptions' => ProductAdminService::categoryOptions(),
+            'audienceOptions' => ProductAdminService::audienceOptions(),
+            'platformOptions' => ProductAdminService::platformOptions(),
+            'layout' => 'admin',
+        ];
     }
 
     public function productLogoUpload(string $id): void

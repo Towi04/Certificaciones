@@ -46,5 +46,17 @@ Todos los grupos de certificación/trámite heredan las mismas condiciones de co
 - OXXO (tarjeta de depósito + comprobante)
 - TDC OpenPay (meses 1, 3, 6, 9, 12; `min_amount` 0)
 
-Tras desplegar, vuelve a ejecutar el seed de catálogo (o el setup) para asignar grupos
-y limpiar `card_msi` viejos en productos que antes limitaban a 1/3/6.
+Tras desplegar, entra a **Admin → Grupos** y pulsa **Cargar grupos sugeridos**
+(o vuelve a ejecutar el seed de catálogo) para crear los grupos y poder asignarlos
+a cada producto. También puedes crear grupos nuevos desde esa misma pantalla.
+
+## Admin
+
+| Pantalla | Ruta | Para qué |
+|----------|------|----------|
+| Grupos de proceso | `/admin/grupos` | Crear/editar grupos y cargar sugeridos |
+| Nuevo grupo | `/admin/grupos/nuevo` | Alta manual de un proceso de proveedor |
+| Productos | `/admin/productos` | Listado |
+| Nuevo producto | `/admin/productos/nuevo` | Alta (código, nombre, precios, grupo…) |
+| Editar producto | `/admin/productos/{id}` | Cambiar código/nombre/grupo/precios + media |
+
