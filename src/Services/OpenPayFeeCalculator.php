@@ -65,7 +65,7 @@ final class OpenPayFeeCalculator
 
         $feeBase = ($net * ($percent / 100)) + $fixed;
         $feeWithTax = round($feeBase + ($feeBase * 0.16), 2);
-        $gross = round($net + $feeWithTax, 2);
+        $gross = self::roundUpToMultiple(round($net + $feeWithTax, 2), 5.0);
 
         return [
             'net' => $net,
@@ -127,20 +127,17 @@ final class OpenPayFeeCalculator
             9 => 13.7,
             12 => 16.7,
         ];
-        $defaultPercentForMonths = $defaultByMonths[$months] ?? 2.9;
 
-        return [
-            self::floatSetting(
-                'openpay_fee_card_msi_' . $months . '_percent',
-                'OPENPAY_FEE_CARD_MSI_' . $months . '_PERCENT',
-                $defaultPercentForMonths
-            ),
-            self::floatSetting(
-                'openpay_fee_card_msi_' . $months . '_fixed',
-                'OPENPAY_FEE_CARD_MSI_' . $months . '_FIXED',
-                2.5
-            ),
-        ];
+        return [$defaultByMonths[$months] ?? 2.9, 2.5];
+    }
+
+    private static function roundUpToMultiple(float $amount, float $multiple): float
+    {
+        if ($multiple <= 0) {
+            return round($amount, 2);
+        }
+
+        return round(ceil($amount / $multiple) * $multiple, 2);
     }
 
     /** @return array{0: float, 1: float} percent, fixed MXN */

@@ -60,6 +60,11 @@ final class CardMsiCalculator
                 $months = self::DEFAULT_MONTHS;
             }
         }
+        if (!in_array(1, $months, true)) {
+            $months[] = 1;
+            $months = array_values(array_unique($months));
+            sort($months);
+        }
 
         return [
             'enabled' => array_key_exists('enabled', $cfg) ? (bool) $cfg['enabled'] : $enabledDefault,
