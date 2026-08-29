@@ -28,7 +28,8 @@ final class ExamScheduleService
      *   slot_minutes:int,
      *   min_advance_days:int,
      *   weekdays:array{start:string,end:string},
-     *   saturday:array{start:string,end:string}
+     *   saturday:array{start:string,end:string},
+     *   blocked_dates:list<string>
      * }
      */
     public static function scheduleRules(array $product): array
@@ -51,7 +52,38 @@ final class ExamScheduleService
                 'start' => (string) ($saturday['start'] ?? '08:00'),
                 'end' => (string) ($saturday['end'] ?? '12:00'),
             ],
+            'blocked_dates' => self::normalizeBlockedDates($schedule['blocked_dates'] ?? []),
         ];
+    }
+
+    /**
+     * Fechas bloqueadas (vacaciones / cierres) en formato YYYY-MM-DD.
+     *
+     * @param mixed $raw
+     * @return list<string>
+     */
+    public static function normalizeBlockedDates(mixed $raw): array
+    {
+        if (is_string($raw)) {
+            $raw = preg_split('/[\s,;]+/', $raw) ?: [];
+        }
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($raw as $item) {
+            $date = trim((string) $item);
+            if ($date === '') {
+                continue;
+            }
+            $dt = \DateTimeImmutable::createFromFormat('Y-m-d', $date);
+            if ($dt && $dt->format('Y-m-d') === $date) {
+                $out[$date] = $date;
+            }
+        }
+
+        return array_values($out);
     }
 
     /** @param array<string, mixed> $product */
@@ -101,6 +133,10 @@ final class ExamScheduleService
         }
 
         $rules = self::scheduleRules($product);
+        if (in_array($date, $rules['blocked_dates'], true)) {
+            return [];
+        }
+
         $dt = new \DateTimeImmutable($date);
         $dow = (int) $dt->format('w');
         if ($dow === 0) {
@@ -146,6 +182,10 @@ final class ExamScheduleService
         }
         if ($date < $this->minSelectableDate($product)) {
             throw new \InvalidArgumentException('La fecha de examen no cumple el anticipo mínimo requerido.');
+        }
+        $blocked = self::scheduleRules($product)['blocked_dates'];
+        if (in_array($date, $blocked, true)) {
+            throw new \InvalidArgumentException('Esa fecha de aplicación no está disponible (bloqueada / vacaciones).');
         }
 
         $allowed = array_column($this->slotsForDate($product, $date), 'value');

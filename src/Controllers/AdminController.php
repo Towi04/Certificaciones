@@ -166,14 +166,16 @@ final class AdminController
     public function productGroupCreateForm(): void
     {
         Auth::requireRole(['admin']);
+        $defaultConfig = json_encode(
+            ProductGroupRepository::defaultCheckoutConfig(true),
+            JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
+        );
         view('admin/product_group_form', [
             'title' => 'Nuevo grupo de proceso',
             'group' => null,
             'suppliers' => (new SupplierRepository())->all(),
-            'defaultConfig' => json_encode(
-                ProductGroupRepository::defaultCheckoutConfig(true),
-                JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
-            ),
+            'defaultConfig' => $defaultConfig,
+            'extras' => ProductAdminService::groupFormExtrasFromConfig((string) $defaultConfig),
             'layout' => 'admin',
         ]);
     }
@@ -209,14 +211,16 @@ final class AdminController
                 $config = (string) json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
             }
         }
+        $defaultConfig = $config !== '' ? $config : json_encode(
+            ProductGroupRepository::defaultCheckoutConfig(true),
+            JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
+        );
         view('admin/product_group_form', [
             'title' => 'Editar grupo · ' . $group['name'],
             'group' => $group,
             'suppliers' => (new SupplierRepository())->all(),
-            'defaultConfig' => $config !== '' ? $config : json_encode(
-                ProductGroupRepository::defaultCheckoutConfig(true),
-                JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
-            ),
+            'defaultConfig' => $defaultConfig,
+            'extras' => ProductAdminService::groupFormExtrasFromConfig((string) ($group['config_json'] ?? '')),
             'layout' => 'admin',
         ]);
     }
@@ -830,12 +834,246 @@ final class AdminController
     public function suppliers(): void
     {
         Auth::requireRole(['admin']);
-        $suppliers = (new \App\Repositories\SupplierRepository())->all();
+        $repo = new SupplierRepository();
+        $suppliers = $repo->all();
+        $counts = [];
+        foreach ($suppliers as $s) {
+            $sid = (int) $s['id'];
+            $counts[$sid] = [
+                'products' => $repo->countProducts($sid),
+                'groups' => $repo->countGroups($sid),
+            ];
+        }
         view('admin/suppliers', [
             'title' => 'Proveedores',
             'suppliers' => $suppliers,
+            'counts' => $counts,
             'layout' => 'admin',
         ]);
+    }
+
+    public function supplierCreateForm(): void
+    {
+        Auth::requireRole(['admin']);
+        view('admin/supplier_form', [
+            'title' => 'Nuevo proveedor',
+            'supplier' => null,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function supplierCreate(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            $id = (new \App\Services\SupplierAdminService())->create($_POST);
+            flash('success', 'Proveedor creado.');
+            redirect('/admin/proveedores/' . $id);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/admin/proveedores/nuevo');
+        }
+    }
+
+    public function supplierShow(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $repo = new SupplierRepository();
+        $supplier = $repo->find((int) $id);
+        if ($supplier === null) {
+            http_response_code(404);
+            view('errors/404', ['title' => 'Proveedor no encontrado', 'layout' => 'admin']);
+
+            return;
+        }
+        $sid = (int) $supplier['id'];
+        $allGroups = (new ProductGroupRepository())->all();
+        $groups = array_values(array_filter(
+            $allGroups,
+            static fn (array $g): bool => (int) ($g['supplier_id'] ?? 0) === $sid
+        ));
+        $products = array_values(array_filter(
+            (new ProductRepository())->adminList(),
+            static fn (array $p): bool => (int) ($p['supplier_id'] ?? 0) === $sid
+        ));
+        $products = array_slice($products, 0, 40);
+        view('admin/supplier_show', [
+            'title' => 'Proveedor · ' . $supplier['name'],
+            'supplier' => $supplier,
+            'groups' => $groups,
+            'products' => $products,
+            'productCount' => $repo->countProducts($sid),
+            'groupCount' => $repo->countGroups($sid),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function supplierUpdate(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $supplierId = (int) $id;
+        try {
+            (new \App\Services\SupplierAdminService())->update($supplierId, $_POST);
+            flash('success', 'Proveedor actualizado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/proveedores/' . $supplierId);
+    }
+
+    public function supplierDelete(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            (new \App\Services\SupplierAdminService())->delete((int) $id);
+            flash('success', 'Proveedor eliminado.');
+            redirect('/admin/proveedores');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/admin/proveedores/' . (int) $id);
+        }
+    }
+
+    public function supplierBulkProducts(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $supplierId = (int) $id;
+        $file = $_FILES['csv'] ?? null;
+        if (!is_array($file) || (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            flash('error', 'Selecciona un archivo CSV válido.');
+            redirect('/admin/proveedores/' . $supplierId);
+
+            return;
+        }
+        $name = strtolower((string) ($file['name'] ?? ''));
+        if (!str_ends_with($name, '.csv')) {
+            flash('error', 'El archivo debe ser CSV.');
+            redirect('/admin/proveedores/' . $supplierId);
+
+            return;
+        }
+        $groupId = !empty($_POST['product_group_id']) ? (int) $_POST['product_group_id'] : null;
+        try {
+            $result = (new ProductAdminService())->importProductsFromCsv(
+                (string) $file['tmp_name'],
+                $groupId,
+                $supplierId
+            );
+            $msg = 'Certificaciones creadas: ' . $result['created'] . '. Omitidas: ' . $result['skipped'] . '.';
+            if ($result['errors'] !== []) {
+                $msg .= ' ' . implode(' ', array_slice($result['errors'], 0, 5));
+                flash('error', $msg);
+            } else {
+                flash('success', $msg);
+            }
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/proveedores/' . $supplierId);
+    }
+
+    public function supplierBulkTemplate(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        if ((new SupplierRepository())->find((int) $id) === null) {
+            http_response_code(404);
+            echo 'Proveedor no encontrado';
+
+            return;
+        }
+        (new ProductAdminService())->sendProductBulkTemplateCsv();
+    }
+
+    public function prices(): void
+    {
+        Auth::requireRole(['admin']);
+        $filterSupplierId = !empty($_GET['supplier_id']) ? (int) $_GET['supplier_id'] : null;
+        $products = (new ProductRepository())->adminList();
+        if ($filterSupplierId !== null) {
+            $products = array_values(array_filter(
+                $products,
+                static fn (array $p): bool => (int) ($p['supplier_id'] ?? 0) === $filterSupplierId
+            ));
+        }
+        view('admin/prices', [
+            'title' => 'Precios masivos',
+            'products' => $products,
+            'suppliers' => (new SupplierRepository())->all(),
+            'filterSupplierId' => $filterSupplierId,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function pricesSave(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $rows = $_POST['prices'] ?? [];
+        if (!is_array($rows)) {
+            flash('error', 'No se recibieron precios.');
+            redirect('/admin/precios');
+
+            return;
+        }
+        try {
+            $n = (new ProductAdminService())->updatePricesBulk($rows);
+            flash('success', "Precios actualizados: {$n} producto(s).");
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        $qs = !empty($_POST['supplier_id']) ? ('?supplier_id=' . (int) $_POST['supplier_id']) : '';
+        redirect('/admin/precios' . $qs);
+    }
+
+    public function pricesTemplate(): void
+    {
+        Auth::requireRole(['admin']);
+        $filterSupplierId = !empty($_GET['supplier_id']) ? (int) $_GET['supplier_id'] : null;
+        $products = (new ProductRepository())->adminList();
+        if ($filterSupplierId !== null) {
+            $products = array_values(array_filter(
+                $products,
+                static fn (array $p): bool => (int) ($p['supplier_id'] ?? 0) === $filterSupplierId
+            ));
+        }
+        (new ProductAdminService())->sendPriceTemplateCsv($products);
+    }
+
+    public function pricesImport(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $file = $_FILES['csv'] ?? null;
+        if (!is_array($file) || (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            flash('error', 'Selecciona un archivo CSV válido.');
+            redirect('/admin/precios');
+
+            return;
+        }
+        $name = strtolower((string) ($file['name'] ?? ''));
+        if (!str_ends_with($name, '.csv')) {
+            flash('error', 'El archivo debe ser CSV.');
+            redirect('/admin/precios');
+
+            return;
+        }
+        try {
+            $result = (new ProductAdminService())->importPricesFromCsv((string) $file['tmp_name']);
+            $msg = 'Precios actualizados: ' . $result['updated'] . '. Omitidos: ' . $result['skipped'] . '.';
+            if ($result['errors'] !== []) {
+                $msg .= ' ' . implode(' ', array_slice($result['errors'], 0, 5));
+                flash('error', $msg);
+            } else {
+                flash('success', $msg);
+            }
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/precios');
     }
 
     public function health(): void

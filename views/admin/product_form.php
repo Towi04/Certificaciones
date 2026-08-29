@@ -201,16 +201,36 @@ $labels = [
                value="<?= e((string) ($product['short_description'] ?? '')) ?>"
                style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
     </label>
-    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-bottom:.75rem">
-        Descripción
-        <textarea name="description" rows="5"
-                  style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px"><?= e((string) ($product['description'] ?? '')) ?></textarea>
-    </label>
-    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-        Beneficios (HTML)
-        <textarea name="benefits_html" rows="4"
-                  style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px"><?= e((string) ($product['benefits_html'] ?? '')) ?></textarea>
-    </label>
+    <div class="html-field" style="margin-bottom:.75rem" data-html-field>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.35rem">
+            <span class="muted" style="font-size:.88rem;font-weight:600">Descripción</span>
+            <button type="button" class="btn btn-ghost btn-sm html-preview-toggle" aria-pressed="false"
+                    title="Ver texto sin código HTML">
+                &lt;/&gt;
+            </button>
+        </div>
+        <textarea name="description" rows="5" class="html-field-source"
+                  style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;width:100%;display:block"><?= e((string) ($product['description'] ?? '')) ?></textarea>
+        <div class="html-field-preview" hidden></div>
+        <p class="muted html-field-hint" style="font-size:.78rem;margin:.35rem 0 0">
+            Pulsa <code>&lt;/&gt;</code> para ver el texto sin etiquetas HTML.
+        </p>
+    </div>
+    <div class="html-field" data-html-field>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.35rem">
+            <span class="muted" style="font-size:.88rem;font-weight:600">Beneficios (HTML)</span>
+            <button type="button" class="btn btn-ghost btn-sm html-preview-toggle" aria-pressed="false"
+                    title="Ver texto sin código HTML">
+                &lt;/&gt;
+            </button>
+        </div>
+        <textarea name="benefits_html" rows="4" class="html-field-source"
+                  style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;width:100%;font-family:ui-monospace,monospace;font-size:.85rem;display:block"><?= e((string) ($product['benefits_html'] ?? '')) ?></textarea>
+        <div class="html-field-preview" hidden></div>
+        <p class="muted html-field-hint" style="font-size:.78rem;margin:.35rem 0 0">
+            Pulsa <code>&lt;/&gt;</code> para ver el texto sin etiquetas HTML.
+        </p>
+    </div>
 
     <h2 style="font-size:1.05rem;color:var(--doceo-blue);margin-top:1.25rem">Campus / publicación</h2>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem">
@@ -517,3 +537,67 @@ $labels = [
 </style>
 
 <?php endif; ?>
+
+<style>
+.html-preview-toggle {
+    font-family: ui-monospace, monospace;
+    font-size: .82rem;
+    min-width: 2.25rem;
+    padding: .35rem .55rem;
+    line-height: 1;
+}
+.html-preview-toggle[aria-pressed="true"] {
+    background: var(--doceo-blue);
+    color: #fff;
+    border-color: var(--doceo-blue);
+}
+.html-field-preview {
+    border: 1px solid #cfd8e6;
+    border-radius: 10px;
+    padding: .85rem 1rem;
+    background: #fff;
+    min-height: 6rem;
+    font-size: .95rem;
+    line-height: 1.5;
+    color: #1a2b42;
+}
+.html-field-preview a { color: var(--doceo-blue); }
+.html-field-preview ul,
+.html-field-preview ol { margin: .35rem 0 .35rem 1.1rem; padding: 0; }
+</style>
+<script>
+(function () {
+  document.querySelectorAll('[data-html-field]').forEach(function (wrap) {
+    var toggleBtn = wrap.querySelector('.html-preview-toggle');
+    var textarea = wrap.querySelector('.html-field-source');
+    var preview = wrap.querySelector('.html-field-preview');
+    var hint = wrap.querySelector('.html-field-hint');
+    if (!toggleBtn || !textarea || !preview) return;
+
+    function updatePreview() {
+      preview.innerHTML = textarea.value;
+    }
+
+    function setPreviewMode(on) {
+      toggleBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      toggleBtn.title = on ? 'Ver código HTML' : 'Ver texto sin código HTML';
+      textarea.hidden = on;
+      preview.hidden = !on;
+      if (hint) {
+        hint.innerHTML = on
+          ? 'Vista previa renderizada. Pulsa <code>&lt;/&gt;</code> para volver al código HTML.'
+          : 'Pulsa <code>&lt;/&gt;</code> para ver el texto sin etiquetas HTML.';
+      }
+      if (on) updatePreview();
+    }
+
+    toggleBtn.addEventListener('click', function () {
+      setPreviewMode(toggleBtn.getAttribute('aria-pressed') !== 'true');
+    });
+
+    textarea.addEventListener('input', function () {
+      if (toggleBtn.getAttribute('aria-pressed') === 'true') updatePreview();
+    });
+  });
+})();
+</script>

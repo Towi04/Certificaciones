@@ -31,6 +31,15 @@ final class SupplierRepository
         return $row ?: null;
     }
 
+    public function findByCode(string $code): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM suppliers WHERE code = ? LIMIT 1');
+        $stmt->execute([$code]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
     /** @param array<string, mixed> $data */
     public function create(array $data): int
     {
@@ -46,6 +55,47 @@ final class SupplierRepository
         ]);
 
         return (int) $this->pdo->lastInsertId();
+    }
+
+    /** @param array{name?:string,website?:?string,notes?:?string,is_active?:int} $data */
+    public function update(int $id, array $data): void
+    {
+        if ($data === []) {
+            return;
+        }
+        $sets = [];
+        foreach ($data as $k => $_) {
+            $sets[] = "{$k} = :{$k}";
+        }
+        $sql = 'UPDATE suppliers SET ' . implode(', ', $sets) . ' WHERE id = :id';
+        $stmt = $this->pdo->prepare($sql);
+        foreach ($data as $k => $v) {
+            $stmt->bindValue(':' . $k, $v);
+        }
+        $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+        $stmt->execute();
+    }
+
+    public function delete(int $id): void
+    {
+        $stmt = $this->pdo->prepare('DELETE FROM suppliers WHERE id = ?');
+        $stmt->execute([$id]);
+    }
+
+    public function countProducts(int $supplierId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM products WHERE supplier_id = ?');
+        $stmt->execute([$supplierId]);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    public function countGroups(int $supplierId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM product_groups WHERE supplier_id = ?');
+        $stmt->execute([$supplierId]);
+
+        return (int) $stmt->fetchColumn();
     }
 
     /** @return list<array<string, mixed>> */
@@ -66,4 +116,3 @@ final class SupplierRepository
         return $stmt->fetchAll();
     }
 }
-
