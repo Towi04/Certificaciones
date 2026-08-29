@@ -80,15 +80,19 @@
 <div class="panel product-edit-card">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Galería del producto</h2>
     <p class="muted" style="font-size:.88rem;margin-top:0">
-        Agrega ejemplos de certificados, badges, CENNI o videos explicativos. Se muestran al costado derecho de la descripción pública.
+        Agrega imágenes de certificados, badges o CENNI. Para videos, pega un link de YouTube y se mostrará embebido en la ficha pública.
     </p>
 
     <form method="post" action="<?= e(url('/admin/productos/' . $product['id'] . '/media')) ?>" enctype="multipart/form-data" style="padding:1rem;background:#f8fafc;border:1px solid #e6ebf2;border-radius:12px;margin-bottom:1rem">
         <?= csrf_field() ?>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem">
             <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-                Archivo *
-                <input type="file" name="media_file" required accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,.webm,.mov">
+                Archivo de imagen
+                <input type="file" name="media_file" accept=".jpg,.jpeg,.png,.webp,.gif">
+            </label>
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                Video YouTube
+                <input type="url" name="youtube_url" placeholder="https://youtu.be/..." style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
             </label>
             <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
                 Título
@@ -106,6 +110,9 @@
         <label class="muted" style="display:flex;gap:.4rem;align-items:center;margin:.85rem 0;font-size:.88rem">
             <input type="checkbox" name="is_active" value="1" checked> Mostrar en catálogo
         </label>
+        <p class="muted" style="font-size:.82rem;margin:.5rem 0 .85rem">
+            Sube una imagen o pega un link de YouTube. Si llenas ambos, se usará el video de YouTube.
+        </p>
         <button class="btn btn-accent btn-sm" type="submit">Agregar multimedia</button>
     </form>
 
@@ -116,7 +123,9 @@
             <?php foreach ($media as $item): ?>
                 <article class="product-media-admin-item">
                     <div class="product-media-admin-preview">
-                        <?php if (($item['media_type'] ?? '') === 'video'): ?>
+                        <?php if (($item['media_type'] ?? '') === 'video' && !empty($item['external_url'])): ?>
+                            <iframe src="<?= e((string) $item['external_url']) ?>" title="<?= e((string) ($item['title'] ?? 'Video')) ?>" allowfullscreen loading="lazy"></iframe>
+                        <?php elseif (($item['media_type'] ?? '') === 'video'): ?>
                             <video src="<?= e(asset((string) $item['storage_path'])) ?>" controls preload="metadata"></video>
                         <?php else: ?>
                             <img src="<?= e(asset((string) $item['storage_path'])) ?>" alt="">
@@ -187,10 +196,12 @@
     margin-bottom:.65rem;
 }
 .product-media-admin-preview img,
-.product-media-admin-preview video {
+.product-media-admin-preview video,
+.product-media-admin-preview iframe {
     width:100%;
     height:100%;
     object-fit:contain;
+    border:0;
 }
 @media (max-width: 860px) {
     .product-edit-grid {

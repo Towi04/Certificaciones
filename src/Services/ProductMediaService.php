@@ -10,9 +10,7 @@ use App\Repositories\ProductRepository;
 final class ProductMediaService
 {
     private const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-    private const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov'];
     private const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    private const VIDEO_MIMES = ['video/mp4', 'video/webm', 'video/quicktime', 'application/octet-stream'];
 
     private ProductMediaRepository $media;
     private ProductRepository $products;
@@ -55,26 +53,52 @@ final class ProductMediaService
             throw new \InvalidArgumentException('Producto no encontrado.');
         }
 
-        $stored = $this->storePublicUpload(
-            $productId,
-            $file,
-            array_merge(self::IMAGE_EXTENSIONS, self::VIDEO_EXTENSIONS),
-            80 * 1024 * 1024
-        );
-
-        $mediaType = $this->mediaTypeFor($stored['extension'], $stored['mime']);
+        $stored = $this->storePublicUpload($productId, $file, self::IMAGE_EXTENSIONS, 10 * 1024 * 1024);
         $title = trim($title);
         if ($title === '') {
-            $title = $mediaType === 'image' ? 'Imagen del producto' : 'Video del producto';
+            $title = 'Imagen del producto';
         }
 
         return $this->media->create([
             'product_id' => $productId,
-            'media_type' => $mediaType,
+            'media_type' => 'image',
             'title' => mb_substr($title, 0, 190),
             'caption' => trim($caption) !== '' ? mb_substr(trim($caption), 0, 255) : null,
             'storage_path' => $stored['path'],
+            'external_url' => null,
             'mime_type' => $stored['mime'],
+            'sort_order' => max(0, $sortOrder),
+            'is_active' => $isActive,
+        ]);
+    }
+
+    public function addYoutubeVideo(
+        int $productId,
+        string $youtubeUrl,
+        string $title,
+        string $caption,
+        int $sortOrder,
+        bool $isActive
+    ): int {
+        $product = $this->products->find($productId);
+        if ($product === null) {
+            throw new \InvalidArgumentException('Producto no encontrado.');
+        }
+
+        $embedUrl = $this->youtubeEmbedUrl($youtubeUrl);
+        $title = trim($title);
+        if ($title === '') {
+            $title = 'Video del producto';
+        }
+
+        return $this->media->create([
+            'product_id' => $productId,
+            'media_type' => 'video',
+            'title' => mb_substr($title, 0, 190),
+            'caption' => trim($caption) !== '' ? mb_substr(trim($caption), 0, 255) : null,
+            'storage_path' => '',
+            'external_url' => $embedUrl,
+            'mime_type' => 'text/youtube',
             'sort_order' => max(0, $sortOrder),
             'is_active' => $isActive,
         ]);
@@ -121,8 +145,7 @@ final class ProductMediaService
 
         $finfo = new \finfo(FILEINFO_MIME_TYPE);
         $mime = (string) ($finfo->file((string) $file['tmp_name']) ?: ($file['type'] ?? 'application/octet-stream'));
-        $allowedMimes = in_array($extension, self::IMAGE_EXTENSIONS, true) ? self::IMAGE_MIMES : self::VIDEO_MIMES;
-        if (!in_array($mime, $allowedMimes, true)) {
+        if (!in_array($mime, self::IMAGE_MIMES, true)) {
             throw new \InvalidArgumentException('Tipo MIME no permitido para multimedia de producto.');
         }
 
@@ -148,13 +171,37 @@ final class ProductMediaService
         ];
     }
 
-    private function mediaTypeFor(string $extension, string $mime): string
+    private function youtubeEmbedUrl(string $url): string
     {
-        if (str_starts_with($mime, 'video/') || in_array($extension, self::VIDEO_EXTENSIONS, true)) {
-            return 'video';
+        $url = trim($url);
+        if ($url === '' || !filter_var($url, FILTER_VALIDATE_URL)) {
+            throw new \InvalidArgumentException('Pega una URL válida de YouTube.');
         }
 
-        return 'image';
+        $parts = parse_url($url);
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        $path = trim((string) ($parts['path'] ?? ''), '/');
+        $videoId = null;
+
+        if (in_array($host, ['youtu.be', 'www.youtu.be'], true)) {
+            $videoId = explode('/', $path)[0] ?? null;
+        } elseif (in_array($host, ['youtube.com', 'www.youtube.com', 'm.youtube.com'], true)) {
+            parse_str((string) ($parts['query'] ?? ''), $query);
+            if (!empty($query['v']) && is_string($query['v'])) {
+                $videoId = $query['v'];
+            } elseif (str_starts_with($path, 'embed/')) {
+                $videoId = explode('/', substr($path, 6))[0] ?? null;
+            } elseif (str_starts_with($path, 'shorts/')) {
+                $videoId = explode('/', substr($path, 7))[0] ?? null;
+            }
+        }
+
+        $videoId = is_string($videoId) ? trim($videoId) : '';
+        if (!preg_match('/^[A-Za-z0-9_-]{6,20}$/', $videoId)) {
+            throw new \InvalidArgumentException('No pude identificar el ID del video de YouTube.');
+        }
+
+        return 'https://www.youtube.com/embed/' . $videoId;
     }
 
     private function absolutePublicPath(string $path): string

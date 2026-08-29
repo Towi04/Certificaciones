@@ -163,11 +163,26 @@ final class AdminController
         csrf_verify();
         $productId = (int) $id;
         try {
+            $service = new ProductMediaService();
+            $youtubeUrl = trim((string) ($_POST['youtube_url'] ?? ''));
+            if ($youtubeUrl !== '') {
+                $service->addYoutubeVideo(
+                    $productId,
+                    $youtubeUrl,
+                    trim((string) ($_POST['title'] ?? '')),
+                    trim((string) ($_POST['caption'] ?? '')),
+                    (int) ($_POST['sort_order'] ?? 0),
+                    !empty($_POST['is_active'])
+                );
+                flash('success', 'Video de YouTube agregado al producto.');
+                redirect('/admin/productos/' . $productId);
+            }
+
             $file = $_FILES['media_file'] ?? null;
             if ($file === null || !is_array($file)) {
-                throw new \InvalidArgumentException('Selecciona una imagen o video.');
+                throw new \InvalidArgumentException('Sube una imagen o pega un link de YouTube.');
             }
-            (new ProductMediaService())->addMedia(
+            $service->addMedia(
                 $productId,
                 $file,
                 trim((string) ($_POST['title'] ?? '')),
@@ -175,7 +190,7 @@ final class AdminController
                 (int) ($_POST['sort_order'] ?? 0),
                 !empty($_POST['is_active'])
             );
-            flash('success', 'Multimedia agregada al producto.');
+            flash('success', 'Imagen agregada al producto.');
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }

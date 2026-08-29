@@ -43,7 +43,11 @@ $media = $media ?? [];
                     <p class="muted">Ejemplos de certificados, badges, CENNI o videos del examen.</p>
                     <?php foreach ($media as $item): ?>
                         <article class="product-media-card">
-                            <?php if (($item['media_type'] ?? '') === 'video'): ?>
+                            <?php if (($item['media_type'] ?? '') === 'video' && !empty($item['external_url'])): ?>
+                                <div class="product-video-embed">
+                                    <iframe src="<?= e((string) $item['external_url']) ?>" title="<?= e((string) ($item['title'] ?? 'Video')) ?>" allowfullscreen loading="lazy"></iframe>
+                                </div>
+                            <?php elseif (($item['media_type'] ?? '') === 'video'): ?>
                                 <video src="<?= e(asset((string) $item['storage_path'])) ?>" controls preload="metadata"></video>
                             <?php else: ?>
                                 <img src="<?= e(asset((string) $item['storage_path'])) ?>" alt="<?= e((string) ($item['title'] ?? '')) ?>">
@@ -98,6 +102,19 @@ $media = $media ?? [];
     object-fit:contain;
     display:block;
     background:#f4f7fb;
+}
+.product-video-embed {
+    position:relative;
+    width:100%;
+    aspect-ratio:16 / 9;
+    background:#f4f7fb;
+}
+.product-video-embed iframe {
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    border:0;
 }
 .product-media-copy {
     padding:.75rem;
