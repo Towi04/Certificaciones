@@ -31,6 +31,15 @@ final class CertifierRepository
         return (int) $this->pdo->lastInsertId();
     }
 
+    public function find(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM certifiers WHERE id = ? LIMIT 1');
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
     public function findByCode(string $code): ?array
     {
         $stmt = $this->pdo->prepare('SELECT * FROM certifiers WHERE code = ?');

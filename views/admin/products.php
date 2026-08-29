@@ -1,11 +1,30 @@
-<div style="display:flex;justify-content:space-between;gap:1rem;align-items:center;flex-wrap:wrap">
-    <h1 style="margin:0;color:var(--doceo-blue)">Productos</h1>
-    <form method="get" class="search" style="max-width:360px">
-        <input type="search" name="q" value="<?= e($q) ?>" placeholder="Buscar…">
-        <button class="btn btn-primary" type="submit">Filtrar</button>
-    </form>
+<div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap">
+    <div>
+        <h1 style="margin:0;color:var(--doceo-blue)">Productos</h1>
+        <p class="muted" style="margin:.35rem 0 0">
+            Crea productos, edita código/nombre/precios y asígnales un
+            <a href="<?= e(url('/admin/grupos')) ?>">grupo de proceso</a>
+            para heredar pagos y MSI.
+        </p>
+    </div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <form method="get" class="search" style="max-width:280px;margin:0">
+            <input type="search" name="q" value="<?= e($q) ?>" placeholder="Buscar…">
+            <button class="btn btn-primary" type="submit">Filtrar</button>
+        </form>
+        <a class="btn btn-ghost" href="<?= e(url('/admin/grupos')) ?>">Grupos</a>
+        <a class="btn btn-accent" href="<?= e(url('/admin/productos/nuevo')) ?>">Nuevo producto</a>
+    </div>
 </div>
-<p class="muted">Para cursos Moodle: edita el producto y captura el <strong>ID numérico del curso</strong> de campus.</p>
+
+<?php if ((int) ($groupsCount ?? 0) === 0): ?>
+    <div class="flash flash-error" style="margin-top:1rem">
+        No hay grupos de proceso. Por eso el combo sale vacío al editar.
+        Ve a <a href="<?= e(url('/admin/grupos')) ?>"><strong>Grupos</strong></a>
+        y pulsa <strong>Cargar grupos sugeridos</strong>.
+    </div>
+<?php endif; ?>
+
 <div class="panel" style="margin-top:1rem">
     <div class="table-wrap">
         <table class="data">
@@ -18,7 +37,7 @@
             <tbody>
             <?php foreach ($products as $p): ?>
                 <tr>
-                    <td><?= e($p['code']) ?></td>
+                    <td><code><?= e($p['code']) ?></code></td>
                     <td><?= e($p['name']) ?><?= !empty($p['is_star']) ? ' ⭐' : '' ?></td>
                     <td><?= e($p['product_group_name'] ?? $p['product_group_code'] ?? '—') ?></td>
                     <td><?= e($p['type']) ?></td>
@@ -29,7 +48,7 @@
                 </tr>
             <?php endforeach; ?>
             <?php if ($products === []): ?>
-                <tr><td colspan="8" class="muted">Sin productos. Ejecuta el seed.</td></tr>
+                <tr><td colspan="8" class="muted">Sin productos. Crea uno nuevo o ejecuta el seed.</td></tr>
             <?php endif; ?>
             </tbody>
         </table>

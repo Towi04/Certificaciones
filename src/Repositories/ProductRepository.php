@@ -148,4 +148,27 @@ final class ProductRepository
     {
         return (int) $this->pdo->query('SELECT COUNT(*) FROM products WHERE is_active = 1')->fetchColumn();
     }
+
+    public function findByCode(string $code): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM products WHERE code = ? LIMIT 1');
+        $stmt->execute([$code]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    public function findBySlugExact(string $slug, ?int $excludeId = null): ?array
+    {
+        if ($excludeId !== null) {
+            $stmt = $this->pdo->prepare('SELECT * FROM products WHERE slug = ? AND id <> ? LIMIT 1');
+            $stmt->execute([$slug, $excludeId]);
+        } else {
+            $stmt = $this->pdo->prepare('SELECT * FROM products WHERE slug = ? LIMIT 1');
+            $stmt->execute([$slug]);
+        }
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
 }
