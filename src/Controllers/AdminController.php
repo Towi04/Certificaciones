@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Auth\Auth;
 use App\Database\Connection;
+use App\Repositories\ProductGroupRepository;
 use App\Repositories\ProductMediaRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
@@ -90,10 +91,13 @@ final class AdminController
             error_log('[Doceo] Product media admin: ' . $e->getMessage());
         }
 
+        $groups = (new ProductGroupRepository())->all();
+
         view('admin/product_edit', [
             'title' => 'Editar · ' . $product['name'],
             'product' => $product,
             'media' => $media,
+            'groups' => $groups,
             'layout' => 'admin',
         ]);
     }
@@ -113,6 +117,14 @@ final class AdminController
         if (!in_array($platform, ['none', 'moodle', 'provider'], true)) {
             $platform = 'none';
         }
+        $groupRaw = trim((string) ($_POST['product_group_id'] ?? ''));
+        $groupId = $groupRaw === '' ? null : (int) $groupRaw;
+        if ($groupId !== null && $groupId < 1) {
+            $groupId = null;
+        }
+        if ($groupId !== null && (new ProductGroupRepository())->find($groupId) === null) {
+            $groupId = null;
+        }
         $courseIdRaw = trim((string) ($_POST['moodle_course_id'] ?? ''));
         $courseId = $courseIdRaw === '' ? null : (int) $courseIdRaw;
         if ($courseId !== null && $courseId < 1) {
@@ -131,6 +143,7 @@ final class AdminController
                 'platform_type' => $platform,
                 'moodle_course_id' => $courseId,
                 'access_months' => $months,
+                'product_group_id' => $groupId,
             ]);
             flash('success', 'Producto actualizado. Si es Moodle, usa Sincronizar Moodle en el caso o confirma un pago de prueba.');
         } catch (\Throwable $e) {

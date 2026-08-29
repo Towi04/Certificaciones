@@ -6,6 +6,7 @@ namespace App\Setup;
 
 use App\Database\Connection;
 use App\Repositories\CertifierRepository;
+use App\Repositories\ProductGroupRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\SupplierRepository;
 use App\Support\Settings;
@@ -167,9 +168,106 @@ HTML;
             'auto_cancel_if_not_started_days' => 15,
         ];
 
+
+        // Condiciones de cobro compartidas (iguales a ELeT) para todos los grupos de venta.
+        $sharedPayments = [
+            'default_method' => 'transfer_proof',
+            'order' => ['transfer_proof', 'openpay_store', 'openpay_card'],
+            'price_includes_fee' => false,
+        ];
+        $sharedCardMsi = [
+            'enabled' => true,
+            'months' => [1, 3, 6, 9, 12],
+            'min_amount' => 0,
+        ];
+        $sharedCheckoutFields = ['email', 'first_name', 'last_name_p', 'last_name_m', 'phone'];
+        $standardRegistrationDocs = [
+            [
+                'code' => 'reglamento',
+                'label' => 'Reglamento firmado (PDF)',
+                'required' => true,
+                'accept' => '.pdf',
+            ],
+            [
+                'code' => 'signature',
+                'label' => 'Firma (imagen)',
+                'required' => true,
+                'accept' => '.jpg,.jpeg,.png',
+            ],
+        ];
+
+        // El proceso de compra vive en el grupo; el producto solo personaliza contenido.
+        $eletUksConfig['payments'] = $sharedPayments;
+        $eletUksConfig['card_msi'] = $sharedCardMsi;
+
+        $standardCertConfig = [
+            'checkout_fields' => $sharedCheckoutFields,
+            'required_docs' => [],
+            'registration_docs' => $standardRegistrationDocs,
+            'payments' => $sharedPayments,
+            'card_msi' => $sharedCardMsi,
+        ];
+        $courseConfig = [
+            'checkout_fields' => $sharedCheckoutFields,
+            'required_docs' => [],
+            'registration_docs' => [],
+            'payments' => $sharedPayments,
+            'card_msi' => ['enabled' => false, 'months' => [1], 'min_amount' => 0],
+        ];
+
+        $gRepo = new ProductGroupRepository();
+        $groupDefs = [
+            'uks-elet' => [
+                'name' => 'UKS · ELeT (examen)',
+                'supplier_id' => $supplierIds['uks'],
+                'config' => $eletUksConfig,
+            ],
+            'uks-elet-cenni' => [
+                'name' => 'UKS · Trámite CENNI ELeT',
+                'supplier_id' => $supplierIds['uks'],
+                'config' => $eletCenniConfig,
+            ],
+            'itep-exams' => [
+                'name' => 'iTEP / Oxford · Exámenes',
+                'supplier_id' => $supplierIds['itep'],
+                'config' => $standardCertConfig,
+            ],
+            'linguafranca-exams' => [
+                'name' => 'Lingua Franca · TOEFL',
+                'supplier_id' => $supplierIds['linguafranca'],
+                'config' => $standardCertConfig,
+            ],
+            'etc-certs' => [
+                'name' => 'ETC · Certificaciones IT',
+                'supplier_id' => $supplierIds['etc'],
+                'config' => $standardCertConfig,
+            ],
+            'doceo-procedures' => [
+                'name' => 'DOCEO · Trámites',
+                'supplier_id' => $supplierIds['doceo'],
+                'config' => $standardCertConfig,
+            ],
+            'doceo-courses' => [
+                'name' => 'DOCEO · Cursos Moodle',
+                'supplier_id' => $supplierIds['doceo'],
+                'config' => $courseConfig,
+            ],
+        ];
+        $groupIds = [];
+        foreach ($groupDefs as $code => $def) {
+            $groupIds[$code] = $gRepo->upsertByCode([
+                'code' => $code,
+                'name' => $def['name'],
+                'supplier_id' => $def['supplier_id'],
+                'config_json' => json_encode($def['config'], JSON_UNESCAPED_UNICODE),
+            ]);
+            $log[] = 'Grupo de producto: ' . $code;
+        }
+
         $products = [
             [
                 'code' => 'ELET-UKS',
+                'product_group_id' => $groupIds['uks-elet'],
                 'name' => 'ELET',
                 'slug' => 'elet',
                 'type' => 'certification',
@@ -190,10 +288,11 @@ HTML;
                 'audience' => 'adult',
                 'platform_type' => 'none',
                 'sort_order' => 1,
-                'config_json' => json_encode($eletUksConfig, JSON_UNESCAPED_UNICODE),
+                'config_json' => json_encode(new \stdClass()),
             ],
             [
                 'code' => 'ELET-CENNI',
+                'product_group_id' => $groupIds['uks-elet-cenni'],
                 'name' => 'Trámite CENNI (ELeT)',
                 'slug' => 'elet-cenni-tramite',
                 'type' => 'procedure',
@@ -208,10 +307,11 @@ HTML;
                 'audience' => 'adult',
                 'platform_type' => 'none',
                 'sort_order' => 99,
-                'config_json' => json_encode($eletCenniConfig, JSON_UNESCAPED_UNICODE),
+                'config_json' => json_encode(new \stdClass()),
             ],
             [
                 'code' => 'ITEP-CENNI',
+                'product_group_id' => $groupIds['itep-exams'],
                 'name' => 'iTEP + CENNI',
                 'slug' => 'itep-cenni',
                 'type' => 'certification',
@@ -223,10 +323,12 @@ HTML;
                 'is_star' => 1,
                 'audience' => 'adult',
                 'platform_type' => 'none',
-                'sort_order' => 2,
+                'sort_order' => 2,,
+                'config_json' => json_encode(new \stdClass()),
             ],
             [
                 'code' => 'TOEFL-ITP',
+                'product_group_id' => $groupIds['linguafranca-exams'],
                 'name' => 'TOEFL ITP',
                 'slug' => 'toefl-itp',
                 'type' => 'certification',
@@ -238,10 +340,12 @@ HTML;
                 'is_star' => 1,
                 'audience' => 'adult',
                 'platform_type' => 'none',
-                'sort_order' => 3,
+                'sort_order' => 3,,
+                'config_json' => json_encode(new \stdClass()),
             ],
             [
                 'code' => 'OOPT',
+                'product_group_id' => $groupIds['itep-exams'],
                 'name' => 'Oxford Online Placement Test (OOPT)',
                 'slug' => 'oopt',
                 'type' => 'certification',
@@ -258,10 +362,12 @@ HTML;
                 'is_star' => 0,
                 'audience' => 'adult',
                 'platform_type' => 'none',
-                'sort_order' => 10,
+                'sort_order' => 10,,
+                'config_json' => json_encode(new \stdClass()),
             ],
             [
                 'code' => 'MOS-EXCEL-2016',
+                'product_group_id' => $groupIds['etc-certs'],
                 'name' => 'Microsoft Office Specialist Excel 2016',
                 'slug' => 'mos-excel-2016',
                 'type' => 'certification',
@@ -278,10 +384,12 @@ HTML;
                 'is_star' => 1,
                 'audience' => 'any',
                 'platform_type' => 'provider',
-                'sort_order' => 4,
+                'sort_order' => 4,,
+                'config_json' => json_encode(new \stdClass()),
             ],
             [
                 'code' => 'CENNI-TRAMITE',
+                'product_group_id' => $groupIds['doceo-procedures'],
                 'name' => 'Trámite CENNI ante SEP',
                 'slug' => 'tramite-cenni',
                 'type' => 'procedure',
@@ -293,10 +401,12 @@ HTML;
                 'is_star' => 0,
                 'audience' => 'adult',
                 'platform_type' => 'none',
-                'sort_order' => 20,
+                'sort_order' => 20,,
+                'config_json' => json_encode(new \stdClass()),
             ],
             [
                 'code' => 'PREP-TOEFL-MOODLE',
+                'product_group_id' => $groupIds['doceo-courses'],
                 'name' => 'Curso de preparación TOEFL (Moodle DOCEO)',
                 'slug' => 'curso-prep-toefl',
                 'type' => 'course',
@@ -310,10 +420,12 @@ HTML;
                 'platform_type' => 'moodle',
                 'access_months' => 6,
                 'extension_percent' => 50,
-                'sort_order' => 5,
+                'sort_order' => 5,,
+                'config_json' => json_encode(new \stdClass()),
             ],
             [
                 'code' => 'TOEFL-JUNIOR',
+                'product_group_id' => $groupIds['linguafranca-exams'],
                 'name' => 'TOEFL Junior',
                 'slug' => 'toefl-junior',
                 'type' => 'certification',
@@ -325,7 +437,8 @@ HTML;
                 'is_star' => 0,
                 'audience' => 'kids',
                 'platform_type' => 'none',
-                'sort_order' => 15,
+                'sort_order' => 15,,
+                'config_json' => json_encode(new \stdClass()),
             ],
         ];
 
@@ -340,35 +453,8 @@ HTML;
             // Checkout mínimo por defecto: contacto + pago.
             // Reglamento/firma se piden después en el caso del alumno (registration_docs).
             if (!isset($p['config_json'])) {
-                $type = (string) ($p['type'] ?? '');
-                $registrationDocs = [];
-                if (in_array($type, ['certification', 'procedure'], true)) {
-                    $registrationDocs = [
-                        [
-                            'code' => 'reglamento',
-                            'label' => 'Reglamento firmado (PDF)',
-                            'required' => true,
-                            'accept' => '.pdf',
-                        ],
-                        [
-                            'code' => 'signature',
-                            'label' => 'Firma (imagen)',
-                            'required' => true,
-                            'accept' => '.jpg,.jpeg,.png',
-                        ],
-                    ];
-                }
-                $deferred = [
-                    'enabled' => in_array($type, ['certification', 'procedure'], true),
-                    'months' => [1, 3, 6],
-                    'min_amount' => 500,
-                ];
-                $p['config_json'] = json_encode([
-                    'checkout_fields' => ['email', 'first_name', 'last_name_p', 'last_name_m', 'phone'],
-                    'required_docs' => [],
-                    'registration_docs' => $registrationDocs,
-                    'card_msi' => $deferred,
-                ], JSON_UNESCAPED_UNICODE);
+                // Sin overrides: hereda pagos/MSI/proceso del grupo de proveedor.
+                $p['config_json'] = json_encode(new \stdClass());
             }
             $log[] = $upsertProduct($p);
         }

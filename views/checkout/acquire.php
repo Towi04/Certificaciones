@@ -149,14 +149,26 @@ $stepLabels = [
                             Transfiere el monto indicado en el panel derecho y sube tu comprobante.
                         </p>
                         <?php if (!empty($bank['clabe'])): ?>
-                            <ul class="deposit-info">
-                                <li>Banco: <strong><?= e($bank['bank']) ?></strong></li>
-                                <li class="copy-line">
-                                    CLABE: <strong class="mono"><?= e($bank['clabe']) ?></strong>
-                                    <button type="button" class="btn btn-ghost btn-sm copy-btn" data-copy="<?= e($bank['clabe']) ?>">Copiar</button>
-                                </li>
-                                <li>Titular: <strong><?= e($bank['holder']) ?></strong></li>
-                            </ul>
+                            <div class="pay-data-card pay-data-card--transfer" role="group" aria-label="Datos de transferencia">
+                                <p class="pay-data-card-title">Datos para transferir</p>
+                                <dl class="pay-data-list">
+                                    <div class="pay-data-row">
+                                        <dt>Banco</dt>
+                                        <dd><strong><?= e($bank['bank']) ?></strong></dd>
+                                    </div>
+                                    <div class="pay-data-row pay-data-row--highlight">
+                                        <dt>CLABE</dt>
+                                        <dd class="copy-line">
+                                            <strong class="mono pay-data-value"><?= e($bank['clabe']) ?></strong>
+                                            <button type="button" class="btn btn-primary btn-sm copy-btn" data-copy="<?= e($bank['clabe']) ?>">Copiar</button>
+                                        </dd>
+                                    </div>
+                                    <div class="pay-data-row">
+                                        <dt>Titular</dt>
+                                        <dd><strong><?= e($bank['holder']) ?></strong></dd>
+                                    </div>
+                                </dl>
+                            </div>
                         <?php endif; ?>
                     </div>
 
@@ -164,14 +176,17 @@ $stepLabels = [
                         <p class="muted" style="font-size:.88rem;margin:.75rem 0 .5rem">
                             Realiza un depósito en OXXO (o tienda afiliada) a esta tarjeta:
                         </p>
-                        <div class="deposit-card-box">
+                        <div class="pay-data-card pay-data-card--oxxo" role="group" aria-label="Datos de depósito OXXO">
+                            <p class="pay-data-card-title">Tarjeta de depósito</p>
                             <span class="muted" style="font-size:.82rem">Número de tarjeta</span>
-                            <span class="mono deposit-card-num"><?= e($depositCard) ?></span>
-                            <button type="button" class="btn btn-ghost btn-sm copy-btn" data-copy="<?= e($depositCard) ?>">Copiar</button>
+                            <div class="copy-line" style="margin-top:.35rem">
+                                <span class="mono pay-data-value deposit-card-num"><?= e($depositCard) ?></span>
+                                <button type="button" class="btn btn-primary btn-sm copy-btn" data-copy="<?= e($depositCard) ?>">Copiar</button>
+                            </div>
+                            <p class="muted" style="font-size:.82rem;margin:.65rem 0 0">
+                                Deposita el monto exacto del panel derecho y sube el comprobante.
+                            </p>
                         </div>
-                        <p class="muted" style="font-size:.82rem;margin:.5rem 0 0">
-                            Deposita el monto exacto del panel derecho y sube el comprobante.
-                        </p>
                     </div>
 
                     <div id="payment-proof-panel" class="pay-panel payment-proof-panel">
@@ -311,15 +326,30 @@ $stepLabels = [
 .pay-tile-label { font-weight:700; font-size:.95rem; color:var(--doceo-blue); }
 .pay-tile-sub { font-size:.68rem; color:var(--doceo-muted); font-weight:500; text-align:center; line-height:1.2; }
 
-.deposit-info { font-size:.85rem; margin:.5rem 0 .75rem; padding-left:1.1rem; }
 .copy-line { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
 .copy-btn { padding:.25rem .65rem; font-size:.75rem; }
 .mono { font-family:ui-monospace,monospace; letter-spacing:.03em; }
-.deposit-card-box {
-  padding:1rem 1.15rem; border-radius:12px; background:#f4f7fb; border:1px solid #d5deea;
-  display:flex; flex-direction:column; align-items:flex-start; gap:.45rem;
+.pay-data-card {
+  margin:.55rem 0 .85rem; padding:1rem 1.15rem; border-radius:14px;
+  background:linear-gradient(180deg, #eef5ff 0%, #f7faff 100%);
+  border:2px solid #9db8de; box-shadow:0 1px 0 rgba(20,60,120,.04);
 }
-.deposit-card-num { font-size:1.15rem; font-weight:700; color:var(--doceo-blue); }
+.pay-data-card--oxxo { border-color:#f0b45a; background:linear-gradient(180deg, #fff7eb 0%, #fffbf4 100%); }
+.pay-data-card-title {
+  margin:0 0 .65rem; font-size:.78rem; font-weight:700; letter-spacing:.04em;
+  text-transform:uppercase; color:var(--doceo-blue);
+}
+.pay-data-card--oxxo .pay-data-card-title { color:#9a5b00; }
+.pay-data-list { margin:0; display:grid; gap:.55rem; }
+.pay-data-row { display:grid; grid-template-columns:6.5rem 1fr; gap:.5rem; align-items:center; }
+.pay-data-row dt { margin:0; font-size:.78rem; color:var(--doceo-muted); font-weight:600; }
+.pay-data-row dd { margin:0; font-size:.95rem; }
+.pay-data-row--highlight {
+  padding:.55rem .65rem; margin:0 -.15rem; border-radius:10px;
+  background:#fff; border:1px dashed #9db8de;
+}
+.pay-data-value { font-size:1.2rem; font-weight:800; color:var(--doceo-blue); letter-spacing:.04em; word-break:break-all; }
+.deposit-card-num { font-size:1.25rem; font-weight:800; color:var(--doceo-blue); }
 
 .file-picker {
   border:2px dashed #c5d4e8; border-radius:14px; padding:1rem; background:#fbfcfe;

@@ -10,18 +10,19 @@ namespace App\Services;
  * El alumno paga el TOTAL con tarjeta; OpenPay liquida el monto completo
  * (menos comisión) al comercio. El banco difiere el cobro mensual al tarjetahabiente.
  *
- * En products.config_json:
+ * Preferir configurar en product_groups.config_json (heredable) o products.config_json:
  * {
  *   "card_msi": {
  *     "enabled": true,
- *     "months": [3, 6, 9, 12],
- *     "min_amount": 500
+ *     "months": [1, 3, 6, 9, 12],
+ *     "min_amount": 0
  *   }
  * }
  */
 final class CardMsiCalculator
 {
-    public const DEFAULT_MONTHS = [1, 3, 6];
+    /** Misma oferta que ELeT para certificaciones/trámites sin override. */
+    public const DEFAULT_MONTHS = [1, 3, 6, 9, 12];
 
     /**
      * @param array<string, mixed> $product
@@ -30,16 +31,12 @@ final class CardMsiCalculator
     public static function configForProduct(array $product): array
     {
         $cfg = [];
-        if (!empty($product['config_json'])) {
-            $decoded = json_decode((string) $product['config_json'], true);
-            if (is_array($decoded)) {
-                if (isset($decoded['card_msi']) && is_array($decoded['card_msi'])) {
-                    $cfg = $decoded['card_msi'];
-                } elseif (isset($decoded['deferred']) && is_array($decoded['deferred'])) {
-                    // Compatibilidad con config anterior
-                    $cfg = $decoded['deferred'];
-                }
-            }
+        $decoded = CheckoutRequirements::config($product);
+        if (isset($decoded['card_msi']) && is_array($decoded['card_msi'])) {
+            $cfg = $decoded['card_msi'];
+        } elseif (isset($decoded['deferred']) && is_array($decoded['deferred'])) {
+            // Compatibilidad con config anterior
+            $cfg = $decoded['deferred'];
         }
 
         $type = (string) ($product['type'] ?? '');
@@ -69,7 +66,7 @@ final class CardMsiCalculator
         return [
             'enabled' => array_key_exists('enabled', $cfg) ? (bool) $cfg['enabled'] : $enabledDefault,
             'months' => $months,
-            'min_amount' => round((float) ($cfg['min_amount'] ?? 500), 2),
+            'min_amount' => round((float) ($cfg['min_amount'] ?? 0), 2),
         ];
     }
 

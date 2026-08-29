@@ -44,6 +44,7 @@ final class TrackingService
         $stmt = $this->pdo->prepare(
             'SELECT t.*, pr.name AS product_name, pr.type AS product_type, pr.slug AS product_slug,
                     pr.platform_type, pr.moodle_course_id, pr.access_months, pr.config_json,
+                    pg.config_json AS group_config_json, pg.code AS product_group_code,
                     pu.matricula, pu.status AS purchase_status, pu.charged_amount, pu.payment_method,
                     pu.payment_proof_path, pu.student_user_id AS purchase_student_id,
                     u.first_name, u.last_name_p, u.last_name_m, u.email AS student_email, u.phone AS student_phone,
@@ -52,6 +53,7 @@ final class TrackingService
              JOIN products pr ON pr.id = t.product_id
              JOIN purchases pu ON pu.id = t.purchase_id
              JOIN users u ON u.id = t.student_user_id
+             LEFT JOIN product_groups pg ON pg.id = pr.product_group_id
              LEFT JOIN pipeline_templates pt ON pt.id = t.pipeline_template_id
              WHERE t.id = ?
              LIMIT 1'
@@ -250,6 +252,7 @@ final class TrackingService
         $product = [
             'type' => $tracking['product_type'] ?? '',
             'config_json' => $tracking['config_json'] ?? null,
+            'group_config_json' => $tracking['group_config_json'] ?? null,
         ];
         $required = CheckoutRequirements::registrationDocsForProduct($product);
         $meta = null;
@@ -446,6 +449,7 @@ final class TrackingService
         $cfg = CheckoutRequirements::config([
             'type' => $tracking['product_type'] ?? '',
             'config_json' => $tracking['config_json'] ?? null,
+            'group_config_json' => $tracking['group_config_json'] ?? null,
         ]);
         $exam = is_array($cfg['exam'] ?? null) ? $cfg['exam'] : [];
 
@@ -469,6 +473,7 @@ final class TrackingService
         $product = [
             'type' => $tracking['product_type'] ?? '',
             'config_json' => $tracking['config_json'] ?? null,
+            'group_config_json' => $tracking['group_config_json'] ?? null,
         ];
         (new ExamScheduleService())->validateSlot($product, $examDate, $examTime);
 
