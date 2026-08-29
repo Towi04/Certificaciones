@@ -6,9 +6,9 @@
     <div>
         <h1 style="margin:0;color:var(--doceo-blue)">Grupos de proceso</h1>
         <p class="muted" style="margin:.35rem 0 0;max-width:46rem">
-            Aquí se define el proceso de compra compartido (pagos, MSI, fechas, reglamento, pipeline).
-            Luego cada producto solo personaliza nombre, descripción, precios e imágenes.
-            Si el combo de grupo en un producto sale vacío, crea grupos aquí o carga los sugeridos.
+            Aquí se define el proceso de compra compartido (pagos, MSI, horarios, <strong>vacaciones</strong>, reglamento, pipeline).
+            Entra a un grupo y usa la pestaña <strong>Vacaciones</strong> para bloquear fechas.
+            Luego cada producto solo personaliza nombre, descripción, precios, nivel e imágenes.
         </p>
     </div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
@@ -39,7 +39,9 @@
                     <td><?= e($g['name']) ?></td>
                     <td><?= e($g['supplier_name'] ?? '—') ?></td>
                     <td><?= (int) ($counts[(int) $g['id']] ?? 0) ?></td>
-                    <td><a href="<?= e(url('/admin/grupos/' . $g['id'])) ?>">Editar</a></td>
+                    <td><a href="<?= e(url('/admin/grupos/' . $g['id'])) ?>">Editar</a>
+                        · <a href="<?= e(url('/admin/grupos/' . $g['id'] . '#vacations')) ?>">Vacaciones</a>
+                    </td>
                 </tr>
             <?php endforeach; ?>
             <?php if ($groups === []): ?>

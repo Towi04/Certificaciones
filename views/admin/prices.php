@@ -3,12 +3,21 @@
 /** @var list<array<string,mixed>> $suppliers */
 /** @var int|null $filterSupplierId */
 $filterSupplierId = $filterSupplierId ?? null;
+$priceFields = [
+    'cost_price' => 'Costo',
+    'catalog_price' => 'Lista',
+    'public_price' => 'Público',
+    'price_cncm' => 'CNCM',
+    'price_partner_a' => 'Partner A',
+    'price_partner_b' => 'Partner B',
+    'price_partner_c' => 'Partner C',
+];
 ?>
 <div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap">
     <div>
         <h1 style="margin:0;color:var(--doceo-blue)">Precios masivos</h1>
         <p class="muted" style="margin:.35rem 0 0;max-width:48rem">
-            Edita en una sola tabla el precio público (real), de lista, costo y niveles de partner.
+            Edita en una sola tabla costo, lista, público y niveles partner.
             También puedes descargar una plantilla CSV, actualizarla y volver a subirla.
             La edición por producto individual sigue disponible.
         </p>
@@ -42,12 +51,16 @@ $filterSupplierId = $filterSupplierId ?? null;
     </label>
     <button class="btn btn-accent" type="submit">Subir e importar</button>
     <span class="muted" style="font-size:.78rem;max-width:28rem">
-        Columnas: <code>code,name,public_price,catalog_price,cost_price,price_cncm,price_partner_a,price_partner_b,price_partner_c</code>
+        Columnas:
+        <code>code,name,cost_price,catalog_price,public_price,price_cncm,price_partner_a,price_partner_b,price_partner_c</code>
     </span>
 </form>
 
 <form method="post" action="<?= e(url('/admin/precios')) ?>" class="panel" style="margin-top:1rem">
     <?= csrf_field() ?>
+    <?php if ($filterSupplierId): ?>
+        <input type="hidden" name="supplier_id" value="<?= (int) $filterSupplierId ?>">
+    <?php endif; ?>
     <div class="table-wrap">
         <table class="data">
             <thead>
@@ -55,13 +68,9 @@ $filterSupplierId = $filterSupplierId ?? null;
                 <th>Código</th>
                 <th>Producto</th>
                 <th>Proveedor</th>
-                <th>Público</th>
-                <th>Lista</th>
-                <th>Costo</th>
-                <th>CNCM</th>
-                <th>Partner A</th>
-                <th>Partner B</th>
-                <th>Partner C</th>
+                <?php foreach ($priceFields as $label): ?>
+                    <th><?= e($label) ?></th>
+                <?php endforeach; ?>
             </tr>
             </thead>
             <tbody>
@@ -73,9 +82,7 @@ $filterSupplierId = $filterSupplierId ?? null;
                         <a href="<?= e(url('/admin/productos/' . $pid)) ?>"><?= e((string) $p['name']) ?></a>
                     </td>
                     <td><?= e((string) ($p['supplier_name'] ?? '—')) ?></td>
-                    <?php
-                    $fields = ['public_price', 'catalog_price', 'cost_price', 'price_cncm', 'price_partner_a', 'price_partner_b', 'price_partner_c'];
-                    foreach ($fields as $field):
+                    <?php foreach ($priceFields as $field => $_label):
                         $val = $p[$field] ?? '';
                         ?>
                         <td>

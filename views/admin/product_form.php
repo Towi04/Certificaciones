@@ -12,7 +12,8 @@
 /** @var list<string> $cefrOptions */
 $media = $media ?? [];
 $isEdit = $product !== null;
-$action = $isEdit ? url('/admin/productos/' . $product['id']) : url('/admin/productos/nuevo');
+$product = $product ?? [];
+$action = $isEdit ? url('/admin/productos/' . (int) $product['id']) : url('/admin/productos/nuevo');
 $typeOptions = $typeOptions ?? [];
 $categoryOptions = $categoryOptions ?? [];
 $audienceOptions = $audienceOptions ?? [];
@@ -828,9 +829,15 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
 
   function setCenniVisible(show) {
     cenniCols.forEach(function (col) {
+      var row = col.closest('.level-range-row');
+      if (row && row.classList.contains('level-range-template')) {
+        col.hidden = !show;
+        return;
+      }
       col.hidden = !show;
       col.querySelectorAll('input').forEach(function (input) {
-        input.required = show;
+        if (input.disabled) return;
+        input.required = !!show;
         if (!show) input.value = '';
       });
     });
