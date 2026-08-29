@@ -11,7 +11,7 @@
         <table class="data">
             <thead>
             <tr>
-                <th>Código</th><th>Nombre</th><th>Tipo</th><th>Plataforma</th>
+                <th>Código</th><th>Nombre</th><th>Grupo</th><th>Tipo</th><th>Plataforma</th>
                 <th>Moodle ID</th><th>Público</th><th></th>
             </tr>
             </thead>
@@ -20,6 +20,7 @@
                 <tr>
                     <td><?= e($p['code']) ?></td>
                     <td><?= e($p['name']) ?><?= !empty($p['is_star']) ? ' ⭐' : '' ?></td>
+                    <td><?= e($p['product_group_name'] ?? $p['product_group_code'] ?? '—') ?></td>
                     <td><?= e($p['type']) ?></td>
                     <td><?= e($p['platform_type'] ?? 'none') ?></td>
                     <td><?= !empty($p['moodle_course_id']) ? (int) $p['moodle_course_id'] : '—' ?></td>
@@ -28,7 +29,7 @@
                 </tr>
             <?php endforeach; ?>
             <?php if ($products === []): ?>
-                <tr><td colspan="7" class="muted">Sin productos. Ejecuta el seed.</td></tr>
+                <tr><td colspan="8" class="muted">Sin productos. Ejecuta el seed.</td></tr>
             <?php endif; ?>
             </tbody>
         </table>

@@ -95,10 +95,11 @@ $methodLabels = [
 
         <?php elseif ($isStore): ?>
             <p>Realiza un depósito en OXXO (o tienda afiliada) a esta tarjeta:</p>
-            <p class="deposit-card-box" style="margin:.75rem 0;padding:1rem;background:#f4f7fb;border-radius:12px;border:1px solid #d5deea">
+            <div class="pay-data-card pay-data-card--oxxo" style="margin:.75rem 0;padding:1rem 1.15rem;border-radius:14px;border:2px solid #f0b45a;background:linear-gradient(180deg,#fff7eb 0%,#fffbf4 100%)">
+                <p style="margin:0 0 .45rem;font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#9a5b00">Tarjeta de depósito</p>
                 <span class="muted" style="font-size:.82rem;display:block">Número de tarjeta</span>
-                <strong style="font-family:ui-monospace,monospace;font-size:1.15rem;color:var(--doceo-blue)"><?= e($depositCard ?? '') ?></strong>
-            </p>
+                <strong style="font-family:ui-monospace,monospace;font-size:1.25rem;color:var(--doceo-blue);letter-spacing:.04em"><?= e($depositCard ?? '') ?></strong>
+            </div>
             <p class="muted" style="font-size:.85rem">
                 Monto exacto: <strong><?= money($purchase['charged_amount']) ?></strong>.
                 Incluye tu matrícula <strong><?= e($purchase['matricula']) ?></strong> al depositar.
@@ -107,19 +108,29 @@ $methodLabels = [
         <?php elseif ($purchase['payment_method'] === 'transfer_proof'): ?>
             <p>Recibimos tu comprobante. Lo revisaremos y te avisaremos por correo.</p>
             <?php if ($bank['clabe'] !== ''): ?>
-                <p class="muted">Cuenta DOCEO de referencia: <?= e($bank['bank']) ?> · CLABE <?= e($bank['clabe']) ?> · <?= e($bank['holder']) ?></p>
+                <div class="pay-data-card" style="margin:.75rem 0;padding:1rem 1.15rem;border-radius:14px;border:2px solid #9db8de;background:linear-gradient(180deg,#eef5ff 0%,#f7faff 100%)">
+                    <p style="margin:0 0 .45rem;font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--doceo-blue)">Cuenta DOCEO de referencia</p>
+                    <p style="margin:0;font-size:.95rem">
+                        <?= e($bank['bank']) ?><br>
+                        CLABE <strong style="font-family:ui-monospace,monospace;font-size:1.15rem;letter-spacing:.04em"><?= e($bank['clabe']) ?></strong><br>
+                        <?= e($bank['holder']) ?>
+                    </p>
+                </div>
             <?php endif; ?>
         <?php elseif ($isCard): ?>
             <p>Te enviamos por correo el link de pago seguro para completar tu pago con tarjeta desde OpenPay de BBVA.</p>
         <?php else: ?>
             <p>Transfiere el monto total a la cuenta DOCEO e incluye tu matrícula en el concepto:</p>
             <?php if ($bank['clabe'] !== ''): ?>
-                <ul>
-                    <li>Banco: <strong><?= e($bank['bank']) ?></strong></li>
-                    <li>CLABE: <strong style="font-family:ui-monospace,monospace"><?= e($bank['clabe']) ?></strong></li>
-                    <li>Titular: <strong><?= e($bank['holder']) ?></strong></li>
-                    <li>Concepto: <strong><?= e($bank['concept']) ?> <?= e($purchase['matricula']) ?></strong></li>
-                </ul>
+                <div class="pay-data-card" style="margin:.75rem 0;padding:1rem 1.15rem;border-radius:14px;border:2px solid #9db8de;background:linear-gradient(180deg,#eef5ff 0%,#f7faff 100%)">
+                    <p style="margin:0 0 .55rem;font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--doceo-blue)">Datos para transferir</p>
+                    <ul style="margin:0;padding-left:1.1rem">
+                        <li>Banco: <strong><?= e($bank['bank']) ?></strong></li>
+                        <li>CLABE: <strong style="font-family:ui-monospace,monospace;font-size:1.15rem;letter-spacing:.04em"><?= e($bank['clabe']) ?></strong></li>
+                        <li>Titular: <strong><?= e($bank['holder']) ?></strong></li>
+                        <li>Concepto: <strong><?= e($bank['concept']) ?> <?= e($purchase['matricula']) ?></strong></li>
+                    </ul>
+                </div>
             <?php else: ?>
                 <p class="muted">Configura <code>BANK_TRANSFER_CLABE</code> en el .env o pide los datos a administración.</p>
             <?php endif; ?>

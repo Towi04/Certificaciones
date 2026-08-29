@@ -13,6 +13,22 @@
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Campus Moodle</h2>
 
     <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;margin-bottom:.85rem;font-size:.88rem;font-weight:600">
+        Grupo de proceso (proveedor)
+        <select name="product_group_id" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            <option value="">— Sin grupo —</option>
+            <?php foreach (($groups ?? []) as $g): ?>
+                <option value="<?= (int) $g['id'] ?>" <?= (int) ($product['product_group_id'] ?? 0) === (int) $g['id'] ? 'selected' : '' ?>>
+                    <?= e($g['name']) ?> (<?= e($g['code']) ?>)
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <span style="font-weight:500;font-size:.8rem">
+            El grupo define pagos, MSI, fechas, reglamento y pipeline compartidos.
+            Este producto solo necesita nombre, descripción e imágenes.
+        </span>
+    </label>
+
+    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;margin-bottom:.85rem;font-size:.88rem;font-weight:600">
         Plataforma
         <select name="platform_type" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
             <?php foreach (['none' => 'Ninguna', 'moodle' => 'Moodle (campus DOCEO)', 'provider' => 'Proveedor externo'] as $val => $label): ?>

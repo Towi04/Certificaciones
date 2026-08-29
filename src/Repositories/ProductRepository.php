@@ -16,13 +16,22 @@ final class ProductRepository
         $this->pdo = Connection::get();
     }
 
+    private const SELECT_WITH_RELATIONS = 'SELECT p.*,
+                c.name AS certifier_name,
+                s.name AS supplier_name,
+                s.code AS supplier_code,
+                pg.code AS product_group_code,
+                pg.name AS product_group_name,
+                pg.config_json AS group_config_json
+             FROM products p
+             LEFT JOIN certifiers c ON c.id = p.certifier_id
+             LEFT JOIN suppliers s ON s.id = p.supplier_id
+             LEFT JOIN product_groups pg ON pg.id = p.product_group_id';
+
     /** @return list<array<string, mixed>> */
     public function publicCatalog(?string $category = null, ?string $q = null, bool $starsOnly = false): array
     {
-        $sql = 'SELECT p.*, c.name AS certifier_name, s.name AS supplier_name
-                FROM products p
-                LEFT JOIN certifiers c ON c.id = p.certifier_id
-                LEFT JOIN suppliers s ON s.id = p.supplier_id
+        $sql = self::SELECT_WITH_RELATIONS . '
                 WHERE p.is_active = 1 AND p.is_public = 1';
         $params = [];
         if ($category !== null && $category !== '' && $category !== 'all') {
@@ -48,9 +57,7 @@ final class ProductRepository
     public function starProducts(int $limit = 8): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT p.*, c.name AS certifier_name
-             FROM products p
-             LEFT JOIN certifiers c ON c.id = p.certifier_id
+            self::SELECT_WITH_RELATIONS . '
              WHERE p.is_active = 1 AND p.is_public = 1 AND p.is_star = 1
              ORDER BY p.sort_order ASC, p.name ASC
              LIMIT ?'
@@ -64,10 +71,7 @@ final class ProductRepository
     public function findBySlug(string $slug): ?array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT p.*, c.name AS certifier_name, s.name AS supplier_name, s.code AS supplier_code
-             FROM products p
-             LEFT JOIN certifiers c ON c.id = p.certifier_id
-             LEFT JOIN suppliers s ON s.id = p.supplier_id
+            self::SELECT_WITH_RELATIONS . '
              WHERE p.slug = ? LIMIT 1'
         );
         $stmt->execute([$slug]);
@@ -78,7 +82,10 @@ final class ProductRepository
 
     public function find(int $id): ?array
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM products WHERE id = ? LIMIT 1');
+        $stmt = $this->pdo->prepare(
+            self::SELECT_WITH_RELATIONS . '
+             WHERE p.id = ? LIMIT 1'
+        );
         $stmt->execute([$id]);
         $row = $stmt->fetch();
 
@@ -88,17 +95,13 @@ final class ProductRepository
     /** @return list<array<string, mixed>> */
     public function adminList(?string $q = null): array
     {
-        $sql = 'SELECT p.*, c.name AS certifier_name, s.name AS supplier_name
-                FROM products p
-                LEFT JOIN certifiers c ON c.id = p.certifier_id
-                LEFT JOIN suppliers s ON s.id = p.supplier_id
+        $sql = self::SELECT_WITH_RELATIONS . '
                 WHERE 1=1';
         $params = [];
         if ($q) {
-            $sql .= ' AND (p.name LIKE ? OR p.code LIKE ?)';
+            $sql .= ' AND (p.name LIKE ? OR p.code LIKE ? OR pg.name LIKE ? OR pg.code LIKE ?)';
             $like = '%' . $q . '%';
-            $params[] = $like;
-            $params[] = $like;
+            array_push($params, $like, $like, $like, $like);
         }
         $sql .= ' ORDER BY p.type, p.name';
         $stmt = $this->pdo->prepare($sql);

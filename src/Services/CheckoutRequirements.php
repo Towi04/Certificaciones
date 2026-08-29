@@ -7,12 +7,21 @@ namespace App\Services;
 /**
  * Requisitos de checkout por producto (mínimos por defecto).
  *
- * En products.config_json:
+ * La configuración efectiva se resuelve así:
+ *   product_groups.config_json  (proceso compartido del proveedor/grupo)
+ *   + products.config_json      (overrides del producto: descripción no aplica aquí)
+ *
+ * Así todas las certificaciones del mismo grupo heredan pagos, MSI, fechas, reglamento, etc.
+ * y cada producto solo personaliza contenido (nombre, imágenes, descripción).
+ *
+ * En config_json (grupo y/o producto):
  * {
  *   "checkout_fields": ["email","first_name","last_name_p","last_name_m","phone","curp","birth_date","sex"],
  *   "required_docs": [
  *     {"code":"ine","label":"INE (PDF)","required":true,"accept":".pdf"}
- *   ]
+ *   ],
+ *   "card_msi": {"enabled":true,"months":[1,3,6,9,12],"min_amount":0},
+ *   "payments": {"default_method":"transfer_proof","order":["transfer_proof","openpay_store","openpay_card"]}
  * }
  *
  * - Si checkout_fields / required_docs están presentes (aunque vacíos), se respetan.
@@ -45,12 +54,64 @@ final class CheckoutRequirements
     /** @return array<string, mixed> */
     public static function config(array $product): array
     {
-        if (empty($product['config_json'])) {
+        $group = self::decodeJson($product['group_config_json'] ?? null);
+        $own = self::decodeJson($product['config_json'] ?? null);
+
+        if ($group === [] && $own === []) {
             return [];
         }
-        $decoded = json_decode((string) $product['config_json'], true);
+
+        return self::deepMerge($group, $own);
+    }
+
+    /** @return array<string, mixed> */
+    private static function decodeJson(mixed $raw): array
+    {
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+        if (is_array($raw)) {
+            return $raw;
+        }
+        $decoded = json_decode((string) $raw, true);
 
         return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * Merge profundo: el override gana. Listas indexadas se reemplazan completas.
+     *
+     * @param array<string, mixed> $base
+     * @param array<string, mixed> $override
+     * @return array<string, mixed>
+     */
+    public static function deepMerge(array $base, array $override): array
+    {
+        foreach ($override as $key => $value) {
+            if (
+                is_array($value)
+                && isset($base[$key])
+                && is_array($base[$key])
+                && self::isAssoc($value)
+                && self::isAssoc($base[$key])
+            ) {
+                $base[$key] = self::deepMerge($base[$key], $value);
+                continue;
+            }
+            $base[$key] = $value;
+        }
+
+        return $base;
+    }
+
+    /** @param array<mixed> $arr */
+    private static function isAssoc(array $arr): bool
+    {
+        if ($arr === []) {
+            return true;
+        }
+
+        return array_keys($arr) !== range(0, count($arr) - 1);
     }
 
     /**

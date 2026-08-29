@@ -37,6 +37,7 @@ final class StudentController
         $product = [
             'type' => $tracking['product_type'] ?? '',
             'config_json' => $tracking['config_json'] ?? null,
+            'group_config_json' => $tracking['group_config_json'] ?? null,
         ];
         $checklist = $svc->registrationChecklist((int) $tracking['id'], $product);
         $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
