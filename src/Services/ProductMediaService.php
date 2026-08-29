@@ -124,7 +124,8 @@ final class ProductMediaService
         string $title,
         string $caption,
         int $sortOrder,
-        bool $isActive
+        bool $isActive,
+        ?array $replacementFile = null
     ): void {
         $media = $this->media->find($mediaId);
         if ($media === null || (int) $media['product_id'] !== $productId) {
@@ -138,12 +139,31 @@ final class ProductMediaService
                 : 'Imagen del producto';
         }
 
+        $replacement = null;
+        $hasReplacement = is_array($replacementFile)
+            && (($replacementFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE);
+        if ($hasReplacement) {
+            if ((string) ($media['media_type'] ?? '') !== 'image') {
+                throw new \InvalidArgumentException('Solo las imágenes pueden reemplazarse con archivo.');
+            }
+            $replacement = $this->storePublicUpload($productId, $replacementFile, self::IMAGE_EXTENSIONS, 10 * 1024 * 1024);
+        }
+
         $this->media->update($mediaId, [
             'title' => mb_substr($title, 0, 190),
             'caption' => trim($caption) !== '' ? mb_substr(trim($caption), 0, 255) : null,
             'sort_order' => max(0, $sortOrder),
             'is_active' => $isActive,
+            'storage_path' => $replacement['path'] ?? null,
+            'mime_type' => $replacement['mime'] ?? null,
         ]);
+
+        if ($replacement !== null) {
+            $oldPath = $this->absolutePublicPath((string) ($media['storage_path'] ?? ''));
+            if (is_file($oldPath)) {
+                @unlink($oldPath);
+            }
+        }
     }
 
     /**

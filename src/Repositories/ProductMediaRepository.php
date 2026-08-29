@@ -77,13 +77,17 @@ final class ProductMediaRepository
     {
         $this->pdo->prepare(
             'UPDATE product_media
-             SET title = ?, caption = ?, sort_order = ?, is_active = ?
+             SET title = ?, caption = ?, sort_order = ?, is_active = ?,
+                 storage_path = COALESCE(?, storage_path),
+                 mime_type = COALESCE(?, mime_type)
              WHERE id = ?'
         )->execute([
             $data['title'],
             $data['caption'],
             $data['sort_order'],
             !empty($data['is_active']) ? 1 : 0,
+            $data['storage_path'] ?? null,
+            $data['mime_type'] ?? null,
             $id,
         ]);
     }

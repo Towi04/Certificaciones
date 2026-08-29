@@ -86,6 +86,9 @@ $youtubeThumb = static function (array $item): ?string {
     <button type="button" class="product-media-modal-backdrop" data-media-close aria-label="Cerrar"></button>
     <div class="product-media-modal-card">
         <button type="button" class="product-media-modal-close" data-media-close aria-label="Cerrar">×</button>
+        <button type="button" class="product-media-modal-zoom" data-media-zoom aria-label="Zoom" hidden>&#128269;</button>
+        <button type="button" class="product-media-modal-nav product-media-modal-prev" data-media-prev aria-label="Anterior">&lt;</button>
+        <button type="button" class="product-media-modal-nav product-media-modal-next" data-media-next aria-label="Siguiente">&gt;</button>
         <div class="product-media-modal-body" id="product-media-modal-body"></div>
         <h3 id="product-media-modal-title"></h3>
         <p class="muted" id="product-media-modal-caption"></p>
@@ -205,6 +208,41 @@ $youtubeThumb = static function (array $item): ?string {
     font-size:1.35rem;
     line-height:1;
 }
+.product-media-modal-zoom {
+    position:absolute;
+    top:.65rem;
+    right:3rem;
+    z-index:2;
+    border:0;
+    border-radius:999px;
+    min-width:2rem;
+    height:2rem;
+    cursor:pointer;
+    background:#fff;
+    box-shadow:0 2px 10px rgba(0,0,0,.15);
+}
+.product-media-modal-nav {
+    position:absolute;
+    top:50%;
+    transform:translateY(-50%);
+    z-index:2;
+    width:2.5rem;
+    height:2.5rem;
+    border:0;
+    border-radius:50%;
+    background:rgba(255,255,255,.94);
+    box-shadow:0 2px 12px rgba(0,0,0,.18);
+    cursor:pointer;
+    color:var(--doceo-blue);
+    font-size:1.25rem;
+    font-weight:800;
+}
+.product-media-modal-prev {
+    left:.75rem;
+}
+.product-media-modal-next {
+    right:.75rem;
+}
 .product-media-modal-body img,
 .product-media-modal-body video {
     width:100%;
@@ -213,6 +251,19 @@ $youtubeThumb = static function (array $item): ?string {
     display:block;
     background:#f4f7fb;
     border-radius:12px;
+}
+.product-media-modal-body.is-zoomed {
+    max-height:72vh;
+    overflow:auto;
+    background:#f4f7fb;
+    border-radius:12px;
+}
+.product-media-modal-body.is-zoomed img {
+    width:auto;
+    max-width:none;
+    max-height:none;
+    min-width:150%;
+    cursor:zoom-out;
 }
 .product-media-modal-body iframe {
     width:100%;
@@ -243,14 +294,26 @@ $youtubeThumb = static function (array $item): ?string {
   const body = document.getElementById('product-media-modal-body');
   const title = document.getElementById('product-media-modal-title');
   const caption = document.getElementById('product-media-modal-caption');
+  const zoomBtn = modal ? modal.querySelector('[data-media-zoom]') : null;
+  const prevBtn = modal ? modal.querySelector('[data-media-prev]') : null;
+  const nextBtn = modal ? modal.querySelector('[data-media-next]') : null;
   if (!modal || !body || !title || !caption) return;
+  const thumbs = Array.from(document.querySelectorAll('.product-media-thumb'));
+  let currentIndex = 0;
 
-  function openMedia(btn) {
+  function openMedia(index) {
+    currentIndex = (index + thumbs.length) % thumbs.length;
+    const btn = thumbs[currentIndex];
     const type = btn.getAttribute('data-media-type') || 'image';
     const src = btn.getAttribute('data-media-src') || '';
     const mediaTitle = btn.getAttribute('data-media-title') || '';
     const mediaCaption = btn.getAttribute('data-media-caption') || '';
     body.innerHTML = '';
+    body.classList.remove('is-zoomed');
+    if (zoomBtn) {
+      zoomBtn.hidden = type === 'video';
+      zoomBtn.setAttribute('aria-pressed', 'false');
+    }
     if (type === 'video') {
       if (src.indexOf('youtube.com/embed/') !== -1) {
         const iframe = document.createElement('iframe');
@@ -269,6 +332,7 @@ $youtubeThumb = static function (array $item): ?string {
       const img = document.createElement('img');
       img.src = src;
       img.alt = mediaTitle;
+      img.addEventListener('click', toggleZoom);
       body.appendChild(img);
     }
     title.textContent = mediaTitle;
@@ -277,22 +341,42 @@ $youtubeThumb = static function (array $item): ?string {
     caption.hidden = mediaCaption === '';
     modal.hidden = false;
     document.body.style.overflow = 'hidden';
+    if (prevBtn) prevBtn.hidden = thumbs.length < 2;
+    if (nextBtn) nextBtn.hidden = thumbs.length < 2;
   }
 
   function closeMedia() {
     modal.hidden = true;
     body.innerHTML = '';
+    body.classList.remove('is-zoomed');
     document.body.style.overflow = '';
   }
 
-  document.querySelectorAll('.product-media-thumb').forEach(btn => {
-    btn.addEventListener('click', () => openMedia(btn));
+  function toggleZoom() {
+    const on = !body.classList.contains('is-zoomed');
+    body.classList.toggle('is-zoomed', on);
+    if (zoomBtn) zoomBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
+  thumbs.forEach((btn, index) => {
+    btn.addEventListener('click', () => openMedia(index));
   });
   modal.querySelectorAll('[data-media-close]').forEach(btn => {
     btn.addEventListener('click', closeMedia);
   });
+  if (prevBtn) {
+    prevBtn.addEventListener('click', () => openMedia(currentIndex - 1));
+  }
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => openMedia(currentIndex + 1));
+  }
+  if (zoomBtn) {
+    zoomBtn.addEventListener('click', toggleZoom);
+  }
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && !modal.hidden) closeMedia();
+    if (e.key === 'ArrowLeft' && !modal.hidden && thumbs.length > 1) openMedia(currentIndex - 1);
+    if (e.key === 'ArrowRight' && !modal.hidden && thumbs.length > 1) openMedia(currentIndex + 1);
   });
 })();
 </script>

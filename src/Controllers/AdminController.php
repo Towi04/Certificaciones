@@ -223,7 +223,8 @@ final class AdminController
                 trim((string) ($_POST['title'] ?? '')),
                 trim((string) ($_POST['caption'] ?? '')),
                 (int) ($_POST['sort_order'] ?? 0),
-                !empty($_POST['is_active'])
+                !empty($_POST['is_active']),
+                isset($_FILES['media_file']) && is_array($_FILES['media_file']) ? $_FILES['media_file'] : null
             );
             flash('success', 'Multimedia actualizada.');
         } catch (\Throwable $e) {
