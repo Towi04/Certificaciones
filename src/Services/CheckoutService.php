@@ -58,11 +58,30 @@ final class CheckoutService
         string $paymentMethod,
         ?string $promoCode,
         int $cardMsiMonths = 1,
-        ?array $exam = null
+        ?array $exam = null,
+        ?int $comboId = null
     ): array {
         $product = $this->products->find($productId);
         if ($product === null || !(int) $product['is_active'] || !(int) $product['is_public']) {
             throw new \InvalidArgumentException('Producto no disponible.');
+        }
+
+        $combo = null;
+        $comboItems = [];
+        if ($comboId !== null && $comboId > 0) {
+            $comboRepo = new \App\Repositories\ComboRepository();
+            $combo = $comboRepo->find($comboId);
+            if ($combo === null || !(int) $combo['is_active']) {
+                throw new \InvalidArgumentException('El combo seleccionado no está disponible.');
+            }
+            $comboItems = $comboRepo->items($comboId);
+            $ids = array_map(static fn (array $i): int => (int) $i['id'], $comboItems);
+            if (!in_array($productId, $ids, true)) {
+                throw new \InvalidArgumentException('Ese combo no incluye el producto que estás adquiriendo.');
+            }
+            if (count($comboItems) < 2) {
+                throw new \InvalidArgumentException('El combo está mal configurado.');
+            }
         }
 
         $openpayConfigured = trim((string) (Env::get('OPENPAY_MERCHANT_ID', '') ?? '')) !== ''
@@ -76,7 +95,20 @@ final class CheckoutService
             throw new \InvalidArgumentException('Método de pago inválido.');
         }
 
-        $required = CheckoutRequirements::docsForProduct($product);
+        // Docs / reglamento: unión de ítems del combo (o solo el producto ancla).
+        $docsProducts = $comboItems !== [] ? $comboItems : [$product];
+        $required = [];
+        $seenDoc = [];
+        foreach ($docsProducts as $dp) {
+            foreach (CheckoutRequirements::docsForProduct($dp) as $doc) {
+                $code = (string) $doc['code'];
+                if (isset($seenDoc[$code])) {
+                    continue;
+                }
+                $seenDoc[$code] = true;
+                $required[] = $doc;
+            }
+        }
         $reglamento = CheckoutRequirements::reglamentoForProduct($product);
         $this->assertRequiredDocs($required, $files);
         if ($reglamento !== null && $reglamento['required_before_checkout']) {
@@ -84,16 +116,29 @@ final class CheckoutService
         }
 
         $examSchedule = new ExamScheduleService();
-        if (ExamScheduleService::needsExamAtCheckout($product)) {
+        $examProduct = $product;
+        if ($comboItems !== []) {
+            foreach ($comboItems as $ci) {
+                if (ExamScheduleService::needsExamAtCheckout($ci)) {
+                    $examProduct = $ci;
+                    break;
+                }
+            }
+        }
+        if (ExamScheduleService::needsExamAtCheckout($examProduct)) {
             $examDate = trim((string) ($exam['exam_date'] ?? ''));
             $examTime = trim((string) ($exam['exam_time'] ?? ''));
             if ($examDate === '' || $examTime === '') {
                 throw new \InvalidArgumentException('Selecciona fecha y hora para tu examen.');
             }
-            $examSchedule->validateSlot($product, $examDate, $examTime);
+            $examSchedule->validateSlot($examProduct, $examDate, $examTime);
         }
 
-        $quote = $this->pricing->quoteProduct($product, $promoCode);
+        if ($combo !== null) {
+            $quote = $this->pricing->quoteCombo($combo, $promoCode);
+        } else {
+            $quote = $this->pricing->quoteProduct($product, $promoCode);
+        }
         $partnerId = $quote['partner_id'];
 
         // Partner logueado adquiriendo al precio de su nivel (sin código)
@@ -103,7 +148,8 @@ final class CheckoutService
             $stmt->execute([(int) $session['id']]);
             $partner = $stmt->fetch();
             if ($partner) {
-                $tierPrice = $this->pricing->partnerPriceForProduct($product, (string) $partner['tier']);
+                $priced = $combo ?? $product;
+                $tierPrice = $this->pricing->partnerPriceForProduct($priced, (string) $partner['tier']);
                 $quote['partner_id'] = (int) $partner['id'];
                 $quote['partner_price'] = $tierPrice;
                 $quote['base'] = $tierPrice;
@@ -114,10 +160,10 @@ final class CheckoutService
             }
         }
 
-
         $cardMsiMonths = max(1, $cardMsiMonths);
         $baseAmount = (float) ($quote['base'] ?? $quote['charged']);
-        $pricing = $this->resolvePaymentAmount($baseAmount, $product, $paymentMethod, $cardMsiMonths);
+        $pricingProduct = $combo ?? $product;
+        $pricing = $this->resolvePaymentAmount($baseAmount, $pricingProduct, $paymentMethod, $cardMsiMonths);
         $chargeAmount = $pricing['gross'];
         $storedMsiMonths = $pricing['msi'];
 
@@ -144,7 +190,7 @@ final class CheckoutService
                 'student_user_id' => $studentUserId,
                 'partner_id' => $partnerId,
                 'discount_code_id' => $quote['discount_code_id'],
-                'combo_id' => null,
+                'combo_id' => $combo !== null ? (int) $combo['id'] : null,
                 'status' => $status,
                 'payment_method' => $paymentMethod,
                 'currency' => 'MXN',
@@ -155,40 +201,58 @@ final class CheckoutService
                 'partner_credit_earned' => $quote['partner_credit'],
             ]);
 
-            $itemId = $this->purchases->addItem(
-                $purchaseId,
-                $productId,
-                (float) $product['public_price'],
-                $chargeAmount
-            );
+            $lineProducts = $comboItems !== [] ? $comboItems : [$product];
+            $n = count($lineProducts);
+            $allocated = 0.0;
+            $firstTrackingId = 0;
+            foreach ($lineProducts as $idx => $lineProduct) {
+                $lineProductId = (int) $lineProduct['id'];
+                if ($idx === $n - 1) {
+                    $lineCharge = round($chargeAmount - $allocated, 2);
+                } else {
+                    $lineCharge = round($chargeAmount / $n, 2);
+                    $allocated += $lineCharge;
+                }
+                $itemId = $this->purchases->addItem(
+                    $purchaseId,
+                    $lineProductId,
+                    (float) $lineProduct['public_price'],
+                    $lineCharge
+                );
 
-            $pipelineId = $this->resolvePipelineId($product);
-            $stepCode = TrackingService::initialStepCode($product, (string) $product['type'], $required);
-            $trackStatus = TrackingService::initialStatus($paymentMethod);
-            $trackingId = $this->trackings->create([
-                'purchase_id' => $purchaseId,
-                'purchase_item_id' => $itemId,
-                'product_id' => $productId,
-                'student_user_id' => $studentUserId,
-                'partner_id' => $partnerId,
-                'pipeline_template_id' => $pipelineId,
-                'current_step_code' => $stepCode,
-                'status' => $trackStatus,
-            ]);
+                $pipelineId = $this->resolvePipelineId($lineProduct);
+                $stepCode = TrackingService::initialStepCode($lineProduct, (string) $lineProduct['type'], $required);
+                $trackStatus = TrackingService::initialStatus($paymentMethod);
+                $tid = $this->trackings->create([
+                    'purchase_id' => $purchaseId,
+                    'purchase_item_id' => $itemId,
+                    'product_id' => $lineProductId,
+                    'student_user_id' => $studentUserId,
+                    'partner_id' => $partnerId,
+                    'pipeline_template_id' => $pipelineId,
+                    'current_step_code' => $stepCode,
+                    'status' => $trackStatus,
+                ]);
+                if ($firstTrackingId === 0) {
+                    $firstTrackingId = $tid;
+                    $trackingId = $tid;
+                }
 
-            $this->pdo->prepare(
-                'INSERT INTO tracking_step_logs (tracking_id, step_code, note, actor_user_id)
-                 VALUES (?, ?, ?, ?)'
-            )->execute([
-                $trackingId,
-                $stepCode,
-                'Compra registrada · matrícula ' . $matricula,
-                $studentUserId,
-            ]);
+                $this->pdo->prepare(
+                    'INSERT INTO tracking_step_logs (tracking_id, step_code, note, actor_user_id)
+                     VALUES (?, ?, ?, ?)'
+                )->execute([
+                    $tid,
+                    $stepCode,
+                    ($combo !== null ? ('Combo ' . $combo['code'] . ' · ') : '')
+                        . 'Compra registrada · matrícula ' . $matricula,
+                    $studentUserId,
+                ]);
+            }
 
-            $this->saveDocuments($required, $files, $purchaseId, $trackingId, $studentUserId);
+            $this->saveDocuments($required, $files, $purchaseId, $firstTrackingId, $studentUserId);
             if ($reglamento !== null) {
-                $this->saveReglamentoFirmado($reglamento, $files, $purchaseId, $trackingId, $studentUserId);
+                $this->saveReglamentoFirmado($reglamento, $files, $purchaseId, $firstTrackingId, $studentUserId);
             }
 
             if (in_array($paymentMethod, ['transfer_proof', 'openpay_store'], true)) {

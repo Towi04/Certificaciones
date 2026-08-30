@@ -34,6 +34,7 @@ $router->get('/adquirir/{slug}', fn (string $slug) => $checkout->show($slug));
 $router->post('/adquirir/{slug}', fn (string $slug) => $checkout->submit($slug));
 $router->get('/compra/{matricula}', fn (string $matricula) => $checkout->success($matricula));
 $router->get('/api/cotizar/{slug}', fn (string $slug) => $checkout->quote($slug));
+$router->get('/api/cotizar-combo/{slug}', fn (string $slug) => $checkout->quoteCombo($slug));
 $router->get('/api/examen-slots/{slug}', fn (string $slug) => $checkout->examSlots($slug));
 
 // Instalador web (funciona aunque setup.php no esté en el docroot)
@@ -63,6 +64,14 @@ $router->post('/admin/grupos/nuevo', fn () => $admin->productGroupCreate());
 $router->post('/admin/grupos/sugeridos', fn () => $admin->productGroupsSeed());
 $router->get('/admin/grupos/{id}', fn (string $id) => $admin->productGroupEdit($id));
 $router->post('/admin/grupos/{id}', fn (string $id) => $admin->productGroupUpdate($id));
+
+$router->get('/admin/combos', fn () => $admin->combos());
+$router->get('/admin/combos/nuevo', fn () => $admin->comboCreateForm());
+$router->post('/admin/combos/nuevo', fn () => $admin->comboCreate());
+$router->post('/admin/combos/{id}/eliminar', fn (string $id) => $admin->comboDelete($id));
+$router->get('/admin/combos/{id}', fn (string $id) => $admin->comboEdit($id));
+$router->post('/admin/combos/{id}', fn (string $id) => $admin->comboUpdate($id));
+
 $router->get('/admin/precios', fn () => $admin->prices());
 $router->post('/admin/precios', fn () => $admin->pricesSave());
 $router->get('/admin/precios/plantilla.csv', fn () => $admin->pricesTemplate());
