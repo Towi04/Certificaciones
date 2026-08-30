@@ -123,9 +123,9 @@ final class ComboAdminService
             $combo['item_ids'] = $itemIds;
             $combo['addon_ids'] = $addonIds;
             $combo['solo_sum'] = array_sum(array_map(
-                static fn (array $i): float => (float) $i['catalog_price'] > 0
-                    ? (float) $i['catalog_price']
-                    : (float) $i['public_price'],
+                static fn (array $i): float => (float) ($i['public_price'] ?? 0) > 0
+                    ? (float) $i['public_price']
+                    : (float) ($i['catalog_price'] ?? 0),
                 $items
             ));
             $enriched[] = $combo;
@@ -144,6 +144,71 @@ final class ComboAdminService
         });
 
         return ['combos' => $enriched, 'addons' => $addons];
+    }
+
+    /**
+     * Desglose de precios sueltos vs tarifa del combo (para admin/checkout).
+     *
+     * @param list<array<string, mixed>> $items
+     * @return array{
+     *   solo_sum: float,
+     *   combo_price: float,
+     *   savings: float,
+     *   savings_percent: float,
+     *   items: list<array{id:int,name:string,type:string,code:string,solo_price:float,combo_share:float,discount:float}>
+     * }
+     */
+    public static function priceBreakdown(array $items, float $comboCharged): array
+    {
+        $rows = [];
+        $soloSum = 0.0;
+        foreach ($items as $item) {
+            $solo = (float) ($item['public_price'] ?? 0) > 0
+                ? (float) $item['public_price']
+                : (float) ($item['catalog_price'] ?? 0);
+            $solo = round(max(0, $solo), 2);
+            $soloSum += $solo;
+            $rows[] = [
+                'id' => (int) ($item['id'] ?? 0),
+                'name' => (string) ($item['name'] ?? ''),
+                'type' => (string) ($item['type'] ?? ''),
+                'code' => (string) ($item['code'] ?? ''),
+                'solo_price' => $solo,
+                'combo_share' => 0.0,
+                'discount' => 0.0,
+            ];
+        }
+        $soloSum = round($soloSum, 2);
+        $comboCharged = round(max(0, $comboCharged), 2);
+        $n = count($rows);
+        $allocated = 0.0;
+        foreach ($rows as $i => &$row) {
+            if ($n === 0) {
+                break;
+            }
+            if ($i === $n - 1) {
+                $share = round($comboCharged - $allocated, 2);
+            } elseif ($soloSum > 0) {
+                $share = round($comboCharged * ($row['solo_price'] / $soloSum), 2);
+                $allocated += $share;
+            } else {
+                $share = round($comboCharged / $n, 2);
+                $allocated += $share;
+            }
+            $row['combo_share'] = $share;
+            $row['discount'] = round($row['solo_price'] - $share, 2);
+        }
+        unset($row);
+
+        $savings = round($soloSum - $comboCharged, 2);
+
+        return [
+            'solo_sum' => $soloSum,
+            'combo_price' => $comboCharged,
+            'savings' => $savings,
+            'savings_percent' => $soloSum > 0 ? round(($savings / $soloSum) * 100, 1) : 0.0,
+            'items' => $rows,
+        ];
     }
 
     /**

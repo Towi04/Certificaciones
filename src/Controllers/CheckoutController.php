@@ -216,6 +216,16 @@ final class CheckoutController
                 }
             }
 
+            $items = $comboRepo->items((int) $combo['id']);
+            $charged = (float) ($quote['charged'] ?? $quote['base'] ?? $combo['public_price'] ?? 0);
+            $breakdown = \App\Services\ComboAdminService::priceBreakdown($items, $charged);
+            if ($breakdown['solo_sum'] > $charged) {
+                $quote['catalog'] = $breakdown['solo_sum'];
+                if (empty($quote['label'])) {
+                    $quote['label'] = 'Precio combo';
+                }
+            }
+
             echo json_encode([
                 'ok' => true,
                 'matched' => true,
@@ -227,6 +237,7 @@ final class CheckoutController
                     'item_ids' => $ids,
                 ],
                 'quote' => $quote,
+                'breakdown' => $breakdown,
             ], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             http_response_code(422);
