@@ -132,6 +132,7 @@ final class ProductAdminService
      */
     public function updateGroup(int $id, array $input): void
     {
+        $input['_group_id'] = $id;
         if ($this->groups->find($id) === null) {
             throw new \InvalidArgumentException('Grupo no encontrado.');
         }
@@ -143,21 +144,7 @@ final class ProductAdminService
     /**
      * Extrae campos de UI a partir del config_json del grupo.
      *
-     * @return array{
-     *   exam_choose_at_checkout:bool,
-     *   exam_slot_minutes:int,
-     *   schedule_min_advance_days:int,
-     *   schedule_weekdays_start:string,
-     *   schedule_weekdays_end:string,
-     *   schedule_saturday_start:string,
-     *   schedule_saturday_end:string,
-     *   schedule_blocked_dates:string,
-     *   reglamento_enabled:bool,
-     *   reglamento_template_path:string,
-     *   reglamento_source_url:string,
-     *   reglamento_doc_code:string,
-     *   reglamento_required_before_checkout:bool
-     * }
+     * @return array<string, mixed>
      */
     public static function groupFormExtrasFromConfig(?string $configJson): array
     {
@@ -173,25 +160,50 @@ final class ProductAdminService
         $weekdays = is_array($schedule['weekdays'] ?? null) ? $schedule['weekdays'] : [];
         $saturday = is_array($schedule['saturday'] ?? null) ? $schedule['saturday'] : [];
         $reg = is_array($cfg['reglamento'] ?? null) ? $cfg['reglamento'] : [];
-        $blocked = ExamScheduleService::normalizeBlockedDates($schedule['blocked_dates'] ?? []);
+        $payments = is_array($cfg['payments'] ?? null) ? $cfg['payments'] : [];
+        $msi = is_array($cfg['card_msi'] ?? null) ? $cfg['card_msi'] : [];
+
+        $daysCfg = is_array($schedule['days'] ?? null) ? $schedule['days'] : null;
+        if ($daysCfg === null) {
+            $days = [1 => true, 2 => true, 3 => true, 4 => true, 5 => true, 6 => true, 0 => false];
+        } else {
+            $days = [];
+            foreach ([0, 1, 2, 3, 4, 5, 6] as $d) {
+                $days[$d] = !empty($daysCfg[(string) $d]) || !empty($daysCfg[$d]);
+            }
+        }
+
+        $order = is_array($payments['order'] ?? null)
+            ? $payments['order']
+            : ['transfer_proof', 'openpay_store', 'openpay_card'];
+        $msiMonths = is_array($msi['months'] ?? null)
+            ? array_map('intval', $msi['months'])
+            : [1, 3, 6, 9, 12];
 
         return [
-            'exam_choose_at_checkout' => (bool) ($exam['choose_at_checkout'] ?? false),
+            'exam_choose_at_checkout' => (bool) ($exam['choose_at_checkout'] ?? true),
             'exam_slot_minutes' => max(15, (int) ($exam['slot_minutes'] ?? 30)),
+            'exam_validity_months' => max(1, (int) ($exam['validity_months'] ?? 6)),
             'schedule_min_advance_days' => max(0, (int) ($schedule['min_advance_days'] ?? 2)),
+            'schedule_available_365' => (bool) ($schedule['available_365'] ?? false),
+            'schedule_days' => $days,
             'schedule_weekdays_start' => (string) ($weekdays['start'] ?? '10:00'),
             'schedule_weekdays_end' => (string) ($weekdays['end'] ?? '17:30'),
             'schedule_saturday_start' => (string) ($saturday['start'] ?? '08:00'),
             'schedule_saturday_end' => (string) ($saturday['end'] ?? '12:00'),
-            'schedule_blocked_dates' => implode("\n", $blocked),
             'reglamento_enabled' => $reg !== [] && (
                 trim((string) ($reg['template_path'] ?? '')) !== ''
                 || trim((string) ($reg['source_url'] ?? '')) !== ''
             ),
             'reglamento_template_path' => (string) ($reg['template_path'] ?? ''),
             'reglamento_source_url' => (string) ($reg['source_url'] ?? ''),
-            'reglamento_doc_code' => (string) ($reg['doc_code'] ?? 'reglamento_firmado'),
+            'reglamento_doc_code' => (string) ($reg['doc_code'] ?? ''),
             'reglamento_required_before_checkout' => (bool) ($reg['required_before_checkout'] ?? true),
+            'pay_transfer' => in_array('transfer_proof', $order, true),
+            'pay_oxxo' => in_array('openpay_store', $order, true),
+            'pay_card' => in_array('openpay_card', $order, true),
+            'msi_enabled' => (bool) ($msi['enabled'] ?? true),
+            'msi_months' => $msiMonths,
         ];
     }
 
@@ -486,6 +498,17 @@ final class ProductAdminService
         return ['Pre-A1', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
     }
 
+    /** @return list<string> */
+    public static function cenniOptions(): array
+    {
+        $out = ['N/A'];
+        for ($i = 1; $i <= 20; $i++) {
+            $out[] = (string) $i;
+        }
+
+        return $out;
+    }
+
     /**
      * Lee la configuración de examen de nivel desde products.config_json.
      *
@@ -770,10 +793,13 @@ final class ProductAdminService
             if (!in_array($cefr, $allowedCefr, true)) {
                 throw new \InvalidArgumentException('Nivel CEFR no válido: ' . $cefr);
             }
-            if ($usesCenni && $cenni === '') {
-                throw new \InvalidArgumentException(
-                    'Si el examen aplica para CENNI, cada rango debe indicar el nivel CENNI correspondiente.'
-                );
+            if ($usesCenni) {
+                $allowedCenni = self::cenniOptions();
+                if ($cenni === '' || !in_array($cenni, $allowedCenni, true)) {
+                    throw new \InvalidArgumentException(
+                        'Cada rango CENNI debe ser N/A o un nivel del 1 al 20.'
+                    );
+                }
             }
             $out[] = [
                 'min' => $min,
@@ -840,7 +866,7 @@ final class ProductAdminService
     }
 
     /**
-     * Mezcla campos de UI (horarios, reglamento, fechas bloqueadas) sobre el JSON base.
+     * Mezcla campos de UI (horarios, pagos, reglamento) sobre el JSON base.
      *
      * @param array<string, mixed> $config
      * @param array<string, mixed> $input
@@ -856,10 +882,25 @@ final class ProductAdminService
         $exam['choose_at_checkout'] = !empty($input['exam_choose_at_checkout']);
         $slot = (int) ($input['exam_slot_minutes'] ?? ($exam['slot_minutes'] ?? 30));
         $exam['slot_minutes'] = max(15, $slot);
+        $validity = (int) ($input['exam_validity_months'] ?? ($exam['validity_months'] ?? 6));
+        $exam['validity_months'] = max(1, min(36, $validity));
         $config['exam'] = $exam;
 
         $schedule = is_array($config['schedule'] ?? null) ? $config['schedule'] : [];
         $schedule['min_advance_days'] = max(0, (int) ($input['schedule_min_advance_days'] ?? ($schedule['min_advance_days'] ?? 2)));
+        $schedule['available_365'] = !empty($input['schedule_available_365']);
+        $daysRaw = $input['schedule_days'] ?? [];
+        if (!is_array($daysRaw)) {
+            $daysRaw = [];
+        }
+        $days = [];
+        foreach ([0, 1, 2, 3, 4, 5, 6] as $d) {
+            $days[(string) $d] = !empty($daysRaw[(string) $d]) || !empty($daysRaw[$d]);
+        }
+        if (!in_array(true, $days, true)) {
+            throw new \InvalidArgumentException('Marca al menos un día de la semana para aplicar exámenes.');
+        }
+        $schedule['days'] = $days;
         $schedule['weekdays'] = [
             'start' => $this->normalizeClock((string) ($input['schedule_weekdays_start'] ?? '10:00'), '10:00'),
             'end' => $this->normalizeClock((string) ($input['schedule_weekdays_end'] ?? '17:30'), '17:30'),
@@ -868,10 +909,49 @@ final class ProductAdminService
             'start' => $this->normalizeClock((string) ($input['schedule_saturday_start'] ?? '08:00'), '08:00'),
             'end' => $this->normalizeClock((string) ($input['schedule_saturday_end'] ?? '12:00'), '12:00'),
         ];
-        $schedule['blocked_dates'] = ExamScheduleService::normalizeBlockedDates(
-            (string) ($input['schedule_blocked_dates'] ?? '')
-        );
+        unset($schedule['blocked_dates']);
         $config['schedule'] = $schedule;
+
+        $order = [];
+        if (!empty($input['pay_transfer'])) {
+            $order[] = 'transfer_proof';
+        }
+        if (!empty($input['pay_oxxo'])) {
+            $order[] = 'openpay_store';
+        }
+        if (!empty($input['pay_card'])) {
+            $order[] = 'openpay_card';
+        }
+        if ($order === []) {
+            $order = ['transfer_proof', 'openpay_store', 'openpay_card'];
+        }
+        $payments = is_array($config['payments'] ?? null) ? $config['payments'] : [];
+        $payments['default_method'] = $order[0];
+        $payments['order'] = $order;
+        $payments['price_includes_fee'] = (bool) ($payments['price_includes_fee'] ?? false);
+        $config['payments'] = $payments;
+
+        $msiMonthsRaw = $input['msi_months'] ?? [];
+        if (!is_array($msiMonthsRaw)) {
+            $msiMonthsRaw = [];
+        }
+        $msiMonths = [];
+        foreach ($msiMonthsRaw as $m) {
+            $mi = (int) $m;
+            if (in_array($mi, [1, 3, 6, 9, 12], true)) {
+                $msiMonths[] = $mi;
+            }
+        }
+        $msiMonths = array_values(array_unique($msiMonths));
+        sort($msiMonths);
+        if ($msiMonths === []) {
+            $msiMonths = [1];
+        }
+        $config['card_msi'] = [
+            'enabled' => !empty($input['msi_enabled']),
+            'months' => $msiMonths,
+            'min_amount' => 0,
+        ];
 
         if (!empty($input['reglamento_enabled'])) {
             $path = trim((string) ($input['reglamento_template_path'] ?? ''));
@@ -881,9 +961,19 @@ final class ProductAdminService
                     'Si activas el reglamento, indica la ruta/plantilla PDF o el link externo.'
                 );
             }
-            $docCode = trim((string) ($input['reglamento_doc_code'] ?? 'reglamento_firmado'));
+            $docCode = strtolower(trim((string) ($input['reglamento_doc_code'] ?? '')));
+            $docCode = preg_replace('/[^a-z0-9_-]+/', '_', $docCode) ?? '';
+            $docCode = trim($docCode, '_');
             if ($docCode === '') {
-                $docCode = 'reglamento_firmado';
+                $groupCode = self::normalizeGroupCode((string) ($input['code'] ?? 'grupo'));
+                $docCode = 'reglamento_' . str_replace('-', '_', $groupCode !== '' ? $groupCode : 'grupo');
+            }
+            $excludeId = isset($input['_group_id']) ? (int) $input['_group_id'] : null;
+            $conflict = $this->findGroupUsingDocCode($docCode, $excludeId);
+            if ($conflict !== null) {
+                throw new \InvalidArgumentException(
+                    'El código de documento "' . $docCode . '" ya lo usa el grupo ' . $conflict . '. Elige otro.'
+                );
             }
             $config['reglamento'] = [
                 'template_path' => $path,
@@ -897,6 +987,40 @@ final class ProductAdminService
         }
 
         return $config;
+    }
+
+
+    /**
+     * @return array<string, string> doc_code => group code
+     */
+    public function usedReglamentoDocCodes(?int $excludeGroupId = null): array
+    {
+        $out = [];
+        foreach ($this->groups->all() as $group) {
+            $gid = (int) ($group['id'] ?? 0);
+            if ($excludeGroupId !== null && $gid === $excludeGroupId) {
+                continue;
+            }
+            $decoded = json_decode((string) ($group['config_json'] ?? ''), true);
+            if (!is_array($decoded)) {
+                continue;
+            }
+            $reg = is_array($decoded['reglamento'] ?? null) ? $decoded['reglamento'] : [];
+            $code = trim((string) ($reg['doc_code'] ?? ''));
+            if ($code === '') {
+                continue;
+            }
+            $out[$code] = (string) ($group['code'] ?? ('#' . $gid));
+        }
+
+        return $out;
+    }
+
+    private function findGroupUsingDocCode(string $docCode, ?int $excludeGroupId = null): ?string
+    {
+        $used = $this->usedReglamentoDocCodes($excludeGroupId);
+
+        return $used[$docCode] ?? null;
     }
 
     private function normalizeClock(string $clock, string $fallback): string

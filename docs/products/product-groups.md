@@ -17,6 +17,12 @@ CheckoutRequirements::config($product)
 El merge es profundo: las claves del producto pisan las del grupo. Las listas
 (indexadas) se reemplazan completas.
 
+## Vacaciones globales
+
+Admin → **Vacaciones**: una sola lista de fechas bloqueadas para toda DOCEO.
+En cada grupo (pestaña Fechas y horarios) marca **Disponible los 365 días** si ese
+grupo no debe respetar vacaciones. El resto sí las hereda automáticamente.
+
 ## Qué se configura desde Admin (sin tocar código)
 
 En **Admin → Grupos → Editar** (pestañas) puedes ajustar con formularios:

@@ -3,21 +3,28 @@
 /** @var list<array<string,mixed>> $suppliers */
 /** @var string $defaultConfig */
 /** @var array<string,mixed> $extras */
+/** @var array<string,string> $usedDocCodes */
 $isEdit = $group !== null;
 $action = $isEdit ? url('/admin/grupos/' . $group['id']) : url('/admin/grupos/nuevo');
 $extras = $extras ?? \App\Services\ProductAdminService::groupFormExtrasFromConfig($defaultConfig ?? null);
+$usedDocCodes = $usedDocCodes ?? [];
 $preselectSupplier = isset($_GET['supplier_id']) ? (int) $_GET['supplier_id'] : 0;
 if (!$isEdit && $preselectSupplier > 0 && empty($group['supplier_id'])) {
     $group = ['supplier_id' => $preselectSupplier];
 }
 $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px';
 $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600';
-$blockedCount = 0;
-foreach (preg_split('/\R+/', (string) ($extras['schedule_blocked_dates'] ?? '')) ?: [] as $line) {
-    if (trim((string) $line) !== '') {
-        $blockedCount++;
-    }
+$dayLabels = [1 => 'Lun', 2 => 'Mar', 3 => 'Mié', 4 => 'Jue', 5 => 'Vie', 6 => 'Sáb', 0 => 'Dom'];
+$days = is_array($extras['schedule_days'] ?? null) ? $extras['schedule_days'] : [
+    1 => true, 2 => true, 3 => true, 4 => true, 5 => true, 6 => true, 0 => false,
+];
+$groupCode = (string) ($group['code'] ?? '');
+$autoDocCode = 'reglamento_' . ($groupCode !== '' ? preg_replace('/[^a-z0-9]+/', '_', strtolower($groupCode)) : 'nuevo');
+$docCode = trim((string) ($extras['reglamento_doc_code'] ?? ''));
+if ($docCode === '') {
+    $docCode = (string) $autoDocCode;
 }
+$msiMonths = is_array($extras['msi_months'] ?? null) ? array_map('intval', $extras['msi_months']) : [1, 3, 6, 9, 12];
 ?>
 <p class="meta"><a href="<?= e(url('/admin/grupos')) ?>">← Grupos de proceso</a></p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">
@@ -25,20 +32,20 @@ foreach (preg_split('/\R+/', (string) ($extras['schedule_blocked_dates'] ?? ''))
 </h1>
 <p class="muted">
     Configura lo compartido por varias certificaciones del mismo proveedor:
-    horarios, <strong>vacaciones / fechas bloqueadas</strong>, reglamento y pagos.
+    días/horarios, reglamento y pagos.
+    Las <a href="<?= e(url('/admin/vacaciones')) ?>"><strong>vacaciones globales</strong></a>
+    se publican una sola vez (excepto grupos marcados como 365 días).
 </p>
 
 <nav class="group-tabs" role="tablist" aria-label="Secciones del grupo">
     <button type="button" class="group-tab active" data-tab="general" role="tab" aria-selected="true">General</button>
-    <button type="button" class="group-tab" data-tab="schedule" role="tab" aria-selected="false">Horarios</button>
-    <button type="button" class="group-tab" data-tab="vacations" role="tab" aria-selected="false">
-        Vacaciones<?php if ($blockedCount > 0): ?> <span class="group-tab-badge"><?= (int) $blockedCount ?></span><?php endif; ?>
-    </button>
+    <button type="button" class="group-tab" data-tab="schedule" role="tab" aria-selected="false">Fechas y horarios</button>
     <button type="button" class="group-tab" data-tab="rules" role="tab" aria-selected="false">Reglamento</button>
-    <button type="button" class="group-tab" data-tab="advanced" role="tab" aria-selected="false">Avanzado</button>
+    <button type="button" class="group-tab" data-tab="payments" role="tab" aria-selected="false">Pagos</button>
+    <button type="button" class="group-tab" data-tab="advanced" role="tab" aria-selected="false">Experto</button>
 </nav>
 
-<form method="post" action="<?= e($action) ?>" class="panel" style="margin-top:.75rem;max-width:920px">
+<form method="post" action="<?= e($action) ?>" class="panel" style="margin-top:.75rem;max-width:960px" id="group-form">
     <?= csrf_field() ?>
     <input type="hidden" name="apply_structured_config" value="1">
 
@@ -54,9 +61,9 @@ foreach (preg_split('/\R+/', (string) ($extras['schedule_blocked_dates'] ?? ''))
             </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
                 Código *
-                <input type="text" name="code" required maxlength="40"
+                <input type="text" name="code" id="group-code" required maxlength="40"
                        <?= $isEdit ? 'readonly' : '' ?>
-                       value="<?= e((string) ($group['code'] ?? '')) ?>"
+                       value="<?= e($groupCode) ?>"
                        placeholder="Ej. itep-exams"
                        style="<?= e($inputStyle) ?><?= $isEdit ? ';background:#f4f7fb' : '' ?>">
                 <?php if ($isEdit): ?>
@@ -84,22 +91,46 @@ foreach (preg_split('/\R+/', (string) ($extras['schedule_blocked_dates'] ?? ''))
                 </label>
             <?php endif; ?>
         </div>
-        <p class="muted" style="font-size:.82rem;margin:1rem 0 0">
-            Para bloquear fechas de vacaciones abre la pestaña <strong>Vacaciones</strong>.
-        </p>
     </div>
 
     <div class="group-panel" data-panel="schedule" hidden>
-        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Horarios de aplicación</h2>
-        <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
-            Solo aplica si el alumno elige fecha/hora en el checkout. Los grupos “siempre disponibles”
-            pueden dejar desmarcada la opción.
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Fechas y horarios de aplicación</h2>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
+            Casi todas las certificaciones piden fecha y hora en el checkout (soporte y caducidad).
+            Marca los días en que se puede presentar el examen.
         </p>
-        <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:.75rem">
+
+        <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:.65rem">
             <input type="checkbox" name="exam_choose_at_checkout" value="1"
                 <?= !empty($extras['exam_choose_at_checkout']) ? 'checked' : '' ?>>
             Pedir fecha y hora de aplicación en el checkout
         </label>
+
+        <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:1rem">
+            <input type="checkbox" name="schedule_available_365" value="1" style="margin-top:.2rem"
+                <?= !empty($extras['schedule_available_365']) ? 'checked' : '' ?>>
+            <span>
+                Disponible los 365 días del año
+                <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin-top:.15rem">
+                    Si se marca, <strong>no</strong> aplican las vacaciones globales DOCEO.
+                    Igual se pide fecha/hora si la opción de arriba está activa.
+                </span>
+            </span>
+        </label>
+
+        <div style="margin-bottom:1rem">
+            <div class="muted" style="font-size:.88rem;font-weight:600;margin-bottom:.45rem">Días en que se puede aplicar</div>
+            <div style="display:flex;flex-wrap:wrap;gap:.55rem">
+                <?php foreach ($dayLabels as $dow => $label): ?>
+                    <label class="day-check">
+                        <input type="checkbox" name="schedule_days[<?= (int) $dow ?>]" value="1"
+                            <?= !empty($days[$dow]) || !empty($days[(string) $dow]) ? 'checked' : '' ?>>
+                        <?= e($label) ?>
+                    </label>
+                <?php endforeach; ?>
+            </div>
+        </div>
+
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.75rem">
             <label class="muted" style="<?= e($labelStyle) ?>">
                 Minutos por bloque
@@ -114,6 +145,13 @@ foreach (preg_split('/\R+/', (string) ($extras['schedule_blocked_dates'] ?? ''))
                        style="<?= e($inputStyle) ?>">
             </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
+                Caducidad para presentar (meses)
+                <input type="number" name="exam_validity_months" min="1" max="36" step="1"
+                       value="<?= (int) ($extras['exam_validity_months'] ?? 6) ?>"
+                       style="<?= e($inputStyle) ?>">
+                <span style="font-weight:500;font-size:.75rem">Normalmente 6 meses; después pueden comprar prórroga.</span>
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
                 Lun–Vie desde
                 <input type="text" name="schedule_weekdays_start" placeholder="10:00"
                        value="<?= e((string) ($extras['schedule_weekdays_start'] ?? '10:00')) ?>"
@@ -126,37 +164,21 @@ foreach (preg_split('/\R+/', (string) ($extras['schedule_blocked_dates'] ?? ''))
                        style="<?= e($inputStyle) ?>">
             </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
-                Sábado desde
+                Fin de semana desde
                 <input type="text" name="schedule_saturday_start" placeholder="08:00"
                        value="<?= e((string) ($extras['schedule_saturday_start'] ?? '08:00')) ?>"
                        style="<?= e($inputStyle) ?>">
             </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
-                Sábado hasta
+                Fin de semana hasta
                 <input type="text" name="schedule_saturday_end" placeholder="12:00"
                        value="<?= e((string) ($extras['schedule_saturday_end'] ?? '12:00')) ?>"
                        style="<?= e($inputStyle) ?>">
             </label>
         </div>
-    </div>
-
-    <div class="group-panel" data-panel="vacations" hidden>
-        <div class="vacations-callout">
-            <h2 style="margin:0 0 .35rem;font-size:1.05rem;color:var(--doceo-blue)">Vacaciones y fechas bloqueadas</h2>
-            <p class="muted" style="margin:0 0 .85rem;font-size:.88rem">
-                Cuando DOCEO cierre o esté de vacaciones, agrega aquí las fechas.
-                No se podrán elegir en el checkout de productos de este grupo que pidan agenda.
-                Los grupos sin agenda en checkout no se afectan.
-            </p>
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Fechas bloqueadas (una por línea, YYYY-MM-DD)
-                <textarea name="schedule_blocked_dates" rows="8" placeholder="2026-12-24&#10;2026-12-25&#10;2027-01-01"
-                          style="padding:.65rem .75rem;border:1px solid #cfd8e6;border-radius:10px;font-family:ui-monospace,monospace;font-size:.9rem"><?= e((string) ($extras['schedule_blocked_dates'] ?? '')) ?></textarea>
-            </label>
-            <p class="muted" style="font-size:.78rem;margin:.55rem 0 0">
-                Ejemplo: <code>2026-12-24</code>, <code>2026-12-25</code>, <code>2027-01-01</code>.
-            </p>
-        </div>
+        <p class="muted" style="font-size:.78rem;margin:.75rem 0 0">
+            Vacaciones DOCEO: <a href="<?= e(url('/admin/vacaciones')) ?>">Administrar fechas globales</a>
+        </p>
     </div>
 
     <div class="group-panel" data-panel="rules" hidden>
@@ -183,9 +205,12 @@ foreach (preg_split('/\R+/', (string) ($extras['schedule_blocked_dates'] ?? ''))
             </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
                 Código del documento
-                <input type="text" name="reglamento_doc_code"
-                       value="<?= e((string) ($extras['reglamento_doc_code'] ?? 'reglamento_firmado')) ?>"
+                <input type="text" name="reglamento_doc_code" id="reglamento_doc_code"
+                       value="<?= e($docCode) ?>"
                        style="<?= e($inputStyle) ?>">
+                <span id="doc-code-hint" style="font-weight:500;font-size:.78rem">
+                    Se propone automáticamente según el código del grupo. Puedes editarlo.
+                </span>
             </label>
             <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.88rem;font-weight:600;margin-top:1.5rem">
                 <input type="checkbox" name="reglamento_required_before_checkout" value="1"
@@ -195,16 +220,54 @@ foreach (preg_split('/\R+/', (string) ($extras['schedule_blocked_dates'] ?? ''))
         </div>
     </div>
 
-    <div class="group-panel" data-panel="advanced" hidden>
-        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Configuración JSON avanzada</h2>
-        <label class="muted" style="<?= e($labelStyle) ?>">
-            config_json
-            <textarea name="config_json" rows="16"
-                      style="padding:.65rem .75rem;border:1px solid #cfd8e6;border-radius:10px;font-family:ui-monospace,monospace;font-size:.82rem"><?= e($defaultConfig) ?></textarea>
-            <span style="font-weight:500;font-size:.78rem">
-                Las otras pestañas se aplican encima de este JSON al guardar.
-            </span>
+    <div class="group-panel" data-panel="payments" hidden>
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Pagos y MSI</h2>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
+            Elige cómo pueden pagar los alumnos. No necesitas editar JSON.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:.55rem;margin-bottom:1rem">
+            <label style="display:flex;gap:.45rem;align-items:center;font-weight:600">
+                <input type="checkbox" name="pay_transfer" value="1" <?= !empty($extras['pay_transfer']) ? 'checked' : '' ?>>
+                Transferencia / CLABE + comprobante
+            </label>
+            <label style="display:flex;gap:.45rem;align-items:center;font-weight:600">
+                <input type="checkbox" name="pay_oxxo" value="1" <?= !empty($extras['pay_oxxo']) ? 'checked' : '' ?>>
+                OXXO / tienda OpenPay
+            </label>
+            <label style="display:flex;gap:.45rem;align-items:center;font-weight:600">
+                <input type="checkbox" name="pay_card" value="1" <?= !empty($extras['pay_card']) ? 'checked' : '' ?>>
+                Tarjeta crédito / débito (OpenPay)
+            </label>
+        </div>
+        <label style="display:flex;gap:.45rem;align-items:center;font-weight:600;margin-bottom:.65rem">
+            <input type="checkbox" name="msi_enabled" value="1" <?= !empty($extras['msi_enabled']) ? 'checked' : '' ?>>
+            Permitir meses sin intereses (MSI)
         </label>
+        <div style="display:flex;flex-wrap:wrap;gap:.55rem">
+            <?php foreach ([1, 3, 6, 9, 12] as $m): ?>
+                <label class="day-check">
+                    <input type="checkbox" name="msi_months[]" value="<?= (int) $m ?>"
+                        <?= in_array($m, $msiMonths, true) ? 'checked' : '' ?>>
+                    <?= (int) $m === 1 ? '1 mes' : ($m . ' meses') ?>
+                </label>
+            <?php endforeach; ?>
+        </div>
+    </div>
+
+    <div class="group-panel" data-panel="advanced" hidden>
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Modo experto (JSON)</h2>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
+            Solo para quien conoce la estructura interna. Las demás pestañas cubren el uso diario
+            y se aplican encima de este JSON al guardar.
+        </p>
+        <details>
+            <summary style="cursor:pointer;font-weight:700;color:var(--doceo-blue)">Mostrar / editar JSON crudo</summary>
+            <label class="muted" style="<?= e($labelStyle) ?>;margin-top:.75rem">
+                config_json
+                <textarea name="config_json" rows="16"
+                          style="padding:.65rem .75rem;border:1px solid #cfd8e6;border-radius:10px;font-family:ui-monospace,monospace;font-size:.82rem"><?= e($defaultConfig) ?></textarea>
+            </label>
+        </details>
     </div>
 
     <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1.1rem">
@@ -220,17 +283,14 @@ foreach (preg_split('/\R+/', (string) ($extras['schedule_blocked_dates'] ?? ''))
     border-radius:999px; padding:.45rem .9rem; font-weight:700; font-size:.86rem; cursor:pointer;
 }
 .group-tab.active { background:var(--doceo-blue); border-color:var(--doceo-blue); color:#fff; }
-.group-tab-badge {
-    display:inline-flex; align-items:center; justify-content:center;
-    min-width:1.2rem; height:1.2rem; margin-left:.25rem; border-radius:999px;
-    background:#f5df25; color:#243d66; font-size:.72rem;
+.day-check {
+    display:inline-flex; align-items:center; gap:.35rem;
+    border:1px solid #cfd8e6; border-radius:999px; padding:.35rem .7rem;
+    font-size:.86rem; font-weight:600; background:#fff;
 }
-.group-tab.active .group-tab-badge { background:#fff; }
-.vacations-callout {
-    border:1px solid #cfe0ff;
-    background:linear-gradient(180deg,#f5f9ff 0%,#fff 70%);
-    border-radius:14px; padding:1rem 1.1rem;
-}
+.day-check:has(input:checked) { background:#eef4ff; border-color:#9db7e8; color:var(--doceo-blue); }
+#reglamento_doc_code.is-duplicate { border-color:#d64545 !important; background:#fff5f5; color:#a11; }
+.doc-code-error { color:#c0392b; font-weight:700; }
 </style>
 <script>
 (function () {
@@ -253,5 +313,59 @@ foreach (preg_split('/\R+/', (string) ($extras['schedule_blocked_dates'] ?? ''))
   });
   var hash = (location.hash || '').replace(/^#/, '');
   if (hash && document.querySelector('.group-panel[data-panel="' + hash + '"]')) activate(hash);
+
+  var usedDocCodes = <?= json_encode($usedDocCodes, JSON_UNESCAPED_UNICODE) ?> || {};
+  var currentGroupCode = <?= json_encode($groupCode, JSON_UNESCAPED_UNICODE) ?>;
+  var docInput = document.getElementById('reglamento_doc_code');
+  var codeInput = document.getElementById('group-code');
+  var hint = document.getElementById('doc-code-hint');
+  var docTouched = <?= json_encode(trim((string) ($extras['reglamento_doc_code'] ?? '')) !== '') ?>;
+
+  function slugify(v) {
+    return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'nuevo';
+  }
+  function autoDoc() {
+    var code = codeInput ? codeInput.value : currentGroupCode;
+    return 'reglamento_' + slugify(code);
+  }
+  function validateDocCode() {
+    if (!docInput) return true;
+    var val = (docInput.value || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_|_$/g, '');
+    docInput.value = val;
+    var owner = usedDocCodes[val];
+    var duplicate = !!(owner && owner !== currentGroupCode);
+    docInput.classList.toggle('is-duplicate', duplicate);
+    if (hint) {
+      if (duplicate) {
+        hint.innerHTML = '<span class="doc-code-error">Este código ya lo usa el grupo <code>' + owner + '</code>.</span>';
+      } else {
+        hint.textContent = 'Se propone automáticamente según el código del grupo. Puedes editarlo.';
+      }
+    }
+    return !duplicate;
+  }
+  if (docInput) {
+    docInput.addEventListener('input', function () { docTouched = true; validateDocCode(); });
+    validateDocCode();
+  }
+  if (codeInput && !codeInput.readOnly) {
+    codeInput.addEventListener('input', function () {
+      if (!docTouched && docInput) {
+        docInput.value = autoDoc();
+        validateDocCode();
+      }
+    });
+  }
+  var form = document.getElementById('group-form');
+  if (form) {
+    form.addEventListener('submit', function (e) {
+      if (!validateDocCode()) {
+        e.preventDefault();
+        activate('rules');
+        if (docInput) docInput.focus();
+        alert('El código del documento ya está en uso. Cámbialo antes de guardar.');
+      }
+    });
+  }
 })();
 </script>

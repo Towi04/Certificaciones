@@ -22,6 +22,7 @@ $groups = $groups ?? [];
 $suppliers = $suppliers ?? [];
 $certifiers = $certifiers ?? [];
 $cefrOptions = $cefrOptions ?? [];
+$cenniOptions = $cenniOptions ?? \App\Services\ProductAdminService::cenniOptions();
 $levelExam = $levelExam ?? [
     'enabled' => false,
     'uses_cenni' => false,
@@ -374,10 +375,15 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                                             </select>
                                         </td>
                                         <td class="level-cenni-col" <?= empty($levelExam['uses_cenni']) ? 'hidden' : '' ?>>
-                                            <input type="text" name="level_cenni[]"
-                                                   value="<?= e((string) ($row['cenni'] ?? '')) ?>"
-                                                   style="<?= e($inputStyle) ?>"
-                                                   <?= !empty($levelExam['uses_cenni']) ? 'required' : '' ?>>
+                                            <select name="level_cenni[]" style="<?= e($inputStyle) ?>"
+                                                    <?= !empty($levelExam['uses_cenni']) ? 'required' : '' ?>>
+                                                <option value="">—</option>
+                                                <?php foreach ($cenniOptions as $cenniOpt): ?>
+                                                    <option value="<?= e($cenniOpt) ?>" <?= ((string) ($row['cenni'] ?? '') === (string) $cenniOpt) ? 'selected' : '' ?>>
+                                                        <?= e($cenniOpt) ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
                                         </td>
                                         <td>
                                             <button type="button" class="btn btn-ghost btn-sm level-range-remove" title="Quitar rango">✕</button>
@@ -402,14 +408,18 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                                         </select>
                                     </td>
                                     <td class="level-cenni-col" hidden>
-                                        <input type="text" name="level_cenni[]" disabled
-                                               style="<?= e($inputStyle) ?>">
+                                        <select name="level_cenni[]" disabled style="<?= e($inputStyle) ?>">
+                                            <option value="">—</option>
+                                            <?php foreach ($cenniOptions as $cenniOpt): ?>
+                                                <option value="<?= e($cenniOpt) ?>"><?= e($cenniOpt) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
                                     </td>
                                     <td>
                                         <button type="button" class="btn btn-ghost btn-sm level-range-remove" title="Quitar rango">✕</button>
                                     </td>
                                 </tr>
-                            </tbody>
+</tbody>
                         </table>
                         <button type="button" class="btn btn-ghost btn-sm" id="level-range-add" style="margin-top:.65rem">
                             + Agregar rango
@@ -825,20 +835,16 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
   var rangesBody = document.getElementById('level-ranges-body');
   var rangeTemplate = rangesBody ? rangesBody.querySelector('.level-range-template') : null;
   var addRangeBtn = document.getElementById('level-range-add');
-  var cenniCols = editor.querySelectorAll('.level-cenni-col');
-
   function setCenniVisible(show) {
-    cenniCols.forEach(function (col) {
+    editor.querySelectorAll('.level-cenni-col').forEach(function (col) {
       var row = col.closest('.level-range-row');
-      if (row && row.classList.contains('level-range-template')) {
-        col.hidden = !show;
-        return;
-      }
+      var isTemplate = row && row.classList.contains('level-range-template');
       col.hidden = !show;
-      col.querySelectorAll('input').forEach(function (input) {
-        if (input.disabled) return;
-        input.required = !!show;
-        if (!show) input.value = '';
+      if (isTemplate) return;
+      col.querySelectorAll('input, select').forEach(function (el) {
+        if (el.disabled) return;
+        el.required = !!show;
+        if (!show) el.value = '';
       });
     });
   }
