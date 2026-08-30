@@ -64,13 +64,9 @@ final class ProductRepository
              WHERE p.is_active = 1 AND p.is_public = 1 AND p.is_star = 1
              ORDER BY p.sort_order ASC, p.name ASC';
         if ($limit !== null && $limit > 0) {
-            $sql .= ' LIMIT ?';
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->bindValue(1, $limit, PDO::PARAM_INT);
-            $stmt->execute();
-        } else {
-            $stmt = $this->pdo->query($sql);
+            $sql .= ' LIMIT ' . (int) $limit;
         }
+        $stmt = $this->pdo->query($sql);
 
         return $stmt->fetchAll();
     }
@@ -128,10 +124,9 @@ final class ProductRepository
             array_push($params, $like, $like, $like, $like);
         }
         $sql .= ' ORDER BY p.type, p.name';
+        // MariaDB rejects quoted LIMIT/OFFSET from PDO string binding; cast inline.
         if ($limit !== null) {
-            $sql .= ' LIMIT ? OFFSET ?';
-            $params[] = $limit;
-            $params[] = max(0, $offset ?? 0);
+            $sql .= ' LIMIT ' . (int) $limit . ' OFFSET ' . max(0, (int) ($offset ?? 0));
         }
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);

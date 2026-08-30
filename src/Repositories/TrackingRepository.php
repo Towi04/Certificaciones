@@ -64,11 +64,9 @@ final class TrackingRepository
              JOIN purchases pu ON pu.id = t.purchase_id
              WHERE t.status = ?
              ORDER BY t.updated_at ASC
-             LIMIT ?'
+             LIMIT ' . (int) $limit
         );
-        $stmt->bindValue(1, 'waiting_admin');
-        $stmt->bindValue(2, $limit, PDO::PARAM_INT);
-        $stmt->execute();
+        $stmt->execute(['waiting_admin']);
 
         return $stmt->fetchAll();
     }
