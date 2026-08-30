@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Support\Settings;
+
 /**
- * Horarios de examen en checkout (bloques de 30 min según config del producto).
+ * Horarios de examen en checkout (bloques según config del producto/grupo).
  */
 final class ExamScheduleService
 {
+    public const GLOBAL_VACATIONS_KEY = 'global_vacation_dates';
+
     /** @param array<string, mixed> $product */
     public static function needsExamAtCheckout(array $product): bool
     {
@@ -27,6 +31,9 @@ final class ExamScheduleService
      * @return array{
      *   slot_minutes:int,
      *   min_advance_days:int,
+     *   validity_months:int,
+     *   available_365:bool,
+     *   days:array<int,bool>,
      *   weekdays:array{start:string,end:string},
      *   saturday:array{start:string,end:string},
      *   blocked_dates:list<string>
@@ -40,10 +47,35 @@ final class ExamScheduleService
 
         $weekdays = is_array($schedule['weekdays'] ?? null) ? $schedule['weekdays'] : [];
         $saturday = is_array($schedule['saturday'] ?? null) ? $schedule['saturday'] : [];
+        $available365 = (bool) ($schedule['available_365'] ?? false);
+
+        $daysCfg = is_array($schedule['days'] ?? null) ? $schedule['days'] : null;
+        if ($daysCfg === null) {
+            $days = [1 => true, 2 => true, 3 => true, 4 => true, 5 => true, 6 => true, 0 => false];
+        } else {
+            $days = [];
+            foreach ([0, 1, 2, 3, 4, 5, 6] as $d) {
+                $days[$d] = !empty($daysCfg[(string) $d]) || !empty($daysCfg[$d]);
+            }
+        }
+
+        $blocked = [];
+        if (!$available365) {
+            $blocked = self::normalizeBlockedDates(self::globalVacationDates());
+        }
+        // Fechas locales antiguas (por grupo) se siguen respetando si existen.
+        $localBlocked = self::normalizeBlockedDates($schedule['blocked_dates'] ?? []);
+        foreach ($localBlocked as $d) {
+            $blocked[$d] = $d;
+        }
+        $blocked = array_values($blocked);
 
         return [
             'slot_minutes' => max(15, (int) ($exam['slot_minutes'] ?? 30)),
             'min_advance_days' => max(0, (int) ($schedule['min_advance_days'] ?? 2)),
+            'validity_months' => max(1, (int) ($exam['validity_months'] ?? 6)),
+            'available_365' => $available365,
+            'days' => $days,
             'weekdays' => [
                 'start' => (string) ($weekdays['start'] ?? '10:00'),
                 'end' => (string) ($weekdays['end'] ?? '17:30'),
@@ -52,8 +84,20 @@ final class ExamScheduleService
                 'start' => (string) ($saturday['start'] ?? '08:00'),
                 'end' => (string) ($saturday['end'] ?? '12:00'),
             ],
-            'blocked_dates' => self::normalizeBlockedDates($schedule['blocked_dates'] ?? []),
+            'blocked_dates' => $blocked,
         ];
+    }
+
+    /** @return list<string> */
+    public static function globalVacationDates(): array
+    {
+        return self::normalizeBlockedDates(Settings::get(self::GLOBAL_VACATIONS_KEY, '') ?? '');
+    }
+
+    public static function saveGlobalVacationDates(string $raw): void
+    {
+        $dates = self::normalizeBlockedDates($raw);
+        Settings::set(self::GLOBAL_VACATIONS_KEY, implode("\n", $dates));
     }
 
     /**
@@ -98,7 +142,7 @@ final class ExamScheduleService
 
     /**
      * @param array<string, mixed> $product
-     * @return list<string> ISO dates within horizon
+     * @return list<string>
      */
     public function selectableDates(array $product, int $horizonDays = 60): array
     {
@@ -138,12 +182,12 @@ final class ExamScheduleService
         }
 
         $dt = new \DateTimeImmutable($date);
-        $dow = (int) $dt->format('w');
-        if ($dow === 0) {
+        $dow = (int) $dt->format('w'); // 0=Dom .. 6=Sáb
+        if (empty($rules['days'][$dow])) {
             return [];
         }
 
-        $window = $dow === 6 ? $rules['saturday'] : $rules['weekdays'];
+        $window = in_array($dow, [0, 6], true) ? $rules['saturday'] : $rules['weekdays'];
         $start = $this->parseClock($window['start']);
         $end = $this->parseClock($window['end']);
         if ($start === null || $end === null || $start >= $end) {

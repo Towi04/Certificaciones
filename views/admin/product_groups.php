@@ -6,9 +6,9 @@
     <div>
         <h1 style="margin:0;color:var(--doceo-blue)">Grupos de proceso</h1>
         <p class="muted" style="margin:.35rem 0 0;max-width:46rem">
-            Aquí se define el proceso de compra compartido (pagos, MSI, horarios, <strong>vacaciones</strong>, reglamento, pipeline).
-            Entra a un grupo y usa la pestaña <strong>Vacaciones</strong> para bloquear fechas.
-            Luego cada producto solo personaliza nombre, descripción, precios, nivel e imágenes.
+            Aquí se define el proceso de compra compartido (pagos, MSI, horarios, reglamento, pipeline).
+            Las <a href="<?= e(url('/admin/vacaciones')) ?>"><strong>vacaciones globales</strong></a> aplican a todos, salvo grupos marcados 365 días.
+            Luego cada producto personaliza nombre, descripción, precios, nivel e imágenes.
         </p>
     </div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
@@ -40,7 +40,7 @@
                     <td><?= e($g['supplier_name'] ?? '—') ?></td>
                     <td><?= (int) ($counts[(int) $g['id']] ?? 0) ?></td>
                     <td><a href="<?= e(url('/admin/grupos/' . $g['id'])) ?>">Editar</a>
-                        · <a href="<?= e(url('/admin/grupos/' . $g['id'] . '#vacations')) ?>">Vacaciones</a>
+                        · <a href="<?= e(url('/admin/grupos/' . $g['id'] . '#schedule')) ?>">Fechas</a>
                     </td>
                 </tr>
             <?php endforeach; ?>

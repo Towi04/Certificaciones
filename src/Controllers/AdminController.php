@@ -20,6 +20,7 @@ use App\Services\ImportService;
 use App\Integrations\Mailer;
 use App\Services\MailTemplateService;
 use App\Services\ProductAdminService;
+use App\Services\ExamScheduleService;
 use App\Services\ProductMediaService;
 use App\Services\TrackingService;
 use App\Services\UksEletService;
@@ -175,6 +176,7 @@ final class AdminController
             'group' => null,
             'suppliers' => (new SupplierRepository())->all(),
             'defaultConfig' => $defaultConfig,
+            'usedDocCodes' => (new ProductAdminService())->usedReglamentoDocCodes(null),
             'extras' => ProductAdminService::groupFormExtrasFromConfig((string) $defaultConfig),
             'layout' => 'admin',
         ]);
@@ -216,6 +218,7 @@ final class AdminController
             JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
         );
         view('admin/product_group_form', [
+            'usedDocCodes' => (new ProductAdminService())->usedReglamentoDocCodes((int) $id),
             'title' => 'Editar grupo · ' . $group['name'],
             'group' => $group,
             'suppliers' => (new SupplierRepository())->all(),
@@ -269,6 +272,7 @@ final class AdminController
             'audienceOptions' => ProductAdminService::audienceOptions(),
             'platformOptions' => ProductAdminService::platformOptions(),
             'cefrOptions' => ProductAdminService::cefrOptions(),
+            'cenniOptions' => ProductAdminService::cenniOptions(),
             'levelExam' => ProductAdminService::levelExamFromConfig(
                 $product !== null ? (string) ($product['config_json'] ?? '') : null
             ),
@@ -1185,7 +1189,33 @@ final class AdminController
         redirect('/admin/exportaciones');
     }
 
-    public function promoCode(): void
+    
+    public function vacations(): void
+    {
+        Auth::requireRole(['admin']);
+        $dates = ExamScheduleService::globalVacationDates();
+        view('admin/vacations', [
+            'title' => 'Vacaciones globales',
+            'dates' => $dates,
+            'raw' => implode("\n", $dates),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function vacationsSave(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            ExamScheduleService::saveGlobalVacationDates((string) ($_POST['vacation_dates'] ?? ''));
+            flash('success', 'Vacaciones globales guardadas.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/vacaciones');
+    }
+
+public function promoCode(): void
     {
         Auth::requireRole(['admin']);
         $pdo = Connection::get();

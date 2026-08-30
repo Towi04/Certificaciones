@@ -29,6 +29,7 @@ $path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
         <a class="<?= str_contains($path, '/productos') ? 'active' : '' ?>" href="<?= e(url('/admin/productos')) ?>">Productos</a>
         <a class="<?= str_contains($path, '/precios') ? 'active' : '' ?>" href="<?= e(url('/admin/precios')) ?>">Precios</a>
         <a class="<?= str_contains($path, '/grupos') ? 'active' : '' ?>" href="<?= e(url('/admin/grupos')) ?>">Grupos</a>
+        <a class="<?= str_contains($path, '/vacaciones') ? 'active' : '' ?>" href="<?= e(url('/admin/vacaciones')) ?>">Vacaciones</a>
         <a class="<?= str_contains($path, '/promo') ? 'active' : '' ?>" href="<?= e(url('/admin/promo')) ?>">Promo DOCEO</a>
         <a class="<?= str_contains($path, '/correos') ? 'active' : '' ?>" href="<?= e(url('/admin/correos')) ?>">Correos</a>
         <a class="<?= str_contains($path, '/partners') ? 'active' : '' ?>" href="<?= e(url('/admin/partners')) ?>">Partners</a>
