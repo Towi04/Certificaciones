@@ -268,6 +268,10 @@ final class AdminController
             'categoryOptions' => ProductAdminService::categoryOptions(),
             'audienceOptions' => ProductAdminService::audienceOptions(),
             'platformOptions' => ProductAdminService::platformOptions(),
+            'cefrOptions' => ProductAdminService::cefrOptions(),
+            'levelExam' => ProductAdminService::levelExamFromConfig(
+                $product !== null ? (string) ($product['config_json'] ?? '') : null
+            ),
             'layout' => 'admin',
         ];
     }

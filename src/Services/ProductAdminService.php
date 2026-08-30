@@ -90,7 +90,6 @@ final class ProductAdminService
         if ($this->products->findBySlugExact($data['slug']) !== null) {
             throw new \InvalidArgumentException('Ya existe un producto con el slug ' . $data['slug']);
         }
-        $data['config_json'] = json_encode(new \stdClass(), JSON_UNESCAPED_UNICODE);
 
         return $this->products->create($data);
     }
@@ -233,9 +232,9 @@ final class ProductAdminService
         return [
             'code',
             'name',
-            'public_price',
-            'catalog_price',
             'cost_price',
+            'catalog_price',
+            'public_price',
             'price_cncm',
             'price_partner_a',
             'price_partner_b',
@@ -321,7 +320,7 @@ final class ProductAdminService
                 continue;
             }
             $fields = [];
-            foreach (['public_price', 'catalog_price', 'cost_price', 'price_cncm', 'price_partner_a', 'price_partner_b', 'price_partner_c'] as $col) {
+            foreach (['cost_price', 'catalog_price', 'public_price', 'price_cncm', 'price_partner_a', 'price_partner_b', 'price_partner_c'] as $col) {
                 if (!isset($map[$col])) {
                     continue;
                 }
@@ -481,6 +480,58 @@ final class ProductAdminService
         exit;
     }
 
+    /** @return list<string> */
+    public static function cefrOptions(): array
+    {
+        return ['Pre-A1', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+    }
+
+    /**
+     * Lee la configuración de examen de nivel desde products.config_json.
+     *
+     * @return array{
+     *   enabled:bool,
+     *   uses_cenni:bool,
+     *   score_label:string,
+     *   ranges:list<array{min:string,max:string,cefr:string,cenni:string}>
+     * }
+     */
+    public static function levelExamFromConfig(?string $configJson): array
+    {
+        $cfg = [];
+        if ($configJson !== null && trim($configJson) !== '') {
+            $decoded = json_decode($configJson, true);
+            if (is_array($decoded)) {
+                $cfg = $decoded;
+            }
+        }
+        $level = is_array($cfg['level_exam'] ?? null) ? $cfg['level_exam'] : [];
+        $ranges = [];
+        if (is_array($level['ranges'] ?? null)) {
+            foreach ($level['ranges'] as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $ranges[] = [
+                    'min' => isset($row['min']) && $row['min'] !== null && $row['min'] !== '' ? (string) $row['min'] : '',
+                    'max' => isset($row['max']) && $row['max'] !== null && $row['max'] !== '' ? (string) $row['max'] : '',
+                    'cefr' => (string) ($row['cefr'] ?? ''),
+                    'cenni' => (string) ($row['cenni'] ?? ''),
+                ];
+            }
+        }
+        if ($ranges === [] && !empty($level['enabled'])) {
+            $ranges[] = ['min' => '', 'max' => '', 'cefr' => '', 'cenni' => ''];
+        }
+
+        return [
+            'enabled' => (bool) ($level['enabled'] ?? false),
+            'uses_cenni' => (bool) ($level['uses_cenni'] ?? false),
+            'score_label' => (string) ($level['score_label'] ?? 'Puntaje'),
+            'ranges' => $ranges,
+        ];
+    }
+
     /**
      * Crea/actualiza grupos sugeridos (si no existen) con pagos tipo ELeT.
      *
@@ -629,7 +680,110 @@ final class ProductAdminService
             'is_public' => !empty($input['is_public']) ? 1 : 0,
             'is_star' => !empty($input['is_star']) ? 1 : 0,
             'sort_order' => (int) ($input['sort_order'] ?? ($existing['sort_order'] ?? 100)),
+            'config_json' => $this->buildProductConfigJson($input, $existing),
         ];
+    }
+
+    /**
+     * Conserva config_json existente y actualiza la sección level_exam desde el formulario.
+     *
+     * @param array<string, mixed> $input
+     * @param array<string, mixed>|null $existing
+     */
+    private function buildProductConfigJson(array $input, ?array $existing = null): string
+    {
+        $cfg = [];
+        if ($existing !== null) {
+            $decoded = json_decode((string) ($existing['config_json'] ?? ''), true);
+            if (is_array($decoded)) {
+                $cfg = $decoded;
+            }
+        }
+
+        if (!empty($input['is_level_exam'])) {
+            $ranges = $this->parseLevelExamRanges($input);
+            if ($ranges === []) {
+                throw new \InvalidArgumentException(
+                    'Si marcas "Es un examen de nivel", agrega al menos un rango con puntaje y nivel CEFR.'
+                );
+            }
+            $scoreLabel = trim((string) ($input['level_score_label'] ?? 'Puntaje'));
+            if ($scoreLabel === '') {
+                $scoreLabel = 'Puntaje';
+            }
+            $cfg['level_exam'] = [
+                'enabled' => true,
+                'uses_cenni' => !empty($input['level_uses_cenni']),
+                'score_label' => $scoreLabel,
+                'ranges' => $ranges,
+            ];
+        } else {
+            unset($cfg['level_exam']);
+        }
+
+        if ($cfg === []) {
+            return (string) json_encode(new \stdClass(), JSON_UNESCAPED_UNICODE);
+        }
+
+        return (string) json_encode($cfg, JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @return list<array{min:float|int,max:float|int,cefr:string,cenni:?string}>
+     */
+    private function parseLevelExamRanges(array $input): array
+    {
+        $mins = $input['level_min'] ?? [];
+        $maxs = $input['level_max'] ?? [];
+        $cefrs = $input['level_cefr'] ?? [];
+        $cennis = $input['level_cenni'] ?? [];
+        if (!is_array($mins) || !is_array($maxs) || !is_array($cefrs)) {
+            return [];
+        }
+
+        $usesCenni = !empty($input['level_uses_cenni']);
+        $allowedCefr = self::cefrOptions();
+        $out = [];
+        $count = max(count($mins), count($maxs), count($cefrs));
+        for ($i = 0; $i < $count; $i++) {
+            $minRaw = trim((string) ($mins[$i] ?? ''));
+            $maxRaw = trim((string) ($maxs[$i] ?? ''));
+            $cefr = trim((string) ($cefrs[$i] ?? ''));
+            $cenni = trim((string) ($cennis[$i] ?? ''));
+            if ($minRaw === '' && $maxRaw === '' && $cefr === '' && $cenni === '') {
+                continue;
+            }
+            if ($minRaw === '' || $maxRaw === '' || $cefr === '') {
+                throw new \InvalidArgumentException(
+                    'Cada rango de nivel debe incluir puntaje mínimo, máximo y nivel CEFR.'
+                );
+            }
+            if (!is_numeric($minRaw) || !is_numeric($maxRaw)) {
+                throw new \InvalidArgumentException('Los puntajes de los rangos deben ser numéricos.');
+            }
+            $min = (float) $minRaw;
+            $max = (float) $maxRaw;
+            if ($min > $max) {
+                throw new \InvalidArgumentException('En un rango, el puntaje mínimo no puede ser mayor que el máximo.');
+            }
+            if (!in_array($cefr, $allowedCefr, true)) {
+                throw new \InvalidArgumentException('Nivel CEFR no válido: ' . $cefr);
+            }
+            if ($usesCenni && $cenni === '') {
+                throw new \InvalidArgumentException(
+                    'Si el examen aplica para CENNI, cada rango debe indicar el nivel CENNI correspondiente.'
+                );
+            }
+            $out[] = [
+                'min' => $min,
+                'max' => $max,
+                'cefr' => $cefr,
+                'cenni' => $usesCenni ? $cenni : null,
+            ];
+        }
+
+        return $out;
     }
 
     /**
