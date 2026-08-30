@@ -45,10 +45,9 @@ final class PartnerRepository
             $params = [$like, $like, $like];
         }
         $sql .= ' ORDER BY p.display_name ASC, p.id ASC';
+        // MariaDB rejects quoted LIMIT/OFFSET from PDO string binding; cast inline.
         if ($limit !== null) {
-            $sql .= ' LIMIT ? OFFSET ?';
-            $params[] = $limit;
-            $params[] = max(0, $offset ?? 0);
+            $sql .= ' LIMIT ' . (int) $limit . ' OFFSET ' . max(0, (int) ($offset ?? 0));
         }
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);

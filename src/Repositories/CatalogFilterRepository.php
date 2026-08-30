@@ -178,5 +178,23 @@ final class CatalogFilterRepository
         foreach ($defaults as [$slug, $label, $group, $sort]) {
             $stmt->execute([$slug, $label, $group, $sort]);
         }
+
+        $this->syncProductTagsFromCategories();
+    }
+
+    public function syncProductTagsFromCategories(): void
+    {
+        $stmt = $this->pdo->query(
+            'SELECT p.id, p.category FROM products p
+             WHERE NOT EXISTS (
+                SELECT 1 FROM product_catalog_filters pcf WHERE pcf.product_id = p.id
+             )'
+        );
+        foreach ($stmt->fetchAll() as $row) {
+            $filter = $this->findBySlug((string) $row['category']);
+            if ($filter !== null) {
+                $this->setProductFilters((int) $row['id'], [(int) $filter['id']]);
+            }
+        }
     }
 }
