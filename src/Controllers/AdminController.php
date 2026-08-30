@@ -906,11 +906,19 @@ final class AdminController
             static fn (array $p): bool => (int) ($p['supplier_id'] ?? 0) === $sid
         ));
         $products = array_slice($products, 0, 40);
+        $revealedPasswords = [];
+        $revealed = flash('_revealed_account');
+        if (is_array($revealed) && isset($revealed['id'])) {
+            $revealedPasswords[(int) $revealed['id']] = (string) ($revealed['password'] ?? '');
+        }
         view('admin/supplier_show', [
             'title' => 'Proveedor · ' . $supplier['name'],
             'supplier' => $supplier,
             'groups' => $groups,
             'products' => $products,
+            'contacts' => $repo->contacts($sid),
+            'accounts' => $repo->accounts($sid),
+            'revealedPasswords' => $revealedPasswords,
             'productCount' => $repo->countProducts($sid),
             'groupCount' => $repo->countGroups($sid),
             'layout' => 'admin',
@@ -931,6 +939,116 @@ final class AdminController
         redirect('/admin/proveedores/' . $supplierId);
     }
 
+    public function supplierLogo(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $supplierId = (int) $id;
+        $svc = new \App\Services\SupplierAdminService();
+        try {
+            if (!empty($_POST['remove_logo'])) {
+                $svc->clearLogo($supplierId);
+                flash('success', 'Logo eliminado.');
+            } else {
+                $file = $_FILES['logo'] ?? null;
+                if (!is_array($file)) {
+                    throw new \InvalidArgumentException('Selecciona una imagen de logo.');
+                }
+                $svc->uploadLogo($supplierId, $file);
+                flash('success', 'Logo actualizado.');
+            }
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/proveedores/' . $supplierId . '#general');
+    }
+
+    public function supplierContactCreate(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $supplierId = (int) $id;
+        try {
+            (new \App\Services\SupplierAdminService())->addContact($supplierId, $_POST);
+            flash('success', 'Contacto agregado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/proveedores/' . $supplierId . '#contacts');
+    }
+
+    public function supplierContactDelete(string $id, string $contactId): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $supplierId = (int) $id;
+        try {
+            (new \App\Services\SupplierAdminService())->deleteContact($supplierId, (int) $contactId);
+            flash('success', 'Contacto eliminado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/proveedores/' . $supplierId . '#contacts');
+    }
+
+    public function supplierAccountCreate(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $supplierId = (int) $id;
+        try {
+            (new \App\Services\SupplierAdminService())->addAccount($supplierId, $_POST);
+            flash('success', 'Acceso a plataforma guardado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/proveedores/' . $supplierId . '#accounts');
+    }
+
+    public function supplierAccountUpdate(string $id, string $accountId): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $supplierId = (int) $id;
+        try {
+            (new \App\Services\SupplierAdminService())->updateAccount($supplierId, (int) $accountId, $_POST);
+            flash('success', 'Acceso actualizado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/proveedores/' . $supplierId . '#accounts');
+    }
+
+    public function supplierAccountDelete(string $id, string $accountId): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $supplierId = (int) $id;
+        try {
+            (new \App\Services\SupplierAdminService())->deleteAccount($supplierId, (int) $accountId);
+            flash('success', 'Acceso eliminado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/proveedores/' . $supplierId . '#accounts');
+    }
+
+    public function supplierAccountReveal(string $id, string $accountId): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $supplierId = (int) $id;
+        $aid = (int) $accountId;
+        try {
+            $password = (new \App\Services\SupplierAdminService())->revealAccountPassword($supplierId, $aid);
+            flash('_revealed_account', ['id' => $aid, 'password' => $password]);
+            flash('info', 'Contraseña revelada abajo (solo en esta pantalla).');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/proveedores/' . $supplierId . '#accounts');
+    }
+
     public function supplierDelete(string $id): void
     {
         Auth::requireRole(['admin']);
@@ -942,6 +1060,125 @@ final class AdminController
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
             redirect('/admin/proveedores/' . (int) $id);
+        }
+    }
+
+    public function certifiers(): void
+    {
+        Auth::requireRole(['admin']);
+        $repo = new CertifierRepository();
+        $certifiers = $repo->all();
+        $counts = [];
+        foreach ($certifiers as $c) {
+            $counts[(int) $c['id']] = $repo->countProducts((int) $c['id']);
+        }
+        view('admin/certifiers', [
+            'title' => 'Casas certificadoras',
+            'certifiers' => $certifiers,
+            'counts' => $counts,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function certifierCreateForm(): void
+    {
+        Auth::requireRole(['admin']);
+        view('admin/certifier_form', [
+            'title' => 'Nueva certificadora',
+            'certifier' => null,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function certifierCreate(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            $id = (new \App\Services\CertifierAdminService())->create($_POST);
+            flash('success', 'Certificadora creada.');
+            redirect('/admin/certificadoras/' . $id);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/admin/certificadoras/nueva');
+        }
+    }
+
+    public function certifierShow(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $repo = new CertifierRepository();
+        $certifier = $repo->find((int) $id);
+        if ($certifier === null) {
+            http_response_code(404);
+            view('errors/404', ['title' => 'Certificadora no encontrada', 'layout' => 'admin']);
+
+            return;
+        }
+        $cid = (int) $certifier['id'];
+        $products = array_values(array_filter(
+            (new ProductRepository())->adminList(),
+            static fn (array $p): bool => (int) ($p['certifier_id'] ?? 0) === $cid
+        ));
+        $products = array_slice($products, 0, 40);
+        view('admin/certifier_show', [
+            'title' => 'Certificadora · ' . $certifier['name'],
+            'certifier' => $certifier,
+            'products' => $products,
+            'productCount' => $repo->countProducts($cid),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function certifierUpdate(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $certifierId = (int) $id;
+        try {
+            (new \App\Services\CertifierAdminService())->update($certifierId, $_POST);
+            flash('success', 'Certificadora actualizada.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/certificadoras/' . $certifierId);
+    }
+
+    public function certifierLogo(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $certifierId = (int) $id;
+        $svc = new \App\Services\CertifierAdminService();
+        try {
+            if (!empty($_POST['remove_logo'])) {
+                $svc->clearLogo($certifierId);
+                flash('success', 'Logo eliminado.');
+            } else {
+                $file = $_FILES['logo'] ?? null;
+                if (!is_array($file)) {
+                    throw new \InvalidArgumentException('Selecciona una imagen de logo.');
+                }
+                $svc->uploadLogo($certifierId, $file);
+                flash('success', 'Logo actualizado.');
+            }
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/certificadoras/' . $certifierId);
+    }
+
+    public function certifierDelete(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            (new \App\Services\CertifierAdminService())->delete((int) $id);
+            flash('success', 'Certificadora eliminada.');
+            redirect('/admin/certificadoras');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/admin/certificadoras/' . (int) $id);
         }
     }
 

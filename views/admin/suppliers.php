@@ -7,8 +7,9 @@ $counts = $counts ?? [];
     <div>
         <h1 style="margin:0;color:var(--doceo-blue)">Proveedores</h1>
         <p class="muted" style="margin:.35rem 0 0;max-width:46rem">
-            Crea y edita proveedores. Desde cada ficha puedes abrir un grupo de proceso
-            y cargar certificaciones en lote (CSV) para después afinarlas en Productos.
+            Crea y edita proveedores. En cada ficha puedes guardar contactos (ventas, soporte…),
+            logo, links de plataformas y usuarios/contraseñas cifrados, además de cargar
+            certificaciones en lote (CSV).
         </p>
     </div>
     <a class="btn btn-accent" href="<?= e(url('/admin/proveedores/nuevo')) ?>">Nuevo proveedor</a>
