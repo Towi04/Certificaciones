@@ -13,6 +13,7 @@ use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\SupplierRepository;
 use App\Repositories\TrackingRepository;
+use App\Services\CatalogFilterService;
 use App\Services\CheckoutService;
 use App\Services\CheckoutRequirements;
 use App\Services\ExportService;
@@ -24,6 +25,7 @@ use App\Services\ExamScheduleService;
 use App\Services\ProductMediaService;
 use App\Services\TrackingService;
 use App\Services\UksEletService;
+use App\Support\Pagination;
 use App\Support\Settings;
 
 final class AdminController
@@ -69,7 +71,9 @@ final class AdminController
     {
         Auth::requireRole(['admin']);
         $q = isset($_GET['q']) && is_string($_GET['q']) ? $_GET['q'] : null;
-        $products = (new ProductRepository())->adminList($q);
+        $repo = new ProductRepository();
+        $pagination = Pagination::fromRequest($repo->adminCount($q));
+        $products = $repo->adminList($q, $pagination['limit'], $pagination['offset']);
         $groupsCount = 0;
         try {
             $groupsCount = count((new ProductGroupRepository())->all());
@@ -79,6 +83,7 @@ final class AdminController
         view('admin/products', [
             'title' => 'Productos',
             'products' => $products,
+            'pagination' => $pagination,
             'q' => $q ?? '',
             'groupsCount' => $groupsCount,
             'layout' => 'admin',
@@ -97,6 +102,7 @@ final class AdminController
         csrf_verify();
         try {
             $id = (new ProductAdminService())->createProduct($_POST);
+            (new CatalogFilterService())->syncProductFilters($id, $_POST['catalog_filter_ids'] ?? []);
             flash('success', 'Producto creado. Ya puedes subir logo/galería y asignarlo al catálogo.');
             redirect('/admin/productos/' . $id);
         } catch (\Throwable $e) {
@@ -140,6 +146,7 @@ final class AdminController
 
         try {
             (new ProductAdminService())->updateProduct($productId, $_POST);
+            (new CatalogFilterService())->syncProductFilters($productId, $_POST['catalog_filter_ids'] ?? []);
             flash('success', 'Producto actualizado.');
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
@@ -236,9 +243,10 @@ final class AdminController
     public function productGroups(): void
     {
         Auth::requireRole(['admin']);
-        $groups = (new ProductGroupRepository())->all();
-        $counts = [];
         $repo = new ProductGroupRepository();
+        $pagination = Pagination::fromRequest($repo->countAll());
+        $groups = $repo->all($pagination['limit'], $pagination['offset']);
+        $counts = [];
         foreach ($groups as $g) {
             $counts[(int) $g['id']] = $repo->countProducts((int) $g['id']);
         }
@@ -246,6 +254,7 @@ final class AdminController
             'title' => 'Grupos de producto',
             'groups' => $groups,
             'counts' => $counts,
+            'pagination' => $pagination,
             'layout' => 'admin',
         ]);
     }
@@ -347,12 +356,17 @@ final class AdminController
      */
     private function productFormData(?array $product): array
     {
+        $filterSvc = new CatalogFilterService();
+        $productId = $product !== null ? (int) $product['id'] : 0;
+
         return [
             'title' => $product ? ('Editar · ' . $product['name']) : 'Nuevo producto',
             'product' => $product,
             'groups' => (new ProductGroupRepository())->all(),
             'suppliers' => (new SupplierRepository())->all(),
             'certifiers' => (new CertifierRepository())->all(),
+            'catalogFilters' => $filterSvc->adminFilters(),
+            'selectedFilterIds' => $productId > 0 ? $filterSvc->productFilterIds($productId) : [],
             'typeOptions' => ProductAdminService::typeOptions(),
             'categoryOptions' => ProductAdminService::categoryOptions(),
             'audienceOptions' => ProductAdminService::audienceOptions(),
@@ -467,22 +481,81 @@ final class AdminController
             'q' => isset($_GET['q']) && is_string($_GET['q']) ? $_GET['q'] : null,
             'status' => isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : null,
         ];
-        $rows = (new PurchaseRepository())->masterList($filters);
+        $repo = new PurchaseRepository();
+        $pagination = Pagination::fromRequest($repo->masterCount($filters));
+        $rows = $repo->masterList($filters, $pagination['limit'], $pagination['offset']);
         view('admin/master', [
             'title' => 'Tabla maestra',
             'rows' => $rows,
             'filters' => $filters,
+            'pagination' => $pagination,
             'layout' => 'admin',
         ]);
+    }
+
+    public function masterExport(): void
+    {
+        Auth::requireRole(['admin']);
+        $filters = [
+            'q' => isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : null,
+            'status' => isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : null,
+            'date_from' => isset($_GET['date_from']) && is_string($_GET['date_from']) ? trim($_GET['date_from']) : null,
+            'date_to' => isset($_GET['date_to']) && is_string($_GET['date_to']) ? trim($_GET['date_to']) : null,
+        ];
+        if ($filters['date_from'] === '') {
+            $filters['date_from'] = null;
+        }
+        if ($filters['date_to'] === '') {
+            $filters['date_to'] = null;
+        }
+
+        $rows = (new PurchaseRepository())->masterList($filters);
+        $filename = 'tabla-maestra-' . date('Y-m-d-His') . '.csv';
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: no-store');
+        echo "\xEF\xBB\xBF";
+
+        $out = fopen('php://output', 'w');
+        if ($out === false) {
+            exit;
+        }
+
+        fputcsv($out, [
+            'Matrícula', 'Nombre', 'Apellido paterno', 'Apellido materno', 'Email', 'Teléfono',
+            'Partner código', 'Partner nombre', 'Monto', 'Moneda', 'Estatus', 'Método pago', 'Creado',
+        ]);
+        foreach ($rows as $r) {
+            fputcsv($out, [
+                $r['matricula'] ?? '',
+                $r['first_name'] ?? '',
+                $r['last_name_p'] ?? '',
+                $r['last_name_m'] ?? '',
+                $r['student_email'] ?? '',
+                $r['student_phone'] ?? '',
+                $r['partner_code'] ?? '',
+                $r['partner_name'] ?? '',
+                $r['charged_amount'] ?? '',
+                $r['currency'] ?? '',
+                $r['status'] ?? '',
+                $r['payment_method'] ?? '',
+                $r['created_at'] ?? '',
+            ]);
+        }
+        fclose($out);
+        exit;
     }
 
     public function payments(): void
     {
         Auth::requireRole(['admin']);
-        $rows = (new PurchaseRepository())->awaitingPaymentList(100);
+        $repo = new PurchaseRepository();
+        $pagination = Pagination::fromRequest($repo->awaitingPaymentCount());
+        $rows = $repo->awaitingPaymentList($pagination['limit'], $pagination['offset']);
         view('admin/payments', [
             'title' => 'Pagos por confirmar',
             'rows' => $rows,
+            'pagination' => $pagination,
             'layout' => 'admin',
         ]);
     }
@@ -781,10 +854,13 @@ final class AdminController
     {
         Auth::requireRole(['admin']);
         $q = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
-        $partners = (new \App\Repositories\PartnerRepository())->adminList($q !== '' ? $q : null);
+        $repo = new \App\Repositories\PartnerRepository();
+        $pagination = Pagination::fromRequest($repo->countAll($q !== '' ? $q : null));
+        $partners = $repo->adminList($q !== '' ? $q : null, $pagination['limit'], $pagination['offset']);
         view('admin/partners', [
             'title' => 'Partners',
             'partners' => $partners,
+            'pagination' => $pagination,
             'q' => $q,
             'tierLabels' => \App\Services\PartnerAdminService::tierLabels(),
             'layout' => 'admin',
@@ -929,7 +1005,8 @@ final class AdminController
     {
         Auth::requireRole(['admin']);
         $repo = new SupplierRepository();
-        $suppliers = $repo->all();
+        $pagination = Pagination::fromRequest($repo->countAll());
+        $suppliers = $repo->all($pagination['limit'], $pagination['offset']);
         $counts = [];
         foreach ($suppliers as $s) {
             $sid = (int) $s['id'];
@@ -942,6 +1019,7 @@ final class AdminController
             'title' => 'Proveedores',
             'suppliers' => $suppliers,
             'counts' => $counts,
+            'pagination' => $pagination,
             'layout' => 'admin',
         ]);
     }
@@ -1153,7 +1231,8 @@ final class AdminController
     {
         Auth::requireRole(['admin']);
         $repo = new CertifierRepository();
-        $certifiers = $repo->all();
+        $pagination = Pagination::fromRequest($repo->countAll());
+        $certifiers = $repo->all($pagination['limit'], $pagination['offset']);
         $counts = [];
         foreach ($certifiers as $c) {
             $counts[(int) $c['id']] = $repo->countProducts((int) $c['id']);
@@ -1162,6 +1241,7 @@ final class AdminController
             'title' => 'Casas certificadoras',
             'certifiers' => $certifiers,
             'counts' => $counts,
+            'pagination' => $pagination,
             'layout' => 'admin',
         ]);
     }
@@ -1323,16 +1403,20 @@ final class AdminController
     {
         Auth::requireRole(['admin']);
         $filterSupplierId = !empty($_GET['supplier_id']) ? (int) $_GET['supplier_id'] : null;
-        $products = (new ProductRepository())->adminList();
+        $repo = new ProductRepository();
+        $allProducts = $repo->adminList();
         if ($filterSupplierId !== null) {
-            $products = array_values(array_filter(
-                $products,
+            $allProducts = array_values(array_filter(
+                $allProducts,
                 static fn (array $p): bool => (int) ($p['supplier_id'] ?? 0) === $filterSupplierId
             ));
         }
+        $pagination = Pagination::fromRequest(count($allProducts));
+        $products = array_slice($allProducts, $pagination['offset'], $pagination['limit']);
         view('admin/prices', [
             'title' => 'Precios masivos',
             'products' => $products,
+            'pagination' => $pagination,
             'suppliers' => (new SupplierRepository())->all(),
             'filterSupplierId' => $filterSupplierId,
             'layout' => 'admin',
@@ -1612,11 +1696,92 @@ public function promoCode(): void
         Auth::requireRole(['admin']);
         $svc = new MailTemplateService();
         $svc->ensureDefaults();
+        $repo = new \App\Repositories\MailTemplateRepository();
+        $pagination = Pagination::fromRequest($repo->countAll());
         view('admin/mail_templates', [
             'title' => 'Plantillas de correo',
-            'templates' => $svc->all(),
+            'templates' => $repo->all($pagination['limit'], $pagination['offset']),
+            'pagination' => $pagination,
             'layout' => 'admin',
         ]);
+    }
+
+    public function catalogFilters(): void
+    {
+        Auth::requireRole(['admin']);
+        view('admin/catalog_filters', [
+            'title' => 'Filtros del catálogo',
+            'filters' => (new CatalogFilterService())->adminFilters(),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function catalogFilterCreateForm(): void
+    {
+        Auth::requireRole(['admin']);
+        view('admin/catalog_filter_form', [
+            'title' => 'Nuevo filtro',
+            'filter' => null,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function catalogFilterCreate(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            $id = (new CatalogFilterService())->create($_POST);
+            flash('success', 'Filtro creado.');
+            redirect('/admin/filtros-catalogo/' . $id);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/admin/filtros-catalogo/nuevo');
+        }
+    }
+
+    public function catalogFilterEdit(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $filter = (new \App\Repositories\CatalogFilterRepository())->find((int) $id);
+        if ($filter === null) {
+            http_response_code(404);
+            view('errors/404', ['title' => 'Filtro no encontrado', 'layout' => 'admin']);
+
+            return;
+        }
+        view('admin/catalog_filter_form', [
+            'title' => 'Editar filtro · ' . $filter['label'],
+            'filter' => $filter,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function catalogFilterUpdate(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $filterId = (int) $id;
+        try {
+            (new CatalogFilterService())->update($filterId, $_POST);
+            flash('success', 'Filtro actualizado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/filtros-catalogo/' . $filterId);
+    }
+
+    public function catalogFilterDelete(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            (new CatalogFilterService())->delete((int) $id);
+            flash('success', 'Filtro eliminado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/filtros-catalogo');
     }
 
     public function mailTemplateCreate(): void

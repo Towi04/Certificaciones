@@ -9,6 +9,7 @@ use App\Repositories\ProductMediaRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\TrackingRepository;
+use App\Services\CatalogFilterService;
 use App\Support\Settings;
 
 final class CatalogController
@@ -20,12 +21,14 @@ final class CatalogController
         $products = [];
         $dbOk = true;
         try {
-            $stars = $repo->starProducts(8);
-            $category = $_GET['categoria'] ?? 'all';
+            $stars = $repo->starProducts();
+            $filter = $_GET['filtro'] ?? $_GET['categoria'] ?? 'all';
             $q = $_GET['q'] ?? null;
-            $products = $repo->publicCatalog(is_string($category) ? $category : 'all', is_string($q) ? $q : null);
+            $products = $repo->publicCatalog(is_string($filter) ? $filter : 'all', is_string($q) ? $q : null);
+            $catalogFilters = (new CatalogFilterService())->catalogFilters();
         } catch (\Throwable $e) {
             $dbOk = false;
+            $catalogFilters = [];
             error_log('[Doceo] Catalog: ' . $e->getMessage());
         }
 
@@ -33,7 +36,8 @@ final class CatalogController
             'title' => 'Catálogo',
             'stars' => $stars,
             'products' => $products,
-            'category' => $_GET['categoria'] ?? 'all',
+            'catalogFilters' => $catalogFilters ?? [],
+            'filter' => $_GET['filtro'] ?? $_GET['categoria'] ?? 'all',
             'q' => $_GET['q'] ?? '',
             'dbOk' => $dbOk,
             'user' => Auth::user(),

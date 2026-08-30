@@ -118,14 +118,86 @@ img { max-width: 100%; height: auto; }
 .product-card .thumb img { max-height: 88px; object-fit: contain; }
 .badge-star {
   position: absolute; top: .7rem; left: .7rem;
-  background: var(--doceo-yellow); color: #2a2a00;
-  font-size: .72rem; font-weight: 800; padding: .25rem .55rem; border-radius: 999px;
+  font-size: .95rem; line-height: 1;
 }
 .product-card .body { padding: .9rem 1rem 1rem; display: flex; flex-direction: column; gap: .45rem; flex: 1; }
 .product-card h3 { margin: 0; font-size: 1rem; color: var(--doceo-blue); line-height: 1.3; }
 .meta { color: var(--doceo-muted); font-size: .8rem; }
 .price { font-weight: 800; font-size: 1.1rem; color: var(--doceo-text); }
 .product-card .actions { margin-top: auto; padding-top: .4rem; }
+.product-card-link {
+  text-decoration: none; color: inherit; transition: transform .15s ease, box-shadow .15s ease;
+}
+.product-card-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 38, 89, .12);
+}
+.product-card-link .actions .btn { pointer-events: none; }
+
+.star-carousel-section { margin-bottom: 1.5rem; }
+.star-carousel-header { margin-bottom: .75rem; }
+.star-carousel-wrap {
+  display: grid; grid-template-columns: auto 1fr auto; gap: .5rem; align-items: center;
+}
+.star-carousel-wrap:not(.can-scroll) .star-carousel-btn { visibility: hidden; pointer-events: none; }
+.star-carousel-viewport { overflow-x: auto; scroll-behavior: smooth; scrollbar-width: none; }
+.star-carousel-viewport::-webkit-scrollbar { display: none; }
+.star-carousel-track { display: flex; gap: .75rem; padding: .25rem 0; }
+.star-carousel-item {
+  flex: 0 0 120px; text-decoration: none; color: inherit; text-align: center;
+  display: flex; flex-direction: column; gap: .45rem; align-items: center;
+}
+.star-carousel-logo {
+  width: 100%; aspect-ratio: 1; border-radius: 14px; border: 1px solid rgba(196,196,196,.65);
+  background: linear-gradient(160deg, #f7f9fc, #e8eef7); display: grid; place-items: center;
+  padding: .75rem; position: relative; box-shadow: var(--shadow);
+}
+.star-carousel-logo img { max-height: 56px; max-width: 100%; object-fit: contain; }
+.star-carousel-logo .badge-star { top: .45rem; left: .45rem; font-size: .85rem; padding: .15rem .35rem; }
+.star-carousel-name {
+  font-size: .82rem; font-weight: 700; color: var(--doceo-blue); line-height: 1.25;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.star-carousel-btn {
+  width: 36px; height: 36px; border-radius: 999px; border: 1px solid rgba(196,196,196,.8);
+  background: #fff; color: var(--doceo-blue); font-size: 1.4rem; line-height: 1; cursor: pointer;
+}
+.star-carousel-btn:disabled { opacity: .35; cursor: default; }
+
+.filter-group-label {
+  margin-top: .65rem; font-size: .72rem; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--doceo-muted);
+}
+.filter-list .filter-group-label:first-child { margin-top: 0; }
+
+.filter-tag-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .35rem .75rem;
+}
+.filter-tag-group {
+  grid-column: 1 / -1; margin-top: .5rem; font-size: .75rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .04em; color: var(--doceo-muted);
+}
+.filter-tag-group:first-child { margin-top: 0; }
+.filter-tag-item {
+  display: flex; align-items: center; gap: .45rem; font-size: .88rem; font-weight: 500;
+}
+
+.pagination-bar {
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+  flex-wrap: wrap; margin: 1rem 0 .75rem;
+}
+.pagination-controls { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.pagination-per-page label { display: flex; align-items: center; gap: .45rem; font-size: .85rem; font-weight: 600; }
+.pagination-per-page select {
+  padding: .35rem .5rem; border: 1px solid var(--doceo-gray); border-radius: 8px; font: inherit;
+}
+.pagination-nav { display: flex; align-items: center; gap: .5rem; }
+.pagination-nav .disabled { opacity: .45; pointer-events: none; }
+.export-form { display: flex; gap: .75rem; flex-wrap: wrap; align-items: end; }
+.export-form label { display: flex; flex-direction: column; gap: .3rem; font-size: .85rem; font-weight: 600; }
+.export-form input[type="date"] {
+  padding: .45rem .55rem; border: 1px solid var(--doceo-gray); border-radius: 8px; font: inherit;
+}
 
 .flash {
   border-radius: 12px; padding: .85rem 1rem; margin: 1rem 0; font-weight: 600;

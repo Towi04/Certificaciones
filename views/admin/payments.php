@@ -33,3 +33,5 @@
         </div>
     <?php endif; ?>
 </div>
+
+<?php require BASE_PATH . '/views/shared/pagination.php'; ?>

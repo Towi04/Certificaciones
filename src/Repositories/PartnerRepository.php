@@ -16,8 +16,23 @@ final class PartnerRepository
         $this->pdo = Connection::get();
     }
 
+    public function countAll(?string $q = null): int
+    {
+        $sql = 'SELECT COUNT(*) FROM partners p JOIN users u ON u.id = p.user_id';
+        $params = [];
+        if ($q !== null && trim($q) !== '') {
+            $sql .= ' WHERE p.code LIKE ? OR p.display_name LIKE ? OR u.email LIKE ?';
+            $like = '%' . trim($q) . '%';
+            $params = [$like, $like, $like];
+        }
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return (int) $stmt->fetchColumn();
+    }
+
     /** @return list<array<string, mixed>> */
-    public function adminList(?string $q = null): array
+    public function adminList(?string $q = null, ?int $limit = null, ?int $offset = null): array
     {
         $sql = 'SELECT p.*, u.email, u.first_name, u.last_name_p, u.last_name_m, u.phone,
                        u.is_active AS user_is_active, u.must_change_password
@@ -30,6 +45,11 @@ final class PartnerRepository
             $params = [$like, $like, $like];
         }
         $sql .= ' ORDER BY p.display_name ASC, p.id ASC';
+        if ($limit !== null) {
+            $sql .= ' LIMIT ? OFFSET ?';
+            $params[] = $limit;
+            $params[] = max(0, $offset ?? 0);
+        }
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
 

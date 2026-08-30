@@ -29,14 +29,18 @@ final class ProductRepository
              LEFT JOIN product_groups pg ON pg.id = p.product_group_id';
 
     /** @return list<array<string, mixed>> */
-    public function publicCatalog(?string $category = null, ?string $q = null, bool $starsOnly = false): array
+    public function publicCatalog(?string $filterSlug = null, ?string $q = null, bool $starsOnly = false): array
     {
         $sql = self::SELECT_WITH_RELATIONS . '
                 WHERE p.is_active = 1 AND p.is_public = 1';
         $params = [];
-        if ($category !== null && $category !== '' && $category !== 'all') {
-            $sql .= ' AND p.category = ?';
-            $params[] = $category;
+        if ($filterSlug !== null && $filterSlug !== '' && $filterSlug !== 'all') {
+            $sql .= ' AND EXISTS (
+                SELECT 1 FROM product_catalog_filters pcf
+                JOIN catalog_filters cf ON cf.id = pcf.filter_id
+                WHERE pcf.product_id = p.id AND cf.slug = ? AND cf.is_active = 1
+            )';
+            $params[] = $filterSlug;
         }
         if ($starsOnly) {
             $sql .= ' AND p.is_star = 1';
@@ -54,18 +58,38 @@ final class ProductRepository
     }
 
     /** @return list<array<string, mixed>> */
-    public function starProducts(int $limit = 8): array
+    public function starProducts(?int $limit = null): array
     {
-        $stmt = $this->pdo->prepare(
-            self::SELECT_WITH_RELATIONS . '
+        $sql = self::SELECT_WITH_RELATIONS . '
              WHERE p.is_active = 1 AND p.is_public = 1 AND p.is_star = 1
-             ORDER BY p.sort_order ASC, p.name ASC
-             LIMIT ?'
-        );
-        $stmt->bindValue(1, $limit, PDO::PARAM_INT);
-        $stmt->execute();
+             ORDER BY p.sort_order ASC, p.name ASC';
+        if ($limit !== null && $limit > 0) {
+            $sql .= ' LIMIT ?';
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindValue(1, $limit, PDO::PARAM_INT);
+            $stmt->execute();
+        } else {
+            $stmt = $this->pdo->query($sql);
+        }
 
         return $stmt->fetchAll();
+    }
+
+    public function adminCount(?string $q = null): int
+    {
+        $sql = 'SELECT COUNT(*) FROM products p
+                LEFT JOIN product_groups pg ON pg.id = p.product_group_id
+                WHERE 1=1';
+        $params = [];
+        if ($q) {
+            $sql .= ' AND (p.name LIKE ? OR p.code LIKE ? OR pg.name LIKE ? OR pg.code LIKE ?)';
+            $like = '%' . $q . '%';
+            array_push($params, $like, $like, $like, $like);
+        }
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return (int) $stmt->fetchColumn();
     }
 
     public function findBySlug(string $slug): ?array
@@ -93,7 +117,7 @@ final class ProductRepository
     }
 
     /** @return list<array<string, mixed>> */
-    public function adminList(?string $q = null): array
+    public function adminList(?string $q = null, ?int $limit = null, ?int $offset = null): array
     {
         $sql = self::SELECT_WITH_RELATIONS . '
                 WHERE 1=1';
@@ -104,6 +128,11 @@ final class ProductRepository
             array_push($params, $like, $like, $like, $like);
         }
         $sql .= ' ORDER BY p.type, p.name';
+        if ($limit !== null) {
+            $sql .= ' LIMIT ? OFFSET ?';
+            $params[] = $limit;
+            $params[] = max(0, $offset ?? 0);
+        }
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
 

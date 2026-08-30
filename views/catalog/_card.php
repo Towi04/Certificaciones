@@ -1,7 +1,8 @@
 <?php /** @var array<string,mixed> $p */ ?>
-<article class="product-card">
+<?php $productUrl = url('/producto/' . $p['slug']); ?>
+<a class="product-card product-card-link" href="<?= e($productUrl) ?>">
     <div class="thumb">
-        <?php if (!empty($p['is_star'])): ?><span class="badge-star">Estrella</span><?php endif; ?>
+        <?php if (!empty($p['is_star'])): ?><span class="badge-star" aria-label="Producto estrella">⭐</span><?php endif; ?>
         <?php if (!empty($p['logo_path'])): ?>
             <img src="<?= e(asset($p['logo_path'])) ?>" alt="">
         <?php else: ?>
@@ -16,7 +17,7 @@
         <?php endif; ?>
         <div class="price"><?= money($p['catalog_price'] ?? $p['public_price'] ?? 0) ?></div>
         <div class="actions">
-            <a class="btn btn-primary btn-sm" href="<?= e(url('/producto/' . $p['slug'])) ?>">Ver más</a>
+            <span class="btn btn-primary btn-sm">Ver más</span>
         </div>
     </div>
-</article>
+</a>

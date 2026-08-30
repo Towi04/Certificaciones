@@ -27,6 +27,7 @@ $path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
         <a class="<?= str_contains($path, '/maestra') ? 'active' : '' ?>" href="<?= e(url('/admin/maestra')) ?>">Tabla maestra</a>
         <a class="<?= str_contains($path, '/pagos') || str_contains($path, '/compras') ? 'active' : '' ?>" href="<?= e(url('/admin/pagos')) ?>">Pagos</a>
         <a class="<?= str_contains($path, '/productos') ? 'active' : '' ?>" href="<?= e(url('/admin/productos')) ?>">Productos</a>
+        <a class="<?= str_contains($path, '/filtros-catalogo') ? 'active' : '' ?>" href="<?= e(url('/admin/filtros-catalogo')) ?>">Filtros catálogo</a>
         <a class="<?= str_contains($path, '/combos') ? 'active' : '' ?>" href="<?= e(url('/admin/combos')) ?>">Combos</a>
         <a class="<?= str_contains($path, '/precios') ? 'active' : '' ?>" href="<?= e(url('/admin/precios')) ?>">Precios</a>
         <a class="<?= str_contains($path, '/grupos') ? 'active' : '' ?>" href="<?= e(url('/admin/grupos')) ?>">Grupos</a>
