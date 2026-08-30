@@ -31,6 +31,13 @@ $action = $isEdit ? url('/admin/proveedores/' . $supplier['id']) : url('/admin/p
                    value="<?= e((string) ($supplier['website'] ?? '')) ?>"
                    style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
         </label>
+        <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+            Plataforma / portal
+            <input type="url" name="platform_url"
+                   value="<?= e((string) ($supplier['platform_url'] ?? '')) ?>"
+                   placeholder="https://..."
+                   style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+        </label>
     </div>
     <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-top:1rem">
         Notas internas

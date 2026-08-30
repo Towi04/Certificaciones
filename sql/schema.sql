@@ -77,6 +77,8 @@ CREATE TABLE IF NOT EXISTS suppliers (
   name VARCHAR(190) NOT NULL,
   code VARCHAR(40) NOT NULL,
   website VARCHAR(255) NULL,
+  logo_path VARCHAR(255) NULL,
+  platform_url VARCHAR(255) NULL,
   notes TEXT NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -111,6 +113,10 @@ CREATE TABLE IF NOT EXISTS certifiers (
   name VARCHAR(190) NOT NULL,
   code VARCHAR(40) NOT NULL,
   logo_path VARCHAR(255) NULL,
+  website VARCHAR(255) NULL,
+  platform_url VARCHAR(255) NULL,
+  notes TEXT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
   UNIQUE KEY uq_certifiers_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
