@@ -69,10 +69,9 @@ final class PurchaseRepository
         $parts = $this->masterQueryParts($filters);
         $sql = $parts['sql'] . ' ORDER BY pu.created_at DESC';
         $params = $parts['params'];
+        // MariaDB rejects quoted LIMIT/OFFSET from PDO string binding; cast inline.
         if ($limit !== null) {
-            $sql .= ' LIMIT ? OFFSET ?';
-            $params[] = $limit;
-            $params[] = max(0, $offset ?? 0);
+            $sql .= ' LIMIT ' . (int) $limit . ' OFFSET ' . max(0, (int) ($offset ?? 0));
         }
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
@@ -97,14 +96,9 @@ final class PurchaseRepository
              WHERE pu.status IN ('awaiting_payment', 'payment_review')
              ORDER BY pu.created_at ASC";
         if ($limit !== null) {
-            $sql .= ' LIMIT ? OFFSET ?';
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->bindValue(1, $limit, PDO::PARAM_INT);
-            $stmt->bindValue(2, max(0, $offset ?? 0), PDO::PARAM_INT);
-            $stmt->execute();
-        } else {
-            $stmt = $this->pdo->query($sql);
+            $sql .= ' LIMIT ' . (int) $limit . ' OFFSET ' . max(0, (int) ($offset ?? 0));
         }
+        $stmt = $this->pdo->query($sql);
 
         return $stmt->fetchAll();
     }
