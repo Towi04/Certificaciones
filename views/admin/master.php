@@ -1,5 +1,8 @@
-<div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center">
-    <h1 style="margin:0;color:var(--doceo-blue)">Tabla maestra</h1>
+<div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:flex-start">
+    <div>
+        <h1 style="margin:0;color:var(--doceo-blue)">Tabla maestra</h1>
+        <p class="muted" style="margin:.35rem 0 0">Revisa comprobantes y confirma pagos desde el detalle de cada matrícula.</p>
+    </div>
     <form method="get" class="search" style="max-width:420px">
         <input type="search" name="q" value="<?= e($filters['q'] ?? '') ?>" placeholder="Nombre, correo, matrícula…">
         <select name="status">
@@ -11,8 +14,32 @@
         <button class="btn btn-primary" type="submit">Filtrar</button>
     </form>
 </div>
-<p class="muted">Revisa comprobantes y confirma pagos desde el detalle de cada matrícula.</p>
+
 <div class="panel" style="margin-top:1rem">
+    <h2 style="margin:0 0 .75rem;font-size:1.05rem;color:var(--doceo-blue)">Descargar Excel</h2>
+    <form method="get" action="<?= e(url('/admin/maestra/exportar')) ?>" class="export-form">
+        <?php if (!empty($filters['q'])): ?>
+            <input type="hidden" name="q" value="<?= e($filters['q']) ?>">
+        <?php endif; ?>
+        <?php if (!empty($filters['status'])): ?>
+            <input type="hidden" name="status" value="<?= e($filters['status']) ?>">
+        <?php endif; ?>
+        <label>
+            Desde
+            <input type="date" name="date_from" value="<?= e($_GET['date_from'] ?? '') ?>">
+        </label>
+        <label>
+            Hasta
+            <input type="date" name="date_to" value="<?= e($_GET['date_to'] ?? '') ?>">
+        </label>
+        <button class="btn btn-ghost" type="submit">Descargar CSV (Excel)</button>
+        <span class="muted" style="font-size:.85rem">Incluye los filtros de búsqueda activos y el rango de fechas.</span>
+    </form>
+</div>
+
+<?php require BASE_PATH . '/views/shared/pagination.php'; ?>
+
+<div class="panel" style="margin-top:.75rem">
     <div class="table-wrap">
         <table class="data">
             <thead>

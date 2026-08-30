@@ -16,10 +16,20 @@ final class SupplierRepository
         $this->pdo = Connection::get();
     }
 
-    /** @return list<array<string, mixed>> */
-    public function all(): array
+    public function countAll(): int
     {
-        return $this->pdo->query('SELECT * FROM suppliers ORDER BY name')->fetchAll();
+        return (int) $this->pdo->query('SELECT COUNT(*) FROM suppliers')->fetchColumn();
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function all(?int $limit = null, ?int $offset = null): array
+    {
+        $sql = 'SELECT * FROM suppliers ORDER BY name';
+        if ($limit !== null) {
+            $sql .= ' LIMIT ' . (int) $limit . ' OFFSET ' . max(0, (int) ($offset ?? 0));
+        }
+
+        return $this->pdo->query($sql)->fetchAll();
     }
 
     public function find(int $id): ?array

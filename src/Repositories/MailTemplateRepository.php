@@ -17,13 +17,20 @@ final class MailTemplateRepository
     }
 
     /** @return list<array<string, mixed>> */
-    public function all(): array
+    public function all(?int $limit = null, ?int $offset = null): array
     {
-        $stmt = $this->pdo->query(
-            'SELECT * FROM mail_templates ORDER BY name ASC, code ASC'
-        );
+        $sql = 'SELECT * FROM mail_templates ORDER BY name ASC, code ASC';
+        if ($limit !== null) {
+            $sql .= ' LIMIT ' . (int) $limit . ' OFFSET ' . max(0, (int) ($offset ?? 0));
+        }
+        $stmt = $this->pdo->query($sql);
 
         return $stmt->fetchAll();
+    }
+
+    public function countAll(): int
+    {
+        return (int) $this->pdo->query('SELECT COUNT(*) FROM mail_templates')->fetchColumn();
     }
 
     /** @return array<string, mixed>|null */

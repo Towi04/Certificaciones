@@ -25,6 +25,8 @@
     </div>
 <?php endif; ?>
 
+<?php require BASE_PATH . '/views/shared/pagination.php'; ?>
+
 <div class="panel" style="margin-top:1rem">
     <div class="table-wrap">
         <table class="data">

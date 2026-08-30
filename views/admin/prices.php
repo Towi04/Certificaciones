@@ -106,3 +106,5 @@ $priceFields = [
         </div>
     <?php endif; ?>
 </form>
+
+<?php require BASE_PATH . '/views/shared/pagination.php'; ?>

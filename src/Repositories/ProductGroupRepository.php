@@ -16,15 +16,23 @@ final class ProductGroupRepository
         $this->pdo = Connection::get();
     }
 
-    /** @return list<array<string, mixed>> */
-    public function all(): array
+    public function countAll(): int
     {
-        return $this->pdo->query(
-            'SELECT pg.*, s.name AS supplier_name, s.code AS supplier_code
+        return (int) $this->pdo->query('SELECT COUNT(*) FROM product_groups')->fetchColumn();
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function all(?int $limit = null, ?int $offset = null): array
+    {
+        $sql = 'SELECT pg.*, s.name AS supplier_name, s.code AS supplier_code
              FROM product_groups pg
              LEFT JOIN suppliers s ON s.id = pg.supplier_id
-             ORDER BY pg.name ASC'
-        )->fetchAll();
+             ORDER BY pg.name ASC';
+        if ($limit !== null) {
+            $sql .= ' LIMIT ' . (int) $limit . ' OFFSET ' . max(0, (int) ($offset ?? 0));
+        }
+
+        return $this->pdo->query($sql)->fetchAll();
     }
 
     public function find(int $id): ?array

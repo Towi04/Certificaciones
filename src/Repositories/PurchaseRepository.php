@@ -16,12 +16,11 @@ final class PurchaseRepository
         $this->pdo = Connection::get();
     }
 
-    /** @return list<array<string, mixed>> */
-    public function masterList(array $filters = []): array
+    /** @return array{sql:string,params:list<mixed>} */
+    private function masterQueryParts(array $filters = []): array
     {
         $sql = 'SELECT pu.*,
                        u.first_name, u.last_name_p, u.last_name_m, u.email AS student_email, u.phone AS student_phone,
-                       /* partners.display_name — no existe partners.name */
                        p.display_name AS partner_name, p.code AS partner_code
                 FROM purchases pu
                 JOIN users u ON u.id = pu.student_user_id
@@ -42,28 +41,70 @@ final class PurchaseRepository
             $sql .= ' AND pu.partner_id = ?';
             $params[] = $filters['partner_id'];
         }
+        if (!empty($filters['date_from'])) {
+            $sql .= ' AND pu.created_at >= ?';
+            $params[] = $filters['date_from'] . ' 00:00:00';
+        }
+        if (!empty($filters['date_to'])) {
+            $sql .= ' AND pu.created_at <= ?';
+            $params[] = $filters['date_to'] . ' 23:59:59';
+        }
 
-        $sql .= ' ORDER BY pu.created_at DESC LIMIT 200';
+        return ['sql' => $sql, 'params' => $params];
+    }
+
+    public function masterCount(array $filters = []): int
+    {
+        $parts = $this->masterQueryParts($filters);
+        $sql = 'SELECT COUNT(*) FROM (' . $parts['sql'] . ') AS master_rows';
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($parts['params']);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function masterList(array $filters = [], ?int $limit = null, ?int $offset = null): array
+    {
+        $parts = $this->masterQueryParts($filters);
+        $sql = $parts['sql'] . ' ORDER BY pu.created_at DESC';
+        $params = $parts['params'];
+        if ($limit !== null) {
+            $sql .= ' LIMIT ? OFFSET ?';
+            $params[] = $limit;
+            $params[] = max(0, $offset ?? 0);
+        }
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
 
         return $stmt->fetchAll();
     }
 
-    /** @return list<array<string, mixed>> */
-    public function awaitingPaymentList(int $limit = 20): array
+    public function awaitingPaymentCount(): int
     {
-        $stmt = $this->pdo->prepare(
-            "SELECT pu.id, pu.matricula, pu.status, pu.charged_amount, pu.payment_method, pu.created_at,
+        return (int) $this->pdo->query(
+            "SELECT COUNT(*) FROM purchases WHERE status IN ('awaiting_payment', 'payment_review')"
+        )->fetchColumn();
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function awaitingPaymentList(?int $limit = null, ?int $offset = null): array
+    {
+        $sql = "SELECT pu.id, pu.matricula, pu.status, pu.charged_amount, pu.payment_method, pu.created_at,
                     u.first_name, u.last_name_p, u.email AS student_email
              FROM purchases pu
              JOIN users u ON u.id = pu.student_user_id
              WHERE pu.status IN ('awaiting_payment', 'payment_review')
-             ORDER BY pu.created_at ASC
-             LIMIT ?"
-        );
-        $stmt->bindValue(1, $limit, PDO::PARAM_INT);
-        $stmt->execute();
+             ORDER BY pu.created_at ASC";
+        if ($limit !== null) {
+            $sql .= ' LIMIT ? OFFSET ?';
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindValue(1, $limit, PDO::PARAM_INT);
+            $stmt->bindValue(2, max(0, $offset ?? 0), PDO::PARAM_INT);
+            $stmt->execute();
+        } else {
+            $stmt = $this->pdo->query($sql);
+        }
 
         return $stmt->fetchAll();
     }
