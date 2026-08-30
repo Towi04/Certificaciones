@@ -92,11 +92,26 @@ $stepLabels = [
                                             Incluye: <?= e(implode(' + ', $itemNames)) ?>
                                         </span>
                                         <span style="display:block;margin-top:.25rem;font-weight:700;color:var(--doceo-blue)">
-                                            Desde <?= money($c['public_price']) ?>
+                                            Combo <?= money($c['public_price']) ?>
                                             <?php if (!empty($c['solo_sum']) && (float) $c['solo_sum'] > (float) $c['public_price']): ?>
                                                 <span class="muted" style="font-weight:500;text-decoration:line-through;margin-left:.35rem"><?= money($c['solo_sum']) ?></span>
+                                                <span style="display:inline-block;margin-left:.35rem;font-size:.78rem;font-weight:700;color:#176b3a">
+                                                    Ahorras <?= money((float) $c['solo_sum'] - (float) $c['public_price']) ?>
+                                                </span>
                                             <?php endif; ?>
                                         </span>
+                                        <?php if (!empty($c['items'])): ?>
+                                            <ul class="muted" style="margin:.4rem 0 0;padding-left:1.1rem;font-size:.78rem;font-weight:500">
+                                                <?php foreach ($c['items'] as $it): ?>
+                                                    <?php
+                                                    $solo = (float) ($it['public_price'] ?? 0) > 0
+                                                        ? (float) $it['public_price']
+                                                        : (float) ($it['catalog_price'] ?? 0);
+                                                    ?>
+                                                    <li><?= e((string) $it['name']) ?> · <?= money($solo) ?> suelto</li>
+                                                <?php endforeach; ?>
+                                            </ul>
+                                        <?php endif; ?>
                                     </span>
                                 </label>
                             <?php endforeach; ?>
@@ -329,12 +344,14 @@ $stepLabels = [
             </div>
             <div class="sidebar-price">
                 <div class="muted" style="font-size:.82rem" id="price-label"><?= e($quote['label'] ?? 'Precio de lista') ?></div>
+                <div id="combo-breakdown" class="combo-breakdown" hidden></div>
                 <div class="sidebar-price-row">
                     <span class="price" id="price-list"><?= money($catalogPrice) ?></span>
                     <span id="price-arrow" style="display:none;color:var(--doceo-muted)">→</span>
                     <span class="price" id="price-final" style="display:none"></span>
                 </div>
                 <p class="muted" style="font-size:.78rem;margin:.5rem 0 0" id="sidebar-pay-note">Total a pagar</p>
+                <p id="combo-savings-note" class="combo-savings-note" hidden></p>
             </div>
         </aside>
     </div>
@@ -358,6 +375,32 @@ $stepLabels = [
 }
 .sidebar-price { margin-top:1.1rem; padding-top:1rem; border-top:1px solid #e6ebf2; }
 .sidebar-price-row { display:flex; align-items:baseline; gap:.5rem; flex-wrap:wrap; margin-top:.25rem; }
+.combo-breakdown { margin:.65rem 0 .85rem; font-size:.8rem; }
+.combo-breakdown-table { width:100%; border-collapse:collapse; }
+.combo-breakdown-table th,
+.combo-breakdown-table td { padding:.3rem 0; vertical-align:top; }
+.combo-breakdown-table th { text-align:left; font-weight:600; color:var(--doceo-muted); font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; }
+.combo-breakdown-table .num { text-align:right; white-space:nowrap; }
+.combo-breakdown-table .solo { text-decoration:line-through; color:var(--doceo-muted); }
+.combo-breakdown-table .share { font-weight:700; color:var(--doceo-blue); }
+.combo-breakdown-table .disc { color:#176b3a; font-weight:600; }
+.combo-savings-note {
+  margin:.55rem 0 0; padding:.45rem .6rem; border-radius:10px; background:#eaf8ef;
+  color:#176b3a; font-size:.8rem; font-weight:700;
+}
+.combo-breakdown { margin:.65rem 0 .85rem; font-size:.8rem; }
+.combo-breakdown-table { width:100%; border-collapse:collapse; }
+.combo-breakdown-table th,
+.combo-breakdown-table td { padding:.3rem 0; vertical-align:top; }
+.combo-breakdown-table th { text-align:left; font-weight:600; color:var(--doceo-muted); font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; }
+.combo-breakdown-table .num { text-align:right; white-space:nowrap; }
+.combo-breakdown-table .solo { text-decoration:line-through; color:var(--doceo-muted); }
+.combo-breakdown-table .share { font-weight:700; color:var(--doceo-blue); }
+.combo-breakdown-table .disc { color:#176b3a; font-weight:600; }
+.combo-savings-note {
+  margin:.55rem 0 0; padding:.45rem .6rem; border-radius:10px; background:#eaf8ef;
+  color:#176b3a; font-size:.8rem; font-weight:700;
+}
 .sidebar-price .price { font-size:1.65rem; color:var(--doceo-blue); font-weight:800; }
 .price-strike { text-decoration:line-through; opacity:.55; font-size:1.2rem !important; }
 
@@ -777,6 +820,53 @@ $stepLabels = [
       .filter(Boolean);
   }
 
+  const breakdownEl = document.getElementById('combo-breakdown');
+  const savingsNoteEl = document.getElementById('combo-savings-note');
+
+  function escapeHtml(s) {
+    return String(s || '').replace(/[&<>"']/g, function (ch) {
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]);
+    });
+  }
+
+  function renderComboBreakdown(breakdown) {
+    if (!breakdownEl) return;
+    if (!breakdown || !Array.isArray(breakdown.items) || !breakdown.items.length) {
+      breakdownEl.hidden = true;
+      breakdownEl.innerHTML = '';
+      if (savingsNoteEl) {
+        savingsNoteEl.hidden = true;
+        savingsNoteEl.textContent = '';
+      }
+      return;
+    }
+    let html = '<table class="combo-breakdown-table"><thead><tr>'
+      + '<th>Incluye</th><th class="num">Suelto</th><th class="num">En combo</th><th class="num">Desc.</th>'
+      + '</tr></thead><tbody>';
+    breakdown.items.forEach(function (it) {
+      html += '<tr>'
+        + '<td>' + escapeHtml(it.name) + '</td>'
+        + '<td class="num solo">' + money(it.solo_price) + '</td>'
+        + '<td class="num share">' + money(it.combo_share) + '</td>'
+        + '<td class="num disc">' + (Number(it.discount) > 0.009 ? ('−' + money(it.discount)) : '—') + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table>';
+    breakdownEl.innerHTML = html;
+    breakdownEl.hidden = false;
+    if (savingsNoteEl) {
+      const savings = Number(breakdown.savings || 0);
+      if (savings > 0.009) {
+        savingsNoteEl.hidden = false;
+        savingsNoteEl.textContent = 'Ahorro del combo: ' + money(savings)
+          + (breakdown.savings_percent ? (' (' + breakdown.savings_percent + '%)') : '');
+      } else {
+        savingsNoteEl.hidden = true;
+        savingsNoteEl.textContent = '';
+      }
+    }
+  }
+
   function refreshQuote() {
     const code = (codeInput && codeInput.value ? codeInput.value : '').trim();
     const comboId = comboIdInput && comboIdInput.value ? comboIdInput.value : '';
@@ -818,12 +908,13 @@ $stepLabels = [
             comboHint.textContent = 'Esa combinación aún no tiene combo definido en admin. Se cotiza solo el producto actual.';
             comboHint.style.color = '#b42318';
           } else if (data.matched) {
-            comboHint.textContent = 'Combo aplicado. El total ya incluye los productos seleccionados.';
+            comboHint.textContent = 'Combo aplicado. Abajo ves el precio de cada producto y el descuento.';
             comboHint.style.color = '';
           } else {
             comboHint.textContent = '';
           }
         }
+        renderComboBreakdown(data.matched ? (data.breakdown || null) : null);
         renderMsiChips(data.quote.payment_options?.msi || data.quote.msi_plans || []);
         updatePriceSummary();
         updateMsiDisplay();

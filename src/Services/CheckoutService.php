@@ -202,6 +202,13 @@ final class CheckoutService
             ]);
 
             $lineProducts = $comboItems !== [] ? $comboItems : [$product];
+            $sharesById = [];
+            if (count($lineProducts) > 1) {
+                $breakdown = ComboAdminService::priceBreakdown($lineProducts, $chargeAmount);
+                foreach ($breakdown['items'] as $row) {
+                    $sharesById[(int) $row['id']] = (float) $row['combo_share'];
+                }
+            }
             $n = count($lineProducts);
             $allocated = 0.0;
             $firstTrackingId = 0;
@@ -209,6 +216,9 @@ final class CheckoutService
                 $lineProductId = (int) $lineProduct['id'];
                 if ($idx === $n - 1) {
                     $lineCharge = round($chargeAmount - $allocated, 2);
+                } elseif (isset($sharesById[$lineProductId])) {
+                    $lineCharge = round($sharesById[$lineProductId], 2);
+                    $allocated += $lineCharge;
                 } else {
                     $lineCharge = round($chargeAmount / $n, 2);
                     $allocated += $lineCharge;
