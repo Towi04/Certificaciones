@@ -124,6 +124,29 @@ final class PricingService
         return $this->withDeferredPlans($product, $out);
     }
 
+    /**
+     * Cotiza un combo (mismas columnas de precio que productos).
+     *
+     * @param array<string, mixed> $combo
+     * @return array<string, mixed>
+     */
+    public function quoteCombo(array $combo, ?string $codeRaw): array
+    {
+        $code = strtoupper(trim((string) $codeRaw));
+        if ($code !== '') {
+            $stmt = $this->pdo->prepare(
+                'SELECT applies_to_combos FROM discount_codes WHERE code = ? AND is_active = 1 LIMIT 1'
+            );
+            $stmt->execute([$code]);
+            $applies = $stmt->fetchColumn();
+            if ($applies !== false && !(int) $applies) {
+                $code = '';
+            }
+        }
+
+        return $this->quoteProduct($combo, $code !== '' ? $code : null);
+    }
+
     /** @param array<string, mixed> $product */
     public function partnerPriceForProduct(array $product, string $tier): float
     {

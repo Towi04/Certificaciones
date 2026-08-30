@@ -204,6 +204,10 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
             </div>
 
             <h2 style="font-size:1.05rem;color:var(--doceo-blue);margin-top:1.25rem">Precios (MXN)</h2>
+            <p class="muted" style="font-size:.85rem;margin:.25rem 0 .75rem">
+                Precio suelto de este producto. Los paquetes (certificación + curso + trámite CENNI/CONOCER)
+                se configuran en <a href="<?= e(url('/admin/combos')) ?>">Combos</a> con su propio precio por nivel.
+            </p>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.75rem">
                 <?php foreach ($priceFields as $field => $label):
                     $val = $product[$field] ?? '';

@@ -10,6 +10,7 @@ use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Services\CheckoutRequirements;
 use App\Services\CheckoutService;
+use App\Services\ComboAdminService;
 use App\Services\ExamScheduleService;
 use App\Services\PricingService;
 use App\Support\Settings;
@@ -28,6 +29,7 @@ final class CheckoutController
             'phone' => $user['phone'] ?? '',
         ];
 
+        $offers = (new ComboAdminService())->offersForProduct((int) $product['id']);
         view('checkout/acquire', [
             'title' => 'Adquirir · ' . $product['name'],
             'product' => $product,
@@ -37,6 +39,7 @@ final class CheckoutController
             'prefill' => $prefill,
             'user' => $user,
             'quote' => (new PricingService())->quoteProduct($product, null),
+            'comboOffers' => $offers,
             'openpayReady' => $this->openPayConfigured(),
             'bank' => $this->bankTransferInfo(),
             'depositCard' => $this->depositCardNumber(),
@@ -94,7 +97,8 @@ final class CheckoutController
                         'exam_date' => trim((string) ($_POST['exam_date'] ?? '')),
                         'exam_time' => trim((string) ($_POST['exam_time'] ?? '')),
                     ]
-                    : null
+                    : null,
+                !empty($_POST['combo_id']) ? (int) $_POST['combo_id'] : null
             );
 
             $matricula = (string) $result['purchase']['matricula'];
@@ -136,6 +140,94 @@ final class CheckoutController
         try {
             $quote = (new PricingService())->quoteProduct($product, $code);
             echo json_encode(['ok' => true, 'quote' => $quote], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            http_response_code(422);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
+
+    public function quoteCombo(string $slug): void
+    {
+        header('Content-Type: application/json; charset=UTF-8');
+        $product = (new ProductRepository())->findBySlug($slug);
+        if (!$product || !(int) $product['is_active']) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Producto no encontrado']);
+
+            return;
+        }
+
+        $addonIds = [];
+        if (isset($_GET['addons']) && is_string($_GET['addons']) && $_GET['addons'] !== '') {
+            foreach (explode(',', $_GET['addons']) as $raw) {
+                $id = (int) trim($raw);
+                if ($id > 0) {
+                    $addonIds[] = $id;
+                }
+            }
+        }
+        $comboId = isset($_GET['combo_id']) ? (int) $_GET['combo_id'] : 0;
+        $code = isset($_GET['code']) && is_string($_GET['code']) ? $_GET['code'] : '';
+        $pricing = new PricingService();
+
+        try {
+            $comboRepo = new \App\Repositories\ComboRepository();
+            $combo = null;
+            if ($comboId > 0) {
+                $combo = $comboRepo->find($comboId);
+            } else {
+                $set = array_values(array_unique(array_merge([(int) $product['id']], $addonIds)));
+                $combo = $comboRepo->findActiveByExactProductSet($set);
+            }
+
+            if ($combo === null || !(int) ($combo['is_active'] ?? 0)) {
+                echo json_encode([
+                    'ok' => true,
+                    'matched' => false,
+                    'combo_id' => null,
+                    'quote' => $pricing->quoteProduct($product, $code !== '' ? $code : null),
+                    'message' => 'Sin combo para esa combinación; precio del producto solo.',
+                ], JSON_UNESCAPED_UNICODE);
+
+                return;
+            }
+
+            $ids = $comboRepo->productIds((int) $combo['id']);
+            if (!in_array((int) $product['id'], $ids, true)) {
+                throw new \InvalidArgumentException('El combo no incluye este producto.');
+            }
+
+            $quote = $pricing->quoteCombo($combo, $code !== '' ? $code : null);
+            $session = Auth::user();
+            if ($session !== null && ($session['role'] ?? '') === 'partner' && empty($quote['partner_id'])) {
+                $pdo = \App\Database\Connection::get();
+                $st = $pdo->prepare('SELECT * FROM partners WHERE user_id = ? AND is_active = 1 LIMIT 1');
+                $st->execute([(int) $session['id']]);
+                $partner = $st->fetch();
+                if ($partner) {
+                    $tierPrice = $pricing->partnerPriceForProduct($combo, (string) $partner['tier']);
+                    $quote['partner_id'] = (int) $partner['id'];
+                    $quote['partner_price'] = $tierPrice;
+                    $quote['base'] = $tierPrice;
+                    $quote['charged'] = $tierPrice;
+                    $quote['partner_credit'] = 0.0;
+                    $quote['label'] = 'Precio partner (' . strtoupper((string) $partner['tier']) . ')';
+                }
+            }
+
+            echo json_encode([
+                'ok' => true,
+                'matched' => true,
+                'combo_id' => (int) $combo['id'],
+                'combo' => [
+                    'id' => (int) $combo['id'],
+                    'code' => $combo['code'],
+                    'name' => $combo['name'],
+                    'item_ids' => $ids,
+                ],
+                'quote' => $quote,
+            ], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             http_response_code(422);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);

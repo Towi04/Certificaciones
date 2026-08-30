@@ -147,6 +147,92 @@ final class AdminController
         redirect('/admin/productos/' . $productId);
     }
 
+
+    public function combos(): void
+    {
+        Auth::requireRole(['admin']);
+        view('admin/combos', [
+            'title' => 'Combos',
+            'combos' => (new \App\Repositories\ComboRepository())->all(),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function comboCreateForm(): void
+    {
+        Auth::requireRole(['admin']);
+        $products = (new \App\Repositories\ProductRepository())->adminList();
+        view('admin/combo_form', [
+            'title' => 'Nuevo combo',
+            'combo' => null,
+            'products' => $products,
+            'selectedIds' => [],
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function comboCreate(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            $id = (new \App\Services\ComboAdminService())->create($_POST, $_POST['product_ids'] ?? []);
+            flash('success', 'Combo creado. Ya aparecerá en el checkout de sus productos.');
+            redirect('/admin/combos/' . $id);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/admin/combos/nuevo');
+        }
+    }
+
+    public function comboEdit(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $repo = new \App\Repositories\ComboRepository();
+        $combo = $repo->find((int) $id);
+        if ($combo === null) {
+            http_response_code(404);
+            view('errors/404', ['title' => 'Combo no encontrado', 'layout' => 'admin']);
+
+            return;
+        }
+        view('admin/combo_form', [
+            'title' => 'Combo · ' . $combo['name'],
+            'combo' => $combo,
+            'products' => (new \App\Repositories\ProductRepository())->adminList(),
+            'selectedIds' => $repo->productIds((int) $combo['id']),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function comboUpdate(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $comboId = (int) $id;
+        try {
+            (new \App\Services\ComboAdminService())->update($comboId, $_POST, $_POST['product_ids'] ?? []);
+            flash('success', 'Combo actualizado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/combos/' . $comboId);
+    }
+
+    public function comboDelete(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            (new \App\Services\ComboAdminService())->delete((int) $id);
+            flash('success', 'Combo eliminado.');
+            redirect('/admin/combos');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/admin/combos/' . (int) $id);
+        }
+    }
+
     public function productGroups(): void
     {
         Auth::requireRole(['admin']);

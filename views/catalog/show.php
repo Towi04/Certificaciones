@@ -22,6 +22,9 @@ $youtubeThumb = static function (array $item): ?string {
                 <p class="muted"><?= e($product['short_description']) ?></p>
             <?php endif; ?>
             <p class="price" style="font-size:1.6rem;margin:.5rem 0"><?= money($product['catalog_price']) ?></p>
+            <p class="muted" style="font-size:.85rem;margin:.25rem 0 0">
+                Al adquirir puedes <strong>convertirlo en combo</strong> (curso y/o trámite) si está configurado.
+            </p>
             <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem">
                 <a class="btn btn-accent" href="<?= e(url('/adquirir/' . $product['slug'])) ?>">Adquirir</a>
                 <a class="btn btn-ghost" href="<?= e(url('/catalogo')) ?>">Volver al catálogo</a>
