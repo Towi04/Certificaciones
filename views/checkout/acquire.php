@@ -16,6 +16,13 @@ $basePrice = (float) ($quote['base'] ?? $catalogPrice);
 $comboOffers = $comboOffers ?? ['combos' => [], 'addons' => []];
 $comboAddons = $comboOffers['addons'] ?? [];
 $comboList = $comboOffers['combos'] ?? [];
+$hasComboOffers = $comboList !== [] || $comboAddons !== [];
+$maxComboSavings = 0.0;
+foreach ($comboList as $c) {
+    if (!empty($c['solo_sum']) && (float) $c['solo_sum'] > (float) $c['public_price']) {
+        $maxComboSavings = max($maxComboSavings, (float) $c['solo_sum'] - (float) $c['public_price']);
+    }
+}
 
 $wizardSteps = ['datos'];
 if (!empty($reglamento)) {
@@ -24,6 +31,9 @@ if (!empty($reglamento)) {
 if ($needsExam) {
     $wizardSteps[] = 'agenda';
 }
+if ($hasComboOffers) {
+    $wizardSteps[] = 'paquete';
+}
 $wizardSteps[] = 'pago';
 $wizardSteps[] = 'confirmar';
 
@@ -31,6 +41,7 @@ $stepLabels = [
     'datos' => 'Datos',
     'reglamento' => 'Reglamento',
     'agenda' => 'Agenda',
+    'paquete' => 'Paquete',
     'pago' => 'Pago',
     'confirmar' => 'Confirmar',
 ];
@@ -64,91 +75,6 @@ $stepLabels = [
 
                 
                 <input type="hidden" name="combo_id" id="combo_id" value="">
-
-                <?php if ($comboList !== [] || $comboAddons !== []): ?>
-                <div class="combo-upsell panel" style="margin:0 0 1rem;border:1px solid #d9e4f5;background:#f7faff">
-                    <h2 style="margin:0 0 .35rem;font-size:1.05rem;color:var(--doceo-blue)">Convertir en combo</h2>
-                    <p class="muted" style="margin:0 0 .75rem;font-size:.85rem">
-                        Puedes agregar el curso y/o trámite relacionado. El precio se actualiza con la tarifa
-                        del combo (público o partner), no es la suma suelta de cada producto.
-                    </p>
-
-                    <?php if ($comboList !== []): ?>
-                        <div style="display:grid;gap:.55rem;margin-bottom:.85rem">
-                            <?php foreach ($comboList as $c): ?>
-                                <?php
-                                $cid = (int) $c['id'];
-                                $addonIds = array_map('intval', $c['addon_ids'] ?? []);
-                                $itemNames = array_map(static fn ($i) => (string) $i['name'], $c['items'] ?? []);
-                                ?>
-                                <label class="combo-preset" style="display:flex;gap:.65rem;align-items:flex-start;padding:.65rem .75rem;border:1px solid #cfd8e6;border-radius:12px;background:#fff;cursor:pointer">
-                                    <input type="radio" name="combo_preset" value="<?= $cid ?>"
-                                           data-addon-ids="<?= e(implode(',', $addonIds)) ?>"
-                                           data-combo-name="<?= e((string) $c['name']) ?>"
-                                           data-combo-price="<?= e((string) $c['public_price']) ?>">
-                                    <span>
-                                        <strong><?= e((string) $c['name']) ?></strong>
-                                        <span class="muted" style="display:block;font-size:.82rem;margin-top:.15rem">
-                                            Incluye: <?= e(implode(' + ', $itemNames)) ?>
-                                        </span>
-                                        <span style="display:block;margin-top:.25rem;font-weight:700;color:var(--doceo-blue)">
-                                            Combo <?= money($c['public_price']) ?>
-                                            <?php if (!empty($c['solo_sum']) && (float) $c['solo_sum'] > (float) $c['public_price']): ?>
-                                                <span class="muted" style="font-weight:500;text-decoration:line-through;margin-left:.35rem"><?= money($c['solo_sum']) ?></span>
-                                                <span style="display:inline-block;margin-left:.35rem;font-size:.78rem;font-weight:700;color:#176b3a">
-                                                    Ahorras <?= money((float) $c['solo_sum'] - (float) $c['public_price']) ?>
-                                                </span>
-                                            <?php endif; ?>
-                                        </span>
-                                        <?php if (!empty($c['items'])): ?>
-                                            <ul class="muted" style="margin:.4rem 0 0;padding-left:1.1rem;font-size:.78rem;font-weight:500">
-                                                <?php foreach ($c['items'] as $it): ?>
-                                                    <?php
-                                                    $solo = (float) ($it['public_price'] ?? 0) > 0
-                                                        ? (float) $it['public_price']
-                                                        : (float) ($it['catalog_price'] ?? 0);
-                                                    ?>
-                                                    <li><?= e((string) $it['name']) ?> · <?= money($solo) ?> suelto</li>
-                                                <?php endforeach; ?>
-                                            </ul>
-                                        <?php endif; ?>
-                                    </span>
-                                </label>
-                            <?php endforeach; ?>
-                            <label class="combo-preset" style="display:flex;gap:.65rem;align-items:center;padding:.55rem .75rem;border:1px dashed #cfd8e6;border-radius:12px;background:#fff;cursor:pointer">
-                                <input type="radio" name="combo_preset" value="" checked data-addon-ids="" data-combo-name="">
-                                <span>Solo este producto (sin combo)</span>
-                            </label>
-                        </div>
-                    <?php endif; ?>
-
-                    <?php if ($comboAddons !== []): ?>
-                        <div style="display:grid;gap:.45rem">
-                            <div class="muted" style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Armar a la carta</div>
-                            <?php foreach ($comboAddons as $addon): ?>
-                                <?php
-                                $type = (string) ($addon['type'] ?? '');
-                                $typeLabel = match ($type) {
-                                    'course' => 'Curso',
-                                    'certification' => 'Certificación',
-                                    'procedure' => 'Trámite',
-                                    default => 'Extra',
-                                };
-                                ?>
-                                <label style="display:flex;gap:.6rem;align-items:flex-start;padding:.45rem 0;border-bottom:1px solid #e8eef6">
-                                    <input type="checkbox" class="combo-addon" value="<?= (int) $addon['id'] ?>"
-                                           data-type="<?= e($type) ?>" style="margin-top:.2rem">
-                                    <span>
-                                        <strong><?= e($typeLabel) ?>:</strong> <?= e((string) $addon['name']) ?>
-                                        <span class="muted" style="font-size:.8rem"> (ref. <?= money($addon['public_price']) ?> suelto)</span>
-                                    </span>
-                                </label>
-                            <?php endforeach; ?>
-                        </div>
-                        <p class="muted" id="combo-match-hint" style="font-size:.82rem;margin:.65rem 0 0"></p>
-                    <?php endif; ?>
-                </div>
-                <?php endif; ?>
 
                 <div class="wizard-step active" data-step="datos">
                     <h2 class="step-title">Tus datos</h2>
@@ -208,6 +134,12 @@ $stepLabels = [
                             </label>
                         </div>
                         <p class="muted" id="exam-slot-hint" style="font-size:.82rem;margin-top:.5rem">Agendar con 2 días de antelación</p>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($hasComboOffers): ?>
+                    <div class="wizard-step" data-step="paquete" hidden>
+                        <?php $comboStepIntro = true; require __DIR__ . '/_combo_offer.php'; ?>
                     </div>
                 <?php endif; ?>
 
@@ -334,6 +266,18 @@ $stepLabels = [
 
         <aside class="checkout-sidebar panel" aria-label="Resumen de compra">
             <h2 class="sidebar-title"><?= e($product['name']) ?></h2>
+            <?php if ($hasComboOffers): ?>
+            <div id="combo-sidebar-teaser" class="combo-sidebar-teaser">
+                <strong>Paquete con descuento</strong>
+                <p class="muted" style="margin:.35rem 0 0;font-size:.8rem;line-height:1.4">
+                    <?php if ($maxComboSavings > 0): ?>
+                        En el paso <em>Paquete</em> podrás agregar curso o trámite y ahorrar hasta <?= money($maxComboSavings) ?>.
+                    <?php else: ?>
+                        En el paso <em>Paquete</em> podrás agregar curso o trámite antes de pagar.
+                    <?php endif; ?>
+                </p>
+            </div>
+            <?php endif; ?>
             <div class="sidebar-promo">
                 <label for="promo_code">Código promocional</label>
                 <div class="sidebar-promo-row">
@@ -388,19 +332,42 @@ $stepLabels = [
   margin:.55rem 0 0; padding:.45rem .6rem; border-radius:10px; background:#eaf8ef;
   color:#176b3a; font-size:.8rem; font-weight:700;
 }
-.combo-breakdown { margin:.65rem 0 .85rem; font-size:.8rem; }
-.combo-breakdown-table { width:100%; border-collapse:collapse; }
-.combo-breakdown-table th,
-.combo-breakdown-table td { padding:.3rem 0; vertical-align:top; }
-.combo-breakdown-table th { text-align:left; font-weight:600; color:var(--doceo-muted); font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; }
-.combo-breakdown-table .num { text-align:right; white-space:nowrap; }
-.combo-breakdown-table .solo { text-decoration:line-through; color:var(--doceo-muted); }
-.combo-breakdown-table .share { font-weight:700; color:var(--doceo-blue); }
-.combo-breakdown-table .disc { color:#176b3a; font-weight:600; }
-.combo-savings-note {
-  margin:.55rem 0 0; padding:.45rem .6rem; border-radius:10px; background:#eaf8ef;
-  color:#176b3a; font-size:.8rem; font-weight:700;
+.combo-sidebar-teaser {
+  margin:0 0 1rem; padding:.75rem .85rem; border-radius:12px;
+  background:linear-gradient(180deg, #f0f7ff 0%, #f8fbff 100%);
+  border:1px solid #c5d8ef; font-size:.85rem;
 }
+.combo-sidebar-teaser strong { color:var(--doceo-blue); display:block; font-size:.88rem; }
+.combo-upsell--step { margin-top:0; }
+.combo-step-intro { margin-bottom:1rem; }
+.combo-step-badge {
+  display:inline-block; font-size:.68rem; font-weight:700; letter-spacing:.04em;
+  text-transform:uppercase; color:#5a7aa8; background:#eef4fc; padding:.2rem .5rem; border-radius:999px;
+}
+.combo-preset-list { display:grid; gap:.65rem; margin-bottom:1rem; }
+.combo-preset-card {
+  display:flex; gap:.75rem; align-items:flex-start; padding:.85rem 1rem;
+  border:2px solid #d5deea; border-radius:14px; background:#fbfcfe; cursor:pointer;
+  transition:border-color .15s, background .15s;
+}
+.combo-preset-card:hover { border-color:#9cb4d8; }
+.combo-preset-card:has(input:checked) { border-color:var(--doceo-blue); background:#eef4fc; }
+.combo-preset-card input { margin-top:.25rem; flex-shrink:0; accent-color:var(--doceo-blue); }
+.combo-preset-body { display:flex; flex-direction:column; gap:.25rem; min-width:0; }
+.combo-preset-includes { font-size:.82rem; line-height:1.35; }
+.combo-preset-prices { font-size:.9rem; font-weight:700; color:var(--doceo-blue); display:flex; flex-wrap:wrap; gap:.35rem .5rem; align-items:center; }
+.combo-solo-strike { text-decoration:line-through; color:var(--doceo-muted); font-weight:500; font-size:.82rem; }
+.combo-save-pill {
+  font-size:.72rem; font-weight:700; color:#176b3a; background:#eaf8ef;
+  padding:.15rem .45rem; border-radius:999px;
+}
+.combo-item-prices { margin:.35rem 0 0; padding-left:1rem; font-size:.78rem; }
+.combo-addon-section { margin-top:.5rem; padding-top:.85rem; border-top:1px solid #e6ebf2; }
+.combo-addon-title { font-size:.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--doceo-muted); margin-bottom:.5rem; }
+.combo-addon-row {
+  display:flex; gap:.6rem; align-items:flex-start; padding:.5rem 0; font-size:.88rem; cursor:pointer;
+}
+.combo-addon-row input { margin-top:.2rem; accent-color:var(--doceo-blue); }
 .sidebar-price .price { font-size:1.65rem; color:var(--doceo-blue); font-weight:800; }
 .price-strike { text-decoration:line-through; opacity:.55; font-size:1.2rem !important; }
 
@@ -516,6 +483,8 @@ $stepLabels = [
   const openpayReady = <?= $openpayReady ? 'true' : 'false' ?>;
   const needsExam = <?= $needsExam ? 'true' : 'false' ?>;
   const wizardSteps = <?= json_encode($wizardSteps, JSON_UNESCAPED_UNICODE) ?>;
+  const comboStepIndex = wizardSteps.indexOf('paquete');
+  const comboSidebarTeaser = document.getElementById('combo-sidebar-teaser');
   const depositCard = <?= json_encode($depositCard, JSON_UNESCAPED_UNICODE) ?>;
 
   let quoteData = <?= json_encode($quote, JSON_UNESCAPED_UNICODE) ?>;
@@ -613,7 +582,16 @@ $stepLabels = [
     prevBtn.hidden = stepIndex === 0;
     nextBtn.hidden = stepIndex === wizardSteps.length - 1;
     submitBtn.hidden = stepIndex !== wizardSteps.length - 1;
+    if (comboSidebarTeaser) {
+      comboSidebarTeaser.hidden = comboStepIndex < 0 || stepIndex >= comboStepIndex;
+    }
+    if (currentStep() === 'paquete') {
+      nextBtn.textContent = 'Continuar al pago';
+    } else {
+      nextBtn.textContent = 'Siguiente';
+    }
     if (currentStep() === 'confirmar') buildConfirmSummary();
+    if (currentStep() === 'paquete') refreshQuote();
     updateHint();
   }
 
@@ -695,6 +673,18 @@ $stepLabels = [
     html += '<dt>Teléfono</dt><dd>' + (fieldValue('phone') || '—') + '</dd>';
     if (needsExam && examDateHidden && examTimeHidden) {
       html += '<dt>Examen</dt><dd>' + (examDateHidden.value || '—') + ' ' + (examTimeHidden.value ? examTimeHidden.value.substring(0, 5) : '') + '</dd>';
+    }
+    const comboPreset = document.querySelector('input[name="combo_preset"]:checked');
+    let comboLabel = '';
+    if (comboPreset && comboPreset.value) {
+      comboLabel = comboPreset.getAttribute('data-combo-name') || 'Combo';
+    } else if (comboIdInput && comboIdInput.value) {
+      comboLabel = 'Combo aplicado';
+    } else if (selectedAddonIds().length) {
+      comboLabel = 'Extras seleccionados';
+    }
+    if (comboLabel) {
+      html += '<dt>Paquete</dt><dd>' + comboLabel + '</dd>';
     }
     html += '<dt>Forma de pago</dt><dd>' + payMethodLabel() + '</dd>';
     html += '<dt>Monto</dt><dd><strong>' + money(selectedPayTotal()) + '</strong></dd>';

@@ -1,7 +1,21 @@
 <?php
 /** @var array<string,mixed> $product */
 /** @var list<array<string,mixed>> $media */
+/** @var array{combos:list<array<string,mixed>>,addons:list<array<string,mixed>>} $comboOffers */
 $media = $media ?? [];
+$comboOffers = $comboOffers ?? ['combos' => [], 'addons' => []];
+$comboList = $comboOffers['combos'] ?? [];
+$bestCombo = $comboList[0] ?? null;
+$bestSavings = 0.0;
+foreach ($comboList as $c) {
+    if (!empty($c['solo_sum']) && (float) $c['solo_sum'] > (float) $c['public_price']) {
+        $savings = (float) $c['solo_sum'] - (float) $c['public_price'];
+        if ($savings > $bestSavings) {
+            $bestSavings = $savings;
+            $bestCombo = $c;
+        }
+    }
+}
 $youtubeThumb = static function (array $item): ?string {
     $url = (string) ($item['external_url'] ?? '');
     if ($url !== '' && preg_match('#/embed/([A-Za-z0-9_-]+)#', $url, $m)) {
@@ -22,9 +36,39 @@ $youtubeThumb = static function (array $item): ?string {
                 <p class="muted"><?= e($product['short_description']) ?></p>
             <?php endif; ?>
             <p class="price" style="font-size:1.6rem;margin:.5rem 0"><?= money($product['catalog_price']) ?></p>
-            <p class="muted" style="font-size:.85rem;margin:.25rem 0 0">
-                Al adquirir puedes <strong>convertirlo en combo</strong> (curso y/o trámite) si está configurado.
-            </p>
+
+            <?php if ($bestCombo !== null): ?>
+                <div class="product-combo-teaser">
+                    <strong>Paquete disponible</strong>
+                    <p class="muted" style="margin:.35rem 0 .5rem;font-size:.88rem">
+                        Al adquirir podrás elegir el combo <em><?= e((string) $bestCombo['name']) ?></em>
+                        <?php if ($bestSavings > 0): ?>
+                            y ahorrar hasta <strong style="color:#176b3a"><?= money($bestSavings) ?></strong>
+                        <?php endif; ?>
+                        frente a comprar cada producto por separado.
+                    </p>
+                    <ul class="muted" style="margin:0;padding-left:1.1rem;font-size:.82rem">
+                        <?php foreach ($bestCombo['items'] ?? [] as $it): ?>
+                            <?php
+                            $solo = (float) ($it['public_price'] ?? 0) > 0
+                                ? (float) $it['public_price']
+                                : (float) ($it['catalog_price'] ?? 0);
+                            ?>
+                            <li><?= e((string) $it['name']) ?> · <?= money($solo) ?></li>
+                        <?php endforeach; ?>
+                        <li><strong>Combo <?= money($bestCombo['public_price']) ?></strong>
+                            <?php if ($bestSavings > 0): ?>
+                                <span style="text-decoration:line-through;margin-left:.25rem"><?= money($bestCombo['solo_sum']) ?></span>
+                            <?php endif; ?>
+                        </li>
+                    </ul>
+                </div>
+            <?php elseif ($comboList !== []): ?>
+                <p class="muted" style="font-size:.85rem;margin:.25rem 0 0">
+                    Al adquirir podrás <strong>completar tu paquete</strong> con productos relacionados.
+                </p>
+            <?php endif; ?>
+
             <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem">
                 <a class="btn btn-accent" href="<?= e(url('/adquirir/' . $product['slug'])) ?>">Adquirir</a>
                 <a class="btn btn-ghost" href="<?= e(url('/catalogo')) ?>">Volver al catálogo</a>
@@ -107,6 +151,12 @@ $youtubeThumb = static function (array $item): ?string {
     gap:1.25rem;
     align-items:start;
 }
+.product-combo-teaser {
+    margin-top:.75rem; padding:.85rem 1rem; border-radius:14px;
+    background:linear-gradient(135deg,#f0f6ff 0%,#f7faff 100%);
+    border:1px solid #c5d8ef; max-width:36rem;
+}
+.product-combo-teaser strong { color:var(--doceo-blue); }
 .product-media-gallery {
     border:1px solid #e6ebf2;
     border-radius:16px;
