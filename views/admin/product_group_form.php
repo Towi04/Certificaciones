@@ -201,6 +201,7 @@ $fieldMeta = \App\Services\CheckoutRequirements::FIELD_META;
                 <input type="text" name="schedule_weekdays_end" placeholder="17:30"
                        value="<?= e((string) ($extras['schedule_weekdays_end'] ?? '17:30')) ?>"
                        style="<?= e($inputStyle) ?>">
+                <span style="font-weight:500;font-size:.75rem">Usa 24:00 para cubrir hasta medianoche.</span>
             </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
                 Fin de semana desde
@@ -213,6 +214,7 @@ $fieldMeta = \App\Services\CheckoutRequirements::FIELD_META;
                 <input type="text" name="schedule_saturday_end" placeholder="12:00"
                        value="<?= e((string) ($extras['schedule_saturday_end'] ?? '12:00')) ?>"
                        style="<?= e($inputStyle) ?>">
+                <span style="font-weight:500;font-size:.75rem">También acepta 24:00.</span>
             </label>
         </div>
         <p class="muted" style="font-size:.78rem;margin:.75rem 0 0">

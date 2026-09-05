@@ -47,6 +47,9 @@ final class CheckoutController
             'examMinDate' => ExamScheduleService::needsExamAtCheckout($product)
                 ? (new ExamScheduleService())->minSelectableDate($product)
                 : null,
+            'examAdvanceDays' => ExamScheduleService::needsExamAtCheckout($product)
+                ? (int) (ExamScheduleService::scheduleRules($product)['min_advance_days'] ?? 0)
+                : 0,
         ]);
     }
 
@@ -263,12 +266,14 @@ final class CheckoutController
         }
 
         $service = new ExamScheduleService();
+        $rules = ExamScheduleService::scheduleRules($product);
         $date = isset($_GET['date']) && is_string($_GET['date']) ? trim($_GET['date']) : '';
 
         if ($date === '') {
             echo json_encode([
                 'ok' => true,
                 'min_date' => $service->minSelectableDate($product),
+                'min_advance_days' => (int) ($rules['min_advance_days'] ?? 0),
                 'dates' => $service->selectableDates($product),
             ], JSON_UNESCAPED_UNICODE);
 
@@ -277,6 +282,7 @@ final class CheckoutController
 
         echo json_encode([
             'ok' => true,
+            'min_advance_days' => (int) ($rules['min_advance_days'] ?? 0),
             'slots' => $service->slotsForDate($product, $date),
         ], JSON_UNESCAPED_UNICODE);
     }
