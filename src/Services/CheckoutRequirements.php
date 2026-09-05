@@ -189,7 +189,8 @@ final class CheckoutRequirements
             'template_url' => $url,
             'source_url' => $sourceUrl !== '' ? $sourceUrl : null,
             'doc_code' => (string) ($reg['doc_code'] ?? 'reglamento_firmado'),
-            'required_before_checkout' => (bool) ($reg['required_before_checkout'] ?? true),
+            // Si hay reglamento configurado, siempre es obligatorio antes de pagar.
+            'required_before_checkout' => true,
         ];
     }
 

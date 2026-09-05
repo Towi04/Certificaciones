@@ -30,16 +30,17 @@ En **Admin → Grupos → Editar** (pestañas) puedes ajustar con formularios:
 | Pestaña | Campos |
 |---------|--------|
 | General | Nombre, código, proveedor |
-| Horarios | Pedir fecha/hora en checkout, minutos por bloque, anticipo, Lun–Vie, sábado |
-| **Vacaciones** | Fechas bloqueadas (`YYYY-MM-DD`, una por línea). Solo afectan a grupos que piden agenda |
-| Reglamento | Activar/desactivar, ruta o URL de la plantilla PDF, link externo, código de documento |
-| Avanzado | `config_json` crudo |
+| **Datos del alumno** | Checkboxes de campos del checkout (correo, nombre, CURP, fecha de nacimiento, etc.). Sin JSON. |
+| Fechas y horarios | Pedir fecha/hora en checkout, minutos por bloque, anticipo, Lun–Vie, sábado, 365 días |
+| Reglamento | Activar/desactivar. Si está activo, **siempre** es obligatorio firmarlo antes de pagar. |
+| Pagos | Transferencia, OXXO, tarjeta y MSI |
+| Experto | `config_json` crudo (se sincroniza con las pestañas al abrirlo / guardar) |
 
-Atajo: en el listado de grupos hay un enlace **Vacaciones** que abre
-`/admin/grupos/{id}#vacations`.
+Las vacaciones globales se administran en **Admin → Vacaciones** (una sola lista para toda DOCEO).
+En el grupo, marca **Disponible los 365 días** si ese grupo no debe respetarlas.
 
-Los grupos que deben estar “siempre disponibles” dejan desmarcada la opción de agenda
-en checkout; las fechas bloqueadas no les aplican.
+Si el grupo requiere reglamento firmado, el checkout lo exige antes de pagar: no hay un segundo
+check de “obligatorio antes de pagar”.
 
 ## Grupos sembrados
 
