@@ -25,6 +25,11 @@ if ($docCode === '') {
     $docCode = (string) $autoDocCode;
 }
 $msiMonths = is_array($extras['msi_months'] ?? null) ? array_map('intval', $extras['msi_months']) : [1, 3, 6, 9, 12];
+$checkoutFields = is_array($extras['checkout_fields'] ?? null)
+    ? $extras['checkout_fields']
+    : ['email', 'first_name', 'last_name_p', 'last_name_m', 'phone'];
+$alwaysFields = ['email', 'first_name', 'last_name_p', 'phone'];
+$fieldMeta = \App\Services\CheckoutRequirements::FIELD_META;
 ?>
 <p class="meta"><a href="<?= e(url('/admin/grupos')) ?>">← Grupos de proceso</a></p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">
@@ -32,13 +37,14 @@ $msiMonths = is_array($extras['msi_months'] ?? null) ? array_map('intval', $extr
 </h1>
 <p class="muted">
     Configura lo compartido por varias certificaciones del mismo proveedor:
-    días/horarios, reglamento y pagos.
+    datos del alumno, días/horarios, reglamento y pagos.
     Las <a href="<?= e(url('/admin/vacaciones')) ?>"><strong>vacaciones globales</strong></a>
     se publican una sola vez (excepto grupos marcados como 365 días).
 </p>
 
 <nav class="group-tabs" role="tablist" aria-label="Secciones del grupo">
     <button type="button" class="group-tab active" data-tab="general" role="tab" aria-selected="true">General</button>
+    <button type="button" class="group-tab" data-tab="fields" role="tab" aria-selected="false">Datos del alumno</button>
     <button type="button" class="group-tab" data-tab="schedule" role="tab" aria-selected="false">Fechas y horarios</button>
     <button type="button" class="group-tab" data-tab="rules" role="tab" aria-selected="false">Reglamento</button>
     <button type="button" class="group-tab" data-tab="payments" role="tab" aria-selected="false">Pagos</button>
@@ -90,6 +96,39 @@ $msiMonths = is_array($extras['msi_months'] ?? null) ? array_map('intval', $extr
                     </select>
                 </label>
             <?php endif; ?>
+        </div>
+    </div>
+
+    <div class="group-panel" data-panel="fields" hidden>
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Datos que se piden al alumno</h2>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
+            Marca qué información debe capturar el alumno al adquirir productos de este grupo.
+            No necesitas editar JSON: estos campos aparecen en el paso <strong>Datos</strong> del checkout.
+        </p>
+        <div class="field-check-grid">
+            <?php foreach ($fieldMeta as $code => $meta): ?>
+                <?php
+                $locked = in_array($code, $alwaysFields, true);
+                $checked = $locked || in_array($code, $checkoutFields, true);
+                ?>
+                <label class="field-check<?= $locked ? ' field-check--locked' : '' ?>">
+                    <?php if ($locked): ?>
+                        <input type="hidden" name="checkout_fields[]" value="<?= e($code) ?>">
+                        <input type="checkbox" checked disabled>
+                    <?php else: ?>
+                        <input type="checkbox" name="checkout_fields[]" value="<?= e($code) ?>"
+                            <?= $checked ? 'checked' : '' ?>>
+                    <?php endif; ?>
+                    <span>
+                        <strong><?= e((string) $meta['label']) ?></strong>
+                        <span class="muted" style="display:block;font-size:.75rem;font-weight:500">
+                            <?= $locked
+                                ? 'Obligatorio en toda compra'
+                                : (!empty($meta['required']) ? 'Requerido si se pide' : 'Opcional para el alumno') ?>
+                        </span>
+                    </span>
+                </label>
+            <?php endforeach; ?>
         </div>
     </div>
 
@@ -183,10 +222,16 @@ $msiMonths = is_array($extras['msi_months'] ?? null) ? array_map('intval', $extr
 
     <div class="group-panel" data-panel="rules" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Reglamento</h2>
-        <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:.75rem">
-            <input type="checkbox" name="reglamento_enabled" value="1"
+        <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:.75rem">
+            <input type="checkbox" name="reglamento_enabled" value="1" style="margin-top:.2rem"
                 <?= !empty($extras['reglamento_enabled']) ? 'checked' : '' ?>>
-            Este grupo requiere reglamento firmado
+            <span>
+                Este grupo requiere reglamento firmado
+                <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin-top:.15rem">
+                    Si se marca, el alumno deberá firmarlo <strong>antes de pagar</strong>
+                    (queda como paso obligatorio del checkout). No hace falta otro check aparte.
+                </span>
+            </span>
         </label>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem">
             <label class="muted" style="<?= e($labelStyle) ?>">
@@ -211,11 +256,6 @@ $msiMonths = is_array($extras['msi_months'] ?? null) ? array_map('intval', $extr
                 <span id="doc-code-hint" style="font-weight:500;font-size:.78rem">
                     Se propone automáticamente según el código del grupo. Puedes editarlo.
                 </span>
-            </label>
-            <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.88rem;font-weight:600;margin-top:1.5rem">
-                <input type="checkbox" name="reglamento_required_before_checkout" value="1"
-                    <?= !empty($extras['reglamento_required_before_checkout']) ? 'checked' : '' ?>>
-                Obligatorio antes de pagar
             </label>
         </div>
     </div>
@@ -257,16 +297,25 @@ $msiMonths = is_array($extras['msi_months'] ?? null) ? array_map('intval', $extr
     <div class="group-panel" data-panel="advanced" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Modo experto (JSON)</h2>
         <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
-            Solo para quien conoce la estructura interna. Las demás pestañas cubren el uso diario
-            y se aplican encima de este JSON al guardar.
+            Vista avanzada del <code>config_json</code>. Al abrir esta pestaña (y al guardar)
+            se sincroniza automáticamente con lo configurado en las demás pestañas:
+            datos del alumno, horarios, reglamento y pagos. Esas pestañas tienen prioridad
+            sobre las mismas claves del JSON.
         </p>
-        <details>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
+            Usa el JSON solo para opciones poco frecuentes (pipeline, documentos del expediente,
+            correos, etc.). Para campos del alumno usa la pestaña <strong>Datos del alumno</strong>.
+        </p>
+        <details open>
             <summary style="cursor:pointer;font-weight:700;color:var(--doceo-blue)">Mostrar / editar JSON crudo</summary>
             <label class="muted" style="<?= e($labelStyle) ?>;margin-top:.75rem">
                 config_json
-                <textarea name="config_json" rows="16"
+                <textarea name="config_json" id="group-config-json" rows="18"
                           style="padding:.65rem .75rem;border:1px solid #cfd8e6;border-radius:10px;font-family:ui-monospace,monospace;font-size:.82rem"><?= e($defaultConfig) ?></textarea>
             </label>
+            <button type="button" class="btn btn-ghost btn-sm" id="sync-config-json" style="margin-top:.5rem">
+                Actualizar JSON desde las pestañas
+            </button>
         </details>
     </div>
 
@@ -289,6 +338,17 @@ $msiMonths = is_array($extras['msi_months'] ?? null) ? array_map('intval', $extr
     font-size:.86rem; font-weight:600; background:#fff;
 }
 .day-check:has(input:checked) { background:#eef4ff; border-color:#9db7e8; color:var(--doceo-blue); }
+.field-check-grid {
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:.65rem;
+}
+.field-check {
+    display:flex; gap:.55rem; align-items:flex-start;
+    border:1px solid #cfd8e6; border-radius:12px; padding:.7rem .8rem; background:#fff;
+    cursor:pointer; font-size:.88rem;
+}
+.field-check:has(input:checked) { background:#eef4ff; border-color:#9db7e8; }
+.field-check--locked { opacity:.92; cursor:default; background:#f7f9fc; }
+.field-check input { margin-top:.15rem; accent-color:var(--doceo-blue); }
 #reglamento_doc_code.is-duplicate { border-color:#d64545 !important; background:#fff5f5; color:#a11; }
 .doc-code-error { color:#c0392b; font-weight:700; }
 </style>
@@ -296,8 +356,15 @@ $msiMonths = is_array($extras['msi_months'] ?? null) ? array_map('intval', $extr
 (function () {
   var tabs = Array.prototype.slice.call(document.querySelectorAll('.group-tab[data-tab]'));
   var panels = Array.prototype.slice.call(document.querySelectorAll('.group-panel[data-panel]'));
+  var form = document.getElementById('group-form');
+  var jsonTa = document.getElementById('group-config-json');
+  var syncBtn = document.getElementById('sync-config-json');
   if (!tabs.length) return;
+
   function activate(name) {
+    if (name === 'advanced') {
+      syncJsonFromTabs();
+    }
     tabs.forEach(function (tab) {
       var on = tab.getAttribute('data-tab') === name;
       tab.classList.toggle('active', on);
@@ -356,9 +423,126 @@ $msiMonths = is_array($extras['msi_months'] ?? null) ? array_map('intval', $extr
       }
     });
   }
-  var form = document.getElementById('group-form');
+
+  function checked(name) {
+    var el = form && form.querySelector('[name="' + name + '"]');
+    return !!(el && el.checked);
+  }
+  function val(name, fallback) {
+    var el = form && form.querySelector('[name="' + name + '"]');
+    if (!el) return fallback;
+    var v = String(el.value || '').trim();
+    return v !== '' ? v : fallback;
+  }
+  function intVal(name, fallback) {
+    var n = parseInt(val(name, String(fallback)), 10);
+    return isNaN(n) ? fallback : n;
+  }
+  function selectedFields() {
+    var out = [];
+    if (!form) return out;
+    form.querySelectorAll('input[name="checkout_fields[]"]').forEach(function (el) {
+      if (el.type === 'hidden' || el.checked) {
+        if (out.indexOf(el.value) === -1) out.push(el.value);
+      }
+    });
+    ['email', 'first_name', 'last_name_p', 'phone'].forEach(function (must) {
+      if (out.indexOf(must) === -1) out.unshift(must);
+    });
+    return out;
+  }
+  function selectedDays() {
+    var days = {};
+    [0, 1, 2, 3, 4, 5, 6].forEach(function (d) {
+      var el = form && form.querySelector('[name="schedule_days[' + d + ']"]');
+      days[String(d)] = !!(el && el.checked);
+    });
+    return days;
+  }
+  function selectedMsiMonths() {
+    var months = [];
+    if (!form) return [1];
+    form.querySelectorAll('input[name="msi_months[]"]:checked').forEach(function (el) {
+      months.push(parseInt(el.value, 10));
+    });
+    months = months.filter(function (m) { return [1, 3, 6, 9, 12].indexOf(m) !== -1; });
+    return months.length ? months : [1];
+  }
+  function paymentOrder() {
+    var order = [];
+    if (checked('pay_transfer')) order.push('transfer_proof');
+    if (checked('pay_oxxo')) order.push('openpay_store');
+    if (checked('pay_card')) order.push('openpay_card');
+    return order.length ? order : ['transfer_proof', 'openpay_store', 'openpay_card'];
+  }
+
+  function syncJsonFromTabs() {
+    if (!jsonTa) return;
+    var base = {};
+    try {
+      base = JSON.parse(jsonTa.value || '{}') || {};
+    } catch (e) {
+      base = {};
+    }
+    if (typeof base !== 'object' || Array.isArray(base) || base === null) base = {};
+
+    base.checkout_fields = selectedFields();
+    base.exam = Object.assign({}, base.exam || {}, {
+      choose_at_checkout: checked('exam_choose_at_checkout'),
+      slot_minutes: Math.max(15, intVal('exam_slot_minutes', 30)),
+      validity_months: Math.max(1, Math.min(36, intVal('exam_validity_months', 6)))
+    });
+    base.schedule = Object.assign({}, base.schedule || {}, {
+      min_advance_days: Math.max(0, intVal('schedule_min_advance_days', 2)),
+      available_365: checked('schedule_available_365'),
+      days: selectedDays(),
+      weekdays: {
+        start: val('schedule_weekdays_start', '10:00'),
+        end: val('schedule_weekdays_end', '17:30')
+      },
+      saturday: {
+        start: val('schedule_saturday_start', '08:00'),
+        end: val('schedule_saturday_end', '12:00')
+      }
+    });
+    delete base.schedule.blocked_dates;
+
+    var order = paymentOrder();
+    base.payments = Object.assign({}, base.payments || {}, {
+      default_method: order[0],
+      order: order,
+      price_includes_fee: !!(base.payments && base.payments.price_includes_fee)
+    });
+    base.card_msi = {
+      enabled: checked('msi_enabled'),
+      months: selectedMsiMonths(),
+      min_amount: 0
+    };
+
+    if (checked('reglamento_enabled')) {
+      var path = val('reglamento_template_path', '');
+      var source = val('reglamento_source_url', '');
+      var doc = val('reglamento_doc_code', autoDoc()).toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_|_$/g, '');
+      base.reglamento = {
+        template_path: path,
+        source_url: source,
+        signature_mode: 'append_to_pdf',
+        required_before_checkout: true,
+        doc_code: doc || autoDoc()
+      };
+    } else {
+      delete base.reglamento;
+    }
+
+    jsonTa.value = JSON.stringify(base, null, 2);
+  }
+
+  if (syncBtn) {
+    syncBtn.addEventListener('click', function () { syncJsonFromTabs(); });
+  }
   if (form) {
     form.addEventListener('submit', function (e) {
+      syncJsonFromTabs();
       if (!validateDocCode()) {
         e.preventDefault();
         activate('rules');

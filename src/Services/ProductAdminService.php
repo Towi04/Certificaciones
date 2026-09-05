@@ -10,6 +10,8 @@ use App\Repositories\ProductRepository;
 use App\Repositories\SupplierRepository;
 use App\Support\Settings;
 
+// CheckoutRequirements vive en el mismo namespace.
+
 /** Alta/edición de productos y grupos desde el panel admin. */
 final class ProductAdminService
 {
@@ -180,6 +182,23 @@ final class ProductAdminService
             ? array_map('intval', $msi['months'])
             : [1, 3, 6, 9, 12];
 
+        $checkoutFields = [];
+        if (array_key_exists('checkout_fields', $cfg) && is_array($cfg['checkout_fields'])) {
+            foreach ($cfg['checkout_fields'] as $code) {
+                if (is_string($code) && isset(CheckoutRequirements::FIELD_META[$code])) {
+                    $checkoutFields[] = $code;
+                }
+            }
+        } else {
+            $checkoutFields = ['email', 'first_name', 'last_name_p', 'last_name_m', 'phone'];
+        }
+        foreach (['email', 'first_name', 'last_name_p', 'phone'] as $must) {
+            if (!in_array($must, $checkoutFields, true)) {
+                array_unshift($checkoutFields, $must);
+            }
+        }
+        $checkoutFields = array_values(array_unique($checkoutFields));
+
         return [
             'exam_choose_at_checkout' => (bool) ($exam['choose_at_checkout'] ?? true),
             'exam_slot_minutes' => max(15, (int) ($exam['slot_minutes'] ?? 30)),
@@ -198,7 +217,7 @@ final class ProductAdminService
             'reglamento_template_path' => (string) ($reg['template_path'] ?? ''),
             'reglamento_source_url' => (string) ($reg['source_url'] ?? ''),
             'reglamento_doc_code' => (string) ($reg['doc_code'] ?? ''),
-            'reglamento_required_before_checkout' => (bool) ($reg['required_before_checkout'] ?? true),
+            'checkout_fields' => $checkoutFields,
             'pay_transfer' => in_array('transfer_proof', $order, true),
             'pay_oxxo' => in_array('openpay_store', $order, true),
             'pay_card' => in_array('openpay_card', $order, true),
@@ -975,16 +994,34 @@ final class ProductAdminService
                     'El código de documento "' . $docCode . '" ya lo usa el grupo ' . $conflict . '. Elige otro.'
                 );
             }
+            // Si el grupo pide reglamento firmado, siempre es obligatorio antes de pagar.
             $config['reglamento'] = [
                 'template_path' => $path,
                 'source_url' => $source,
                 'signature_mode' => 'append_to_pdf',
-                'required_before_checkout' => !empty($input['reglamento_required_before_checkout']),
+                'required_before_checkout' => true,
                 'doc_code' => $docCode,
             ];
         } else {
             unset($config['reglamento']);
         }
+
+        $fieldsRaw = $input['checkout_fields'] ?? [];
+        if (!is_array($fieldsRaw)) {
+            $fieldsRaw = [];
+        }
+        $fields = [];
+        foreach ($fieldsRaw as $code) {
+            if (is_string($code) && isset(CheckoutRequirements::FIELD_META[$code])) {
+                $fields[] = $code;
+            }
+        }
+        foreach (['email', 'first_name', 'last_name_p', 'phone'] as $must) {
+            if (!in_array($must, $fields, true)) {
+                array_unshift($fields, $must);
+            }
+        }
+        $config['checkout_fields'] = array_values(array_unique($fields));
 
         return $config;
     }
