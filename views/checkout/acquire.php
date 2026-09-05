@@ -10,6 +10,7 @@
 /** @var string $depositCard */
 /** @var bool $needsExam */
 /** @var ?string $examMinDate */
+/** @var int $examAdvanceDays */
 
 $catalogPrice = (float) ($quote['catalog'] ?? $product['catalog_price'] ?? 0);
 $basePrice = (float) ($quote['base'] ?? $catalogPrice);
@@ -133,7 +134,18 @@ $stepLabels = [
                                 </select>
                             </label>
                         </div>
-                        <p class="muted" id="exam-slot-hint" style="font-size:.82rem;margin-top:.5rem">Agendar con 2 días de antelación</p>
+                        <p class="muted" id="exam-slot-hint" style="font-size:.82rem;margin-top:.5rem">
+                            <?php
+                            $examAdvanceDays = (int) ($examAdvanceDays ?? 2);
+                            if ($examAdvanceDays <= 0) {
+                                echo 'Puedes agendar desde hoy (sin días de antelación).';
+                            } elseif ($examAdvanceDays === 1) {
+                                echo 'Agendar con 1 día de antelación';
+                            } else {
+                                echo 'Agendar con ' . $examAdvanceDays . ' días de antelación';
+                            }
+                            ?>
+                        </p>
                     </div>
                 <?php endif; ?>
 
@@ -985,6 +997,13 @@ $stepLabels = [
     });
   }
 
+  function examAdvanceHint(days) {
+    const n = Number(days || 0);
+    if (n <= 0) return 'Puedes agendar desde hoy (sin días de antelación).';
+    if (n === 1) return 'Agendar con 1 día de antelación';
+    return 'Agendar con ' + n + ' días de antelación';
+  }
+
   function loadExamDates() {
     if (!needsExam || !examDateSelect) return;
     fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(slug))
@@ -992,7 +1011,9 @@ $stepLabels = [
       .then(data => {
         if (!data.ok) return;
         if (data.min_date) examDateSelect.min = data.min_date;
-        if (examSlotHint) examSlotHint.textContent = 'Agendar con 2 días de antelación';
+        if (examSlotHint && data.min_advance_days !== undefined) {
+          examSlotHint.textContent = examAdvanceHint(data.min_advance_days);
+        }
       });
   }
 

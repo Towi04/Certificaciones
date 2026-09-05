@@ -188,8 +188,8 @@ final class ExamScheduleService
         }
 
         $window = in_array($dow, [0, 6], true) ? $rules['saturday'] : $rules['weekdays'];
-        $start = $this->parseClock($window['start']);
-        $end = $this->parseClock($window['end']);
+        $start = $this->parseClockOnDate($date, (string) $window['start'], false);
+        $end = $this->parseClockOnDate($date, (string) $window['end'], true);
         if ($start === null || $end === null || $start >= $end) {
             return [];
         }
@@ -268,13 +268,26 @@ final class ExamScheduleService
         return null;
     }
 
-    private function parseClock(string $clock): ?\DateTimeImmutable
+    /**
+     * Interpreta HH:MM sobre una fecha. Si $isEnd y el valor es 24:00,
+     * se toma como medianoche del día siguiente (fin exclusivo del día).
+     */
+    private function parseClockOnDate(string $date, string $clock, bool $isEnd): ?\DateTimeImmutable
     {
         $clock = trim($clock);
-        if (!preg_match('/^\d{1,2}:\d{2}$/', $clock)) {
+        if (!preg_match('/^(\d{1,2}):(\d{2})$/', $clock, $m)) {
+            return null;
+        }
+        $hour = (int) $m[1];
+        $minute = (int) $m[2];
+
+        if ($isEnd && $hour === 24 && $minute === 0) {
+            return (new \DateTimeImmutable($date . ' 00:00:00'))->modify('+1 day');
+        }
+        if ($hour < 0 || $hour > 23 || $minute < 0 || $minute > 59) {
             return null;
         }
 
-        return \DateTimeImmutable::createFromFormat('H:i', $clock) ?: null;
+        return new \DateTimeImmutable(sprintf('%s %02d:%02d:00', $date, $hour, $minute));
     }
 }

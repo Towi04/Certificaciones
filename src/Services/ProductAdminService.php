@@ -903,11 +903,11 @@ final class ProductAdminService
         $schedule['days'] = $days;
         $schedule['weekdays'] = [
             'start' => $this->normalizeClock((string) ($input['schedule_weekdays_start'] ?? '10:00'), '10:00'),
-            'end' => $this->normalizeClock((string) ($input['schedule_weekdays_end'] ?? '17:30'), '17:30'),
+            'end' => $this->normalizeClock((string) ($input['schedule_weekdays_end'] ?? '17:30'), '17:30', true),
         ];
         $schedule['saturday'] = [
             'start' => $this->normalizeClock((string) ($input['schedule_saturday_start'] ?? '08:00'), '08:00'),
-            'end' => $this->normalizeClock((string) ($input['schedule_saturday_end'] ?? '12:00'), '12:00'),
+            'end' => $this->normalizeClock((string) ($input['schedule_saturday_end'] ?? '12:00'), '12:00', true),
         ];
         unset($schedule['blocked_dates']);
         $config['schedule'] = $schedule;
@@ -1023,13 +1023,19 @@ final class ProductAdminService
         return $used[$docCode] ?? null;
     }
 
-    private function normalizeClock(string $clock, string $fallback): string
+    /**
+     * Normaliza hora HH:MM. Acepta 24:00 como fin del día (medianoche siguiente).
+     */
+    private function normalizeClock(string $clock, string $fallback, bool $allowEndOfDay = false): string
     {
         $clock = trim($clock);
         if (!preg_match('/^\d{1,2}:\d{2}$/', $clock)) {
             return $fallback;
         }
         [$h, $m] = array_map('intval', explode(':', $clock));
+        if ($allowEndOfDay && $h === 24 && $m === 0) {
+            return '24:00';
+        }
         if ($h < 0 || $h > 23 || $m < 0 || $m > 59) {
             return $fallback;
         }
