@@ -10,7 +10,6 @@ use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\TrackingRepository;
 use App\Services\CatalogFilterService;
-use App\Services\ComboAdminService;
 use App\Support\Settings;
 
 final class CatalogController
@@ -67,7 +66,6 @@ final class CatalogController
             'title' => $product['name'],
             'product' => $product,
             'media' => $media,
-            'comboOffers' => (new ComboAdminService())->offersForProduct((int) $product['id']),
             'user' => Auth::user(),
         ]);
     }

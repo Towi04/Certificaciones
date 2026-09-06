@@ -168,6 +168,31 @@ function money(float|int|string|null $amount): string
     return '$' . number_format((float) $amount, 2, '.', ',');
 }
 
+/**
+ * Renderiza texto de producto escrito desde el admin.
+ * Si trae HTML (p, strong, ul…), lo muestra formateado; si es texto plano, escapa y respeta saltos de línea.
+ */
+function rich_text(mixed $value): string
+{
+    $html = trim((string) ($value ?? ''));
+    if ($html === '') {
+        return '';
+    }
+
+    // Texto plano: escapar y conservar saltos de línea.
+    if (!preg_match('/<[a-z][\s\S]*>/i', $html)) {
+        return nl2br(e($html), false);
+    }
+
+    // HTML del admin: quitar vectores obvios, conservar formato.
+    $html = preg_replace('#<(script|iframe|object|embed|form)\b[^>]*>.*?</\1>#is', '', $html) ?? $html;
+    $html = preg_replace('#<(script|iframe|object|embed|form)\b[^>]*/?>#i', '', $html) ?? $html;
+    $html = preg_replace('#\son\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)#i', '', $html) ?? $html;
+    $html = preg_replace('#javascript\s*:#i', '', $html) ?? $html;
+
+    return $html;
+}
+
 function view(string $name, array $data = []): void
 {
     extract($data, EXTR_SKIP);
