@@ -337,6 +337,39 @@ final class AdminController
         redirect('/admin/grupos/' . $groupId);
     }
 
+    public function createCheckoutField(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        header('Content-Type: application/json; charset=UTF-8');
+        try {
+            $label = trim((string) ($_POST['label'] ?? ''));
+            $type = (string) ($_POST['type'] ?? 'text');
+            $required = !empty($_POST['required']);
+            $field = CheckoutRequirements::addCustomField($label, $type, $required);
+            echo json_encode(['ok' => true, 'field' => $field], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            http_response_code(422);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
+    public function deleteCheckoutField(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        header('Content-Type: application/json; charset=UTF-8');
+        try {
+            $code = (string) ($_POST['code'] ?? '');
+            CheckoutRequirements::removeCustomField($code);
+            echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            http_response_code(422);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
+
     public function productGroupsSeed(): void
     {
         Auth::requireRole(['admin']);

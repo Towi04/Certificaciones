@@ -30,7 +30,7 @@ En **Admin → Grupos → Editar** (pestañas) puedes ajustar con formularios:
 | Pestaña | Campos |
 |---------|--------|
 | General | Nombre, código, proveedor |
-| **Datos del alumno** | Checkboxes de campos del checkout (correo, nombre, CURP, fecha de nacimiento, etc.). Sin JSON. |
+| **Datos del alumno** | Checkboxes de campos del checkout (correo, nombre, CURP, fecha de nacimiento, etc.). Puedes **agregar campos nuevos** al catálogo global; aparecerán en todos los grupos. Sin JSON. |
 | Fechas y horarios | Pedir fecha/hora en checkout, minutos por bloque, anticipo, Lun–Vie, sábado, 365 días |
 | Reglamento | Activar/desactivar. Si está activo, **siempre** es obligatorio firmarlo antes de pagar. |
 | Pagos | Transferencia, OXXO, tarjeta y MSI |

@@ -29,7 +29,7 @@ $checkoutFields = is_array($extras['checkout_fields'] ?? null)
     ? $extras['checkout_fields']
     : ['email', 'first_name', 'last_name_p', 'last_name_m', 'phone'];
 $alwaysFields = ['email', 'first_name', 'last_name_p', 'phone'];
-$fieldMeta = \App\Services\CheckoutRequirements::FIELD_META;
+$fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
 ?>
 <p class="meta"><a href="<?= e(url('/admin/grupos')) ?>">← Grupos de proceso</a></p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">
@@ -105,13 +105,14 @@ $fieldMeta = \App\Services\CheckoutRequirements::FIELD_META;
             Marca qué información debe capturar el alumno al adquirir productos de este grupo.
             No necesitas editar JSON: estos campos aparecen en el paso <strong>Datos</strong> del checkout.
         </p>
-        <div class="field-check-grid">
+        <div class="field-check-grid" id="checkout-field-grid">
             <?php foreach ($fieldMeta as $code => $meta): ?>
                 <?php
                 $locked = in_array($code, $alwaysFields, true);
                 $checked = $locked || in_array($code, $checkoutFields, true);
+                $isCustom = !empty($meta['custom']);
                 ?>
-                <label class="field-check<?= $locked ? ' field-check--locked' : '' ?>">
+                <label class="field-check<?= $locked ? ' field-check--locked' : '' ?>" data-field-code="<?= e($code) ?>">
                     <?php if ($locked): ?>
                         <input type="hidden" name="checkout_fields[]" value="<?= e($code) ?>">
                         <input type="checkbox" checked disabled>
@@ -121,6 +122,9 @@ $fieldMeta = \App\Services\CheckoutRequirements::FIELD_META;
                     <?php endif; ?>
                     <span>
                         <strong><?= e((string) $meta['label']) ?></strong>
+                        <?php if ($isCustom): ?>
+                            <span class="field-custom-badge">Personalizado</span>
+                        <?php endif; ?>
                         <span class="muted" style="display:block;font-size:.75rem;font-weight:500">
                             <?= $locked
                                 ? 'Obligatorio en toda compra'
@@ -129,6 +133,41 @@ $fieldMeta = \App\Services\CheckoutRequirements::FIELD_META;
                     </span>
                 </label>
             <?php endforeach; ?>
+        </div>
+
+        <div class="add-checkout-field" style="margin-top:1.1rem;padding:1rem;border:1px dashed #9db7e8;border-radius:14px;background:#f7faff">
+            <h3 style="margin:0 0 .35rem;font-size:.95rem;color:var(--doceo-blue)">Agregar campo nuevo</h3>
+            <p class="muted" style="margin:0 0 .75rem;font-size:.8rem">
+                El campo se guarda en el catálogo global y aparecerá en la lista de selección de <strong>todos</strong> los grupos.
+                Al guardar este grupo quedará marcado aquí automáticamente.
+            </p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.65rem;align-items:end">
+                <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
+                    Nombre del campo *
+                    <input type="text" name="new_checkout_field_label" id="new_checkout_field_label"
+                           placeholder="Ej. Escuela de procedencia"
+                           style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                </label>
+                <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
+                    Tipo
+                    <select name="new_checkout_field_type" id="new_checkout_field_type"
+                            style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                        <option value="text">Texto</option>
+                        <option value="email">Correo</option>
+                        <option value="tel">Teléfono</option>
+                        <option value="date">Fecha</option>
+                        <option value="number">Número</option>
+                    </select>
+                </label>
+                <label class="muted" style="display:flex;align-items:center;gap:.45rem;font-size:.82rem;font-weight:600;padding-bottom:.45rem">
+                    <input type="checkbox" name="new_checkout_field_required" id="new_checkout_field_required" value="1">
+                    Requerido si se pide
+                </label>
+                <div style="padding-bottom:.15rem">
+                    <button type="button" class="btn btn-ghost" id="add-checkout-field-btn">Agregar a la lista</button>
+                </div>
+            </div>
+            <p class="muted" id="add-checkout-field-msg" style="margin:.55rem 0 0;font-size:.78rem;display:none"></p>
         </div>
     </div>
 
@@ -349,7 +388,7 @@ $fieldMeta = \App\Services\CheckoutRequirements::FIELD_META;
     cursor:pointer; font-size:.88rem;
 }
 .field-check:has(input:checked) { background:#eef4ff; border-color:#9db7e8; }
-.field-check--locked { opacity:.92; cursor:default; background:#f7f9fc; }
+.field-custom-badge{display:inline-block;margin-left:.35rem;padding:.05rem .4rem;border-radius:999px;background:#e8f0ff;color:#2a4d8f;font-size:.68rem;font-weight:700;vertical-align:middle}.field-check--locked { opacity:.92; cursor:default; background:#f7f9fc; }
 .field-check input { margin-top:.15rem; accent-color:var(--doceo-blue); }
 #reglamento_doc_code.is-duplicate { border-color:#d64545 !important; background:#fff5f5; color:#a11; }
 .doc-code-error { color:#c0392b; font-weight:700; }
@@ -553,5 +592,76 @@ $fieldMeta = \App\Services\CheckoutRequirements::FIELD_META;
       }
     });
   }
+
+  var addFieldBtn = document.getElementById('add-checkout-field-btn');
+  var addFieldMsg = document.getElementById('add-checkout-field-msg');
+  var fieldGrid = document.getElementById('checkout-field-grid');
+  function showAddFieldMsg(text, isError) {
+    if (!addFieldMsg) return;
+    addFieldMsg.style.display = 'block';
+    addFieldMsg.style.color = isError ? '#b42318' : '#176b3a';
+    addFieldMsg.textContent = text;
+  }
+  function appendFieldCard(field) {
+    if (!fieldGrid || !field || !field.code) return;
+    if (fieldGrid.querySelector('[data-field-code="' + field.code + '"]')) {
+      var existing = fieldGrid.querySelector('[data-field-code="' + field.code + '"] input[type="checkbox"]');
+      if (existing) existing.checked = true;
+      return;
+    }
+    var label = document.createElement('label');
+    label.className = 'field-check';
+    label.setAttribute('data-field-code', field.code);
+    var reqNote = field.required ? 'Requerido si se pide' : 'Opcional para el alumno';
+    label.innerHTML = ''
+      + '<input type="checkbox" name="checkout_fields[]" value="' + field.code + '" checked>'
+      + '<span><strong></strong>'
+      + '<span class="field-custom-badge">Personalizado</span>'
+      + '<span class="muted" style="display:block;font-size:.75rem;font-weight:500"></span></span>';
+    label.querySelector('strong').textContent = field.label || field.code;
+    label.querySelectorAll('.muted')[0].textContent = reqNote;
+    fieldGrid.appendChild(label);
+  }
+  if (addFieldBtn) {
+    addFieldBtn.addEventListener('click', function () {
+      var labelEl = document.getElementById('new_checkout_field_label');
+      var typeEl = document.getElementById('new_checkout_field_type');
+      var reqEl = document.getElementById('new_checkout_field_required');
+      var label = labelEl ? String(labelEl.value || '').trim() : '';
+      if (!label) {
+        showAddFieldMsg('Escribe el nombre del campo.', true);
+        if (labelEl) labelEl.focus();
+        return;
+      }
+      addFieldBtn.disabled = true;
+      var body = new FormData();
+      var csrf = form && form.querySelector('input[name="_csrf"]');
+      if (csrf) body.append('_csrf', csrf.value);
+      body.append('label', label);
+      body.append('type', typeEl ? typeEl.value : 'text');
+      if (reqEl && reqEl.checked) body.append('required', '1');
+      fetch(<?= json_encode(url('/admin/campos-checkout')) ?>, {
+        method: 'POST',
+        body: body,
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      }).then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.data || !res.data.ok) {
+            throw new Error((res.data && res.data.error) || 'No se pudo crear el campo.');
+          }
+          appendFieldCard(res.data.field);
+          if (labelEl) labelEl.value = '';
+          if (reqEl) reqEl.checked = false;
+          showAddFieldMsg('Campo agregado al catálogo global y marcado en este grupo.', false);
+          if (typeof syncJsonFromTabs === 'function') syncJsonFromTabs();
+        })
+        .catch(function (err) {
+          showAddFieldMsg(err.message || 'Error al agregar el campo.', true);
+        })
+        .finally(function () { addFieldBtn.disabled = false; });
+    });
+  }
+
 })();
 </script>
