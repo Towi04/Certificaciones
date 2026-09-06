@@ -521,12 +521,36 @@ final class TrackingService
                 $adminUserId
             );
 
-            $product = $this->pdo->prepare('SELECT * FROM products WHERE id = ? LIMIT 1');
+            $product = $this->pdo->prepare(
+                'SELECT pr.*, pg.config_json AS group_config_json
+                 FROM products pr
+                 LEFT JOIN product_groups pg ON pg.id = pr.product_group_id
+                 WHERE pr.id = ?
+                 LIMIT 1'
+            );
             $product->execute([$productId]);
-            $productRow = $product->fetch();
+            $productRow = $product->fetch() ?: null;
             $pipelineCode = $productRow
                 ? CheckoutRequirements::pipelineCode($productRow)
                 : null;
+
+            if ($productRow && ProviderRequestService::configForProduct($productRow) !== null) {
+                try {
+                    (new ProviderRequestService())->onPaymentConfirmed($trackingId, $purchaseId, $adminUserId);
+                } catch (\Throwable $e) {
+                    error_log('[Doceo] Solicitud proveedor tras pago: ' . $e->getMessage());
+                    $cfg = ProviderRequestService::configForProduct($productRow) ?? [];
+                    $step = (string) ($cfg['step_code'] ?? 'solicitud_proveedor');
+                    $this->setStep(
+                        $trackingId,
+                        $step,
+                        $adminUserId,
+                        'Pago confirmado (solicitud al proveedor falló: ' . $e->getMessage() . ')',
+                        'waiting_admin'
+                    );
+                }
+                continue;
+            }
 
             if ($pipelineCode === 'elet_uks') {
                 try {

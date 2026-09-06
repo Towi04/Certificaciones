@@ -121,6 +121,7 @@ final class ProductAdminService
      */
     public function createGroup(array $input): int
     {
+        $input = $this->storeProviderWorkbookFromInput($input, null);
         $parsed = $this->buildGroupPayload($input, true);
         if ($this->groups->findByCode($parsed['code']) !== null) {
             throw new \InvalidArgumentException('Ya existe un grupo con el código ' . $parsed['code']);
@@ -131,21 +132,18 @@ final class ProductAdminService
         return $id;
     }
 
-    /**
-     * @param array<string, mixed> $input
-     */
     public function updateGroup(int $id, array $input): void
     {
         $input['_group_id'] = $id;
         if ($this->groups->find($id) === null) {
             throw new \InvalidArgumentException('Grupo no encontrado.');
         }
+        $input = $this->storeProviderWorkbookFromInput($input, $id);
         $parsed = $this->buildGroupPayload($input, false);
         unset($parsed['code']);
         $this->groups->update($id, $parsed);
         $this->savePipelineStepsFromInput($input);
     }
-
 
     public function deleteProduct(int $id): void
     {
@@ -266,6 +264,58 @@ final class ProductAdminService
             'msi_months' => $msiMonths,
             'pipeline_code' => trim((string) ($cfg['pipeline_code'] ?? '')),
             'initial_step_code' => trim((string) ($cfg['initial_step_code'] ?? '')),
+            'provider_request' => self::providerRequestExtrasFromConfig($cfg),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $cfg
+     * @return array<string, mixed>
+     */
+    private static function providerRequestExtrasFromConfig(array $cfg): array
+    {
+        $raw = is_array($cfg['provider_request'] ?? null) ? $cfg['provider_request'] : [];
+        $wb = is_array($raw['workbook'] ?? null) ? $raw['workbook'] : [];
+        $cellMap = [];
+        foreach (is_array($wb['cell_map'] ?? null) ? $wb['cell_map'] : [] as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $cellMap[] = [
+                'cell' => strtoupper(trim((string) ($item['cell'] ?? ''))),
+                'field' => trim((string) ($item['field'] ?? '')),
+            ];
+        }
+
+        return [
+            'enabled' => !empty($raw['enabled']),
+            'auto_send_on_payment' => array_key_exists('auto_send_on_payment', $raw)
+                ? (bool) $raw['auto_send_on_payment']
+                : true,
+            'step_code' => trim((string) ($raw['step_code'] ?? 'solicitud_proveedor')),
+            'to' => trim((string) ($raw['to'] ?? '')),
+            'cc' => trim((string) ($raw['cc'] ?? '')),
+            'mail_template_code' => trim((string) ($raw['mail_template_code'] ?? '')),
+            'include_student_data' => array_key_exists('include_student_data', $raw)
+                ? (bool) $raw['include_student_data']
+                : true,
+            'include_exam_schedule' => array_key_exists('include_exam_schedule', $raw)
+                ? (bool) $raw['include_exam_schedule']
+                : true,
+            'include_reglamento' => array_key_exists('include_reglamento', $raw)
+                ? (bool) $raw['include_reglamento']
+                : true,
+            'include_payment_proof' => array_key_exists('include_payment_proof', $raw)
+                ? (bool) $raw['include_payment_proof']
+                : true,
+            'require_reglamento' => array_key_exists('require_reglamento', $raw)
+                ? (bool) $raw['require_reglamento']
+                : true,
+            'delivery' => (string) ($raw['delivery'] ?? 'links'),
+            'workbook_enabled' => !empty($wb['enabled']),
+            'workbook_template_path' => trim((string) ($wb['template_path'] ?? '')),
+            'workbook_attach' => array_key_exists('attach', $wb) ? (bool) $wb['attach'] : true,
+            'workbook_cell_map' => $cellMap,
         ];
     }
 
@@ -1120,6 +1170,78 @@ final class ProductAdminService
             unset($config['initial_step_code']);
         }
 
+        $config = $this->applyProviderRequestConfig($config, $input);
+
+        return $config;
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     * @param array<string, mixed> $input
+     * @return array<string, mixed>
+     */
+    private function applyProviderRequestConfig(array $config, array $input): array
+    {
+        if (empty($input['provider_request_enabled'])) {
+            unset($config['provider_request']);
+
+            return $config;
+        }
+
+        $delivery = (string) ($input['provider_request_delivery'] ?? 'links');
+        if (!in_array($delivery, ['links', 'attachments', 'both'], true)) {
+            $delivery = 'links';
+        }
+
+        $step = strtolower(trim((string) ($input['provider_request_step_code'] ?? 'solicitud_proveedor')));
+        $step = preg_replace('/[^a-z0-9_]+/', '_', $step) ?? 'solicitud_proveedor';
+        $step = trim($step, '_') ?: 'solicitud_proveedor';
+
+        $cellMap = [];
+        $cells = $input['provider_request_cells'] ?? [];
+        $fields = $input['provider_request_fields'] ?? [];
+        if (is_array($cells) && is_array($fields)) {
+            foreach ($cells as $i => $cellRaw) {
+                $cell = strtoupper(trim((string) $cellRaw));
+                $field = trim((string) ($fields[$i] ?? ''));
+                if ($cell === '' || $field === '') {
+                    continue;
+                }
+                $cellMap[] = ['cell' => $cell, 'field' => $field];
+            }
+        }
+
+        $existing = is_array($config['provider_request'] ?? null) ? $config['provider_request'] : [];
+        $existingWb = is_array($existing['workbook'] ?? null) ? $existing['workbook'] : [];
+        $templatePath = trim((string) ($existingWb['template_path'] ?? ''));
+        if (!empty($input['provider_request_clear_workbook'])) {
+            $templatePath = '';
+        }
+        if (!empty($input['provider_request_workbook_path'])) {
+            $templatePath = trim((string) $input['provider_request_workbook_path']);
+        }
+
+        $config['provider_request'] = [
+            'enabled' => true,
+            'auto_send_on_payment' => !empty($input['provider_request_auto_send']),
+            'step_code' => $step,
+            'to' => trim((string) ($input['provider_request_to'] ?? '')),
+            'cc' => trim((string) ($input['provider_request_cc'] ?? '')),
+            'mail_template_code' => trim((string) ($input['provider_request_mail_template'] ?? '')),
+            'include_student_data' => !empty($input['provider_request_include_student']),
+            'include_exam_schedule' => !empty($input['provider_request_include_exam']),
+            'include_reglamento' => !empty($input['provider_request_include_reglamento']),
+            'include_payment_proof' => !empty($input['provider_request_include_proof']),
+            'require_reglamento' => !empty($input['provider_request_require_reglamento']),
+            'delivery' => $delivery,
+            'workbook' => [
+                'enabled' => !empty($input['provider_request_workbook_enabled']),
+                'template_path' => $templatePath,
+                'attach' => !empty($input['provider_request_workbook_attach']),
+                'cell_map' => $cellMap,
+            ],
+        ];
+
         return $config;
     }
 
@@ -1128,6 +1250,32 @@ final class ProductAdminService
      *
      * @param array<string, mixed> $input
      */
+
+    /**
+     * Guarda plantilla Excel de solicitud a proveedor y deja la ruta en el input.
+     *
+     * @param array<string, mixed> $input
+     * @return array<string, mixed>
+     */
+    private function storeProviderWorkbookFromInput(array $input, ?int $groupId): array
+    {
+        $file = $input['_provider_workbook_file'] ?? null;
+        if (!is_array($file) || (int) ($file['error'] ?? \UPLOAD_ERR_NO_FILE) === \UPLOAD_ERR_NO_FILE) {
+            return $input;
+        }
+
+        $stored = (new DocumentService())->storeUploaded(
+            $file,
+            'provider_templates',
+            '.xlsx,.xls'
+        );
+        $input['provider_request_workbook_path'] = $stored['path'];
+        $input['provider_request_workbook_enabled'] = '1';
+        $input['provider_request_enabled'] = '1';
+
+        return $input;
+    }
+
     public function savePipelineStepsFromInput(array $input): void
     {
         $pipelineCode = strtolower(trim((string) ($input['pipeline_code'] ?? '')));

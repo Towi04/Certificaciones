@@ -8,6 +8,7 @@
         <div class="value"><?= (int) $stats['awaiting_payment'] ?></div>
     </a>
     <div class="stat"><div class="label">Pendientes de ti</div><div class="value"><?= (int) $stats['waiting_admin'] ?></div></div>
+    <div class="stat"><div class="label">Solicitud a proveedor</div><div class="value"><?= (int) ($stats['pending_provider_requests'] ?? 0) ?></div></div>
 </div>
 
 <section class="panel" style="margin-bottom:1rem;border:2px solid var(--doceo-yellow)">
@@ -28,6 +29,45 @@
                         <td><span class="pill"><?= e($row['status']) ?></span></td>
                         <td>
                             <a class="btn btn-accent" href="<?= e(url('/admin/compras/' . $row['id'])) ?>">Confirmar pago</a>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+</section>
+
+
+<section class="panel" style="margin-bottom:1rem;border:2px solid #f59e0b;background:#fffbeb">
+    <h2 style="margin-top:0;color:var(--doceo-blue)">Pendiente de solicitud a proveedor</h2>
+    <?php $providerQueue = $providerQueue ?? []; ?>
+    <?php if ($providerQueue === []): ?>
+        <p class="muted" style="margin:0">No hay solicitudes pendientes de enviar al proveedor.</p>
+    <?php else: ?>
+        <p class="muted" style="margin-top:0;font-size:.88rem">
+            Casos pagados que requieren correo al proveedor (UKS, TOEFL, etc.) y aún no se ha enviado.
+        </p>
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                <tr>
+                    <th>Matrícula</th>
+                    <th>Alumno</th>
+                    <th>Producto</th>
+                    <th>Paso</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($providerQueue as $row): ?>
+                    <tr>
+                        <td><a href="<?= e(url('/admin/seguimientos/' . $row['id'])) ?>"><?= e($row['matricula']) ?></a></td>
+                        <td><?= e(trim(($row['first_name'] ?? '') . ' ' . ($row['last_name_p'] ?? ''))) ?></td>
+                        <td><?= e($row['product_name'] ?? '') ?></td>
+                        <td><span class="pill"><?= e($row['current_step_code'] ?? '—') ?></span></td>
+                        <td style="white-space:nowrap">
+                            <a class="btn btn-accent btn-sm" href="<?= e(url('/admin/seguimientos/' . $row['id'])) ?>">Enviar solicitud</a>
                         </td>
                     </tr>
                 <?php endforeach; ?>

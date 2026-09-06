@@ -55,6 +55,8 @@ final class DocumentService
                 'png' => 'image/png',
                 'webp' => 'image/webp',
                 'jpg', 'jpeg' => 'image/jpeg',
+                'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'xls' => 'application/vnd.ms-excel',
                 default => '',
             };
         }
@@ -67,6 +69,8 @@ final class DocumentService
                 'pdf' => 'application/pdf',
                 'png' => 'image/png',
                 'webp' => 'image/webp',
+                'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'xls' => 'application/vnd.ms-excel',
                 default => 'image/jpeg',
             };
         }
