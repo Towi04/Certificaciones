@@ -2,6 +2,7 @@
 /** @var list<array<string,mixed>> $comboList */
 /** @var bool $comboStepIntro */
 /** @var array<string,mixed> $product */
+$comboList = $comboList ?? [];
 $comboStepIntro = $comboStepIntro ?? false;
 $whatsappUrl = \App\Support\Settings::schoolWhatsappPromoUrl((string) ($product['name'] ?? ''));
 $showAdvisorCta = false;
