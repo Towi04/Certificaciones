@@ -38,11 +38,11 @@
                     <td><?= !empty($c['is_active']) ? 'Sí' : 'No' ?></td>
                     <td>
                         <span class="row-actions">
-                            <a class="icon-btn" href="<?= e(url('/admin/combos/' . (int) $c['id'])) ?>" title="Editar" aria-label="Editar">✏️</a>
+                            <a class="icon-btn" href="<?= e(url('/admin/combos/' . (int) $c['id'])) ?>" title="Editar" aria-label="Editar"><?= icon('edit') ?></a>
                             <form class="icon-btn-form" method="post" action="<?= e(url('/admin/combos/' . (int) $c['id'] . '/eliminar')) ?>"
                                   onsubmit="return confirm('¿Eliminar este combo? Solo si no tiene compras.');">
                                 <?= csrf_field() ?>
-                                <button class="icon-btn icon-btn--danger" type="submit" title="Eliminar" aria-label="Eliminar">🗑️</button>
+                                <button class="icon-btn icon-btn--danger" type="submit" title="Eliminar" aria-label="Eliminar"><?= icon('trash') ?></button>
                             </form>
                         </span>
                     </td>

@@ -229,18 +229,71 @@ table.data th, table.data td {
 }
 table.data th { color: var(--doceo-blue); font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }
 
-.app-shell { display: grid; grid-template-columns: 230px 1fr; min-height: 100vh; }
-@media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } }
+.app-shell { display: grid; grid-template-columns: 230px 1fr; min-height: 100vh; transition: grid-template-columns .18s ease; }
+.app-shell--nav-collapsed { grid-template-columns: 72px 1fr; }
+html.admin-nav-collapsed-boot .app-shell { grid-template-columns: 72px 1fr; }
+@media (max-width: 900px) {
+  .app-shell,
+  .app-shell--nav-collapsed,
+  html.admin-nav-collapsed-boot .app-shell { grid-template-columns: 1fr; }
+}
 .side-nav {
-  background: var(--doceo-blue); color: #fff; padding: 1.2rem 1rem;
+  background: var(--doceo-blue); color: #fff; padding: 1rem .75rem 1.2rem;
+  display: flex; flex-direction: column; min-height: 100vh; position: sticky; top: 0;
 }
-.side-nav .brand-mini { display: flex; gap: .6rem; align-items: center; margin-bottom: 1.2rem; }
-.side-nav .brand-mini img { width: 40px; height: 40px; object-fit: contain; background: #fff; border-radius: 10px; padding: 4px; }
-.side-nav a {
-  display: block; color: #fff; padding: .55rem .7rem; border-radius: 10px;
-  margin-bottom: .25rem; font-weight: 600; font-size: .92rem;
+.side-nav-top {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: .35rem;
+  margin-bottom: 1rem;
 }
-.side-nav a:hover, .side-nav a.active { background: rgba(255,255,255,.14); text-decoration: none; }
+.side-nav .brand-mini { display: flex; gap: .6rem; align-items: center; min-width: 0; }
+.side-nav .brand-mini img {
+  width: 40px; height: 40px; object-fit: contain; background: #fff;
+  border-radius: 10px; padding: 4px; flex-shrink: 0;
+}
+.side-nav .brand-mini-text { min-width: 0; line-height: 1.25; }
+.side-nav .brand-mini-text strong { font-size: .92rem; }
+.side-nav .brand-mini-text small { opacity: .85; font-size: .78rem; }
+.nav-collapse-btn {
+  flex-shrink: 0; width: 2rem; height: 2rem; border: 0; border-radius: 8px;
+  background: rgba(255,255,255,.12); color: #fff; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+}
+.nav-collapse-btn:hover { background: rgba(255,255,255,.22); }
+.side-nav-links { display: flex; flex-direction: column; gap: .15rem; flex: 1; }
+.side-nav-link {
+  display: flex; align-items: center; gap: .65rem; color: #fff;
+  padding: .55rem .65rem; border-radius: 10px; font-weight: 600; font-size: .9rem;
+  text-decoration: none; border: 0; background: transparent; width: 100%;
+  text-align: left; cursor: pointer; font: inherit;
+}
+.side-nav-link:hover, .side-nav-link.active { background: rgba(255,255,255,.14); text-decoration: none; color: #fff; }
+.side-nav-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.25rem; height: 1.25rem; flex-shrink: 0; opacity: .95;
+}
+.side-nav-icon svg { display: block; }
+.side-nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-nav-logout { margin-top: 1rem; }
+.side-nav-logout-btn { background: rgba(255,255,255,.08); }
+
+/* Modo colapsado: solo iconos */
+.app-shell--nav-collapsed .side-nav,
+html.admin-nav-collapsed-boot .side-nav { padding-left: .55rem; padding-right: .55rem; }
+.app-shell--nav-collapsed .brand-mini-text,
+.app-shell--nav-collapsed .side-nav-label,
+html.admin-nav-collapsed-boot .brand-mini-text,
+html.admin-nav-collapsed-boot .side-nav-label { display: none; }
+.app-shell--nav-collapsed .side-nav-top,
+html.admin-nav-collapsed-boot .side-nav-top {
+  flex-direction: column; align-items: center; gap: .5rem;
+}
+.app-shell--nav-collapsed .side-nav-link,
+html.admin-nav-collapsed-boot .side-nav-link {
+  justify-content: center; padding: .6rem .35rem;
+}
+.app-shell--nav-collapsed .nav-collapse-btn,
+html.admin-nav-collapsed-boot .nav-collapse-btn { width: 100%; }
+
 .app-main { padding: 1.25rem; }
 .muted { color: var(--doceo-muted); }
 .login-wrap {
@@ -261,18 +314,12 @@ table.data th { color: var(--doceo-blue); font-size: .78rem; text-transform: upp
   margin: 0 auto 1rem;
   object-fit: contain;
 }
-.side-nav .brand-mini img {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
-  background: #fff;
-  border-radius: 10px;
-  padding: 4px;
-}
 @media (max-width: 900px) {
+  .side-nav { position: static; min-height: auto; }
   .app-main .stats + div[style*="grid-template-columns"] {
     grid-template-columns: 1fr !important;
   }
+  /* En móvil no forzar solo-iconos: el toggle sigue funcionando, pero el menú no queda pegajoso estrecho */
 }
 
 .pill {
@@ -299,7 +346,7 @@ table.data th { color: var(--doceo-blue); font-size: .78rem; text-transform: upp
 
 .row-actions {
   display: inline-flex;
-  gap: .3rem;
+  gap: .15rem;
   align-items: center;
   white-space: nowrap;
 }
@@ -307,19 +354,29 @@ table.data th { color: var(--doceo-blue); font-size: .78rem; text-transform: upp
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
+  width: 1.85rem;
+  height: 1.85rem;
+  border: 0;
   border-radius: 8px;
-  border: 1px solid #d5deea;
-  background: #fff;
+  background: transparent;
   text-decoration: none !important;
-  font-size: 1rem;
   line-height: 1;
   cursor: pointer;
   padding: 0;
-  color: inherit;
+  color: var(--doceo-blue);
+  opacity: .88;
+  transition: background .12s ease, color .12s ease, opacity .12s ease;
 }
-.icon-btn:hover { border-color: #9cb4d8; background: #f5f8fc; }
+.icon-btn svg { display: block; }
+.icon-btn:hover {
+  background: rgba(49, 82, 133, .1);
+  color: var(--doceo-blue-dark);
+  opacity: 1;
+}
 button.icon-btn { font: inherit; }
-.icon-btn--danger:hover { border-color: #f0b4b4; background: #fff5f5; }
+.icon-btn--danger { color: var(--doceo-blue); }
+.icon-btn--danger:hover {
+  background: rgba(49, 82, 133, .1);
+  color: var(--doceo-blue-dark);
+}
 .icon-btn-form { display: inline; margin: 0; }
