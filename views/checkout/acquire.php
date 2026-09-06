@@ -360,27 +360,20 @@ $stepLabels = [
   display:inline-block; font-size:.68rem; font-weight:700; letter-spacing:.04em;
   text-transform:uppercase; color:#5a7aa8; background:#eef4fc; padding:.2rem .5rem; border-radius:999px;
 }
-.combo-preset-list { display:grid; gap:.65rem; margin-bottom:1rem; }
+.combo-preset-list { display:grid; gap:.55rem; margin-bottom:.75rem; }
 .combo-preset-card {
-  display:flex; gap:.75rem; align-items:flex-start; padding:.85rem 1rem;
+  display:flex; gap:.75rem; align-items:center; padding:.7rem 1rem;
   border:2px solid #d5deea; border-radius:14px; background:#fbfcfe; cursor:pointer;
   transition:border-color .15s, background .15s;
 }
 .combo-preset-card:hover { border-color:#9cb4d8; }
 .combo-preset-card:has(input:checked) { border-color:var(--doceo-blue); background:#eef4fc; }
-.combo-preset-card input { margin-top:.25rem; flex-shrink:0; accent-color:var(--doceo-blue); }
-.combo-preset-body { display:flex; flex-direction:column; gap:.25rem; min-width:0; }
-.combo-preset-includes { font-size:.82rem; line-height:1.35; }
-.combo-preset-prices { font-size:.9rem; font-weight:700; color:var(--doceo-blue); display:flex; flex-wrap:wrap; gap:.35rem .5rem; align-items:center; }
-.combo-solo-strike { text-decoration:line-through; color:var(--doceo-muted); font-weight:500; font-size:.82rem; }
-.combo-save-pill {
-  font-size:.72rem; font-weight:700; color:#176b3a; background:#eaf8ef;
-  padding:.15rem .45rem; border-radius:999px;
-}
-.combo-item-prices { margin:.35rem 0 0; padding-left:1rem; font-size:.78rem; }
+.combo-preset-card input { flex-shrink:0; accent-color:var(--doceo-blue); }
+.combo-preset-body { display:flex; flex-direction:column; min-width:0; }
+.combo-preset-body strong { color:var(--doceo-blue); font-size:.95rem; line-height:1.3; }
+.combo-advisor-once { margin:0 0 .25rem; font-size:.8rem; }
 .combo-advisor-link {
-  display:inline-block; margin-top:.15rem; font-size:.78rem; font-weight:600;
-  color:#176b3a; text-decoration:underline; text-underline-offset:2px;
+  font-weight:600; color:#176b3a; text-decoration:underline; text-underline-offset:2px;
 }
 .combo-advisor-link:hover { color:#0f4f2a; }
 .sidebar-price .price { font-size:1.65rem; color:var(--doceo-blue); font-weight:800; }
