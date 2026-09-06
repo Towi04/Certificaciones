@@ -265,6 +265,7 @@ final class ProductAdminService
             'pipeline_code' => trim((string) ($cfg['pipeline_code'] ?? '')),
             'initial_step_code' => trim((string) ($cfg['initial_step_code'] ?? '')),
             'provider_request' => self::providerRequestExtrasFromConfig($cfg),
+            'emails' => GroupEmailAutomation::normalize($cfg['emails'] ?? null),
         ];
     }
 
@@ -1171,6 +1172,50 @@ final class ProductAdminService
         }
 
         $config = $this->applyProviderRequestConfig($config, $input);
+        $config = $this->applyEmailsConfig($config, $input);
+
+        return $config;
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     * @param array<string, mixed> $input
+     * @return array<string, mixed>
+     */
+    private function applyEmailsConfig(array $config, array $input): array
+    {
+        $onSteps = [];
+        $codes = $input['email_step_codes'] ?? [];
+        $templates = $input['email_step_templates'] ?? [];
+        $modes = $input['email_step_modes'] ?? [];
+        $audiences = $input['email_step_audiences'] ?? [];
+        if (is_array($codes) && is_array($templates)) {
+            foreach ($codes as $i => $codeRaw) {
+                $onSteps[] = [
+                    'step_code' => (string) $codeRaw,
+                    'template_code' => (string) ($templates[$i] ?? ''),
+                    'mode' => (string) (is_array($modes) ? ($modes[$i] ?? 'admin') : 'admin'),
+                    'audience' => (string) (is_array($audiences) ? ($audiences[$i] ?? 'student') : 'student'),
+                ];
+            }
+        }
+
+        $config['emails'] = GroupEmailAutomation::normalize([
+            GroupEmailAutomation::KEY_REGISTRATION => [
+                'enabled' => !empty($input['email_registration_enabled']),
+                'template_code' => trim((string) ($input['email_registration_template'] ?? 'student_registration')),
+            ],
+            GroupEmailAutomation::KEY_PAYMENT => [
+                'enabled' => !empty($input['email_payment_enabled']),
+                'template_code' => trim((string) ($input['email_payment_template'] ?? 'student_payment_confirmed')),
+            ],
+            GroupEmailAutomation::KEY_EXAM_ACCESS => [
+                'enabled' => !empty($input['email_exam_access_enabled']),
+                'template_code' => trim((string) ($input['email_exam_access_template'] ?? 'student_elet_exam_access')),
+                'mode' => (string) ($input['email_exam_access_mode'] ?? 'admin'),
+            ],
+            'on_steps' => $onSteps,
+        ]);
 
         return $config;
     }

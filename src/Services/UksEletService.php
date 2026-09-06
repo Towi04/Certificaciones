@@ -256,7 +256,16 @@ final class UksEletService
         );
 
         if ($notifyStudent) {
-            $this->sendStudentExamAccessEmail($trackingId, $folio, $accessKey);
+            $product = [
+                'config_json' => $tracking['config_json'] ?? null,
+                'group_config_json' => $tracking['group_config_json'] ?? null,
+                'id' => $tracking['product_id'] ?? 0,
+                'name' => $tracking['product_name'] ?? '',
+                'code' => $tracking['product_code'] ?? '',
+            ];
+            if (GroupEmailAutomation::isEnabled($product, GroupEmailAutomation::KEY_EXAM_ACCESS)) {
+                $this->sendStudentExamAccessEmail($trackingId, $folio, $accessKey);
+            }
         }
 
         $this->tracking->addLog(
@@ -302,8 +311,24 @@ final class UksEletService
             'access_key' => $accessKey,
         ];
 
-        if ($mailTpl->render('student_elet_exam_access', $vars) !== null) {
-            $mailTpl->send('student_elet_exam_access', $email, $vars);
+        $product = [
+            'config_json' => $tracking['config_json'] ?? null,
+            'group_config_json' => $tracking['group_config_json'] ?? null,
+            'id' => $tracking['product_id'] ?? 0,
+            'name' => $tracking['product_name'] ?? '',
+            'code' => $tracking['product_code'] ?? '',
+        ];
+        if (!GroupEmailAutomation::isEnabled($product, GroupEmailAutomation::KEY_EXAM_ACCESS)) {
+            return;
+        }
+        $tplCode = GroupEmailAutomation::templateCode(
+            $product,
+            GroupEmailAutomation::KEY_EXAM_ACCESS,
+            'student_elet_exam_access'
+        );
+
+        if ($mailTpl->render($tplCode, $vars) !== null) {
+            $mailTpl->send($tplCode, $email, $vars);
             return;
         }
 

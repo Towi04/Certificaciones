@@ -298,6 +298,10 @@ final class AdminController
             'extras' => ProductAdminService::groupFormExtrasFromConfig((string) $defaultConfig),
             'pipelines' => (new \App\Repositories\PipelineRepository())->allTemplates(),
             'pipelineStepsByCode' => (new \App\Repositories\PipelineRepository())->stepsByTemplateCode(),
+            'mailTemplates' => array_values(array_filter(
+                (new MailTemplateService())->all(),
+                static fn (array $t): bool => !array_key_exists('is_active', $t) || !empty($t['is_active'])
+            )),
             'layout' => 'admin',
         ]);
     }
@@ -351,6 +355,10 @@ final class AdminController
             'extras' => ProductAdminService::groupFormExtrasFromConfig((string) ($group['config_json'] ?? '')),
             'pipelines' => $pipelineRepo->allTemplates(),
             'pipelineStepsByCode' => $pipelineRepo->stepsByTemplateCode(),
+            'mailTemplates' => array_values(array_filter(
+                (new MailTemplateService())->all(),
+                static fn (array $t): bool => !array_key_exists('is_active', $t) || !empty($t['is_active'])
+            )),
             'layout' => 'admin',
         ]);
     }

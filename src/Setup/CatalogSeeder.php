@@ -143,9 +143,20 @@ HTML;
             ],
             'card_msi' => ['enabled' => true, 'months' => [1, 3, 6, 9, 12], 'min_amount' => 0],
             'emails' => [
-                'payment_confirmed' => true,
-                'exam_scheduled' => true,
-                'payment_rejected' => true,
+                'student_registration' => [
+                    'enabled' => true,
+                    'template_code' => 'student_registration',
+                ],
+                'student_payment_confirmed' => [
+                    'enabled' => true,
+                    'template_code' => 'student_payment_confirmed',
+                ],
+                'student_exam_access' => [
+                    'enabled' => true,
+                    'template_code' => 'student_elet_exam_access',
+                    'mode' => 'admin',
+                ],
+                'on_steps' => [],
             ],
             'export_template_code' => 'uks_elet_registro',
             'import_template_code' => 'uks_elet_reporte',
