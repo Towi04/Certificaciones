@@ -4,19 +4,8 @@
 /** @var array<string,mixed> $product */
 $comboList = $comboList ?? [];
 $comboStepIntro = $comboStepIntro ?? false;
-$whatsappUrl = \App\Support\Settings::schoolWhatsappPromoUrl((string) ($product['name'] ?? ''));
-$showAdvisorCta = false;
-foreach ($comboList as $c) {
-    $listPrice = (float) ($c['list_price'] ?? $c['catalog_price'] ?? 0);
-    $publicPrice = (float) ($c['public_price'] ?? 0);
-    if ($listPrice <= 0) {
-        $listPrice = $publicPrice;
-    }
-    if ($publicPrice > 0 && $listPrice > $publicPrice + 0.009) {
-        $showAdvisorCta = true;
-        break;
-    }
-}
+$productName = (string) ($product['name'] ?? 'este producto');
+$whatsappUrl = \App\Support\Settings::schoolWhatsappPromoUrl($productName);
 ?>
 <div class="combo-upsell<?= $comboStepIntro ? ' combo-upsell--step' : '' ?>">
     <?php if ($comboStepIntro): ?>
@@ -25,7 +14,7 @@ foreach ($comboList as $c) {
             <h2 class="step-title" style="margin:.35rem 0">¿Quieres completar tu paquete?</h2>
             <p class="muted" style="margin:0;font-size:.9rem;max-width:40rem">
                 Elige un paquete armado o continúa solo con
-                <strong><?= e((string) ($product['name'] ?? 'este producto')) ?></strong>.
+                <strong><?= e($productName) ?></strong>.
                 El detalle y el ahorro se muestran a la derecha.
             </p>
         </div>
@@ -37,7 +26,7 @@ foreach ($comboList as $c) {
     <?php endif; ?>
 
     <?php if ($comboList !== []): ?>
-        <div class="combo-preset-list">
+        <div class="combo-tiles" role="group" aria-label="Paquetes disponibles">
             <?php foreach ($comboList as $c): ?>
                 <?php
                 $cid = (int) $c['id'];
@@ -47,34 +36,27 @@ foreach ($comboList as $c) {
                 if ($listPrice <= 0) {
                     $listPrice = $publicPrice;
                 }
+                $comboName = (string) ($c['name'] ?? 'Combo');
                 ?>
-                <label class="combo-preset-card">
+                <label class="combo-tile">
                     <input type="radio" name="combo_preset" value="<?= $cid ?>"
                            data-addon-ids="<?= e(implode(',', $addonIds)) ?>"
-                           data-combo-name="<?= e((string) $c['name']) ?>"
+                           data-combo-name="<?= e($comboName) ?>"
                            data-combo-price="<?= e((string) $listPrice) ?>"
                            data-combo-public="<?= e((string) $publicPrice) ?>">
-                    <span class="combo-preset-body">
-                        <strong><?= e((string) $c['name']) ?></strong>
-                    </span>
+                    <span class="combo-tile-label"><?= e($comboName) ?></span>
                 </label>
             <?php endforeach; ?>
-            <label class="combo-preset-card combo-preset-card--solo">
+            <label class="combo-tile combo-tile--solo">
                 <input type="radio" name="combo_preset" value="" checked data-addon-ids="" data-combo-name="">
-                <span class="combo-preset-body">
-                    <strong>Solo <?= e($product['name'] ?? 'este producto') ?></strong>
-                </span>
+                <span class="combo-tile-label">Solo <?= e($productName) ?></span>
             </label>
         </div>
-        <?php if ($showAdvisorCta): ?>
-            <p class="combo-advisor-once muted">
-                <?php if ($whatsappUrl !== null): ?>
-                    <a class="combo-advisor-link" href="<?= e($whatsappUrl) ?>" target="_blank" rel="noopener noreferrer">
-                        Contacta a un asesor para ver si existe algún código promocional vigente
-                    </a>
-                <?php else: ?>
-                    Contacta a un asesor para ver si existe algún código promocional vigente.
-                <?php endif; ?>
+        <?php if ($whatsappUrl !== null): ?>
+            <p class="combo-advisor-once">
+                <a class="combo-advisor-link" href="<?= e($whatsappUrl) ?>" target="_blank" rel="noopener noreferrer">
+                    Contacta a un asesor por WhatsApp para ver si existe algún código promocional vigente
+                </a>
             </p>
         <?php endif; ?>
     <?php endif; ?>

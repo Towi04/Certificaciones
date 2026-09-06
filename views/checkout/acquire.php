@@ -360,17 +360,27 @@ $stepLabels = [
   display:inline-block; font-size:.68rem; font-weight:700; letter-spacing:.04em;
   text-transform:uppercase; color:#5a7aa8; background:#eef4fc; padding:.2rem .5rem; border-radius:999px;
 }
-.combo-preset-list { display:grid; gap:.55rem; margin-bottom:.75rem; }
-.combo-preset-card {
-  display:flex; gap:.75rem; align-items:center; padding:.7rem 1rem;
+.combo-tiles { display:flex; gap:.65rem; flex-wrap:wrap; margin-bottom:.85rem; }
+.checkout-form .combo-tile {
+  flex:1 1 120px; min-width:118px; max-width:160px; min-height:92px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:.15rem; padding:.75rem .55rem; margin:0;
   border:2px solid #d5deea; border-radius:14px; background:#fbfcfe; cursor:pointer;
-  transition:border-color .15s, background .15s;
+  font:inherit; font-weight:600; color:var(--doceo-muted);
+  text-align:center; transition:border-color .15s, background .15s;
+  position:relative;
 }
-.combo-preset-card:hover { border-color:#9cb4d8; }
-.combo-preset-card:has(input:checked) { border-color:var(--doceo-blue); background:#eef4fc; }
-.combo-preset-card input { flex-shrink:0; accent-color:var(--doceo-blue); }
-.combo-preset-body { display:flex; flex-direction:column; min-width:0; }
-.combo-preset-body strong { color:var(--doceo-blue); font-size:.95rem; line-height:1.3; }
+.checkout-form .combo-tile:hover { border-color:#9cb4d8; }
+.checkout-form .combo-tile:has(input:checked) {
+  border-color:var(--doceo-blue); background:#eef4fc;
+}
+.checkout-form .combo-tile input {
+  position:absolute; opacity:0; width:1px; height:1px; margin:0; pointer-events:none;
+}
+.checkout-form .combo-tile-label {
+  display:block; font-weight:700; font-size:.82rem; line-height:1.25;
+  color:var(--doceo-blue); text-align:center;
+}
 .combo-advisor-once { margin:0 0 .25rem; font-size:.8rem; }
 .combo-advisor-link {
   font-weight:600; color:#176b3a; text-decoration:underline; text-underline-offset:2px;

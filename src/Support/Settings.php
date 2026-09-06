@@ -75,17 +75,18 @@ final class Settings
 
     /**
      * WhatsApp de la escuela (solo dígitos, con código de país).
-     * Preferencia: settings.school_whatsapp → env SCHOOL_WHATSAPP.
+     * Preferencia: settings.school_whatsapp → env SCHOOL_WHATSAPP → 524778775112.
      */
     public static function schoolWhatsapp(): string
     {
-        $raw = self::get('school_whatsapp', Env::get('SCHOOL_WHATSAPP', '')) ?? '';
-        return preg_replace('/\D+/', '', $raw) ?? '';
+        $raw = self::get('school_whatsapp', Env::get('SCHOOL_WHATSAPP', '524778775112')) ?? '524778775112';
+        $digits = preg_replace('/\D+/', '', $raw) ?? '';
+
+        return $digits !== '' ? $digits : '524778775112';
     }
 
     /**
      * URL wa.me para pedir código promocional a un asesor.
-     * Null si no hay número configurado.
      */
     public static function schoolWhatsappPromoUrl(?string $productName = null): ?string
     {
@@ -94,11 +95,13 @@ final class Settings
             return null;
         }
 
-        $msg = 'Hola, me interesa saber si hay algún código promocional vigente';
-        if ($productName !== null && trim($productName) !== '') {
-            $msg .= ' para ' . trim($productName);
+        $name = trim((string) ($productName ?? ''));
+        if ($name !== '') {
+            $msg = 'Hola, quisiera adquirir la certificación ' . $name
+                . ' y me gustaría saber si hay un código promocional vigente.';
+        } else {
+            $msg = 'Hola, quisiera adquirir una certificación y me gustaría saber si hay un código promocional vigente.';
         }
-        $msg .= '.';
 
         return 'https://wa.me/' . $phone . '?text=' . rawurlencode($msg);
     }
