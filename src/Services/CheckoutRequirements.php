@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Support\Settings;
+
 /**
  * Requisitos de checkout por producto (mínimos por defecto).
  *
@@ -26,6 +28,8 @@ namespace App\Services;
  *
  * - Si checkout_fields / required_docs están presentes (aunque vacíos), se respetan.
  * - Sin config: solo contacto básico y sin documentos (reglamento/firma van en pasos posteriores).
+ *
+ * Campos personalizados globales: settings.checkout_custom_fields (vía allFieldMeta()).
  */
 final class CheckoutRequirements
 {
@@ -50,6 +54,206 @@ final class CheckoutRequirements
         'last_name_m',
         'phone',
     ];
+
+    public const CUSTOM_FIELDS_SETTING = 'checkout_custom_fields';
+
+    /** @var list<string> */
+    public const CUSTOM_FIELD_TYPES = ['text', 'email', 'tel', 'date', 'number'];
+
+    /** @var array<string, array{label:string,required:bool,type:string,custom?:bool}>|null */
+    private static ?array $metaCache = null;
+
+    /**
+     * Catálogo completo: built-ins + campos personalizados globales (settings).
+     *
+     * @return array<string, array{label:string,required:bool,type:string,custom?:bool}>
+     */
+    public static function allFieldMeta(): array
+    {
+        if (self::$metaCache !== null) {
+            return self::$metaCache;
+        }
+
+        $meta = [];
+        foreach (self::FIELD_META as $code => $row) {
+            $meta[$code] = $row + ['custom' => false];
+        }
+        foreach (self::customFieldDefinitions() as $code => $def) {
+            if (isset($meta[$code])) {
+                continue;
+            }
+            $meta[$code] = [
+                'label' => (string) $def['label'],
+                'required' => (bool) ($def['required'] ?? false),
+                'type' => (string) ($def['type'] ?? 'text'),
+                'custom' => true,
+            ];
+        }
+        self::$metaCache = $meta;
+
+        return $meta;
+    }
+
+    public static function clearFieldMetaCache(): void
+    {
+        self::$metaCache = null;
+    }
+
+    public static function isBuiltinField(string $code): bool
+    {
+        return isset(self::FIELD_META[$code]);
+    }
+
+    /**
+     * @return array<string, array{label:string,required:bool,type:string}>
+     */
+    public static function customFieldDefinitions(): array
+    {
+        $raw = Settings::get(self::CUSTOM_FIELDS_SETTING, '{}') ?? '{}';
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($decoded as $code => $row) {
+            if (!is_string($code) || !is_array($row)) {
+                continue;
+            }
+            $code = self::normalizeFieldCode($code);
+            if ($code === '' || isset(self::FIELD_META[$code])) {
+                continue;
+            }
+            $label = trim((string) ($row['label'] ?? ''));
+            if ($label === '') {
+                continue;
+            }
+            $type = (string) ($row['type'] ?? 'text');
+            if (!in_array($type, self::CUSTOM_FIELD_TYPES, true)) {
+                $type = 'text';
+            }
+            $out[$code] = [
+                'label' => $label,
+                'required' => (bool) ($row['required'] ?? false),
+                'type' => $type,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, array{label:string,required:bool,type:string}> $defs
+     */
+    public static function saveCustomFieldDefinitions(array $defs): void
+    {
+        $clean = [];
+        foreach ($defs as $code => $row) {
+            if (!is_string($code) || !is_array($row)) {
+                continue;
+            }
+            $code = self::normalizeFieldCode($code);
+            if ($code === '' || isset(self::FIELD_META[$code])) {
+                continue;
+            }
+            $label = trim((string) ($row['label'] ?? ''));
+            if ($label === '') {
+                continue;
+            }
+            $type = (string) ($row['type'] ?? 'text');
+            if (!in_array($type, self::CUSTOM_FIELD_TYPES, true)) {
+                $type = 'text';
+            }
+            $clean[$code] = [
+                'label' => $label,
+                'required' => (bool) ($row['required'] ?? false),
+                'type' => $type,
+            ];
+        }
+        Settings::set(
+            self::CUSTOM_FIELDS_SETTING,
+            (string) json_encode($clean, JSON_UNESCAPED_UNICODE)
+        );
+        self::clearFieldMetaCache();
+    }
+
+    /**
+     * @return array{code:string,label:string,required:bool,type:string,custom:bool}
+     */
+    public static function addCustomField(string $label, string $type = 'text', bool $required = false, ?string $codeHint = null): array
+    {
+        $label = trim($label);
+        if ($label === '') {
+            throw new \InvalidArgumentException('Indica el nombre del campo.');
+        }
+        if (!in_array($type, self::CUSTOM_FIELD_TYPES, true)) {
+            throw new \InvalidArgumentException('Tipo de campo no válido.');
+        }
+
+        $base = $codeHint !== null && trim($codeHint) !== ''
+            ? self::normalizeFieldCode($codeHint)
+            : self::normalizeFieldCode($label);
+        if ($base === '') {
+            $base = 'campo';
+        }
+        if (!str_starts_with($base, 'custom_')) {
+            $base = 'custom_' . $base;
+        }
+
+        $defs = self::customFieldDefinitions();
+        $code = $base;
+        $n = 2;
+        while (isset(self::FIELD_META[$code]) || isset($defs[$code])) {
+            $code = $base . '_' . $n;
+            $n++;
+            if ($n > 50) {
+                throw new \InvalidArgumentException('No se pudo generar un código único para el campo.');
+            }
+        }
+
+        $defs[$code] = [
+            'label' => $label,
+            'required' => $required,
+            'type' => $type,
+        ];
+        self::saveCustomFieldDefinitions($defs);
+
+        return [
+            'code' => $code,
+            'label' => $label,
+            'required' => $required,
+            'type' => $type,
+            'custom' => true,
+        ];
+    }
+
+    public static function removeCustomField(string $code): void
+    {
+        $code = self::normalizeFieldCode($code);
+        if ($code === '' || isset(self::FIELD_META[$code])) {
+            throw new \InvalidArgumentException('Solo se pueden eliminar campos personalizados.');
+        }
+        $defs = self::customFieldDefinitions();
+        if (!isset($defs[$code])) {
+            throw new \InvalidArgumentException('Ese campo personalizado no existe.');
+        }
+        unset($defs[$code]);
+        self::saveCustomFieldDefinitions($defs);
+    }
+
+    public static function normalizeFieldCode(string $raw): string
+    {
+        $s = strtolower(trim($raw));
+        $s = preg_replace('/[^a-z0-9_]+/', '_', $s) ?? '';
+        $s = trim($s, '_');
+        if (strlen($s) > 60) {
+            $s = substr($s, 0, 60);
+            $s = rtrim($s, '_');
+        }
+
+        return $s;
+    }
+
 
     /** @return array<string, mixed> */
     public static function config(array $product): array
@@ -121,11 +325,12 @@ final class CheckoutRequirements
     public static function fieldsForProduct(array $product): array
     {
         $cfg = self::config($product);
+        $all = self::allFieldMeta();
         $codes = self::DEFAULT_FIELDS;
         if (array_key_exists('checkout_fields', $cfg) && is_array($cfg['checkout_fields'])) {
             $codes = [];
             foreach ($cfg['checkout_fields'] as $code) {
-                if (is_string($code) && isset(self::FIELD_META[$code])) {
+                if (is_string($code) && isset($all[$code])) {
                     $codes[] = $code;
                 }
             }
@@ -139,12 +344,13 @@ final class CheckoutRequirements
 
         $out = [];
         foreach ($codes as $code) {
-            $meta = self::FIELD_META[$code];
+            $meta = $all[$code];
             $out[] = [
                 'code' => $code,
                 'label' => $meta['label'],
                 'required' => (bool) $meta['required'],
                 'type' => $meta['type'],
+                'custom' => !empty($meta['custom']),
             ];
         }
 

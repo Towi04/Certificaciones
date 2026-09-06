@@ -71,7 +71,17 @@ final class CheckoutController
             'nationality' => in_array('nationality', $fieldCodes, true)
                 ? trim((string) ($_POST['nationality'] ?? 'México'))
                 : '',
+            'extra_fields' => [],
         ];
+        foreach (CheckoutRequirements::fieldsForProduct($product) as $field) {
+            $code = (string) ($field['code'] ?? '');
+            if ($code === '' || CheckoutRequirements::isBuiltinField($code)) {
+                continue;
+            }
+            $value = trim((string) ($_POST[$code] ?? ''));
+            $buyer[$code] = $value;
+            $buyer['extra_fields'][$code] = $value;
+        }
 
         $paymentMethod = (string) ($_POST['payment_method'] ?? 'transfer_proof');
         $promoCode = trim((string) ($_POST['promo_code'] ?? ''));

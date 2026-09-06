@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS students (
   birth_date DATE NULL,
   sex ENUM('F','M','X') NULL,
   nationality VARCHAR(80) NULL DEFAULT 'México',
+  extra_fields_json JSON NULL,
   signature_image_path VARCHAR(255) NULL,
   address_street VARCHAR(190) NULL,
   address_int VARCHAR(40) NULL,

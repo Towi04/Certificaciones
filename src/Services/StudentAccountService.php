@@ -97,29 +97,96 @@ final class StudentAccountService
         $stmt = $this->pdo->prepare('SELECT id FROM students WHERE user_id = ?');
         $stmt->execute([$userId]);
         if ($stmt->fetchColumn()) {
-            $this->pdo->prepare(
-                'UPDATE students SET curp = COALESCE(?, curp), birth_date = COALESCE(?, birth_date),
-                 sex = COALESCE(?, sex), nationality = COALESCE(?, nationality) WHERE user_id = ?'
-            )->execute([
-                ($data['curp'] ?? '') !== '' ? $data['curp'] : null,
-                ($data['birth_date'] ?? '') !== '' ? $data['birth_date'] : null,
-                ($data['sex'] ?? '') !== '' ? $data['sex'] : null,
-                ($data['nationality'] ?? '') !== '' ? $data['nationality'] : null,
-                $userId,
-            ]);
+            if ($this->studentsHaveExtraFieldsColumn()) {
+                $extraJson = self::encodeExtraFields($data['extra_fields'] ?? null);
+                $this->pdo->prepare(
+                    'UPDATE students SET curp = COALESCE(?, curp), birth_date = COALESCE(?, birth_date),
+                     sex = COALESCE(?, sex), nationality = COALESCE(?, nationality),
+                     extra_fields_json = COALESCE(?, extra_fields_json) WHERE user_id = ?'
+                )->execute([
+                    ($data['curp'] ?? '') !== '' ? $data['curp'] : null,
+                    ($data['birth_date'] ?? '') !== '' ? $data['birth_date'] : null,
+                    ($data['sex'] ?? '') !== '' ? $data['sex'] : null,
+                    ($data['nationality'] ?? '') !== '' ? $data['nationality'] : null,
+                    $extraJson,
+                    $userId,
+                ]);
+            } else {
+                $this->pdo->prepare(
+                    'UPDATE students SET curp = COALESCE(?, curp), birth_date = COALESCE(?, birth_date),
+                     sex = COALESCE(?, sex), nationality = COALESCE(?, nationality) WHERE user_id = ?'
+                )->execute([
+                    ($data['curp'] ?? '') !== '' ? $data['curp'] : null,
+                    ($data['birth_date'] ?? '') !== '' ? $data['birth_date'] : null,
+                    ($data['sex'] ?? '') !== '' ? $data['sex'] : null,
+                    ($data['nationality'] ?? '') !== '' ? $data['nationality'] : null,
+                    $userId,
+                ]);
+            }
 
             return;
         }
 
-        $this->pdo->prepare(
-            'INSERT INTO students (user_id, curp, birth_date, sex, nationality) VALUES (?,?,?,?,?)'
-        )->execute([
-            $userId,
-            ($data['curp'] ?? '') !== '' ? $data['curp'] : null,
-            ($data['birth_date'] ?? '') !== '' ? $data['birth_date'] : null,
-            ($data['sex'] ?? '') !== '' ? $data['sex'] : null,
-            ($data['nationality'] ?? '') !== '' ? $data['nationality'] : 'México',
-        ]);
+        if ($this->studentsHaveExtraFieldsColumn()) {
+            $this->pdo->prepare(
+                'INSERT INTO students (user_id, curp, birth_date, sex, nationality, extra_fields_json) VALUES (?,?,?,?,?,?)'
+            )->execute([
+                $userId,
+                ($data['curp'] ?? '') !== '' ? $data['curp'] : null,
+                ($data['birth_date'] ?? '') !== '' ? $data['birth_date'] : null,
+                ($data['sex'] ?? '') !== '' ? $data['sex'] : null,
+                ($data['nationality'] ?? '') !== '' ? $data['nationality'] : 'México',
+                self::encodeExtraFields($data['extra_fields'] ?? null),
+            ]);
+        } else {
+            $this->pdo->prepare(
+                'INSERT INTO students (user_id, curp, birth_date, sex, nationality) VALUES (?,?,?,?,?)'
+            )->execute([
+                $userId,
+                ($data['curp'] ?? '') !== '' ? $data['curp'] : null,
+                ($data['birth_date'] ?? '') !== '' ? $data['birth_date'] : null,
+                ($data['sex'] ?? '') !== '' ? $data['sex'] : null,
+                ($data['nationality'] ?? '') !== '' ? $data['nationality'] : 'México',
+            ]);
+        }
+    }
+
+
+    private static ?bool $hasExtraFieldsColumn = null;
+
+    private function studentsHaveExtraFieldsColumn(): bool
+    {
+        if (self::$hasExtraFieldsColumn !== null) {
+            return self::$hasExtraFieldsColumn;
+        }
+        try {
+            $stmt = $this->pdo->query("SHOW COLUMNS FROM students LIKE 'extra_fields_json'");
+            self::$hasExtraFieldsColumn = (bool) ($stmt && $stmt->fetch());
+        } catch (\Throwable) {
+            self::$hasExtraFieldsColumn = false;
+        }
+
+        return self::$hasExtraFieldsColumn;
+    }
+
+    /** @param mixed $extra */
+    private static function encodeExtraFields(mixed $extra): ?string
+    {
+        if (!is_array($extra) || $extra === []) {
+            return null;
+        }
+        $clean = [];
+        foreach ($extra as $k => $v) {
+            if (!is_string($k) || $k === '') {
+                continue;
+            }
+            $clean[$k] = is_scalar($v) ? (string) $v : '';
+        }
+        if ($clean === []) {
+            return null;
+        }
+
+        return (string) json_encode($clean, JSON_UNESCAPED_UNICODE);
     }
 
     public function loginAs(array $user): void

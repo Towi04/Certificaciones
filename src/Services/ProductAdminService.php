@@ -185,7 +185,7 @@ final class ProductAdminService
         $checkoutFields = [];
         if (array_key_exists('checkout_fields', $cfg) && is_array($cfg['checkout_fields'])) {
             foreach ($cfg['checkout_fields'] as $code) {
-                if (is_string($code) && isset(CheckoutRequirements::FIELD_META[$code])) {
+                if (is_string($code) && isset(CheckoutRequirements::allFieldMeta()[$code])) {
                     $checkoutFields[] = $code;
                 }
             }
@@ -1006,13 +1006,28 @@ final class ProductAdminService
             unset($config['reglamento']);
         }
 
+        // Alta opcional de campo personalizado global (aparece en todos los grupos).
+        $newLabel = trim((string) ($input['new_checkout_field_label'] ?? ''));
+        if ($newLabel !== '') {
+            $newType = (string) ($input['new_checkout_field_type'] ?? 'text');
+            $newRequired = !empty($input['new_checkout_field_required']);
+            $created = CheckoutRequirements::addCustomField($newLabel, $newType, $newRequired);
+            $fieldsRaw = $input['checkout_fields'] ?? [];
+            if (!is_array($fieldsRaw)) {
+                $fieldsRaw = [];
+            }
+            $fieldsRaw[] = $created['code'];
+            $input['checkout_fields'] = $fieldsRaw;
+        }
+
         $fieldsRaw = $input['checkout_fields'] ?? [];
         if (!is_array($fieldsRaw)) {
             $fieldsRaw = [];
         }
+        $allMeta = CheckoutRequirements::allFieldMeta();
         $fields = [];
         foreach ($fieldsRaw as $code) {
-            if (is_string($code) && isset(CheckoutRequirements::FIELD_META[$code])) {
+            if (is_string($code) && isset($allMeta[$code])) {
                 $fields[] = $code;
             }
         }
