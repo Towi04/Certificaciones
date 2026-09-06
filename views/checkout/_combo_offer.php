@@ -1,9 +1,9 @@
 <?php
 /** @var list<array<string,mixed>> $comboList */
-/** @var list<array<string,mixed>> $comboAddons */
 /** @var bool $comboStepIntro */
 /** @var array<string,mixed> $product */
 $comboStepIntro = $comboStepIntro ?? false;
+$whatsappUrl = \App\Support\Settings::schoolWhatsappPromoUrl((string) ($product['name'] ?? ''));
 ?>
 <div class="combo-upsell<?= $comboStepIntro ? ' combo-upsell--step' : '' ?>">
     <?php if ($comboStepIntro): ?>
@@ -11,15 +11,15 @@ $comboStepIntro = $comboStepIntro ?? false;
             <span class="combo-step-badge">Paso opcional</span>
             <h2 class="step-title" style="margin:.35rem 0">¿Quieres completar tu paquete?</h2>
             <p class="muted" style="margin:0;font-size:.9rem;max-width:40rem">
-                Ya registraste tus datos. Antes de pagar, puedes agregar el curso y/o trámite relacionado
-                con <strong>precio de paquete</strong> y ver el ahorro frente a comprar cada producto
+                Ya registraste tus datos. Antes de pagar, puedes elegir un paquete armado con
+                <strong>precio de combo</strong> y ver el ahorro frente a comprar cada producto
                 por separado a <strong>precio de lista</strong>.
             </p>
         </div>
     <?php else: ?>
         <h2 style="margin:0 0 .35rem;font-size:1.05rem;color:var(--doceo-blue)">Convertir en combo</h2>
         <p class="muted" style="margin:0 0 .75rem;font-size:.85rem">
-            Agrega curso y/o trámite con tarifa de paquete (comparado contra el precio de lista de cada uno).
+            Elige un paquete armado con tarifa de combo (comparado contra el precio de lista de cada uno).
         </p>
     <?php endif; ?>
 
@@ -37,9 +37,7 @@ $comboStepIntro = $comboStepIntro ?? false;
                 }
                 $soloSum = (float) ($c['solo_sum'] ?? 0);
                 $savings = $soloSum > $listPrice ? $soloSum - $listPrice : 0;
-                $promoSavings = ($publicPrice > 0 && $listPrice > $publicPrice)
-                    ? $listPrice - $publicPrice
-                    : 0;
+                $showAdvisorCta = $publicPrice > 0 && $listPrice > $publicPrice + 0.009;
                 ?>
                 <label class="combo-preset-card">
                     <input type="radio" name="combo_preset" value="<?= $cid ?>"
@@ -59,10 +57,17 @@ $comboStepIntro = $comboStepIntro ?? false;
                                 <span class="combo-save-pill">Ahorras <?= money($savings) ?> vs lista</span>
                             <?php endif; ?>
                         </span>
-                        <?php if ($promoSavings > 0.009): ?>
-                            <span class="muted" style="font-size:.78rem">
-                                Con código promocional: <strong><?= money($publicPrice) ?></strong>
-                            </span>
+                        <?php if ($showAdvisorCta): ?>
+                            <?php if ($whatsappUrl !== null): ?>
+                                <a class="combo-advisor-link" href="<?= e($whatsappUrl) ?>" target="_blank" rel="noopener noreferrer"
+                                   onclick="event.stopPropagation()">
+                                    Contacta a un asesor para ver si existe algún código promocional vigente
+                                </a>
+                            <?php else: ?>
+                                <span class="muted" style="font-size:.78rem">
+                                    Contacta a un asesor para ver si existe algún código promocional vigente.
+                                </span>
+                            <?php endif; ?>
                         <?php endif; ?>
                         <?php if (!empty($c['items'])): ?>
                             <ul class="combo-item-prices muted">
@@ -88,35 +93,5 @@ $comboStepIntro = $comboStepIntro ?? false;
                 </span>
             </label>
         </div>
-    <?php endif; ?>
-
-    <?php if ($comboAddons !== []): ?>
-        <div class="combo-addon-section">
-            <div class="combo-addon-title">Armar a la carta</div>
-            <?php foreach ($comboAddons as $addon): ?>
-                <?php
-                $type = (string) ($addon['type'] ?? '');
-                $typeLabel = match ($type) {
-                    'course' => 'Curso',
-                    'certification' => 'Certificación',
-                    'procedure' => 'Trámite',
-                    default => 'Extra',
-                };
-                $addonList = (float) ($addon['list_price'] ?? 0);
-                if ($addonList <= 0) {
-                    $addonList = \App\Services\ComboAdminService::listPriceForItem($addon);
-                }
-                ?>
-                <label class="combo-addon-row">
-                    <input type="checkbox" class="combo-addon" value="<?= (int) $addon['id'] ?>"
-                           data-type="<?= e($type) ?>">
-                    <span>
-                        <strong><?= e($typeLabel) ?>:</strong> <?= e((string) $addon['name']) ?>
-                        <span class="muted" style="font-size:.8rem"> (<?= money($addonList) ?> lista)</span>
-                    </span>
-                </label>
-            <?php endforeach; ?>
-        </div>
-        <p class="muted" id="combo-match-hint" style="font-size:.82rem;margin:.65rem 0 0"></p>
     <?php endif; ?>
 </div>

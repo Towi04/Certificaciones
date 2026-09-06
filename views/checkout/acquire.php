@@ -15,9 +15,9 @@
 $catalogPrice = (float) ($quote['catalog'] ?? $product['catalog_price'] ?? 0);
 $basePrice = (float) ($quote['base'] ?? $catalogPrice);
 $comboOffers = $comboOffers ?? ['combos' => [], 'addons' => []];
-$comboAddons = $comboOffers['addons'] ?? [];
+$comboAddons = []; // Ya no se ofrece “a la carta”: solo combos armados.
 $comboList = $comboOffers['combos'] ?? [];
-$hasComboOffers = $comboList !== [] || $comboAddons !== [];
+$hasComboOffers = $comboList !== [];
 $maxComboSavings = 0.0;
 foreach ($comboList as $c) {
     $list = (float) ($c['list_price'] ?? $c['catalog_price'] ?? 0);
@@ -378,12 +378,11 @@ $stepLabels = [
   padding:.15rem .45rem; border-radius:999px;
 }
 .combo-item-prices { margin:.35rem 0 0; padding-left:1rem; font-size:.78rem; }
-.combo-addon-section { margin-top:.5rem; padding-top:.85rem; border-top:1px solid #e6ebf2; }
-.combo-addon-title { font-size:.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--doceo-muted); margin-bottom:.5rem; }
-.combo-addon-row {
-  display:flex; gap:.6rem; align-items:flex-start; padding:.5rem 0; font-size:.88rem; cursor:pointer;
+.combo-advisor-link {
+  display:inline-block; margin-top:.15rem; font-size:.78rem; font-weight:600;
+  color:#176b3a; text-decoration:underline; text-underline-offset:2px;
 }
-.combo-addon-row input { margin-top:.2rem; accent-color:var(--doceo-blue); }
+.combo-advisor-link:hover { color:#0f4f2a; }
 .sidebar-price .price { font-size:1.65rem; color:var(--doceo-blue); font-weight:800; }
 .price-strike { text-decoration:line-through; opacity:.55; font-size:1.2rem !important; }
 

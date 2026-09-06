@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Config\Env;
+
 use App\Auth\Auth;
 use App\Database\Connection;
 use App\Repositories\CertifierRepository;
@@ -1670,6 +1672,7 @@ public function promoCode(): void
             'title' => 'Código promocional DOCEO',
             'currentCode' => $active ? (string) $active['code'] : $currentCode,
             'active' => $active,
+            'whatsapp' => Settings::get('school_whatsapp', Env::get('SCHOOL_WHATSAPP', '')) ?? '',
             'layout' => 'admin',
         ]);
     }
@@ -1707,6 +1710,9 @@ public function promoCode(): void
             }
 
             Settings::set('doceo_promo_code', $newCode);
+
+            $wa = preg_replace('/\D+/', '', (string) ($_POST['school_whatsapp'] ?? '')) ?? '';
+            Settings::set('school_whatsapp', $wa);
             $pdo->commit();
             flash('success', 'Código promocional actualizado a ' . $newCode . '.');
         } catch (\Throwable $e) {
