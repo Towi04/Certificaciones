@@ -290,6 +290,8 @@ final class AdminController
             'defaultConfig' => $defaultConfig,
             'usedDocCodes' => (new ProductAdminService())->usedReglamentoDocCodes(null),
             'extras' => ProductAdminService::groupFormExtrasFromConfig((string) $defaultConfig),
+            'pipelines' => (new \App\Repositories\PipelineRepository())->allTemplates(),
+            'pipelineStepsByCode' => (new \App\Repositories\PipelineRepository())->stepsByTemplateCode(),
             'layout' => 'admin',
         ]);
     }
@@ -329,6 +331,7 @@ final class AdminController
             ProductGroupRepository::defaultCheckoutConfig(true),
             JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
         );
+        $pipelineRepo = new \App\Repositories\PipelineRepository();
         view('admin/product_group_form', [
             'usedDocCodes' => (new ProductAdminService())->usedReglamentoDocCodes((int) $id),
             'title' => 'Editar grupo · ' . $group['name'],
@@ -336,6 +339,8 @@ final class AdminController
             'suppliers' => (new SupplierRepository())->all(),
             'defaultConfig' => $defaultConfig,
             'extras' => ProductAdminService::groupFormExtrasFromConfig((string) ($group['config_json'] ?? '')),
+            'pipelines' => $pipelineRepo->allTemplates(),
+            'pipelineStepsByCode' => $pipelineRepo->stepsByTemplateCode(),
             'layout' => 'admin',
         ]);
     }

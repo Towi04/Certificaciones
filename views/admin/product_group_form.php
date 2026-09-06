@@ -40,7 +40,8 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
 </h1>
 <p class="muted">
     Configura lo compartido por varias certificaciones del mismo proveedor:
-    datos del alumno, días/horarios, reglamento y pagos.
+    datos del alumno, días/horarios, reglamento, pagos y la tarjeta de
+    <strong>Progreso</strong> del caso.
     Las <a href="<?= e(url('/admin/vacaciones')) ?>"><strong>vacaciones globales</strong></a>
     se publican una sola vez (excepto grupos marcados como 365 días).
 </p>
@@ -51,6 +52,7 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
     <button type="button" class="group-tab" data-tab="schedule" role="tab" aria-selected="false">Fechas y horarios</button>
     <button type="button" class="group-tab" data-tab="rules" role="tab" aria-selected="false">Reglamento</button>
     <button type="button" class="group-tab" data-tab="payments" role="tab" aria-selected="false">Pagos</button>
+    <button type="button" class="group-tab" data-tab="progress" role="tab" aria-selected="false">Progreso</button>
     <button type="button" class="group-tab" data-tab="advanced" role="tab" aria-selected="false">Experto</button>
 </nav>
 
@@ -404,6 +406,78 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
         </div>
     </div>
 
+    <?php
+    $pipelines = $pipelines ?? [];
+    $pipelineStepsByCode = $pipelineStepsByCode ?? [];
+    $selectedPipeline = (string) ($extras['pipeline_code'] ?? '');
+    $selectedInitialStep = (string) ($extras['initial_step_code'] ?? '');
+    ?>
+    <div class="group-panel" data-panel="progress" hidden>
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Progreso del caso</h2>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
+            Esta es la tarjeta de pasos que ve el alumno después de comprar
+            (Registro, Confirmación de pago, etc.). Elige una plantilla y edita
+            las etiquetas o el orden. Los productos de este grupo heredan este progreso.
+        </p>
+
+        <?php if ($pipelines === []): ?>
+            <div class="flash flash-error" style="margin:0">
+                No hay plantillas de progreso en la base de datos.
+                Ejecuta el seed del catálogo o carga grupos sugeridos para crearlas.
+            </div>
+        <?php else: ?>
+            <label class="muted" style="<?= e($labelStyle) ?>;max-width:34rem;margin-bottom:.85rem">
+                Plantilla de progreso
+                <select name="pipeline_code" id="pipeline-code-select" style="<?= e($inputStyle) ?>">
+                    <option value="">— Sin plantilla específica (usa la del tipo de producto) —</option>
+                    <?php foreach ($pipelines as $tpl): ?>
+                        <option value="<?= e((string) $tpl['code']) ?>"
+                            <?= $selectedPipeline === (string) $tpl['code'] ? 'selected' : '' ?>>
+                            <?= e((string) $tpl['name']) ?>
+                            (<?= e((string) $tpl['code']) ?> · <?= e((string) $tpl['product_type']) ?>)
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+
+            <label class="muted" style="<?= e($labelStyle) ?>;max-width:34rem;margin-bottom:1rem">
+                Paso inicial al crear el caso
+                <select name="initial_step_code" id="pipeline-initial-step" style="<?= e($inputStyle) ?>">
+                    <option value="">— Primero de la plantilla —</option>
+                </select>
+            </label>
+
+            <div style="display:flex;justify-content:space-between;gap:.75rem;align-items:center;flex-wrap:wrap;margin-bottom:.55rem">
+                <strong style="color:var(--doceo-blue)">Pasos (tarjeta del alumno)</strong>
+                <button type="button" class="btn btn-ghost btn-sm" id="pipeline-add-step">+ Agregar paso</button>
+            </div>
+            <p class="muted" style="font-size:.78rem;margin:0 0 .65rem">
+                Nota: al guardar, estos pasos actualizan la plantilla seleccionada.
+                Si otro grupo usa la misma plantilla, verá los mismos cambios.
+                No borres ni renombres códigos de pasos ya usados en casos existentes
+                (puedes cambiar solo la etiqueta visible).
+            </p>
+            <div class="table-wrap">
+                <table class="data" id="pipeline-steps-table">
+                    <thead>
+                    <tr>
+                        <th style="width:3rem">#</th>
+                        <th>Código</th>
+                        <th>Etiqueta (visible al alumno)</th>
+                        <th>Actor</th>
+                        <th>Final</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+                    <tbody id="pipeline-steps-body"></tbody>
+                </table>
+            </div>
+            <p id="pipeline-steps-empty" class="muted" style="display:none;margin:.5rem 0 0">
+                Elige una plantilla para editar sus pasos.
+            </p>
+        <?php endif; ?>
+    </div>
+
     <div class="group-panel" data-panel="advanced" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Modo experto (JSON)</h2>
         <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
@@ -413,8 +487,9 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
             sobre las mismas claves del JSON.
         </p>
         <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
-            Usa el JSON solo para opciones poco frecuentes (pipeline, documentos del expediente,
-            correos, etc.). Para campos del alumno usa la pestaña <strong>Datos del alumno</strong>.
+            Usa el JSON solo para opciones poco frecuentes (documentos del expediente,
+            correos, etc.). La tarjeta de progreso del alumno se configura en la pestaña
+            <strong>Progreso</strong>. Para campos del alumno usa <strong>Datos del alumno</strong>.
         </p>
         <details open>
             <summary style="cursor:pointer;font-weight:700;color:var(--doceo-blue)">Mostrar / editar JSON crudo</summary>
@@ -669,6 +744,13 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
       delete base.reglamento;
     }
 
+    var pipelineCode = val('pipeline_code', '');
+    if (pipelineCode) base.pipeline_code = pipelineCode;
+    else delete base.pipeline_code;
+    var initialStep = val('initial_step_code', '');
+    if (initialStep) base.initial_step_code = initialStep;
+    else delete base.initial_step_code;
+
     jsonTa.value = JSON.stringify(base, null, 2);
   }
 
@@ -859,6 +941,131 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
     });
   }
 
+
+  // ---- Editor de progreso (tarjeta del alumno) ----
+  var stepsByCode = <?= json_encode($pipelineStepsByCode ?? [], JSON_UNESCAPED_UNICODE) ?> || {};
+  var initialSelectedStep = <?= json_encode($selectedInitialStep ?? '', JSON_UNESCAPED_UNICODE) ?>;
+  var pipelineSelect = document.getElementById('pipeline-code-select');
+  var initialSelect = document.getElementById('pipeline-initial-step');
+  var stepsBody = document.getElementById('pipeline-steps-body');
+  var stepsEmpty = document.getElementById('pipeline-steps-empty');
+  var addStepBtn = document.getElementById('pipeline-add-step');
+  var actors = [
+    { value: 'system', label: 'Sistema' },
+    { value: 'admin', label: 'Admin' },
+    { value: 'student', label: 'Alumno' },
+    { value: 'partner', label: 'Partner' },
+    { value: 'provider', label: 'Proveedor' }
+  ];
+
+  function escapeHtml(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function currentStepsFromDom() {
+    if (!stepsBody) return [];
+    var rows = [];
+    stepsBody.querySelectorAll('tr').forEach(function (tr) {
+      var code = tr.querySelector('[data-field="code"]');
+      var label = tr.querySelector('[data-field="label"]');
+      var actor = tr.querySelector('[data-field="actor"]');
+      var term = tr.querySelector('[data-field="terminal"]');
+      rows.push({
+        code: code ? code.value : '',
+        label: label ? label.value : '',
+        actor: actor ? actor.value : 'admin',
+        is_terminal: !!(term && term.checked)
+      });
+    });
+    return rows;
+  }
+
+  function renderInitialOptions(steps, selected) {
+    if (!initialSelect) return;
+    var html = '<option value="">— Primero de la plantilla —</option>';
+    steps.forEach(function (s) {
+      var sel = selected && selected === s.code ? ' selected' : '';
+      html += '<option value="' + escapeHtml(s.code) + '"' + sel + '>' + escapeHtml(s.label || s.code) + '</option>';
+    });
+    initialSelect.innerHTML = html;
+  }
+
+  function renderSteps(steps) {
+    if (!stepsBody) return;
+    stepsBody.innerHTML = '';
+    if (!steps || !steps.length) {
+      if (stepsEmpty) stepsEmpty.style.display = 'block';
+      renderInitialOptions([], '');
+      return;
+    }
+    if (stepsEmpty) stepsEmpty.style.display = 'none';
+    steps.forEach(function (s, idx) {
+      var tr = document.createElement('tr');
+      var actorOpts = actors.map(function (a) {
+        return '<option value="' + a.value + '"' + ((s.actor || 'admin') === a.value ? ' selected' : '') + '>' + a.label + '</option>';
+      }).join('');
+      tr.innerHTML =
+        '<td class="muted">' + (idx + 1) + '</td>' +
+        '<td><input data-field="code" name="pipeline_steps[' + idx + '][code]" value="' + escapeHtml(s.code || '') + '" ' +
+          'style="width:100%;min-width:7rem;padding:.35rem .45rem;border:1px solid #cfd8e6;border-radius:8px;font:inherit" required></td>' +
+        '<td><input data-field="label" name="pipeline_steps[' + idx + '][label]" value="' + escapeHtml(s.label || '') + '" ' +
+          'style="width:100%;min-width:12rem;padding:.35rem .45rem;border:1px solid #cfd8e6;border-radius:8px;font:inherit" required></td>' +
+        '<td><select data-field="actor" name="pipeline_steps[' + idx + '][actor]" ' +
+          'style="padding:.35rem .45rem;border:1px solid #cfd8e6;border-radius:8px;font:inherit">' + actorOpts + '</select></td>' +
+        '<td style="text-align:center"><input data-field="terminal" type="checkbox" name="pipeline_steps[' + idx + '][is_terminal]" value="1"' +
+          (s.is_terminal == 1 || s.is_terminal === true ? ' checked' : '') + '></td>' +
+        '<td><button type="button" class="btn btn-ghost btn-sm pipeline-remove-step" title="Quitar">✕</button></td>';
+      stepsBody.appendChild(tr);
+    });
+    renderInitialOptions(steps, initialSelectedStep || (initialSelect && initialSelect.value) || '');
+  }
+
+  function loadPipeline(code) {
+    if (!code) {
+      renderSteps([]);
+      if (stepsEmpty) {
+        stepsEmpty.style.display = 'block';
+        stepsEmpty.textContent = 'Elige una plantilla para editar sus pasos.';
+      }
+      return;
+    }
+    var steps = (stepsByCode[code] || []).map(function (s) {
+      return {
+        code: s.code || '',
+        label: s.label || '',
+        actor: s.actor || 'admin',
+        is_terminal: s.is_terminal
+      };
+    });
+    renderSteps(steps);
+  }
+
+  if (pipelineSelect) {
+    pipelineSelect.addEventListener('change', function () {
+      initialSelectedStep = '';
+      loadPipeline(pipelineSelect.value);
+    });
+    loadPipeline(pipelineSelect.value);
+  }
+  if (addStepBtn) {
+    addStepBtn.addEventListener('click', function () {
+      var steps = currentStepsFromDom();
+      steps.push({ code: '', label: '', actor: 'admin', is_terminal: false });
+      renderSteps(steps);
+    });
+  }
+  if (stepsBody) {
+    stepsBody.addEventListener('click', function (e) {
+      var btn = e.target.closest('.pipeline-remove-step');
+      if (!btn) return;
+      var tr = btn.closest('tr');
+      if (tr) tr.remove();
+      var steps = currentStepsFromDom();
+      renderSteps(steps);
+    });
+  }
 
 })();
 </script>
