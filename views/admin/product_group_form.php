@@ -40,7 +40,8 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
 </h1>
 <p class="muted">
     Configura lo compartido por varias certificaciones del mismo proveedor:
-    datos del alumno, días/horarios, reglamento y pagos.
+    datos del alumno, días/horarios, reglamento, pagos y la tarjeta de
+    <strong>Progreso</strong> del caso.
     Las <a href="<?= e(url('/admin/vacaciones')) ?>"><strong>vacaciones globales</strong></a>
     se publican una sola vez (excepto grupos marcados como 365 días).
 </p>
