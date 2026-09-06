@@ -44,11 +44,11 @@
                     <td><?= (int) ($counts[(int) $g['id']] ?? 0) ?></td>
                     <td>
                         <span class="row-actions">
-                            <a class="icon-btn" href="<?= e(url('/admin/grupos/' . $g['id'])) ?>" title="Editar" aria-label="Editar">✏️</a>
+                            <a class="icon-btn" href="<?= e(url('/admin/grupos/' . $g['id'])) ?>" title="Editar" aria-label="Editar"><?= icon('edit') ?></a>
                             <form class="icon-btn-form" method="post" action="<?= e(url('/admin/grupos/' . $g['id'] . '/eliminar')) ?>"
                                   onsubmit="return confirm('¿Eliminar este grupo? Solo si no tiene productos.');">
                                 <?= csrf_field() ?>
-                                <button class="icon-btn icon-btn--danger" type="submit" title="Eliminar" aria-label="Eliminar">🗑️</button>
+                                <button class="icon-btn icon-btn--danger" type="submit" title="Eliminar" aria-label="Eliminar"><?= icon('trash') ?></button>
                             </form>
                         </span>
                     </td>
