@@ -848,9 +848,7 @@ $stepLabels = [
       }
       return;
     }
-    let html = '<table class="combo-breakdown-table"><thead><tr>'
-      + '<th>Incluye</th><th class="num">Lista</th><th class="num">En paquete</th>'
-      + '</tr></thead><tbody>';
+    let html = '<table class="combo-breakdown-table"><tbody>';
     breakdown.items.forEach(function (it) {
       html += '<tr>'
         + '<td>' + escapeHtml(it.name) + '</td>'
@@ -921,9 +919,10 @@ $stepLabels = [
         if (errEl) errEl.style.display = 'none';
         quoteData = data.quote;
         if (labelEl) {
-          labelEl.textContent = data.matched
-            ? ((data.combo && data.combo.name ? data.combo.name + ' · ' : 'Combo · ') + (data.quote.label || 'Precio combo'))
-            : (data.quote.label || 'Precio de lista');
+          // Solo el nombre del paquete (sin “· Precio de paquete” / “· Código promocional …”).
+          labelEl.textContent = data.matched && data.combo && data.combo.name
+            ? String(data.combo.name)
+            : '';
         }
         if (comboIdInput && data.matched && data.combo_id) {
           comboIdInput.value = String(data.combo_id);

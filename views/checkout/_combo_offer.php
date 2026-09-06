@@ -15,7 +15,6 @@ $whatsappUrl = \App\Support\Settings::schoolWhatsappPromoUrl($productName);
             <p class="muted" style="margin:0;font-size:.9rem;max-width:40rem">
                 Elige un paquete armado o continúa solo con
                 <strong><?= e($productName) ?></strong>.
-                El detalle y el ahorro se muestran a la derecha.
             </p>
         </div>
     <?php else: ?>
@@ -26,6 +25,20 @@ $whatsappUrl = \App\Support\Settings::schoolWhatsappPromoUrl($productName);
     <?php endif; ?>
 
     <?php if ($comboList !== []): ?>
+        <?php
+        usort($comboList, static function (array $a, array $b): int {
+            $priceOf = static function (array $c): float {
+                $list = (float) ($c['list_price'] ?? $c['catalog_price'] ?? 0);
+                if ($list <= 0) {
+                    $list = (float) ($c['public_price'] ?? 0);
+                }
+
+                return $list;
+            };
+
+            return $priceOf($b) <=> $priceOf($a); // mayor → menor
+        });
+        ?>
         <div class="combo-tiles" role="group" aria-label="Paquetes disponibles">
             <?php foreach ($comboList as $c): ?>
                 <?php
