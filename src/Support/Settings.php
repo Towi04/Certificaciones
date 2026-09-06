@@ -72,4 +72,34 @@ final class Settings
         return self::get('default_student_password', Env::get('MOODLE_DEFAULT_PASSWORD', 'Doceo*1234'))
             ?? 'Doceo*1234';
     }
+
+    /**
+     * WhatsApp de la escuela (solo dígitos, con código de país).
+     * Preferencia: settings.school_whatsapp → env SCHOOL_WHATSAPP.
+     */
+    public static function schoolWhatsapp(): string
+    {
+        $raw = self::get('school_whatsapp', Env::get('SCHOOL_WHATSAPP', '')) ?? '';
+        return preg_replace('/\D+/', '', $raw) ?? '';
+    }
+
+    /**
+     * URL wa.me para pedir código promocional a un asesor.
+     * Null si no hay número configurado.
+     */
+    public static function schoolWhatsappPromoUrl(?string $productName = null): ?string
+    {
+        $phone = self::schoolWhatsapp();
+        if ($phone === '') {
+            return null;
+        }
+
+        $msg = 'Hola, me interesa saber si hay algún código promocional vigente';
+        if ($productName !== null && trim($productName) !== '') {
+            $msg .= ' para ' . trim($productName);
+        }
+        $msg .= '.';
+
+        return 'https://wa.me/' . $phone . '?text=' . rawurlencode($msg);
+    }
 }

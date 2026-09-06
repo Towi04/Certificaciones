@@ -74,7 +74,16 @@ $youtubeThumb = static function (array $item): ?string {
                             <?php endif; ?>
                         </li>
                         <?php if ($bestPublic > 0 && $bestList > $bestPublic + 0.009): ?>
-                            <li>Con código promocional: <?= money($bestPublic) ?></li>
+                            <?php $wa = \App\Support\Settings::schoolWhatsappPromoUrl((string) ($product['name'] ?? '')); ?>
+                            <li>
+                                <?php if ($wa !== null): ?>
+                                    <a href="<?= e($wa) ?>" target="_blank" rel="noopener noreferrer">
+                                        Contacta a un asesor para ver si existe algún código promocional vigente
+                                    </a>
+                                <?php else: ?>
+                                    Contacta a un asesor para ver si existe algún código promocional vigente.
+                                <?php endif; ?>
+                            </li>
                         <?php endif; ?>
                     </ul>
                 </div>
