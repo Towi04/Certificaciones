@@ -371,6 +371,25 @@ final class AdminController
         }
     }
 
+    public function updateCheckoutField(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        header('Content-Type: application/json; charset=UTF-8');
+        try {
+            $code = (string) ($_POST['code'] ?? '');
+            $label = trim((string) ($_POST['label'] ?? ''));
+            $type = (string) ($_POST['type'] ?? 'text');
+            $required = !empty($_POST['required']);
+            $field = CheckoutRequirements::updateCustomField($code, $label, $type, $required);
+            echo json_encode(['ok' => true, 'field' => $field], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            http_response_code(422);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
+
 
     public function productGroupsSeed(): void
     {

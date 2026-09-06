@@ -28,6 +28,9 @@ $msiMonths = is_array($extras['msi_months'] ?? null) ? array_map('intval', $extr
 $checkoutFields = is_array($extras['checkout_fields'] ?? null)
     ? $extras['checkout_fields']
     : ['email', 'first_name', 'last_name_p', 'last_name_m', 'phone'];
+$checkoutFieldRequired = is_array($extras['checkout_field_required'] ?? null)
+    ? $extras['checkout_field_required']
+    : [];
 $alwaysFields = ['email', 'first_name', 'last_name_p', 'phone'];
 $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
 ?>
@@ -102,8 +105,9 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
     <div class="group-panel" data-panel="fields" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Datos que se piden al alumno</h2>
         <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
-            Marca qué información debe capturar el alumno al adquirir productos de este grupo.
-            No necesitas editar JSON: estos campos aparecen en el paso <strong>Datos</strong> del checkout.
+            Marca qué información debe capturar el alumno y, para cada campo, si es
+            <strong>obligatorio</strong> u <strong>opcional</strong> cuando se pide.
+            Los campos personalizados se pueden editar (nombre, tipo y default) y quedan disponibles en todos los grupos.
         </p>
         <div class="field-check-grid" id="checkout-field-grid">
             <?php foreach ($fieldMeta as $code => $meta): ?>
@@ -111,27 +115,49 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
                 $locked = in_array($code, $alwaysFields, true);
                 $checked = $locked || in_array($code, $checkoutFields, true);
                 $isCustom = !empty($meta['custom']);
+                $defaultRequired = !empty($meta['required']);
+                $isRequired = array_key_exists($code, $checkoutFieldRequired)
+                    ? !empty($checkoutFieldRequired[$code])
+                    : $defaultRequired;
                 ?>
-                <label class="field-check<?= $locked ? ' field-check--locked' : '' ?>" data-field-code="<?= e($code) ?>">
-                    <?php if ($locked): ?>
-                        <input type="hidden" name="checkout_fields[]" value="<?= e($code) ?>">
-                        <input type="checkbox" checked disabled>
-                    <?php else: ?>
-                        <input type="checkbox" name="checkout_fields[]" value="<?= e($code) ?>"
-                            <?= $checked ? 'checked' : '' ?>>
-                    <?php endif; ?>
-                    <span>
-                        <strong><?= e((string) $meta['label']) ?></strong>
-                        <?php if ($isCustom): ?>
-                            <span class="field-custom-badge">Personalizado</span>
+                <div class="field-check<?= $locked ? ' field-check--locked' : '' ?>" data-field-code="<?= e($code) ?>" data-custom="<?= $isCustom ? '1' : '0' ?>">
+                    <label class="field-check-main">
+                        <?php if ($locked): ?>
+                            <input type="hidden" name="checkout_fields[]" value="<?= e($code) ?>">
+                            <input type="checkbox" checked disabled>
+                        <?php else: ?>
+                            <input type="checkbox" class="field-include" name="checkout_fields[]" value="<?= e($code) ?>"
+                                <?= $checked ? 'checked' : '' ?>>
                         <?php endif; ?>
-                        <span class="muted" style="display:block;font-size:.75rem;font-weight:500">
-                            <?= $locked
-                                ? 'Obligatorio en toda compra'
-                                : (!empty($meta['required']) ? 'Requerido si se pide' : 'Opcional para el alumno') ?>
+                        <span>
+                            <strong class="field-label-text"><?= e((string) $meta['label']) ?></strong>
+                            <?php if ($isCustom): ?>
+                                <span class="field-custom-badge">Personalizado</span>
+                            <?php endif; ?>
                         </span>
-                    </span>
-                </label>
+                    </label>
+                    <?php if ($locked): ?>
+                        <span class="muted" style="display:block;font-size:.75rem;font-weight:500;margin:.25rem 0 0 1.55rem">
+                            Obligatorio en toda compra
+                        </span>
+                    <?php else: ?>
+                        <label class="field-required-toggle muted">
+                            Si se pide:
+                            <select name="checkout_field_required[<?= e($code) ?>]" class="field-required-select">
+                                <option value="1" <?= $isRequired ? 'selected' : '' ?>>Obligatorio</option>
+                                <option value="0" <?= !$isRequired ? 'selected' : '' ?>>Opcional</option>
+                            </select>
+                        </label>
+                        <?php if ($isCustom): ?>
+                            <button type="button" class="btn-link field-edit-btn" data-code="<?= e($code) ?>"
+                                    data-label="<?= e((string) $meta['label']) ?>"
+                                    data-type="<?= e((string) ($meta['type'] ?? 'text')) ?>"
+                                    data-required="<?= $defaultRequired ? '1' : '0' ?>">
+                                Editar campo
+                            </button>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
             <?php endforeach; ?>
         </div>
 
@@ -159,15 +185,58 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
                         <option value="number">Número</option>
                     </select>
                 </label>
-                <label class="muted" style="display:flex;align-items:center;gap:.45rem;font-size:.82rem;font-weight:600;padding-bottom:.45rem">
-                    <input type="checkbox" name="new_checkout_field_required" id="new_checkout_field_required" value="1">
-                    Requerido si se pide
+                <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
+                    Si se pide
+                    <select name="new_checkout_field_required" id="new_checkout_field_required"
+                            style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                        <option value="1" selected>Obligatorio</option>
+                        <option value="0">Opcional</option>
+                    </select>
                 </label>
                 <div style="padding-bottom:.15rem">
                     <button type="button" class="btn btn-ghost" id="add-checkout-field-btn">Agregar a la lista</button>
                 </div>
             </div>
             <p class="muted" id="add-checkout-field-msg" style="margin:.55rem 0 0;font-size:.78rem;display:none"></p>
+        </div>
+
+        <div id="edit-checkout-field-panel" hidden style="margin-top:1rem;padding:1rem;border:1px solid #9db7e8;border-radius:14px;background:#fff">
+            <h3 style="margin:0 0 .35rem;font-size:.95rem;color:var(--doceo-blue)">Editar campo personalizado</h3>
+            <p class="muted" style="margin:0 0 .75rem;font-size:.8rem">
+                Los cambios aplican al catálogo global (todos los grupos).
+            </p>
+            <input type="hidden" id="edit_checkout_field_code" value="">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.65rem;align-items:end">
+                <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
+                    Nombre *
+                    <input type="text" id="edit_checkout_field_label"
+                           style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                </label>
+                <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
+                    Tipo
+                    <select id="edit_checkout_field_type"
+                            style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                        <option value="text">Texto</option>
+                        <option value="email">Correo</option>
+                        <option value="tel">Teléfono</option>
+                        <option value="date">Fecha</option>
+                        <option value="number">Número</option>
+                    </select>
+                </label>
+                <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
+                    Default si se pide
+                    <select id="edit_checkout_field_required"
+                            style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                        <option value="1">Obligatorio</option>
+                        <option value="0">Opcional</option>
+                    </select>
+                </label>
+                <div style="display:flex;gap:.5rem;padding-bottom:.15rem">
+                    <button type="button" class="btn btn-accent" id="save-checkout-field-btn">Guardar cambios</button>
+                    <button type="button" class="btn btn-ghost" id="cancel-edit-checkout-field-btn">Cancelar</button>
+                </div>
+            </div>
+            <p class="muted" id="edit-checkout-field-msg" style="margin:.55rem 0 0;font-size:.78rem;display:none"></p>
         </div>
     </div>
 
@@ -388,7 +457,21 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
     cursor:pointer; font-size:.88rem;
 }
 .field-check:has(input:checked) { background:#eef4ff; border-color:#9db7e8; }
-.field-custom-badge{display:inline-block;margin-left:.35rem;padding:.05rem .4rem;border-radius:999px;background:#e8f0ff;color:#2a4d8f;font-size:.68rem;font-weight:700;vertical-align:middle}.field-check--locked { opacity:.92; cursor:default; background:#f7f9fc; }
+.field-custom-badge{display:inline-block;margin-left:.35rem;padding:.05rem .4rem;border-radius:999px;background:#e8f0ff;color:#2a4d8f;font-size:.68rem;font-weight:700;vertical-align:middle}
+.field-check-main { display:flex; gap:.65rem; align-items:flex-start; cursor:pointer; }
+.field-required-toggle {
+  display:flex; gap:.4rem; align-items:center; margin:.35rem 0 0 1.55rem;
+  font-size:.75rem; font-weight:600;
+}
+.field-required-select {
+  font:inherit; font-size:.75rem; padding:.2rem .4rem; border:1px solid #cfd8e6; border-radius:8px;
+}
+.btn-link {
+  background:none; border:0; color:var(--doceo-blue); cursor:pointer; font:inherit;
+  font-size:.75rem; font-weight:700; text-decoration:underline; margin:.25rem 0 0 1.55rem; padding:0;
+}
+.btn-link:hover { color:#1a3f73; }
+.field-check--locked { opacity:.92; cursor:default; background:#f7f9fc; }
 .field-check input { margin-top:.15rem; accent-color:var(--doceo-blue); }
 #reglamento_doc_code.is-duplicate { border-color:#d64545 !important; background:#fff5f5; color:#a11; }
 .doc-code-error { color:#c0392b; font-weight:700; }
@@ -492,6 +575,16 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
     });
     return out;
   }
+  function selectedFieldRequiredMap() {
+    var map = {};
+    var selected = selectedFields();
+    selected.forEach(function (code) {
+      if (['email', 'first_name', 'last_name_p', 'phone'].indexOf(code) !== -1) return;
+      var sel = form && form.querySelector('select[name="checkout_field_required[' + code + ']"]');
+      if (sel) map[code] = sel.value === '1';
+    });
+    return map;
+  }
   function selectedDays() {
     var days = {};
     [0, 1, 2, 3, 4, 5, 6].forEach(function (d) {
@@ -528,6 +621,7 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
     if (typeof base !== 'object' || Array.isArray(base) || base === null) base = {};
 
     base.checkout_fields = selectedFields();
+    base.checkout_field_required = selectedFieldRequiredMap();
     base.exam = Object.assign({}, base.exam || {}, {
       choose_at_checkout: checked('exam_choose_at_checkout'),
       slot_minutes: Math.max(15, intVal('exam_slot_minutes', 30)),
@@ -596,31 +690,58 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
   var addFieldBtn = document.getElementById('add-checkout-field-btn');
   var addFieldMsg = document.getElementById('add-checkout-field-msg');
   var fieldGrid = document.getElementById('checkout-field-grid');
+  var editPanel = document.getElementById('edit-checkout-field-panel');
+  var editMsg = document.getElementById('edit-checkout-field-msg');
+
   function showAddFieldMsg(text, isError) {
     if (!addFieldMsg) return;
     addFieldMsg.style.display = 'block';
     addFieldMsg.style.color = isError ? '#b42318' : '#176b3a';
     addFieldMsg.textContent = text;
   }
+  function showEditFieldMsg(text, isError) {
+    if (!editMsg) return;
+    editMsg.style.display = 'block';
+    editMsg.style.color = isError ? '#b42318' : '#176b3a';
+    editMsg.textContent = text;
+  }
+  function csrfToken() {
+    var csrf = form && (form.querySelector('input[name="_csrf"]') || form.querySelector('input[name="csrf_token"]'));
+    return csrf ? csrf.value : '';
+  }
   function appendFieldCard(field) {
     if (!fieldGrid || !field || !field.code) return;
-    if (fieldGrid.querySelector('[data-field-code="' + field.code + '"]')) {
-      var existing = fieldGrid.querySelector('[data-field-code="' + field.code + '"] input[type="checkbox"]');
-      if (existing) existing.checked = true;
+    var existingCard = fieldGrid.querySelector('[data-field-code="' + field.code + '"]');
+    if (existingCard) {
+      var existing = existingCard.querySelector('input.field-include');
+      if (existing && !existing.disabled) existing.checked = true;
+      var reqSel = existingCard.querySelector('.field-required-select');
+      if (reqSel) reqSel.value = field.required ? '1' : '0';
+      var strong = existingCard.querySelector('.field-label-text');
+      if (strong && field.label) strong.textContent = field.label;
       return;
     }
-    var label = document.createElement('label');
-    label.className = 'field-check';
-    label.setAttribute('data-field-code', field.code);
-    var reqNote = field.required ? 'Requerido si se pide' : 'Opcional para el alumno';
-    label.innerHTML = ''
-      + '<input type="checkbox" name="checkout_fields[]" value="' + field.code + '" checked>'
-      + '<span><strong></strong>'
-      + '<span class="field-custom-badge">Personalizado</span>'
-      + '<span class="muted" style="display:block;font-size:.75rem;font-weight:500"></span></span>';
-    label.querySelector('strong').textContent = field.label || field.code;
-    label.querySelectorAll('.muted')[0].textContent = reqNote;
-    fieldGrid.appendChild(label);
+    var card = document.createElement('div');
+    card.className = 'field-check';
+    card.setAttribute('data-field-code', field.code);
+    card.setAttribute('data-custom', '1');
+    card.innerHTML = ''
+      + '<label class="field-check-main">'
+      + '<input type="checkbox" class="field-include" name="checkout_fields[]" value="' + field.code + '" checked>'
+      + '<span><strong class="field-label-text"></strong>'
+      + '<span class="field-custom-badge">Personalizado</span></span></label>'
+      + '<label class="field-required-toggle muted">Si se pide: '
+      + '<select name="checkout_field_required[' + field.code + ']" class="field-required-select">'
+      + '<option value="1">Obligatorio</option><option value="0">Opcional</option></select></label>'
+      + '<button type="button" class="btn-link field-edit-btn">Editar campo</button>';
+    card.querySelector('.field-label-text').textContent = field.label || field.code;
+    card.querySelector('.field-required-select').value = field.required ? '1' : '0';
+    var editBtn = card.querySelector('.field-edit-btn');
+    editBtn.setAttribute('data-code', field.code);
+    editBtn.setAttribute('data-label', field.label || field.code);
+    editBtn.setAttribute('data-type', field.type || 'text');
+    editBtn.setAttribute('data-required', field.required ? '1' : '0');
+    fieldGrid.appendChild(card);
   }
   if (addFieldBtn) {
     addFieldBtn.addEventListener('click', function () {
@@ -635,11 +756,10 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
       }
       addFieldBtn.disabled = true;
       var body = new FormData();
-      var csrf = form && form.querySelector('input[name="_csrf"]');
-      if (csrf) body.append('_csrf', csrf.value);
+      body.append('_csrf', csrfToken());
       body.append('label', label);
       body.append('type', typeEl ? typeEl.value : 'text');
-      if (reqEl && reqEl.checked) body.append('required', '1');
+      if (reqEl && String(reqEl.value) === '1') body.append('required', '1');
       fetch(<?= json_encode(url('/admin/campos-checkout')) ?>, {
         method: 'POST',
         body: body,
@@ -652,7 +772,7 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
           }
           appendFieldCard(res.data.field);
           if (labelEl) labelEl.value = '';
-          if (reqEl) reqEl.checked = false;
+          if (reqEl) reqEl.value = '1';
           showAddFieldMsg('Campo agregado al catálogo global y marcado en este grupo.', false);
           if (typeof syncJsonFromTabs === 'function') syncJsonFromTabs();
         })
@@ -662,6 +782,83 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
         .finally(function () { addFieldBtn.disabled = false; });
     });
   }
+
+  function openEditPanel(btn) {
+    if (!editPanel || !btn) return;
+    document.getElementById('edit_checkout_field_code').value = btn.getAttribute('data-code') || '';
+    document.getElementById('edit_checkout_field_label').value = btn.getAttribute('data-label') || '';
+    document.getElementById('edit_checkout_field_type').value = btn.getAttribute('data-type') || 'text';
+    document.getElementById('edit_checkout_field_required').value = btn.getAttribute('data-required') === '1' ? '1' : '0';
+    editPanel.hidden = false;
+    if (editMsg) editMsg.style.display = 'none';
+    editPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  if (fieldGrid) {
+    fieldGrid.addEventListener('click', function (e) {
+      var btn = e.target.closest('.field-edit-btn');
+      if (!btn) return;
+      e.preventDefault();
+      openEditPanel(btn);
+    });
+  }
+  var cancelEditBtn = document.getElementById('cancel-edit-checkout-field-btn');
+  if (cancelEditBtn) {
+    cancelEditBtn.addEventListener('click', function () {
+      if (editPanel) editPanel.hidden = true;
+    });
+  }
+  var saveEditBtn = document.getElementById('save-checkout-field-btn');
+  if (saveEditBtn) {
+    saveEditBtn.addEventListener('click', function () {
+      var code = document.getElementById('edit_checkout_field_code').value;
+      var label = String(document.getElementById('edit_checkout_field_label').value || '').trim();
+      var type = document.getElementById('edit_checkout_field_type').value || 'text';
+      var required = document.getElementById('edit_checkout_field_required').value === '1';
+      if (!code || !label) {
+        showEditFieldMsg('Indica el nombre del campo.', true);
+        return;
+      }
+      saveEditBtn.disabled = true;
+      var body = new FormData();
+      body.append('_csrf', csrfToken());
+      body.append('code', code);
+      body.append('label', label);
+      body.append('type', type);
+      if (required) body.append('required', '1');
+      fetch(<?= json_encode(url('/admin/campos-checkout/editar')) ?>, {
+        method: 'POST',
+        body: body,
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' }
+      }).then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.data || !res.data.ok) {
+            throw new Error((res.data && res.data.error) || 'No se pudo guardar el campo.');
+          }
+          var field = res.data.field;
+          var card = fieldGrid && fieldGrid.querySelector('[data-field-code="' + field.code + '"]');
+          if (card) {
+            var strong = card.querySelector('.field-label-text');
+            if (strong) strong.textContent = field.label;
+            var reqSel = card.querySelector('.field-required-select');
+            if (reqSel) reqSel.value = field.required ? '1' : '0';
+            var editBtn = card.querySelector('.field-edit-btn');
+            if (editBtn) {
+              editBtn.setAttribute('data-label', field.label);
+              editBtn.setAttribute('data-type', field.type);
+              editBtn.setAttribute('data-required', field.required ? '1' : '0');
+            }
+          }
+          showEditFieldMsg('Campo actualizado en el catálogo global.', false);
+          if (typeof syncJsonFromTabs === 'function') syncJsonFromTabs();
+        })
+        .catch(function (err) {
+          showEditFieldMsg(err.message || 'Error al guardar.', true);
+        })
+        .finally(function () { saveEditBtn.disabled = false; });
+    });
+  }
+
 
 })();
 </script>
