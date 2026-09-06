@@ -229,17 +229,20 @@ table.data th, table.data td {
 }
 table.data th { color: var(--doceo-blue); font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }
 
-.app-shell { display: grid; grid-template-columns: 230px 1fr; min-height: 100vh; transition: grid-template-columns .18s ease; }
-.app-shell--nav-collapsed { grid-template-columns: 72px 1fr; }
-html.admin-nav-collapsed-boot .app-shell { grid-template-columns: 72px 1fr; }
-@media (max-width: 900px) {
-  .app-shell,
-  .app-shell--nav-collapsed,
-  html.admin-nav-collapsed-boot .app-shell { grid-template-columns: 1fr; }
+.app-shell {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  min-height: 100vh;
+  transition: grid-template-columns .18s ease;
+}
+.app-shell--nav-collapsed,
+html.admin-nav-collapsed-boot .app-shell {
+  grid-template-columns: 72px minmax(0, 1fr);
 }
 .side-nav {
   background: var(--doceo-blue); color: #fff; padding: 1rem .75rem 1.2rem;
   display: flex; flex-direction: column; min-height: 100vh; position: sticky; top: 0;
+  min-width: 0;
 }
 .side-nav-top {
   display: flex; align-items: flex-start; justify-content: space-between; gap: .35rem;
@@ -257,8 +260,11 @@ html.admin-nav-collapsed-boot .app-shell { grid-template-columns: 72px 1fr; }
   flex-shrink: 0; width: 2rem; height: 2rem; border: 0; border-radius: 8px;
   background: rgba(255,255,255,.12); color: #fff; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  appearance: none; -webkit-appearance: none; box-shadow: none; line-height: 0;
 }
+.nav-collapse-btn svg { display: block; pointer-events: none; }
 .nav-collapse-btn:hover { background: rgba(255,255,255,.22); }
+.nav-collapse-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .side-nav-links { display: flex; flex-direction: column; gap: .15rem; flex: 1; }
 .side-nav-link {
   display: flex; align-items: center; gap: .65rem; color: #fff;
@@ -278,11 +284,28 @@ html.admin-nav-collapsed-boot .app-shell { grid-template-columns: 72px 1fr; }
 
 /* Modo colapsado: solo iconos */
 .app-shell--nav-collapsed .side-nav,
-html.admin-nav-collapsed-boot .side-nav { padding-left: .55rem; padding-right: .55rem; }
+html.admin-nav-collapsed-boot .side-nav {
+  padding-left: .45rem;
+  padding-right: .45rem;
+  overflow: hidden;
+  width: 72px;
+  max-width: 72px;
+  box-sizing: border-box;
+}
 .app-shell--nav-collapsed .brand-mini-text,
 .app-shell--nav-collapsed .side-nav-label,
 html.admin-nav-collapsed-boot .brand-mini-text,
-html.admin-nav-collapsed-boot .side-nav-label { display: none; }
+html.admin-nav-collapsed-boot .side-nav-label { display: none !important; }
+.app-shell--nav-collapsed .brand-mini,
+html.admin-nav-collapsed-boot .brand-mini {
+  justify-content: center;
+  width: 100%;
+}
+.app-shell--nav-collapsed .brand-mini img,
+html.admin-nav-collapsed-boot .brand-mini img {
+  width: 36px;
+  height: 36px;
+}
 .app-shell--nav-collapsed .side-nav-top,
 html.admin-nav-collapsed-boot .side-nav-top {
   flex-direction: column; align-items: center; gap: .5rem;
@@ -294,7 +317,7 @@ html.admin-nav-collapsed-boot .side-nav-link {
 .app-shell--nav-collapsed .nav-collapse-btn,
 html.admin-nav-collapsed-boot .nav-collapse-btn { width: 100%; }
 
-.app-main { padding: 1.25rem; }
+.app-main { padding: 1.25rem; min-width: 0; }
 .muted { color: var(--doceo-muted); }
 .login-wrap {
   min-height: 100vh; display: grid; place-items: center; padding: 1.5rem;
@@ -315,11 +338,21 @@ html.admin-nav-collapsed-boot .nav-collapse-btn { width: 100%; }
   object-fit: contain;
 }
 @media (max-width: 900px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .app-shell--nav-collapsed,
+  html.admin-nav-collapsed-boot .app-shell {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
   .side-nav { position: static; min-height: auto; }
+  .app-shell--nav-collapsed .side-nav,
+  html.admin-nav-collapsed-boot .side-nav {
+    position: sticky;
+    top: 0;
+    min-height: 100vh;
+  }
   .app-main .stats + div[style*="grid-template-columns"] {
     grid-template-columns: 1fr !important;
   }
-  /* En móvil no forzar solo-iconos: el toggle sigue funcionando, pero el menú no queda pegajoso estrecho */
 }
 
 .pill {
@@ -356,27 +389,58 @@ html.admin-nav-collapsed-boot .nav-collapse-btn { width: 100%; }
   justify-content: center;
   width: 1.85rem;
   height: 1.85rem;
-  border: 0;
+  border: none !important;
   border-radius: 8px;
-  background: transparent;
+  background: transparent !important;
   text-decoration: none !important;
-  line-height: 1;
+  line-height: 0;
   cursor: pointer;
   padding: 0;
-  color: var(--doceo-blue);
+  margin: 0;
+  color: var(--doceo-blue) !important;
   opacity: .88;
+  box-shadow: none !important;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
   transition: background .12s ease, color .12s ease, opacity .12s ease;
 }
-.icon-btn svg { display: block; }
+.icon-btn svg {
+  display: block;
+  pointer-events: none;
+  fill: none;
+  stroke: currentColor;
+}
 .icon-btn:hover {
-  background: rgba(49, 82, 133, .1);
-  color: var(--doceo-blue-dark);
+  background: rgba(49, 82, 133, .1) !important;
+  color: var(--doceo-blue-dark) !important;
   opacity: 1;
 }
-button.icon-btn { font: inherit; }
-.icon-btn--danger { color: var(--doceo-blue); }
-.icon-btn--danger:hover {
-  background: rgba(49, 82, 133, .1);
-  color: var(--doceo-blue-dark);
+.icon-btn:focus-visible {
+  outline: 2px solid rgba(49, 82, 133, .35);
+  outline-offset: 1px;
 }
-.icon-btn-form { display: inline; margin: 0; }
+a.icon-btn,
+button.icon-btn {
+  font: inherit;
+  color: var(--doceo-blue) !important;
+}
+/* Compatibilidad: misma apariencia que editar (sin rojo ni borde) */
+.icon-btn--danger,
+.icon-btn--danger:hover {
+  color: var(--doceo-blue) !important;
+  background: transparent !important;
+  border: none !important;
+}
+.icon-btn--danger:hover {
+  background: rgba(49, 82, 133, .1) !important;
+  color: var(--doceo-blue-dark) !important;
+}
+.icon-btn-form {
+  display: inline-flex;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}

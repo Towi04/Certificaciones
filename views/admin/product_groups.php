@@ -48,7 +48,7 @@
                             <form class="icon-btn-form" method="post" action="<?= e(url('/admin/grupos/' . $g['id'] . '/eliminar')) ?>"
                                   onsubmit="return confirm('¿Eliminar este grupo? Solo si no tiene productos.');">
                                 <?= csrf_field() ?>
-                                <button class="icon-btn icon-btn--danger" type="submit" title="Eliminar" aria-label="Eliminar"><?= icon('trash') ?></button>
+                                <button class="icon-btn" type="submit" title="Eliminar" aria-label="Eliminar"><?= icon('trash') ?></button>
                             </form>
                         </span>
                     </td>
