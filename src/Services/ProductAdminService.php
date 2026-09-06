@@ -125,8 +125,10 @@ final class ProductAdminService
         if ($this->groups->findByCode($parsed['code']) !== null) {
             throw new \InvalidArgumentException('Ya existe un grupo con el código ' . $parsed['code']);
         }
+        $id = $this->groups->create($parsed);
+        $this->savePipelineStepsFromInput($input);
 
-        return $this->groups->create($parsed);
+        return $id;
     }
 
     /**
@@ -141,6 +143,7 @@ final class ProductAdminService
         $parsed = $this->buildGroupPayload($input, false);
         unset($parsed['code']);
         $this->groups->update($id, $parsed);
+        $this->savePipelineStepsFromInput($input);
     }
 
 
@@ -261,6 +264,8 @@ final class ProductAdminService
             'pay_card' => in_array('openpay_card', $order, true),
             'msi_enabled' => (bool) ($msi['enabled'] ?? true),
             'msi_months' => $msiMonths,
+            'pipeline_code' => trim((string) ($cfg['pipeline_code'] ?? '')),
+            'initial_step_code' => trim((string) ($cfg['initial_step_code'] ?? '')),
         ];
     }
 
@@ -1097,7 +1102,61 @@ final class ProductAdminService
             unset($config['checkout_field_required']);
         }
 
+        $pipelineCode = strtolower(trim((string) ($input['pipeline_code'] ?? '')));
+        $pipelineCode = preg_replace('/[^a-z0-9_-]+/', '_', $pipelineCode) ?? '';
+        $pipelineCode = trim($pipelineCode, '_');
+        if ($pipelineCode !== '') {
+            $config['pipeline_code'] = $pipelineCode;
+        } else {
+            unset($config['pipeline_code']);
+        }
+
+        $initialStep = strtolower(trim((string) ($input['initial_step_code'] ?? '')));
+        $initialStep = preg_replace('/[^a-z0-9_]+/', '_', $initialStep) ?? '';
+        $initialStep = trim($initialStep, '_');
+        if ($initialStep !== '') {
+            $config['initial_step_code'] = $initialStep;
+        } else {
+            unset($config['initial_step_code']);
+        }
+
         return $config;
+    }
+
+    /**
+     * Guarda los pasos de la plantilla de progreso seleccionada (si vienen en el formulario).
+     *
+     * @param array<string, mixed> $input
+     */
+    public function savePipelineStepsFromInput(array $input): void
+    {
+        $pipelineCode = strtolower(trim((string) ($input['pipeline_code'] ?? '')));
+        $pipelineCode = preg_replace('/[^a-z0-9_-]+/', '_', $pipelineCode) ?? '';
+        $pipelineCode = trim($pipelineCode, '_');
+        if ($pipelineCode === '' || !isset($input['pipeline_steps']) || !is_array($input['pipeline_steps'])) {
+            return;
+        }
+
+        $repo = new \App\Repositories\PipelineRepository();
+        $tpl = $repo->findByCode($pipelineCode);
+        if ($tpl === null) {
+            throw new \InvalidArgumentException('La plantilla de progreso "' . $pipelineCode . '" no existe.');
+        }
+
+        $rawSteps = $input['pipeline_steps'];
+        $steps = [];
+        foreach ($rawSteps as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $steps[] = [
+                'code' => (string) ($row['code'] ?? ''),
+                'label' => (string) ($row['label'] ?? ''),
+                'actor' => (string) ($row['actor'] ?? 'admin'),
+                'is_terminal' => !empty($row['is_terminal']),
+            ];
+        }
+        $repo->replaceSteps((int) $tpl['id'], $steps);
     }
 
 
