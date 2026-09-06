@@ -20,6 +20,20 @@ que un alumno público (`/adquirir/{slug}`), con precio de su nivel.
 El proceso (campos, reglamento, pagos, pipeline) vive en el **grupo del producto**
 (Admin → Grupos), igual que para compra directa del alumno.
 
+## Código promocional del partner
+
+Al **crear o editar** un partner, su `code` se sincroniza automáticamente en
+`discount_codes` (`type=partner`, `discount_mode=partner_public`).
+
+| Quién | Qué paga | Crédito al partner |
+|-------|----------|--------------------|
+| Alumno público con el código del partner en checkout | Precio **público** (igual que promo DOCEO) | `público − precio del nivel del partner` |
+| Partner logueado registrando alumno | Precio de su **nivel** | `0` (ya compra al costo) |
+
+El catálogo/setup también hace un backfill de partners existentes
+(`PartnerAdminService::syncAllPartnerPromoCodes`). Si falta la fila en
+`discount_codes`, el checkout aún acepta el código leyendo `partners.code`.
+
 ## Notas
 
 - El endpoint `POST /partner/registrar` quedó deprecado (redirige al catálogo/picker).

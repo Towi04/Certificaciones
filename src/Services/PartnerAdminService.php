@@ -126,6 +126,7 @@ final class PartnerAdminService
                 $active ? 1 : 0,
             ]);
             $partnerId = (int) $this->pdo->lastInsertId();
+            $this->syncPartnerPromoCode($partnerId, $code, $active);
             $this->pdo->commit();
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
@@ -266,6 +267,7 @@ final class PartnerAdminService
                 $partnerId,
             ]);
 
+            $this->syncPartnerPromoCode($partnerId, $code, $active);
             $this->pdo->commit();
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
@@ -295,6 +297,108 @@ final class PartnerAdminService
             'email_sent' => $emailSent,
             'email_error' => $emailError,
         ];
+    }
+
+    /**
+     * El código del partner funciona en checkout como un código promocional DOCEO:
+     * el alumno paga precio público y la diferencia vs el precio del nivel se abona
+     * como crédito al partner (PricingService + confirmPayment).
+     */
+    public function syncPartnerPromoCode(int $partnerId, string $code, bool $active): void
+    {
+        $code = strtoupper(trim($code));
+        if ($code === '' || !preg_match('/^[A-Z0-9_-]{2,40}$/', $code)) {
+            throw new \InvalidArgumentException('Código de partner inválido para promoción.');
+        }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT id, partner_id, type FROM discount_codes WHERE code = ? LIMIT 1'
+        );
+        $stmt->execute([$code]);
+        $byCode = $stmt->fetch() ?: null;
+
+        if ($byCode !== null) {
+            $owner = (int) ($byCode['partner_id'] ?? 0);
+            $type = (string) ($byCode['type'] ?? '');
+            if ($owner !== $partnerId) {
+                if ($owner > 0) {
+                    throw new \InvalidArgumentException('Ese código ya está asignado a otro partner.');
+                }
+                if ($type !== 'partner') {
+                    throw new \InvalidArgumentException(
+                        'Ese código ya existe como promoción DOCEO/campaña. Elige otro código de partner.'
+                    );
+                }
+            }
+        }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT id, code FROM discount_codes WHERE partner_id = ? AND type = ? LIMIT 1'
+        );
+        $stmt->execute([$partnerId, 'partner']);
+        $byPartner = $stmt->fetch() ?: null;
+
+        if ($byPartner !== null) {
+            $this->pdo->prepare(
+                'UPDATE discount_codes
+                 SET code = ?, discount_mode = ?, applies_to_combos = 1, is_active = ?, partner_id = ?
+                 WHERE id = ?'
+            )->execute([
+                $code,
+                'partner_public',
+                $active ? 1 : 0,
+                $partnerId,
+                (int) $byPartner['id'],
+            ]);
+
+            // Si había otra fila con el nuevo código (caso raro tras renombrar), ya se validó arriba.
+            return;
+        }
+
+        if ($byCode !== null && (int) ($byCode['partner_id'] ?? 0) === $partnerId) {
+            $this->pdo->prepare(
+                'UPDATE discount_codes
+                 SET type = ?, discount_mode = ?, applies_to_combos = 1, is_active = ?
+                 WHERE id = ?'
+            )->execute([
+                'partner',
+                'partner_public',
+                $active ? 1 : 0,
+                (int) $byCode['id'],
+            ]);
+
+            return;
+        }
+
+        $this->pdo->prepare(
+            'INSERT INTO discount_codes (code, type, partner_id, discount_mode, discount_value, applies_to_combos, is_active)
+             VALUES (?, ?, ?, ?, NULL, 1, ?)'
+        )->execute([
+            $code,
+            'partner',
+            $partnerId,
+            'partner_public',
+            $active ? 1 : 0,
+        ]);
+    }
+
+    /** @return int Número de partners sincronizados */
+    public function syncAllPartnerPromoCodes(): int
+    {
+        $rows = $this->pdo->query(
+            'SELECT id, code, is_active FROM partners ORDER BY id ASC'
+        )->fetchAll();
+        $n = 0;
+        foreach ($rows as $row) {
+            $this->syncPartnerPromoCode(
+                (int) $row['id'],
+                (string) $row['code'],
+                (int) ($row['is_active'] ?? 0) === 1
+            );
+            $n++;
+        }
+
+        return $n;
     }
 
     /**

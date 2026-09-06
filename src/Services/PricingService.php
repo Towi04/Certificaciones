@@ -63,10 +63,22 @@ final class PricingService
             'SELECT * FROM discount_codes WHERE code = ? AND is_active = 1 LIMIT 1'
         );
         $stmt->execute([$codeRaw]);
-        $row = $stmt->fetch();
-        if (!$row) {
-            throw new \InvalidArgumentException('El código de descuento no es válido.');
+        $row = $stmt->fetch() ?: null;
+
+        // Fallback: código guardado solo en partners (antes de sincronizar discount_codes).
+        if ($row === null) {
+            $partnerStmt = $this->pdo->prepare(
+                'SELECT * FROM partners WHERE code = ? AND is_active = 1 LIMIT 1'
+            );
+            $partnerStmt->execute([$codeRaw]);
+            $partnerOnly = $partnerStmt->fetch() ?: null;
+            if ($partnerOnly === null) {
+                throw new \InvalidArgumentException('El código de descuento no es válido.');
+            }
+
+            return $this->quoteWithPartnerRow($product, $out, $partnerOnly, null, $codeRaw);
         }
+
         if (!empty($row['starts_at']) && strtotime((string) $row['starts_at']) > time()) {
             throw new \InvalidArgumentException('Este código aún no está vigente.');
         }
@@ -90,22 +102,8 @@ final class PricingService
             if (!$p) {
                 throw new \InvalidArgumentException('Partner inactivo o inexistente.');
             }
-            $tierPrice = $this->partnerPriceForProduct($product, (string) $p['tier']);
-            $charged = $public > 0 ? $public : $catalog;
-            // Código de temporada: descuento extra sobre público
-            if ($type === 'partner_seasonal' && $mode === 'percent' && $row['discount_value'] !== null) {
-                $charged = round($charged * (1 - ((float) $row['discount_value'] / 100)), 2);
-            } elseif ($type === 'partner_seasonal' && $mode === 'fixed' && $row['discount_value'] !== null) {
-                $charged = max(0, round($charged - (float) $row['discount_value'], 2));
-            }
 
-            $out['charged'] = $charged;
-            $out['partner_id'] = $partnerId;
-            $out['partner_price'] = $tierPrice;
-            $out['partner_credit'] = max(0, round($charged - $tierPrice, 2));
-            $out['label'] = 'Código partner · precio público';
-
-            return $this->withDeferredPlans($product, $out);
+            return $this->quoteWithPartnerRow($product, $out, $p, $row, (string) $row['code']);
         }
 
         // Promo DOCEO / campaña → bajar a público u otro descuento
@@ -147,7 +145,50 @@ final class PricingService
         return $this->quoteProduct($combo, $code !== '' ? $code : null);
     }
 
-    /** @param array<string, mixed> $product */
+    /**
+     * Alumno con código partner: paga precio público (como promo DOCEO)
+     * y la diferencia vs el precio del nivel se abona como crédito al partner.
+     *
+     * @param array<string, mixed> $product
+     * @param array<string, mixed> $out
+     * @param array<string, mixed> $partner
+     * @param array<string, mixed>|null $discountRow
+     * @return array<string, mixed>
+     */
+    private function quoteWithPartnerRow(
+        array $product,
+        array $out,
+        array $partner,
+        ?array $discountRow,
+        string $code
+    ): array {
+        $catalog = (float) ($out['catalog'] ?? 0);
+        $public = (float) ($out['public'] ?? 0);
+        $tierPrice = $this->partnerPriceForProduct($product, (string) $partner['tier']);
+        $charged = $public > 0 ? $public : $catalog;
+
+        $type = (string) ($discountRow['type'] ?? 'partner');
+        $mode = (string) ($discountRow['discount_mode'] ?? 'partner_public');
+        if ($type === 'partner_seasonal' && $mode === 'percent' && ($discountRow['discount_value'] ?? null) !== null) {
+            $charged = round($charged * (1 - ((float) $discountRow['discount_value'] / 100)), 2);
+        } elseif ($type === 'partner_seasonal' && $mode === 'fixed' && ($discountRow['discount_value'] ?? null) !== null) {
+            $charged = max(0, round($charged - (float) $discountRow['discount_value'], 2));
+        }
+
+        $out['charged'] = $charged;
+        $out['base'] = $charged;
+        $out['partner_id'] = (int) $partner['id'];
+        $out['partner_price'] = $tierPrice;
+        $out['partner_credit'] = max(0, round($charged - $tierPrice, 2));
+        $out['discount_code'] = $code;
+        if ($discountRow !== null) {
+            $out['discount_code_id'] = (int) ($discountRow['id'] ?? 0) ?: null;
+        }
+        $out['label'] = 'Código partner · precio público';
+
+        return $this->withDeferredPlans($product, $out);
+    }
+
     public function partnerPriceForProduct(array $product, string $tier): float
     {
         $map = [
