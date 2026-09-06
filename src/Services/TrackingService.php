@@ -146,11 +146,26 @@ final class TrackingService
             $status = (string) $tracking['status'];
         }
 
+        $previousStep = (string) ($tracking['current_step_code'] ?? '');
+
         $this->pdo->prepare(
             'UPDATE trackings SET current_step_code = ?, status = ? WHERE id = ?'
         )->execute([$stepCode, $status, $trackingId]);
 
         $this->log($trackingId, $stepCode, $note, $actorUserId);
+
+        if ($previousStep !== $stepCode) {
+            $fresh = $this->find($trackingId);
+            if ($fresh !== null) {
+                $vars = [
+                    'name' => trim((string) (($fresh['first_name'] ?? '') . ' ' . ($fresh['last_name_p'] ?? ''))),
+                    'matricula' => (string) ($fresh['matricula'] ?? ''),
+                    'product_name' => (string) ($fresh['product_name'] ?? ''),
+                    'step_code' => $stepCode,
+                ];
+                GroupEmailAutomation::sendAutoEmailsForStep($fresh, $stepCode, $vars);
+            }
+        }
     }
 
     public function advance(int $trackingId, ?int $actorUserId, ?string $note = null): string

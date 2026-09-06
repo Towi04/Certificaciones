@@ -33,6 +33,53 @@ $checkoutFieldRequired = is_array($extras['checkout_field_required'] ?? null)
     : [];
 $alwaysFields = ['email', 'first_name', 'last_name_p', 'phone'];
 $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
+$mailTemplates = isset($mailTemplates) && is_array($mailTemplates) ? $mailTemplates : [];
+$emailsCfg = is_array($extras['emails'] ?? null)
+    ? $extras['emails']
+    : \App\Services\GroupEmailAutomation::normalize(null);
+$emailReg = is_array($emailsCfg['student_registration'] ?? null) ? $emailsCfg['student_registration'] : ['enabled' => true, 'template_code' => 'student_registration'];
+$emailPay = is_array($emailsCfg['student_payment_confirmed'] ?? null) ? $emailsCfg['student_payment_confirmed'] : ['enabled' => true, 'template_code' => 'student_payment_confirmed'];
+$emailExam = is_array($emailsCfg['student_exam_access'] ?? null) ? $emailsCfg['student_exam_access'] : ['enabled' => true, 'template_code' => 'student_elet_exam_access', 'mode' => 'admin'];
+$emailSteps = is_array($emailsCfg['on_steps'] ?? null) ? $emailsCfg['on_steps'] : [];
+if ($emailSteps === []) {
+    $emailSteps = [['step_code' => '', 'template_code' => '', 'mode' => 'admin', 'audience' => 'student']];
+}
+$renderMailTemplateField = static function (
+    string $name,
+    string $value,
+    array $templates,
+    string $inputStyle,
+    string $placeholder = ''
+): void {
+    $value = trim($value);
+    if ($templates !== []) {
+        echo '<select name="' . e($name) . '" style="' . e($inputStyle) . '">';
+        echo '<option value="">— Elegir plantilla —</option>';
+        $found = false;
+        foreach ($templates as $tpl) {
+            $code = trim((string) ($tpl['code'] ?? ''));
+            if ($code === '') {
+                continue;
+            }
+            $label = trim((string) ($tpl['name'] ?? $code));
+            $sel = $code === $value;
+            if ($sel) {
+                $found = true;
+            }
+            echo '<option value="' . e($code) . '"' . ($sel ? ' selected' : '') . '>'
+                . e($label) . ' (' . e($code) . ')</option>';
+        }
+        if ($value !== '' && !$found) {
+            echo '<option value="' . e($value) . '" selected>' . e($value) . ' (actual)</option>';
+        }
+        echo '</select>';
+
+        return;
+    }
+    echo '<input type="text" name="' . e($name) . '" value="' . e($value) . '"'
+        . ' placeholder="' . e($placeholder !== '' ? $placeholder : 'código_de_plantilla') . '"'
+        . ' style="' . e($inputStyle) . '">';
+};
 ?>
 <p class="meta"><a href="<?= e(url('/admin/grupos')) ?>">← Grupos de proceso</a></p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">
@@ -54,6 +101,7 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
     <button type="button" class="group-tab" data-tab="payments" role="tab" aria-selected="false">Pagos</button>
     <button type="button" class="group-tab" data-tab="progress" role="tab" aria-selected="false">Progreso</button>
     <button type="button" class="group-tab" data-tab="provider" role="tab" aria-selected="false">Solicitud proveedor</button>
+    <button type="button" class="group-tab" data-tab="emails" role="tab" aria-selected="false">Correos</button>
     <button type="button" class="group-tab" data-tab="advanced" role="tab" aria-selected="false">Experto</button>
 </nav>
 
@@ -491,9 +539,10 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
     <div class="group-panel" data-panel="provider" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Solicitud al proveedor</h2>
         <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
-            Después de confirmar el pago, el sistema puede enviar (o dejar pendiente) un correo
-            al proveedor con datos del alumno, fecha/hora, reglamento, comprobante y/o una plantilla Excel.
-            Los casos pendientes aparecen en el Dashboard.
+            Esta pestaña es solo para el correo de <strong>solicitud al proveedor</strong> después del pago
+            (datos del alumno, fecha/hora, reglamento, comprobante y/o Excel). Los casos pendientes
+            aparecen en el Dashboard. Los correos del ciclo del alumno (registro, pago confirmado,
+            acceso al examen, pasos del progreso) se configuran en la pestaña <strong>Correos</strong>.
         </p>
 
         <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.9rem;margin-bottom:.85rem">
@@ -614,18 +663,147 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
         </div>
     </div>
 
+    <div class="group-panel" data-panel="emails" hidden>
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Correos automáticos</h2>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
+            Define qué correos se envían al alumno (y opcionalmente al proveedor en un paso del progreso)
+            y con qué plantilla. El correo de solicitud al proveedor tras el pago se configura en
+            <strong>Solicitud proveedor</strong>, no aquí.
+        </p>
+
+        <h3 style="margin:0 0 .55rem;font-size:.95rem;color:var(--doceo-blue)">Correos al alumno</h3>
+        <p class="muted" style="font-size:.8rem;margin:0 0 .75rem">
+            Activa o desactiva cada momento del ciclo y elige la plantilla.
+            En acceso al examen, <em>Admin</em> significa que un administrador dispara el envío;
+            <em>Automático</em> lo envía el sistema cuando corresponda.
+        </p>
+
+        <div style="display:flex;flex-direction:column;gap:.85rem;margin-bottom:1.25rem">
+            <div style="border:1px solid #dbeafe;border-radius:12px;padding:.85rem;background:#f8fbff">
+                <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.9rem;margin-bottom:.55rem">
+                    <input type="checkbox" name="email_registration_enabled" value="1"
+                        <?= !empty($emailReg['enabled']) ? 'checked' : '' ?>>
+                    Al registrarse / crear la cuenta
+                </label>
+                <label class="muted" style="<?= e($labelStyle) ?>;max-width:28rem">
+                    Plantilla
+                    <?php $renderMailTemplateField(
+                        'email_registration_template',
+                        (string) ($emailReg['template_code'] ?? 'student_registration'),
+                        $mailTemplates,
+                        $inputStyle,
+                        'student_registration'
+                    ); ?>
+                </label>
+            </div>
+
+            <div style="border:1px solid #dbeafe;border-radius:12px;padding:.85rem;background:#f8fbff">
+                <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.9rem;margin-bottom:.55rem">
+                    <input type="checkbox" name="email_payment_enabled" value="1"
+                        <?= !empty($emailPay['enabled']) ? 'checked' : '' ?>>
+                    Cuando se confirma el pago
+                </label>
+                <label class="muted" style="<?= e($labelStyle) ?>;max-width:28rem">
+                    Plantilla
+                    <?php $renderMailTemplateField(
+                        'email_payment_template',
+                        (string) ($emailPay['template_code'] ?? 'student_payment_confirmed'),
+                        $mailTemplates,
+                        $inputStyle,
+                        'student_payment_confirmed'
+                    ); ?>
+                </label>
+            </div>
+
+            <div style="border:1px solid #dbeafe;border-radius:12px;padding:.85rem;background:#f8fbff">
+                <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.9rem;margin-bottom:.55rem">
+                    <input type="checkbox" name="email_exam_access_enabled" value="1"
+                        <?= !empty($emailExam['enabled']) ? 'checked' : '' ?>>
+                    Acceso al examen (enlace / clave)
+                </label>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem">
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Plantilla
+                        <?php $renderMailTemplateField(
+                            'email_exam_access_template',
+                            (string) ($emailExam['template_code'] ?? 'student_elet_exam_access'),
+                            $mailTemplates,
+                            $inputStyle,
+                            'student_elet_exam_access'
+                        ); ?>
+                    </label>
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Quién lo envía
+                        <?php $examMode = (string) ($emailExam['mode'] ?? 'admin'); ?>
+                        <select name="email_exam_access_mode" style="<?= e($inputStyle) ?>">
+                            <option value="admin" <?= $examMode !== 'auto' ? 'selected' : '' ?>>Admin (manual)</option>
+                            <option value="auto" <?= $examMode === 'auto' ? 'selected' : '' ?>>Automático</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <h3 style="margin:0 0 .55rem;font-size:.95rem;color:var(--doceo-blue)">Correos al entrar a un paso del progreso</h3>
+        <p class="muted" style="font-size:.8rem;margin:0 0 .65rem">
+            Cuando el caso pasa a un paso (código de la pestaña Progreso), se puede enviar un correo.
+            <em>Automático</em> se dispara solo; <em>Admin</em> queda para envío manual desde el caso.
+            Destinatario: alumno o proveedor.
+        </p>
+        <div id="email-step-rows">
+            <?php foreach ($emailSteps as $stepRow): ?>
+                <div class="email-step-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.5rem;margin-bottom:.55rem;align-items:end;padding:.65rem;border:1px solid #e2e8f0;border-radius:10px;background:#fff">
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Código del paso
+                        <input type="text" name="email_step_codes[]"
+                               value="<?= e((string) ($stepRow['step_code'] ?? '')) ?>"
+                               placeholder="ej. resultados" style="<?= e($inputStyle) ?>">
+                    </label>
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Plantilla
+                        <?php $renderMailTemplateField(
+                            'email_step_templates[]',
+                            (string) ($stepRow['template_code'] ?? ''),
+                            $mailTemplates,
+                            $inputStyle,
+                            'código_plantilla'
+                        ); ?>
+                    </label>
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Modo
+                        <?php $sm = (string) ($stepRow['mode'] ?? 'admin'); ?>
+                        <select name="email_step_modes[]" style="<?= e($inputStyle) ?>">
+                            <option value="admin" <?= $sm !== 'auto' ? 'selected' : '' ?>>Admin</option>
+                            <option value="auto" <?= $sm === 'auto' ? 'selected' : '' ?>>Automático</option>
+                        </select>
+                    </label>
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Destinatario
+                        <?php $aud = (string) ($stepRow['audience'] ?? 'student'); ?>
+                        <select name="email_step_audiences[]" style="<?= e($inputStyle) ?>">
+                            <option value="student" <?= $aud !== 'provider' ? 'selected' : '' ?>>Alumno</option>
+                            <option value="provider" <?= $aud === 'provider' ? 'selected' : '' ?>>Proveedor</option>
+                        </select>
+                    </label>
+                    <button type="button" class="btn btn-ghost btn-sm email-step-remove" style="margin-bottom:.15rem">Quitar</button>
+                </div>
+            <?php endforeach; ?>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="email-step-add">+ Agregar correo por paso</button>
+    </div>
+
     <div class="group-panel" data-panel="advanced" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Modo experto (JSON)</h2>
         <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
             Vista avanzada del <code>config_json</code>. Al abrir esta pestaña (y al guardar)
             se sincroniza automáticamente con lo configurado en las demás pestañas:
-            datos del alumno, horarios, reglamento y pagos. Esas pestañas tienen prioridad
+            datos del alumno, horarios, reglamento, pagos y correos. Esas pestañas tienen prioridad
             sobre las mismas claves del JSON.
         </p>
         <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
-            Usa el JSON solo para opciones poco frecuentes (documentos del expediente,
-            correos, etc.). La tarjeta de progreso del alumno se configura en la pestaña
-            <strong>Progreso</strong>. Para campos del alumno usa <strong>Datos del alumno</strong>.
+            Usa el JSON solo para opciones poco frecuentes (documentos del expediente, etc.).
+            La tarjeta de progreso se configura en <strong>Progreso</strong>; los correos del ciclo
+            del alumno en <strong>Correos</strong>; campos del alumno en <strong>Datos del alumno</strong>.
         </p>
         <details open>
             <summary style="cursor:pointer;font-weight:700;color:var(--doceo-blue)">Mostrar / editar JSON crudo</summary>
@@ -919,6 +1097,47 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
     } else {
       delete base.provider_request;
     }
+
+    var onSteps = [];
+    document.querySelectorAll('#email-step-rows .email-step-row').forEach(function (row) {
+      var stepEl = row.querySelector('[name="email_step_codes[]"]');
+      var tplEl = row.querySelector('[name="email_step_templates[]"]');
+      var modeEl = row.querySelector('[name="email_step_modes[]"]');
+      var audEl = row.querySelector('[name="email_step_audiences[]"]');
+      var step = stepEl ? String(stepEl.value || '').trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_|_$/g, '') : '';
+      var tpl = tplEl ? String(tplEl.value || '').trim() : '';
+      if (!step || !tpl) return;
+      onSteps.push({
+        step_code: step,
+        template_code: tpl,
+        mode: modeEl && modeEl.value === 'auto' ? 'auto' : 'admin',
+        audience: audEl && audEl.value === 'provider' ? 'provider' : 'student'
+      });
+    });
+    function emailTpl(name, fallback) {
+      var el = document.querySelector('[name="' + name + '"]');
+      var v = el ? String(el.value || '').trim() : '';
+      return v || fallback;
+    }
+    base.emails = {
+      student_registration: {
+        enabled: !!(document.querySelector('[name="email_registration_enabled"]') || {}).checked,
+        template_code: emailTpl('email_registration_template', 'student_registration')
+      },
+      student_payment_confirmed: {
+        enabled: !!(document.querySelector('[name="email_payment_enabled"]') || {}).checked,
+        template_code: emailTpl('email_payment_template', 'student_payment_confirmed')
+      },
+      student_exam_access: {
+        enabled: !!(document.querySelector('[name="email_exam_access_enabled"]') || {}).checked,
+        template_code: emailTpl('email_exam_access_template', 'student_elet_exam_access'),
+        mode: (function () {
+          var m = document.querySelector('[name="email_exam_access_mode"]');
+          return m && m.value === 'auto' ? 'auto' : 'admin';
+        })()
+      },
+      on_steps: onSteps
+    };
 
     jsonTa.value = JSON.stringify(base, null, 2);
   }
@@ -1272,6 +1491,32 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
         btn.closest('.provider-cell-row').remove();
       });
     }
+  })();
+
+  // ---- Correos por paso ----
+  (function () {
+    var addBtn = document.getElementById('email-step-add');
+    var rows = document.getElementById('email-step-rows');
+    if (!addBtn || !rows) return;
+    addBtn.addEventListener('click', function () {
+      var row = rows.querySelector('.email-step-row');
+      if (!row) return;
+      var clone = row.cloneNode(true);
+      clone.querySelectorAll('input').forEach(function (el) { el.value = ''; });
+      clone.querySelectorAll('select').forEach(function (el) { el.selectedIndex = 0; });
+      rows.appendChild(clone);
+    });
+    rows.addEventListener('click', function (e) {
+      var btn = e.target.closest('.email-step-remove');
+      if (!btn) return;
+      var list = rows.querySelectorAll('.email-step-row');
+      if (list.length <= 1) {
+        list[0].querySelectorAll('input').forEach(function (el) { el.value = ''; });
+        list[0].querySelectorAll('select').forEach(function (el) { el.selectedIndex = 0; });
+        return;
+      }
+      btn.closest('.email-step-row').remove();
+    });
   })();
 
 </script>

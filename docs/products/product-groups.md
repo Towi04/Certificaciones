@@ -34,7 +34,20 @@ En **Admin → Grupos → Editar** (pestañas) puedes ajustar con formularios:
 | Fechas y horarios | Pedir fecha/hora en checkout, minutos por bloque, anticipo, Lun–Vie, sábado, 365 días |
 | Reglamento | Activar/desactivar. Si está activo, **siempre** es obligatorio firmarlo antes de pagar. |
 | Pagos | Transferencia, OXXO, tarjeta y MSI |
+| Progreso | Plantilla de pasos del caso (`pipeline_code`) |
+| Solicitud proveedor | Correo al proveedor tras el pago (destino, plantilla, Excel, etc.) |
+| **Correos** | Correos del ciclo del alumno y por paso del progreso (ver abajo) |
 | Experto | `config_json` crudo (se sincroniza con las pestañas al abrirlo / guardar) |
+
+### Correos
+
+En la pestaña **Correos** se guarda `config_json.emails` (normalizado por `GroupEmailAutomation`):
+
+- **Al alumno:** registro, pago confirmado y acceso al examen (con modo `admin` o `auto`).
+- **Al entrar a un paso:** filas `on_steps` con `step_code`, plantilla, modo y destinatario (`student` / `provider`).
+- El correo de **solicitud al proveedor** post-pago no va aquí: usa la pestaña **Solicitud proveedor** (`provider_request`).
+
+Plantillas: Admin → Correos. Si no hay listado, el formulario acepta el código de plantilla a mano.
 
 Las vacaciones globales se administran en **Admin → Vacaciones** (una sola lista para toda DOCEO).
 En el grupo, marca **Disponible los 365 días** si ese grupo no debe respetarlas.

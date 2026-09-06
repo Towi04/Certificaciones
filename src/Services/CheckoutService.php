@@ -319,7 +319,8 @@ final class CheckoutService
             (string) $product['name'],
             $account['created'] ? $account['plain_password'] : null,
             $paymentMethod,
-            $paymentMethod === 'openpay_card' ? $cardPaymentUrl : null
+            $paymentMethod === 'openpay_card' ? $cardPaymentUrl : null,
+            $product
         );
 
         if ($account['created']) {
@@ -847,15 +848,23 @@ final class CheckoutService
     }
 
     /** @param array<string, mixed> $user @param array<string, mixed> $purchase */
+    /**
+     * @param array<string, mixed>|null $product
+     */
     private function sendWelcomeEmail(
         array $user,
         array $purchase,
         string $productName,
         ?string $plainPassword,
         string $paymentMethod,
-        ?string $paymentUrl = null
+        ?string $paymentUrl = null,
+        ?array $product = null
     ): void {
         try {
+            if ($product !== null && !GroupEmailAutomation::isEnabled($product, GroupEmailAutomation::KEY_REGISTRATION)) {
+                return;
+            }
+
             $mailer = new Mailer();
             $loginUrl = rtrim((string) (Env::get('APP_URL', '') ?? ''), '/') . '/login';
             $fullName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name_p'] ?? ''));
@@ -887,8 +896,11 @@ final class CheckoutService
                 'login_url' => $loginUrl,
             ];
 
-            if ($mailTpl->render('student_registration', $vars) !== null) {
-                $mailTpl->send('student_registration', (string) $user['email'], $vars);
+            $tplCode = $product !== null
+                ? GroupEmailAutomation::templateCode($product, GroupEmailAutomation::KEY_REGISTRATION, 'student_registration')
+                : 'student_registration';
+            if ($mailTpl->render($tplCode, $vars) !== null) {
+                $mailTpl->send($tplCode, (string) $user['email'], $vars);
                 return;
             }
 
@@ -942,21 +954,36 @@ final class CheckoutService
         try {
             $stmt = $this->pdo->prepare(
                 'SELECT u.email, u.first_name, u.last_name_p,
-                        (SELECT pr.name FROM purchase_items pi
-                         JOIN products pr ON pr.id = pi.product_id
-                         WHERE pi.purchase_id = pu.id LIMIT 1) AS product_name
+                        pr.id AS product_id, pr.name AS product_name, pr.code AS product_code,
+                        pr.config_json, pg.config_json AS group_config_json
                  FROM purchases pu
                  JOIN users u ON u.id = pu.student_user_id
-                 WHERE pu.id = ?'
+                 LEFT JOIN purchase_items pi ON pi.purchase_id = pu.id
+                 LEFT JOIN products pr ON pr.id = pi.product_id
+                 LEFT JOIN product_groups pg ON pg.id = pr.product_group_id
+                 WHERE pu.id = ?
+                 LIMIT 1'
             );
             $stmt->execute([(int) $purchase['id']]);
             $row = $stmt->fetch();
             if (!$row) {
                 return;
             }
+
+            $product = [
+                'id' => $row['product_id'] ?? 0,
+                'name' => $row['product_name'] ?? '',
+                'code' => $row['product_code'] ?? '',
+                'config_json' => $row['config_json'] ?? null,
+                'group_config_json' => $row['group_config_json'] ?? null,
+            ];
+            if (!GroupEmailAutomation::isEnabled($product, GroupEmailAutomation::KEY_PAYMENT)) {
+                return;
+            }
+
             $name = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name_p'] ?? ''));
             $matricula = (string) $purchase['matricula'];
-            $productName = (string) $row['product_name'];
+            $productName = (string) ($row['product_name'] ?? '');
 
             $mailTpl = new MailTemplateService();
             $vars = [
@@ -965,8 +992,13 @@ final class CheckoutService
                 'product_name' => $productName,
             ];
 
-            if ($mailTpl->render('student_payment_confirmed', $vars) !== null) {
-                $mailTpl->send('student_payment_confirmed', (string) $row['email'], $vars);
+            $tplCode = GroupEmailAutomation::templateCode(
+                $product,
+                GroupEmailAutomation::KEY_PAYMENT,
+                'student_payment_confirmed'
+            );
+            if ($mailTpl->render($tplCode, $vars) !== null) {
+                $mailTpl->send($tplCode, (string) $row['email'], $vars);
                 return;
             }
 
