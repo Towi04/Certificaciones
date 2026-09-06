@@ -3,7 +3,7 @@
         <h1 style="margin:0;color:var(--doceo-blue)">Productos</h1>
         <p class="muted" style="margin:.35rem 0 0">
             Crea productos, edita código/nombre/precios y asígnales un
-            <a href="<?= e(url('/admin/grupos')) ?>">grupo de proceso</a>
+            <a href="<?= e(url('/admin/grupos')) ?>">grupo de producto</a>
             para heredar pagos y MSI.
         </p>
     </div>
@@ -19,7 +19,7 @@
 
 <?php if ((int) ($groupsCount ?? 0) === 0): ?>
     <div class="flash flash-error" style="margin-top:1rem">
-        No hay grupos de proceso. Por eso el combo sale vacío al editar.
+        No hay grupos de producto. Por eso el combo sale vacío al editar.
         Ve a <a href="<?= e(url('/admin/grupos')) ?>"><strong>Grupos</strong></a>
         y pulsa <strong>Cargar grupos sugeridos</strong>.
     </div>
@@ -46,7 +46,16 @@
                     <td><?= e($p['platform_type'] ?? 'none') ?></td>
                     <td><?= !empty($p['moodle_course_id']) ? (int) $p['moodle_course_id'] : '—' ?></td>
                     <td><?= money($p['public_price']) ?></td>
-                    <td><a href="<?= e(url('/admin/productos/' . $p['id'])) ?>">Editar</a></td>
+                    <td>
+                        <span class="row-actions">
+                            <a class="icon-btn" href="<?= e(url('/admin/productos/' . $p['id'])) ?>" title="Editar" aria-label="Editar">✏️</a>
+                            <form class="icon-btn-form" method="post" action="<?= e(url('/admin/productos/' . $p['id'] . '/eliminar')) ?>"
+                                  onsubmit="return confirm('¿Eliminar este producto? Solo si no tiene compras.');">
+                                <?= csrf_field() ?>
+                                <button class="icon-btn icon-btn--danger" type="submit" title="Eliminar" aria-label="Eliminar">🗑️</button>
+                            </form>
+                        </span>
+                    </td>
                 </tr>
             <?php endforeach; ?>
             <?php if ($products === []): ?>

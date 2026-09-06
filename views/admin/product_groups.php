@@ -4,10 +4,11 @@
 ?>
 <div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap">
     <div>
-        <h1 style="margin:0;color:var(--doceo-blue)">Grupos de proceso</h1>
+        <h1 style="margin:0;color:var(--doceo-blue)">Grupos de producto</h1>
         <p class="muted" style="margin:.35rem 0 0;max-width:46rem">
             Aquí se define el proceso de compra compartido (pagos, MSI, horarios, reglamento, pipeline).
             Las <a href="<?= e(url('/admin/vacaciones')) ?>"><strong>vacaciones globales</strong></a> aplican a todos, salvo grupos marcados 365 días.
+            Los horarios de examen se editan dentro de cada grupo (pestaña Fechas y horarios).
             Luego cada producto personaliza nombre, descripción, precios, nivel e imágenes.
         </p>
     </div>
@@ -41,8 +42,15 @@
                     <td><?= e($g['name']) ?></td>
                     <td><?= e($g['supplier_name'] ?? '—') ?></td>
                     <td><?= (int) ($counts[(int) $g['id']] ?? 0) ?></td>
-                    <td><a href="<?= e(url('/admin/grupos/' . $g['id'])) ?>">Editar</a>
-                        · <a href="<?= e(url('/admin/grupos/' . $g['id'] . '#schedule')) ?>">Fechas</a>
+                    <td>
+                        <span class="row-actions">
+                            <a class="icon-btn" href="<?= e(url('/admin/grupos/' . $g['id'])) ?>" title="Editar" aria-label="Editar">✏️</a>
+                            <form class="icon-btn-form" method="post" action="<?= e(url('/admin/grupos/' . $g['id'] . '/eliminar')) ?>"
+                                  onsubmit="return confirm('¿Eliminar este grupo? Solo si no tiene productos.');">
+                                <?= csrf_field() ?>
+                                <button class="icon-btn icon-btn--danger" type="submit" title="Eliminar" aria-label="Eliminar">🗑️</button>
+                            </form>
+                        </span>
                     </td>
                 </tr>
             <?php endforeach; ?>

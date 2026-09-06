@@ -165,4 +165,9 @@ final class ProductGroupRepository
             'card_msi' => $msi,
         ];
     }
+
+    public function delete(int $id): void
+    {
+        $this->pdo->prepare('DELETE FROM product_groups WHERE id = ?')->execute([$id]);
+    }
 }

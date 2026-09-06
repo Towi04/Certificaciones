@@ -143,6 +143,34 @@ final class ProductAdminService
         $this->groups->update($id, $parsed);
     }
 
+
+    public function deleteProduct(int $id): void
+    {
+        $product = $this->products->find($id);
+        if ($product === null) {
+            throw new \InvalidArgumentException('Producto no encontrado.');
+        }
+        if ($this->products->countPurchaseItems($id) > 0 || $this->products->countTrackings($id) > 0) {
+            throw new \InvalidArgumentException(
+                'No se puede eliminar: ya hay compras o seguimientos con este producto. Márcalo inactivo.'
+            );
+        }
+        $this->products->delete($id);
+    }
+
+    public function deleteGroup(int $id): void
+    {
+        if ($this->groups->find($id) === null) {
+            throw new \InvalidArgumentException('Grupo no encontrado.');
+        }
+        if ($this->groups->countProducts($id) > 0) {
+            throw new \InvalidArgumentException(
+                'No se puede eliminar: el grupo aún tiene productos. Muévelos o elimínalos antes.'
+            );
+        }
+        $this->groups->delete($id);
+    }
+
     /**
      * Extrae campos de UI a partir del config_json del grupo.
      *

@@ -36,7 +36,16 @@
                     <td><?= money($c['public_price']) ?></td>
                     <td><?= money($c['catalog_price']) ?></td>
                     <td><?= !empty($c['is_active']) ? 'Sí' : 'No' ?></td>
-                    <td><a href="<?= e(url('/admin/combos/' . (int) $c['id'])) ?>">Editar</a></td>
+                    <td>
+                        <span class="row-actions">
+                            <a class="icon-btn" href="<?= e(url('/admin/combos/' . (int) $c['id'])) ?>" title="Editar" aria-label="Editar">✏️</a>
+                            <form class="icon-btn-form" method="post" action="<?= e(url('/admin/combos/' . (int) $c['id'] . '/eliminar')) ?>"
+                                  onsubmit="return confirm('¿Eliminar este combo? Solo si no tiene compras.');">
+                                <?= csrf_field() ?>
+                                <button class="icon-btn icon-btn--danger" type="submit" title="Eliminar" aria-label="Eliminar">🗑️</button>
+                            </form>
+                        </span>
+                    </td>
                 </tr>
             <?php endforeach; ?>
             <?php if ($combos === []): ?>

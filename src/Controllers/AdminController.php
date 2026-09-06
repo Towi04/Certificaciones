@@ -157,6 +157,21 @@ final class AdminController
     }
 
 
+    public function productDelete(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            (new ProductAdminService())->deleteProduct((int) $id);
+            flash('success', 'Producto eliminado.');
+            redirect('/admin/productos');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/admin/productos/' . (int) $id);
+        }
+    }
+
+
     public function combos(): void
     {
         Auth::requireRole(['admin']);
@@ -338,6 +353,22 @@ final class AdminController
         }
         redirect('/admin/grupos/' . $groupId);
     }
+
+    public function productGroupDelete(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            (new ProductAdminService())->deleteGroup((int) $id);
+            flash('success', 'Grupo eliminado.');
+            redirect('/admin/grupos');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/admin/grupos/' . (int) $id);
+        }
+    }
+
+
 
     public function createCheckoutField(): void
     {

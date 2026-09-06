@@ -158,7 +158,7 @@ $num = static function (mixed $v): string {
       onsubmit="return confirm('¿Eliminar este combo? Solo si no tiene compras.');"
       style="margin-top:1rem">
     <?= csrf_field() ?>
-    <button class="btn btn-ghost" type="submit" style="color:#b42318">Eliminar combo</button>
+    <button class="icon-btn icon-btn--danger" type="submit" title="Eliminar" aria-label="Eliminar">🗑️</button>
 </form>
 <?php endif; ?>
 

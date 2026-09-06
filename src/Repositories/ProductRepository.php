@@ -195,4 +195,25 @@ final class ProductRepository
 
         return $row ?: null;
     }
+
+    public function countPurchaseItems(int $productId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM purchase_items WHERE product_id = ?');
+        $stmt->execute([$productId]);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    public function countTrackings(int $productId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM trackings WHERE product_id = ?');
+        $stmt->execute([$productId]);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    public function delete(int $id): void
+    {
+        $this->pdo->prepare('DELETE FROM products WHERE id = ?')->execute([$id]);
+    }
 }

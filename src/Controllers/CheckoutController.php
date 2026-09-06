@@ -307,10 +307,12 @@ final class CheckoutController
             return;
         }
 
+        $slots = $service->slotsForDate($product, $date);
         echo json_encode([
             'ok' => true,
             'min_advance_days' => (int) ($rules['min_advance_days'] ?? 0),
-            'slots' => $service->slotsForDate($product, $date),
+            'slots' => $slots,
+            'unavailable_reason' => $slots === [] ? $service->unavailabilityReason($product, $date) : null,
         ], JSON_UNESCAPED_UNICODE);
     }
 
