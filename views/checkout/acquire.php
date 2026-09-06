@@ -20,8 +20,12 @@ $comboList = $comboOffers['combos'] ?? [];
 $hasComboOffers = $comboList !== [] || $comboAddons !== [];
 $maxComboSavings = 0.0;
 foreach ($comboList as $c) {
-    if (!empty($c['solo_sum']) && (float) $c['solo_sum'] > (float) $c['public_price']) {
-        $maxComboSavings = max($maxComboSavings, (float) $c['solo_sum'] - (float) $c['public_price']);
+    $list = (float) ($c['list_price'] ?? $c['catalog_price'] ?? 0);
+    if ($list <= 0) {
+        $list = (float) ($c['public_price'] ?? 0);
+    }
+    if (!empty($c['solo_sum']) && (float) $c['solo_sum'] > $list) {
+        $maxComboSavings = max($maxComboSavings, (float) $c['solo_sum'] - $list);
     }
 }
 
@@ -831,7 +835,7 @@ $stepLabels = [
     });
   }
 
-  function renderComboBreakdown(breakdown) {
+  function renderComboBreakdown(breakdown, quote) {
     if (!breakdownEl) return;
     if (!breakdown || !Array.isArray(breakdown.items) || !breakdown.items.length) {
       breakdownEl.hidden = true;
@@ -843,25 +847,44 @@ $stepLabels = [
       return;
     }
     let html = '<table class="combo-breakdown-table"><thead><tr>'
-      + '<th>Incluye</th><th class="num">Suelto</th><th class="num">En combo</th><th class="num">Desc.</th>'
+      + '<th>Incluye</th><th class="num">Lista</th><th class="num">En paquete</th>'
       + '</tr></thead><tbody>';
     breakdown.items.forEach(function (it) {
       html += '<tr>'
         + '<td>' + escapeHtml(it.name) + '</td>'
         + '<td class="num solo">' + money(it.solo_price) + '</td>'
         + '<td class="num share">' + money(it.combo_share) + '</td>'
-        + '<td class="num disc">' + (Number(it.discount) > 0.009 ? ('−' + money(it.discount)) : '—') + '</td>'
         + '</tr>';
     });
     html += '</tbody></table>';
+    const packageList = Number(breakdown.package_list_price ?? breakdown.combo_price ?? 0);
+    const charged = Number(breakdown.charged ?? (quote && quote.charged) ?? packageList);
+    const promoSavings = Number(breakdown.promo_savings || 0);
+    const code = quote && quote.discount_code ? String(quote.discount_code) : '';
+    if (promoSavings > 0.009 && code) {
+      html += '<p class="muted" style="margin:.45rem 0 0;font-size:.75rem;line-height:1.35">'
+        + 'Paquete a precio de lista: <strong>' + money(packageList) + '</strong>'
+        + ' · Código ' + escapeHtml(code) + ': −' + money(promoSavings)
+        + '</p>';
+    }
     breakdownEl.innerHTML = html;
     breakdownEl.hidden = false;
     if (savingsNoteEl) {
-      const savings = Number(breakdown.savings || 0);
-      if (savings > 0.009) {
+      const packageSavings = Number(breakdown.savings || 0);
+      const totalSavings = Number(breakdown.total_savings != null ? breakdown.total_savings : packageSavings);
+      const pct = breakdown.total_savings_percent != null
+        ? breakdown.total_savings_percent
+        : breakdown.savings_percent;
+      if (totalSavings > 0.009) {
         savingsNoteEl.hidden = false;
-        savingsNoteEl.textContent = 'Ahorro del combo: ' + money(savings)
-          + (breakdown.savings_percent ? (' (' + breakdown.savings_percent + '%)') : '');
+        let msg = 'Ahorro vs precios de lista: ' + money(totalSavings)
+          + (pct ? (' (' + pct + '%)') : '');
+        if (promoSavings > 0.009 && code) {
+          msg = 'Ahorro del paquete: ' + money(packageSavings)
+            + ' + código ' + code + ': ' + money(promoSavings)
+            + ' = ' + money(totalSavings);
+        }
+        savingsNoteEl.textContent = msg;
       } else {
         savingsNoteEl.hidden = true;
         savingsNoteEl.textContent = '';
@@ -910,13 +933,13 @@ $stepLabels = [
             comboHint.textContent = 'Esa combinación aún no tiene combo definido en admin. Se cotiza solo el producto actual.';
             comboHint.style.color = '#b42318';
           } else if (data.matched) {
-            comboHint.textContent = 'Combo aplicado. Abajo ves el precio de cada producto y el descuento.';
+            comboHint.textContent = 'Combo aplicado. Abajo ves cada producto a precio de lista y su parte del paquete.';
             comboHint.style.color = '';
           } else {
             comboHint.textContent = '';
           }
         }
-        renderComboBreakdown(data.matched ? (data.breakdown || null) : null);
+        renderComboBreakdown(data.matched ? (data.breakdown || null) : null, data.quote || null);
         renderMsiChips(data.quote.payment_options?.msi || data.quote.msi_plans || []);
         updatePriceSummary();
         updateMsiDisplay();

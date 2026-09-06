@@ -86,6 +86,36 @@ final class ComboAdminService
     }
 
     /**
+     * Precio de lista (catálogo) de un producto/ítem: lo que pagaría el alumno
+     * comprándolo suelto sin código promocional.
+     *
+     * @param array<string, mixed> $item
+     */
+    public static function listPriceForItem(array $item): float
+    {
+        $catalog = (float) ($item['catalog_price'] ?? 0);
+        $public = (float) ($item['public_price'] ?? 0);
+        if ($catalog <= 0 && $public > 0) {
+            $catalog = Settings::catalogPriceFromPublic($public);
+        }
+        if ($catalog > 0) {
+            return round($catalog, 2);
+        }
+
+        return round(max(0, $public), 2);
+    }
+
+    /**
+     * Precio de lista del combo (sin código): catálogo, o markup sobre público.
+     *
+     * @param array<string, mixed> $combo
+     */
+    public static function listPriceForCombo(array $combo): float
+    {
+        return self::listPriceForItem($combo);
+    }
+
+    /**
      * Opciones de “convertir en combo” para un producto ancla.
      *
      * @return array{
@@ -103,8 +133,9 @@ final class ComboAdminService
             $items = $this->combos->items($cid);
             $itemIds = [];
             $addonIds = [];
-            foreach ($items as $item) {
+            foreach ($items as &$item) {
                 $pid = (int) $item['id'];
+                $item['list_price'] = self::listPriceForItem($item);
                 $itemIds[] = $pid;
                 if ($pid !== $productId) {
                     $addonIds[] = $pid;
@@ -115,19 +146,20 @@ final class ComboAdminService
                         'type' => (string) $item['type'],
                         'public_price' => (float) $item['public_price'],
                         'catalog_price' => (float) $item['catalog_price'],
+                        'list_price' => (float) $item['list_price'],
                         'slug' => (string) $item['slug'],
                     ];
                 }
             }
+            unset($item);
             $combo['items'] = $items;
             $combo['item_ids'] = $itemIds;
             $combo['addon_ids'] = $addonIds;
-            $combo['solo_sum'] = array_sum(array_map(
-                static fn (array $i): float => (float) ($i['public_price'] ?? 0) > 0
-                    ? (float) $i['public_price']
-                    : (float) ($i['catalog_price'] ?? 0),
+            $combo['list_price'] = self::listPriceForCombo($combo);
+            $combo['solo_sum'] = round(array_sum(array_map(
+                static fn (array $i): float => self::listPriceForItem($i),
                 $items
-            ));
+            )), 2);
             $enriched[] = $combo;
         }
 
@@ -147,7 +179,10 @@ final class ComboAdminService
     }
 
     /**
-     * Desglose de precios sueltos vs tarifa del combo (para admin/checkout).
+     * Desglose precio de lista vs parte del paquete.
+     * "Lista"/suelto siempre usa catálogo (mismo criterio que producto solo sin código).
+     * $comboCharged suele ser el precio de lista del paquete en UI; en checkout de cobro
+     * puede ser el monto realmente cargado para prorratear líneas.
      *
      * @param list<array<string, mixed>> $items
      * @return array{
@@ -163,10 +198,7 @@ final class ComboAdminService
         $rows = [];
         $soloSum = 0.0;
         foreach ($items as $item) {
-            $solo = (float) ($item['public_price'] ?? 0) > 0
-                ? (float) $item['public_price']
-                : (float) ($item['catalog_price'] ?? 0);
-            $solo = round(max(0, $solo), 2);
+            $solo = self::listPriceForItem($item);
             $soloSum += $solo;
             $rows[] = [
                 'id' => (int) ($item['id'] ?? 0),

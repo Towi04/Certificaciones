@@ -221,11 +221,27 @@ final class CheckoutController
 
             $items = $comboRepo->items((int) $combo['id']);
             $charged = (float) ($quote['charged'] ?? $quote['base'] ?? $combo['public_price'] ?? 0);
-            $breakdown = \App\Services\ComboAdminService::priceBreakdown($items, $charged);
+            // El desglose por producto usa siempre el precio de lista del paquete
+            // (sin código). Así el alumno no ve el descuento del código “repartido”
+            // como si fuera un descuento distinto en cada ítem.
+            $packageList = \App\Services\ComboAdminService::listPriceForCombo($combo);
+            $breakdown = \App\Services\ComboAdminService::priceBreakdown($items, $packageList);
+            $breakdown['package_list_price'] = $packageList;
+            $breakdown['charged'] = round($charged, 2);
+            $promoExtra = round(max(0, $packageList - $charged), 2);
+            $breakdown['promo_savings'] = $promoExtra;
+            $breakdown['total_savings'] = round(max(0, (float) $breakdown['solo_sum'] - $charged), 2);
+            $breakdown['total_savings_percent'] = $breakdown['solo_sum'] > 0
+                ? round(($breakdown['total_savings'] / (float) $breakdown['solo_sum']) * 100, 1)
+                : 0.0;
+
+            // En sidebar: tachar suma de precios de lista → total a pagar (con o sin código).
             if ($breakdown['solo_sum'] > $charged) {
                 $quote['catalog'] = $breakdown['solo_sum'];
-                if (empty($quote['label'])) {
-                    $quote['label'] = 'Precio combo';
+                if (empty($quote['label']) || ($quote['label'] ?? '') === 'Precio de lista') {
+                    $quote['label'] = !empty($quote['discount_code'])
+                        ? 'Precio paquete con código'
+                        : 'Precio de paquete';
                 }
             }
 
@@ -238,6 +254,7 @@ final class CheckoutController
                     'code' => $combo['code'],
                     'name' => $combo['name'],
                     'item_ids' => $ids,
+                    'list_price' => $packageList,
                 ],
                 'quote' => $quote,
                 'breakdown' => $breakdown,
