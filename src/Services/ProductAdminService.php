@@ -1061,7 +1061,7 @@ final class ProductAdminService
                 // Sin override explícito: conservar default del catálogo.
                 continue;
             }
-            $requiredMap[$code] = !empty($reqRaw[$code]);
+            $requiredMap[$code] = ((string) $reqRaw[$code] === '1' || $reqRaw[$code] === true || $reqRaw[$code] === 1);
         }
         if ($requiredMap !== []) {
             $config['checkout_field_required'] = $requiredMap;
