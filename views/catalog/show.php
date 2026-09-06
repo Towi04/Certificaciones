@@ -8,8 +8,12 @@ $comboList = $comboOffers['combos'] ?? [];
 $bestCombo = $comboList[0] ?? null;
 $bestSavings = 0.0;
 foreach ($comboList as $c) {
-    if (!empty($c['solo_sum']) && (float) $c['solo_sum'] > (float) $c['public_price']) {
-        $savings = (float) $c['solo_sum'] - (float) $c['public_price'];
+    $list = (float) ($c['list_price'] ?? $c['catalog_price'] ?? 0);
+    if ($list <= 0) {
+        $list = (float) ($c['public_price'] ?? 0);
+    }
+    if (!empty($c['solo_sum']) && (float) $c['solo_sum'] > $list) {
+        $savings = (float) $c['solo_sum'] - $list;
         if ($savings > $bestSavings) {
             $bestSavings = $savings;
             $bestCombo = $c;
@@ -50,17 +54,28 @@ $youtubeThumb = static function (array $item): ?string {
                     <ul class="muted" style="margin:0;padding-left:1.1rem;font-size:.82rem">
                         <?php foreach ($bestCombo['items'] ?? [] as $it): ?>
                             <?php
-                            $solo = (float) ($it['public_price'] ?? 0) > 0
-                                ? (float) $it['public_price']
-                                : (float) ($it['catalog_price'] ?? 0);
+                            $solo = (float) ($it['list_price'] ?? 0);
+                            if ($solo <= 0) {
+                                $solo = \App\Services\ComboAdminService::listPriceForItem($it);
+                            }
                             ?>
-                            <li><?= e((string) $it['name']) ?> · <?= money($solo) ?></li>
+                            <li><?= e((string) $it['name']) ?> · <?= money($solo) ?> lista</li>
                         <?php endforeach; ?>
-                        <li><strong>Combo <?= money($bestCombo['public_price']) ?></strong>
+                        <?php
+                        $bestList = (float) ($bestCombo['list_price'] ?? $bestCombo['catalog_price'] ?? 0);
+                        if ($bestList <= 0) {
+                            $bestList = \App\Services\ComboAdminService::listPriceForCombo($bestCombo);
+                        }
+                        $bestPublic = (float) ($bestCombo['public_price'] ?? 0);
+                        ?>
+                        <li><strong>Paquete <?= money($bestList) ?></strong>
                             <?php if ($bestSavings > 0): ?>
                                 <span style="text-decoration:line-through;margin-left:.25rem"><?= money($bestCombo['solo_sum']) ?></span>
                             <?php endif; ?>
                         </li>
+                        <?php if ($bestPublic > 0 && $bestList > $bestPublic + 0.009): ?>
+                            <li>Con código promocional: <?= money($bestPublic) ?></li>
+                        <?php endif; ?>
                     </ul>
                 </div>
             <?php elseif ($comboList !== []): ?>
