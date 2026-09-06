@@ -99,6 +99,7 @@ $router->post('/admin/seguimientos/{id}/moodle', fn (string $id) => $admin->trac
 $router->post('/admin/seguimientos/{id}/examen', fn (string $id) => $admin->trackingUpdateExam($id));
 $router->post('/admin/seguimientos/{id}/elet-accesos', fn (string $id) => $admin->trackingPublishEletAccess($id));
 $router->post('/admin/seguimientos/{id}/uks-solicitud', fn (string $id) => $admin->trackingResendUksRequest($id));
+$router->post('/admin/seguimientos/{id}/comprobante-proveedor', fn (string $id) => $admin->trackingUploadProviderProof($id));
 $router->post('/admin/seguimientos/{id}/solicitud-proveedor', fn (string $id) => $admin->trackingSendProviderRequest($id));
 $router->post('/admin/documentos/{id}/aprobar', fn (string $id) => $admin->documentApprove($id));
 $router->post('/admin/documentos/{id}/rechazar', fn (string $id) => $admin->documentReject($id));

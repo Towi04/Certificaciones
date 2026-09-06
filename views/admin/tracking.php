@@ -173,9 +173,13 @@ try {
     $providerCfg = null;
 }
 $providerPending = false;
+$adminProof = null;
 if ($providerCfg) {
-    $providerPending = (new \App\Services\ProviderRequestService())->isPendingSend($tracking);
+    $providerSvc = new \App\Services\ProviderRequestService();
+    $providerPending = $providerSvc->isPendingSend($tracking);
+    $adminProof = $providerSvc->findAdminPaymentProof((int) $tracking['id']);
 }
+$needsAdminProof = $providerCfg && !empty($providerCfg['require_admin_payment_proof']);
 ?>
 <?php if ($providerCfg && (string) ($tracking['purchase_status'] ?? '') === 'paid'): ?>
 <div class="panel" style="margin-top:1rem;border:2px solid #f59e0b;background:#fffbeb">
@@ -189,14 +193,48 @@ if ($providerCfg) {
             Puedes reenviar el correo si hace falta.
         <?php endif; ?>
     </p>
+
+    <div style="margin:.75rem 0;padding:.75rem;border:1px dashed #f59e0b;border-radius:10px;background:#fff">
+        <p style="margin:0 0 .5rem;font-size:.9rem;font-weight:700;color:var(--doceo-blue)">
+            Comprobante de pago DOCEO → proveedor
+        </p>
+        <p class="muted" style="margin:0 0 .65rem;font-size:.82rem">
+            Este es el disparador: no se solicita al proveedor hasta que subas este comprobante
+            <?= $needsAdminProof ? '(obligatorio en este grupo)' : '(recomendado)' ?>.
+        </p>
+        <?php if ($adminProof): ?>
+            <p class="muted" style="font-size:.85rem;margin:0 0 .55rem">
+                Subido: <code><?= e((string) ($adminProof['original_name'] ?? $adminProof['storage_path'] ?? '')) ?></code>
+                <?php if (!empty($adminProof['created_at'])): ?>
+                    · <?= e((string) $adminProof['created_at']) ?>
+                <?php endif; ?>
+            </p>
+        <?php else: ?>
+            <p class="muted" style="font-size:.85rem;margin:0 0 .55rem;color:#b45309">
+                Aún no hay comprobante admin.
+            </p>
+        <?php endif; ?>
+        <form method="post" action="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/comprobante-proveedor')) ?>"
+              enctype="multipart/form-data" style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:center">
+            <?= csrf_field() ?>
+            <input type="file" name="provider_payment_proof" accept=".pdf,.jpg,.jpeg,.png,.webp" required
+                   style="padding:.4rem;border:1px solid #cfd8e6;border-radius:8px;background:#fff">
+            <button type="submit" class="btn btn-primary btn-sm">
+                <?= $adminProof ? 'Reemplazar comprobante' : 'Subir comprobante' ?>
+                <?= !empty($providerCfg['auto_send_on_admin_proof']) ? ' y enviar' : '' ?>
+            </button>
+        </form>
+    </div>
+
     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/solicitud-proveedor')) ?>"
           style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:center">
         <?= csrf_field() ?>
         <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
             <input type="checkbox" name="include_payment_proof" value="1" checked>
-            Incluir comprobante de pago
+            Incluir comprobante de pago al proveedor
         </label>
-        <button type="submit" class="btn btn-accent btn-sm">
+        <button type="submit" class="btn btn-accent btn-sm"
+            <?= ($needsAdminProof && !$adminProof) ? 'disabled title="Sube el comprobante admin primero"' : '' ?>>
             <?= $providerPending ? 'Enviar solicitud ahora' : 'Reenviar solicitud' ?>
         </button>
     </form>

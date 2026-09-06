@@ -244,6 +244,8 @@ HTML;
         $toeflCertConfig['provider_request'] = [
             'enabled' => true,
             'auto_send_on_payment' => false,
+            'require_admin_payment_proof' => true,
+            'auto_send_on_admin_proof' => true,
             'step_code' => 'solicitud_proveedor',
             'to' => '',
             'cc' => '',
@@ -258,6 +260,8 @@ HTML;
                 'enabled' => true,
                 'template_path' => '',
                 'attach' => true,
+                'sheet' => '1',
+                'normalize' => 'toefl',
                 'cell_map' => [
                     ['cell' => 'B2', 'field' => 'full_name'],
                     ['cell' => 'B3', 'field' => 'email'],

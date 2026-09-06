@@ -292,7 +292,7 @@ final class ProductAdminService
             'enabled' => !empty($raw['enabled']),
             'auto_send_on_payment' => array_key_exists('auto_send_on_payment', $raw)
                 ? (bool) $raw['auto_send_on_payment']
-                : true,
+                : false,
             'step_code' => trim((string) ($raw['step_code'] ?? 'solicitud_proveedor')),
             'to' => trim((string) ($raw['to'] ?? '')),
             'cc' => trim((string) ($raw['cc'] ?? '')),
@@ -313,9 +313,19 @@ final class ProductAdminService
                 ? (bool) $raw['require_reglamento']
                 : true,
             'delivery' => (string) ($raw['delivery'] ?? 'links'),
+            'require_admin_payment_proof' => array_key_exists('require_admin_payment_proof', $raw)
+                ? (bool) $raw['require_admin_payment_proof']
+                : true,
+            'auto_send_on_admin_proof' => array_key_exists('auto_send_on_admin_proof', $raw)
+                ? (bool) $raw['auto_send_on_admin_proof']
+                : true,
             'workbook_enabled' => !empty($wb['enabled']),
             'workbook_template_path' => trim((string) ($wb['template_path'] ?? '')),
             'workbook_attach' => array_key_exists('attach', $wb) ? (bool) $wb['attach'] : true,
+            'workbook_sheet' => trim((string) ($wb['sheet'] ?? '')),
+            'workbook_normalize' => in_array((string) ($wb['normalize'] ?? 'none'), ['none', 'toefl'], true)
+                ? (string) ($wb['normalize'] ?? 'none')
+                : 'none',
             'workbook_cell_map' => $cellMap,
         ];
     }
@@ -1266,15 +1276,22 @@ final class ProductAdminService
             $templatePath = trim((string) $input['provider_request_workbook_path']);
         }
 
+        $normalize = (string) ($input['provider_request_workbook_normalize'] ?? 'none');
+        if (!in_array($normalize, ['none', 'toefl'], true)) {
+            $normalize = 'none';
+        }
+
         $config['provider_request'] = [
             'enabled' => true,
             'auto_send_on_payment' => !empty($input['provider_request_auto_send']),
+            'require_admin_payment_proof' => !empty($input['provider_request_require_admin_proof']),
+            'auto_send_on_admin_proof' => !empty($input['provider_request_auto_send_admin_proof']),
             'step_code' => $step,
             'to' => trim((string) ($input['provider_request_to'] ?? '')),
             'cc' => trim((string) ($input['provider_request_cc'] ?? '')),
             'mail_template_code' => trim((string) ($input['provider_request_mail_template'] ?? '')),
-            'include_student_data' => !empty($input['provider_request_include_student']),
-            'include_exam_schedule' => !empty($input['provider_request_include_exam']),
+            'include_student_data' => true,
+            'include_exam_schedule' => true,
             'include_reglamento' => !empty($input['provider_request_include_reglamento']),
             'include_payment_proof' => !empty($input['provider_request_include_proof']),
             'require_reglamento' => !empty($input['provider_request_require_reglamento']),
@@ -1283,6 +1300,8 @@ final class ProductAdminService
                 'enabled' => !empty($input['provider_request_workbook_enabled']),
                 'template_path' => $templatePath,
                 'attach' => !empty($input['provider_request_workbook_attach']),
+                'sheet' => trim((string) ($input['provider_request_workbook_sheet'] ?? '')),
+                'normalize' => $normalize,
                 'cell_map' => $cellMap,
             ],
         ];
