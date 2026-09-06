@@ -213,6 +213,58 @@ final class ExamScheduleService
         return $slots;
     }
 
+    /**
+     * Motivo legible cuando un día no tiene horarios (o null si sí tiene).
+     *
+     * @param array<string, mixed> $product
+     */
+    public function unavailabilityReason(array $product, string $dateRaw): ?string
+    {
+        if ($this->slotsForDate($product, $dateRaw) !== []) {
+            return null;
+        }
+
+        $date = $this->normalizeDate($dateRaw);
+        if ($date === null) {
+            return 'Selecciona una fecha válida.';
+        }
+
+        $rules = self::scheduleRules($product);
+        $dayNames = [
+            0 => 'domingo',
+            1 => 'lunes',
+            2 => 'martes',
+            3 => 'miércoles',
+            4 => 'jueves',
+            5 => 'viernes',
+            6 => 'sábado',
+        ];
+
+        if ($date < $this->minSelectableDate($product)) {
+            $days = (int) ($rules['min_advance_days'] ?? 0);
+            if ($days <= 0) {
+                return 'Esa fecha ya no está disponible. Elige una fecha a partir de hoy.';
+            }
+
+            return $days === 1
+                ? 'Esa fecha no cumple el anticipo mínimo (1 día). Elige otra fecha.'
+                : ('Esa fecha no cumple el anticipo mínimo (' . $days . ' días). Elige otra fecha.');
+        }
+
+        if (in_array($date, $rules['blocked_dates'], true)) {
+            return 'Esa fecha no está disponible (vacaciones o día bloqueado). Elige otra fecha.';
+        }
+
+        $dow = (int) (new \DateTimeImmutable($date))->format('w');
+        if (empty($rules['days'][$dow])) {
+            $name = $dayNames[$dow] ?? 'ese día';
+
+            return 'El ' . $name . ' no hay aplicación de examen. Elige otro día.';
+        }
+
+        return 'No hay horarios disponibles en esa fecha. Elige otra fecha.';
+    }
+
     /** @param array<string, mixed> $product */
     public function validateSlot(array $product, string $dateRaw, string $timeRaw): void
     {

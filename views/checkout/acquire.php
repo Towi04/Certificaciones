@@ -150,6 +150,7 @@ $stepLabels = [
                             }
                             ?>
                         </p>
+                        <p id="exam-date-warn" class="exam-date-warn" hidden role="alert"></p>
                     </div>
                 <?php endif; ?>
 
@@ -1042,10 +1043,23 @@ $stepLabels = [
       });
   }
 
+  const examDateWarn = document.getElementById('exam-date-warn');
+  function setExamDateWarn(msg) {
+    if (!examDateWarn) return;
+    if (msg) {
+      examDateWarn.hidden = false;
+      examDateWarn.textContent = msg;
+    } else {
+      examDateWarn.hidden = true;
+      examDateWarn.textContent = '';
+    }
+  }
+
   function loadExamSlots(date) {
     if (!examTimeSelect) return;
     examTimeSelect.innerHTML = '<option value="">— elige hora —</option>';
     examTimeSelect.disabled = true;
+    setExamDateWarn('');
     if (!date) return;
     fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(slug) + '?date=' + encodeURIComponent(date))
       .then(r => r.json())
@@ -1057,7 +1071,15 @@ $stepLabels = [
           opt.textContent = s.label;
           examTimeSelect.appendChild(opt);
         });
-        examTimeSelect.disabled = data.slots.length === 0;
+        const empty = data.slots.length === 0;
+        examTimeSelect.disabled = empty;
+        if (empty) {
+          setExamDateWarn(data.unavailable_reason
+            || 'Esa fecha no tiene horarios disponibles. Elige otro día.');
+        }
+      })
+      .catch(function () {
+        setExamDateWarn('No se pudieron cargar los horarios. Intenta de nuevo.');
       });
   }
 
