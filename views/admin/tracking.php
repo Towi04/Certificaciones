@@ -158,6 +158,51 @@ $statusLabels = [
     </form>
 </div>
 
+
+<?php
+$providerCfg = null;
+try {
+    $providerCfg = \App\Services\ProviderRequestService::configForProduct([
+        'config_json' => $tracking['config_json'] ?? null,
+        'group_config_json' => $tracking['group_config_json'] ?? null,
+        'id' => $tracking['product_id'] ?? 0,
+        'name' => $tracking['product_name'] ?? '',
+        'code' => $tracking['product_code'] ?? '',
+    ]);
+} catch (Throwable $e) {
+    $providerCfg = null;
+}
+$providerPending = false;
+if ($providerCfg) {
+    $providerPending = (new \App\Services\ProviderRequestService())->isPendingSend($tracking);
+}
+?>
+<?php if ($providerCfg && (string) ($tracking['purchase_status'] ?? '') === 'paid'): ?>
+<div class="panel" style="margin-top:1rem;border:2px solid #f59e0b;background:#fffbeb">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Solicitud al proveedor</h2>
+    <p class="muted" style="margin-top:0;font-size:.88rem">
+        Este producto requiere enviar solicitud al proveedor
+        <?= !empty($providerCfg['to']) ? ' (<strong>' . e($providerCfg['to']) . '</strong>)' : '' ?>.
+        <?php if ($providerPending): ?>
+            <strong style="color:#b45309">Pendiente de envío.</strong>
+        <?php else: ?>
+            Puedes reenviar el correo si hace falta.
+        <?php endif; ?>
+    </p>
+    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/solicitud-proveedor')) ?>"
+          style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:center">
+        <?= csrf_field() ?>
+        <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
+            <input type="checkbox" name="include_payment_proof" value="1" checked>
+            Incluir comprobante de pago
+        </label>
+        <button type="submit" class="btn btn-accent btn-sm">
+            <?= $providerPending ? 'Enviar solicitud ahora' : 'Reenviar solicitud' ?>
+        </button>
+    </form>
+</div>
+<?php endif; ?>
+
 <?php if ($isEletUks && (string) ($tracking['purchase_status'] ?? '') === 'paid'): ?>
 <?php if (in_array($current, ['registro', 'confirm_pago'], true)): ?>
 <div class="panel" style="margin-top:1rem;border:2px solid #f59e0b;background:#fffbeb">

@@ -149,6 +149,26 @@ HTML;
             ],
             'export_template_code' => 'uks_elet_registro',
             'import_template_code' => 'uks_elet_reporte',
+            'provider_request' => [
+                'enabled' => true,
+                'auto_send_on_payment' => true,
+                'step_code' => 'solicitud_uks',
+                'to' => '',
+                'cc' => '',
+                'mail_template_code' => 'uks_solicitud',
+                'include_student_data' => true,
+                'include_exam_schedule' => true,
+                'include_reglamento' => true,
+                'include_payment_proof' => true,
+                'require_reglamento' => true,
+                'delivery' => 'links',
+                'workbook' => [
+                    'enabled' => false,
+                    'template_path' => '',
+                    'attach' => false,
+                    'cell_map' => [],
+                ],
+            ],
         ];
 
         $eletCenniConfig = [
@@ -207,6 +227,35 @@ HTML;
             'payments' => $sharedPayments,
             'card_msi' => $sharedCardMsi,
         ];
+        $toeflCertConfig = $standardCertConfig;
+        $toeflCertConfig['pipeline_code'] = 'toefl_lf';
+        $toeflCertConfig['initial_step_code'] = 'registro';
+        $toeflCertConfig['provider_request'] = [
+            'enabled' => true,
+            'auto_send_on_payment' => false,
+            'step_code' => 'solicitud_proveedor',
+            'to' => '',
+            'cc' => '',
+            'mail_template_code' => '',
+            'include_student_data' => true,
+            'include_exam_schedule' => true,
+            'include_reglamento' => false,
+            'include_payment_proof' => true,
+            'require_reglamento' => false,
+            'delivery' => 'attachments',
+            'workbook' => [
+                'enabled' => true,
+                'template_path' => '',
+                'attach' => true,
+                'cell_map' => [
+                    ['cell' => 'B2', 'field' => 'full_name'],
+                    ['cell' => 'B3', 'field' => 'email'],
+                    ['cell' => 'B4', 'field' => 'matricula'],
+                    ['cell' => 'B5', 'field' => 'exam_date'],
+                    ['cell' => 'B6', 'field' => 'exam_time'],
+                ],
+            ],
+        ];
         $courseConfig = [
             'checkout_fields' => $sharedCheckoutFields,
             'required_docs' => [],
@@ -235,7 +284,7 @@ HTML;
             'linguafranca-exams' => [
                 'name' => 'Lingua Franca · TOEFL',
                 'supplier_id' => $supplierIds['linguafranca'],
-                'config' => $standardCertConfig,
+                'config' => $toeflCertConfig,
             ],
             'etc-certs' => [
                 'name' => 'ETC · Certificaciones IT',
@@ -502,6 +551,14 @@ HTML;
                 ['confirm_pago', 'Confirmación de pago', 'admin'],
                 ['solicitud_uks', 'Solicitud a UKS', 'admin'],
                 ['codigos', 'Asignación de códigos (folio y clave)', 'admin'],
+                ['resultados', 'Publicación de resultados', 'admin'],
+                ['fin', 'Completado', 'system'],
+            ]],
+            ['toefl_lf', 'TOEFL / Lingua Franca', 'certification', [
+                ['registro', 'Registro (datos y pago)', 'student'],
+                ['confirm_pago', 'Confirmación de pago', 'admin'],
+                ['solicitud_proveedor', 'Solicitud a proveedor', 'admin'],
+                ['asignacion', 'Asignación de códigos / accesos', 'admin'],
                 ['resultados', 'Publicación de resultados', 'admin'],
                 ['fin', 'Completado', 'system'],
             ]],

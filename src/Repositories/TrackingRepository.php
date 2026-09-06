@@ -71,6 +71,39 @@ final class TrackingRepository
         return $stmt->fetchAll();
     }
 
+
+    /**
+     * Casos con solicitud a proveedor pendiente de enviar (o reintentar).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function pendingProviderRequests(int $limit = 50): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT t.*, pr.name AS product_name, pr.code AS product_code,
+                    u.first_name, u.last_name_p, pu.matricula,
+                    pu.id AS purchase_id, pu.status AS purchase_status, pu.charged_amount,
+                    pg.name AS group_name, pg.code AS group_code
+             FROM trackings t
+             JOIN products pr ON pr.id = t.product_id
+             JOIN users u ON u.id = t.student_user_id
+             JOIN purchases pu ON pu.id = t.purchase_id
+             LEFT JOIN product_groups pg ON pg.id = pr.product_group_id
+             WHERE pu.status = 'paid'
+               AND t.status IN ('waiting_admin', 'waiting_provider')
+               AND JSON_EXTRACT(t.extra_json, '$.provider_request.required') = true
+               AND (
+                    JSON_EXTRACT(t.extra_json, '$.provider_request.sent_at') IS NULL
+                    OR JSON_UNQUOTE(JSON_EXTRACT(t.extra_json, '$.provider_request.sent_at')) IN ('', 'null')
+               )
+             ORDER BY t.updated_at ASC
+             LIMIT " . (int) $limit
+        );
+        $stmt->execute();
+
+        return $stmt->fetchAll() ?: [];
+    }
+
     public function upcomingExams(int $days = 14): array
     {
         $stmt = $this->pdo->prepare(

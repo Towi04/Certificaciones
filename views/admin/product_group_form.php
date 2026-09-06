@@ -53,10 +53,11 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
     <button type="button" class="group-tab" data-tab="rules" role="tab" aria-selected="false">Reglamento</button>
     <button type="button" class="group-tab" data-tab="payments" role="tab" aria-selected="false">Pagos</button>
     <button type="button" class="group-tab" data-tab="progress" role="tab" aria-selected="false">Progreso</button>
+    <button type="button" class="group-tab" data-tab="provider" role="tab" aria-selected="false">Solicitud proveedor</button>
     <button type="button" class="group-tab" data-tab="advanced" role="tab" aria-selected="false">Experto</button>
 </nav>
 
-<form method="post" action="<?= e($action) ?>" class="panel" style="margin-top:.75rem;max-width:960px" id="group-form">
+<form method="post" action="<?= e($action) ?>" class="panel" style="margin-top:.75rem;max-width:960px" id="group-form" enctype="multipart/form-data">
     <?= csrf_field() ?>
     <input type="hidden" name="apply_structured_config" value="1">
 
@@ -478,6 +479,141 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
         <?php endif; ?>
     </div>
 
+<?php
+    $pr = is_array($extras['provider_request'] ?? null) ? $extras['provider_request'] : [];
+    $prEnabled = !empty($pr['enabled']);
+    $prCells = is_array($pr['workbook_cell_map'] ?? null) ? $pr['workbook_cell_map'] : [];
+    if ($prCells === []) {
+        $prCells = [['cell' => '', 'field' => '']];
+    }
+    $fieldOptions = \App\Services\ProviderRequestService::FIELD_OPTIONS;
+?>
+    <div class="group-panel" data-panel="provider" hidden>
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Solicitud al proveedor</h2>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
+            Después de confirmar el pago, el sistema puede enviar (o dejar pendiente) un correo
+            al proveedor con datos del alumno, fecha/hora, reglamento, comprobante y/o una plantilla Excel.
+            Los casos pendientes aparecen en el Dashboard.
+        </p>
+
+        <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.9rem;margin-bottom:.85rem">
+            <input type="checkbox" name="provider_request_enabled" value="1" id="provider-request-enabled"
+                <?= $prEnabled ? 'checked' : '' ?>>
+            Este grupo requiere solicitud al proveedor tras el pago
+        </label>
+
+        <div id="provider-request-fields" style="<?= $prEnabled ? '' : 'opacity:.55;pointer-events:none' ?>">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem;margin-bottom:.85rem">
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Correo destino (Para)
+                    <input type="email" name="provider_request_to" value="<?= e((string) ($pr['to'] ?? '')) ?>"
+                           placeholder="proveedor@ejemplo.com" style="<?= e($inputStyle) ?>">
+                </label>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    CC (opcional)
+                    <input type="text" name="provider_request_cc" value="<?= e((string) ($pr['cc'] ?? '')) ?>"
+                           placeholder="ops@doceo.mx" style="<?= e($inputStyle) ?>">
+                </label>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Código de plantilla de correo
+                    <input type="text" name="provider_request_mail_template" value="<?= e((string) ($pr['mail_template_code'] ?? '')) ?>"
+                           placeholder="uks_solicitud o vacío = genérico" style="<?= e($inputStyle) ?>">
+                </label>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Código de paso en el progreso
+                    <input type="text" name="provider_request_step_code" value="<?= e((string) ($pr['step_code'] ?? 'solicitud_proveedor')) ?>"
+                           style="<?= e($inputStyle) ?>">
+                </label>
+            </div>
+
+            <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.88rem;margin-bottom:.55rem">
+                <input type="checkbox" name="provider_request_auto_send" value="1"
+                    <?= array_key_exists('auto_send_on_payment', $pr) ? (!empty($pr['auto_send_on_payment']) ? 'checked' : '') : 'checked' ?>>
+                Enviar automáticamente al confirmar el pago
+                <span class="muted" style="font-weight:500">(si se desactiva, queda en la cola del Dashboard)</span>
+            </label>
+
+            <p style="margin:.75rem 0 .35rem;font-weight:700;color:var(--doceo-blue)">Contenido del correo</p>
+            <div style="display:flex;flex-wrap:wrap;gap:.75rem 1.25rem;margin-bottom:.85rem">
+                <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
+                    <input type="checkbox" name="provider_request_include_student" value="1" <?= !isset($pr['include_student_data']) || !empty($pr['include_student_data']) ? 'checked' : '' ?>>
+                    Datos del alumno
+                </label>
+                <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
+                    <input type="checkbox" name="provider_request_include_exam" value="1" <?= !isset($pr['include_exam_schedule']) || !empty($pr['include_exam_schedule']) ? 'checked' : '' ?>>
+                    Fecha y hora de examen
+                </label>
+                <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
+                    <input type="checkbox" name="provider_request_include_reglamento" value="1" <?= !isset($pr['include_reglamento']) || !empty($pr['include_reglamento']) ? 'checked' : '' ?>>
+                    Reglamento firmado
+                </label>
+                <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
+                    <input type="checkbox" name="provider_request_require_reglamento" value="1" <?= !isset($pr['require_reglamento']) || !empty($pr['require_reglamento']) ? 'checked' : '' ?>>
+                    Exigir reglamento para poder enviar
+                </label>
+                <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
+                    <input type="checkbox" name="provider_request_include_proof" value="1" <?= !isset($pr['include_payment_proof']) || !empty($pr['include_payment_proof']) ? 'checked' : '' ?>>
+                    Comprobante de pago
+                </label>
+            </div>
+
+            <label class="muted" style="<?= e($labelStyle) ?>;max-width:28rem;margin-bottom:1rem">
+                Cómo enviar documentos
+                <select name="provider_request_delivery" style="<?= e($inputStyle) ?>">
+                    <?php $del = (string) ($pr['delivery'] ?? 'links'); ?>
+                    <option value="links" <?= $del === 'links' ? 'selected' : '' ?>>Solo enlaces seguros</option>
+                    <option value="attachments" <?= $del === 'attachments' ? 'selected' : '' ?>>Solo adjuntos</option>
+                    <option value="both" <?= $del === 'both' ? 'selected' : '' ?>>Enlaces y adjuntos</option>
+                </select>
+            </label>
+
+            <div style="border:1px solid #dbeafe;border-radius:12px;padding:.85rem;background:#f8fbff;margin-bottom:.5rem">
+                <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.9rem;margin-bottom:.65rem">
+                    <input type="checkbox" name="provider_request_workbook_enabled" value="1" id="provider-workbook-enabled"
+                        <?= !empty($pr['workbook_enabled']) ? 'checked' : '' ?>>
+                    Adjuntar plantilla Excel rellenada (p. ej. TOEFL)
+                </label>
+                <div id="provider-workbook-fields">
+                    <label class="muted" style="<?= e($labelStyle) ?>;margin-bottom:.65rem">
+                        Plantilla .xlsx
+                        <input type="file" name="provider_request_workbook" accept=".xlsx,.xls" style="<?= e($inputStyle) ?>">
+                    </label>
+                    <?php if (!empty($pr['workbook_template_path'])): ?>
+                        <p class="muted" style="font-size:.8rem;margin:.2rem 0 .65rem">
+                            Actual: <code><?= e((string) $pr['workbook_template_path']) ?></code>
+                            · <label style="display:inline-flex;gap:.3rem;align-items:center"><input type="checkbox" name="provider_request_clear_workbook" value="1"> Quitar</label>
+                        </p>
+                    <?php endif; ?>
+                    <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem;margin-bottom:.65rem">
+                        <input type="checkbox" name="provider_request_workbook_attach" value="1"
+                            <?= !isset($pr['workbook_attach']) || !empty($pr['workbook_attach']) ? 'checked' : '' ?>>
+                        Adjuntar el Excel al correo
+                    </label>
+                    <p style="margin:.35rem 0;font-weight:700;color:var(--doceo-blue)">Mapeo de celdas</p>
+                    <p class="muted" style="font-size:.78rem;margin:0 0 .5rem">Indica en qué celda (ej. B2) se escribe cada dato.</p>
+                    <div id="provider-cell-map">
+                        <?php foreach ($prCells as $i => $map): ?>
+                            <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;align-items:center" class="provider-cell-row">
+                                <input type="text" name="provider_request_cells[]" value="<?= e((string) ($map['cell'] ?? '')) ?>"
+                                       placeholder="B2" style="width:5rem;<?= e($inputStyle) ?>">
+                                <select name="provider_request_fields[]" style="<?= e($inputStyle) ?>">
+                                    <option value="">— Dato —</option>
+                                    <?php foreach ($fieldOptions as $opt): ?>
+                                        <option value="<?= e($opt['value']) ?>" <?= (($map['field'] ?? '') === $opt['value']) ? 'selected' : '' ?>>
+                                            <?= e($opt['label']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button type="button" class="btn btn-ghost btn-sm provider-cell-remove">✕</button>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <button type="button" class="btn btn-ghost btn-sm" id="provider-cell-add">+ Celda</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="group-panel" data-panel="advanced" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Modo experto (JSON)</h2>
         <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
@@ -750,6 +886,39 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
     var initialStep = val('initial_step_code', '');
     if (initialStep) base.initial_step_code = initialStep;
     else delete base.initial_step_code;
+
+    if (document.getElementById('provider-request-enabled') && document.getElementById('provider-request-enabled').checked) {
+      var cellMap = [];
+      document.querySelectorAll('#provider-cell-map .provider-cell-row').forEach(function (row) {
+        var cell = row.querySelector('input[name="provider_request_cells[]"]');
+        var field = row.querySelector('select[name="provider_request_fields[]"]');
+        if (cell && field && cell.value && field.value) {
+          cellMap.push({ cell: String(cell.value).toUpperCase(), field: field.value });
+        }
+      });
+      base.provider_request = {
+        enabled: true,
+        auto_send_on_payment: !!(document.querySelector('[name="provider_request_auto_send"]') || {}).checked,
+        step_code: val('provider_request_step_code', 'solicitud_proveedor'),
+        to: val('provider_request_to', ''),
+        cc: val('provider_request_cc', ''),
+        mail_template_code: val('provider_request_mail_template', ''),
+        include_student_data: !!(document.querySelector('[name="provider_request_include_student"]') || {}).checked,
+        include_exam_schedule: !!(document.querySelector('[name="provider_request_include_exam"]') || {}).checked,
+        include_reglamento: !!(document.querySelector('[name="provider_request_include_reglamento"]') || {}).checked,
+        include_payment_proof: !!(document.querySelector('[name="provider_request_include_proof"]') || {}).checked,
+        require_reglamento: !!(document.querySelector('[name="provider_request_require_reglamento"]') || {}).checked,
+        delivery: val('provider_request_delivery', 'links'),
+        workbook: {
+          enabled: !!(document.querySelector('[name="provider_request_workbook_enabled"]') || {}).checked,
+          template_path: (base.provider_request && base.provider_request.workbook && base.provider_request.workbook.template_path) || '',
+          attach: !!(document.querySelector('[name="provider_request_workbook_attach"]') || {}).checked,
+          cell_map: cellMap
+        }
+      };
+    } else {
+      delete base.provider_request;
+    }
 
     jsonTa.value = JSON.stringify(base, null, 2);
   }
@@ -1068,4 +1237,41 @@ $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
   }
 
 })();
+
+  // ---- Solicitud a proveedor ----
+  (function () {
+    var enabled = document.getElementById('provider-request-enabled');
+    var fields = document.getElementById('provider-request-fields');
+    var addBtn = document.getElementById('provider-cell-add');
+    var map = document.getElementById('provider-cell-map');
+    function refresh() {
+      if (!enabled || !fields) return;
+      fields.style.opacity = enabled.checked ? '1' : '.55';
+      fields.style.pointerEvents = enabled.checked ? 'auto' : 'none';
+    }
+    if (enabled) enabled.addEventListener('change', refresh);
+    refresh();
+    if (addBtn && map) {
+      addBtn.addEventListener('click', function () {
+        var row = map.querySelector('.provider-cell-row');
+        if (!row) return;
+        var clone = row.cloneNode(true);
+        clone.querySelectorAll('input').forEach(function (el) { el.value = ''; });
+        clone.querySelectorAll('select').forEach(function (el) { el.selectedIndex = 0; });
+        map.appendChild(clone);
+      });
+      map.addEventListener('click', function (e) {
+        var btn = e.target.closest('.provider-cell-remove');
+        if (!btn) return;
+        var rows = map.querySelectorAll('.provider-cell-row');
+        if (rows.length <= 1) {
+          rows[0].querySelectorAll('input').forEach(function (el) { el.value = ''; });
+          rows[0].querySelectorAll('select').forEach(function (el) { el.selectedIndex = 0; });
+          return;
+        }
+        btn.closest('.provider-cell-row').remove();
+      });
+    }
+  })();
+
 </script>

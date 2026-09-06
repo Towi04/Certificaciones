@@ -27,6 +27,7 @@ use App\Services\ExamScheduleService;
 use App\Services\ProductMediaService;
 use App\Services\TrackingService;
 use App\Services\UksEletService;
+use App\Services\ProviderRequestService;
 use App\Support\Pagination;
 use App\Support\Settings;
 
@@ -40,10 +41,12 @@ final class AdminController
             'paid' => 0,
             'awaiting_payment' => 0,
             'waiting_admin' => 0,
+            'pending_provider_requests' => 0,
         ];
         $upcoming = [];
         $queue = [];
         $paymentQueue = [];
+        $providerQueue = [];
         try {
             $stats['products'] = (new ProductRepository())->countActive();
             $purchases = new PurchaseRepository();
@@ -54,6 +57,8 @@ final class AdminController
             $track = new TrackingRepository();
             $queue = $track->waitingAdmin(10);
             $stats['waiting_admin'] = count($queue);
+            $providerQueue = $track->pendingProviderRequests(15);
+            $stats['pending_provider_requests'] = count($providerQueue);
             $upcoming = $track->upcomingExams(14);
         } catch (\Throwable $e) {
             flash('error', 'Base de datos no lista: ejecuta bin/install.php — ' . $e->getMessage());
@@ -64,6 +69,7 @@ final class AdminController
             'stats' => $stats,
             'queue' => $queue,
             'paymentQueue' => $paymentQueue,
+            'providerQueue' => $providerQueue,
             'upcoming' => $upcoming,
             'layout' => 'admin',
         ]);
@@ -301,7 +307,11 @@ final class AdminController
         Auth::requireRole(['admin']);
         csrf_verify();
         try {
-            $id = (new ProductAdminService())->createGroup($_POST);
+            $post = $_POST;
+            if (isset($_FILES['provider_request_workbook']) && is_array($_FILES['provider_request_workbook'])) {
+                $post['_provider_workbook_file'] = $_FILES['provider_request_workbook'];
+            }
+            $id = (new ProductAdminService())->createGroup($post);
             flash('success', 'Grupo creado. Ya puedes asignarlo a productos.');
             redirect('/admin/grupos/' . $id);
         } catch (\Throwable $e) {
@@ -351,7 +361,11 @@ final class AdminController
         csrf_verify();
         $groupId = (int) $id;
         try {
-            (new ProductAdminService())->updateGroup($groupId, $_POST);
+            $post = $_POST;
+            if (isset($_FILES['provider_request_workbook']) && is_array($_FILES['provider_request_workbook'])) {
+                $post['_provider_workbook_file'] = $_FILES['provider_request_workbook'];
+            }
+            (new ProductAdminService())->updateGroup($groupId, $post);
             flash('success', 'Grupo actualizado. Los productos del grupo heredan estos cambios.');
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
@@ -878,6 +892,33 @@ final class AdminController
                 $msg .= ' · caso en solicitud UKS';
             }
             flash('success', $msg);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/seguimientos/' . $trackingId);
+    }
+
+
+    public function trackingSendProviderRequest(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        $svc = new TrackingService();
+        $tracking = $svc->find($trackingId);
+        if ($tracking === null) {
+            flash('error', 'Seguimiento no encontrado.');
+            redirect('/admin');
+        }
+        try {
+            $includeProof = !empty($_POST['include_payment_proof']);
+            (new ProviderRequestService())->send(
+                $trackingId,
+                (int) $tracking['purchase_id'],
+                (int) Auth::id(),
+                $includeProof
+            );
+            flash('success', 'Solicitud enviada al proveedor.');
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }

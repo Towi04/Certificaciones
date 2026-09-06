@@ -65,7 +65,7 @@ final class UksEletService
             'waiting_provider'
         );
 
-        $this->sendSolicitudEmail($trackingId, $purchaseId, false);
+        $this->sendSolicitudEmail($trackingId, $purchaseId, true);
     }
 
     public function sendSolicitudEmail(int $trackingId, int $purchaseId, bool $includePaymentProof = false): void
