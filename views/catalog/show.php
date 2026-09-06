@@ -21,10 +21,23 @@ $youtubeThumb = static function (array $item): ?string {
             <?php if (!empty($product['short_description'])): ?>
                 <p class="muted"><?= e($product['short_description']) ?></p>
             <?php endif; ?>
-            <p class="price" style="font-size:1.6rem;margin:.5rem 0"><?= money($product['catalog_price']) ?></p>
+            <?php
+            $isPartnerView = !empty($partner);
+            $shownPrice = $isPartnerView && $partnerPrice !== null
+                ? (float) $partnerPrice
+                : (float) ($product['catalog_price'] ?? $product['public_price'] ?? 0);
+            ?>
+            <p class="price" style="font-size:1.6rem;margin:.5rem 0">
+                <?= money($shownPrice) ?>
+                <?php if ($isPartnerView && $partnerPrice !== null): ?>
+                    <span class="muted" style="font-size:.85rem;font-weight:600">precio partner (<?= e(strtoupper((string) ($partner['tier'] ?? ''))) ?>)</span>
+                <?php endif; ?>
+            </p>
 
             <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem">
-                <a class="btn btn-accent" href="<?= e(url('/adquirir/' . $product['slug'])) ?>">Adquirir</a>
+                <a class="btn btn-accent" href="<?= e(url('/adquirir/' . $product['slug'])) ?>">
+                    <?= $isPartnerView ? 'Registrar alumno' : 'Adquirir' ?>
+                </a>
                 <a class="btn btn-ghost" href="<?= e(url('/catalogo')) ?>">Volver al catálogo</a>
             </div>
         </div>

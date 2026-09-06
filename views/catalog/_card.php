@@ -1,5 +1,13 @@
 <?php /** @var array<string,mixed> $p */ ?>
-<?php $productUrl = url('/producto/' . $p['slug']); ?>
+<?php
+$isPartner = !empty($partner) || (($user['role'] ?? '') === 'partner');
+$productUrl = $isPartner
+    ? url('/adquirir/' . $p['slug'])
+    : url('/producto/' . $p['slug']);
+$displayPrice = $isPartner && isset($p['partner_price'])
+    ? (float) $p['partner_price']
+    : (float) ($p['catalog_price'] ?? $p['public_price'] ?? 0);
+?>
 <a class="product-card product-card-link" href="<?= e($productUrl) ?>">
     <div class="thumb">
         <?php if (!empty($p['is_star'])): ?><span class="badge-star" aria-label="Producto estrella">⭐</span><?php endif; ?>
@@ -15,9 +23,14 @@
         <?php if (!empty($p['short_description'])): ?>
             <div class="meta"><?= e($p['short_description']) ?></div>
         <?php endif; ?>
-        <div class="price"><?= money($p['catalog_price'] ?? $p['public_price'] ?? 0) ?></div>
+        <div class="price">
+            <?= money($displayPrice) ?>
+            <?php if ($isPartner && isset($p['partner_price'])): ?>
+                <span class="muted" style="font-size:.72rem;font-weight:600"> · tu nivel</span>
+            <?php endif; ?>
+        </div>
         <div class="actions">
-            <span class="btn btn-primary btn-sm">Ver más</span>
+            <span class="btn btn-primary btn-sm"><?= $isPartner ? 'Registrar alumno' : 'Ver más' ?></span>
         </div>
     </div>
 </a>

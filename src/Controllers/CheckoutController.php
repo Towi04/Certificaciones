@@ -12,6 +12,7 @@ use App\Services\CheckoutRequirements;
 use App\Services\CheckoutService;
 use App\Services\ComboAdminService;
 use App\Services\ExamScheduleService;
+use App\Services\PartnerRegistrationService;
 use App\Services\PricingService;
 use App\Support\Settings;
 
@@ -21,24 +22,56 @@ final class CheckoutController
     {
         $product = $this->loadProduct($slug);
         $user = Auth::user();
-        $prefill = [
-            'email' => $user['email'] ?? '',
-            'first_name' => $user['first_name'] ?? '',
-            'last_name_p' => $user['last_name_p'] ?? '',
-            'last_name_m' => $user['last_name_m'] ?? '',
-            'phone' => $user['phone'] ?? '',
-        ];
+        $isPartnerCheckout = ($user['role'] ?? '') === 'partner';
+
+        // El partner registra a un alumno: no rellenar con datos del partner.
+        if ($isPartnerCheckout) {
+            $prefill = [
+                'email' => '',
+                'first_name' => '',
+                'last_name_p' => '',
+                'last_name_m' => '',
+                'phone' => '',
+            ];
+        } else {
+            $prefill = [
+                'email' => $user['email'] ?? '',
+                'first_name' => $user['first_name'] ?? '',
+                'last_name_p' => $user['last_name_p'] ?? '',
+                'last_name_m' => $user['last_name_m'] ?? '',
+                'phone' => $user['phone'] ?? '',
+            ];
+        }
+
+        $pricing = new PricingService();
+        $quote = $pricing->quoteProduct($product, null);
+        $partner = null;
+        if ($isPartnerCheckout) {
+            try {
+                $partner = (new PartnerRegistrationService())->partnerForUser((int) Auth::id());
+                $tierPrice = $pricing->partnerPriceForProduct($product, (string) $partner['tier']);
+                $quote['charged'] = $tierPrice;
+                $quote['base'] = $tierPrice;
+                $quote['catalog'] = $tierPrice;
+                $quote['partner_id'] = (int) $partner['id'];
+                $quote['partner_price'] = $tierPrice;
+                $quote['label'] = 'Precio partner (' . strtoupper((string) $partner['tier']) . ')';
+            } catch (\Throwable) {
+                $isPartnerCheckout = false;
+                $partner = null;
+            }
+        }
 
         $offers = (new ComboAdminService())->offersForProduct((int) $product['id']);
         view('checkout/acquire', [
-            'title' => 'Adquirir · ' . $product['name'],
+            'title' => ($isPartnerCheckout ? 'Registrar alumno · ' : 'Adquirir · ') . $product['name'],
             'product' => $product,
             'fields' => CheckoutRequirements::fieldsForProduct($product),
             'docs' => CheckoutRequirements::docsForProduct($product),
             'reglamento' => CheckoutRequirements::reglamentoForProduct($product),
             'prefill' => $prefill,
             'user' => $user,
-            'quote' => (new PricingService())->quoteProduct($product, null),
+            'quote' => $quote,
             'comboOffers' => $offers,
             'openpayReady' => $this->openPayConfigured(),
             'bank' => $this->bankTransferInfo(),
@@ -50,6 +83,8 @@ final class CheckoutController
             'examAdvanceDays' => ExamScheduleService::needsExamAtCheckout($product)
                 ? (int) (ExamScheduleService::scheduleRules($product)['min_advance_days'] ?? 0)
                 : 0,
+            'isPartnerCheckout' => $isPartnerCheckout,
+            'partner' => $partner,
         ]);
     }
 
@@ -120,11 +155,25 @@ final class CheckoutController
             }
 
             if (!empty($result['redirect_url'])) {
-                if ($result['created_account']) {
+                if (!empty($result['partner_checkout'])) {
+                    $_SESSION['_doceo_pending_flash'] = [
+                        'success',
+                        'Matrícula ' . $matricula . ' — completa el pago en OpenPay. Luego revisa el caso en tu portal partner.',
+                    ];
+                } elseif ($result['created_account']) {
                     $_SESSION['_doceo_pending_flash'] = ['success', 'Matrícula ' . $matricula . ' — completa tu pago en OpenPay.'];
                 }
                 header('Location: ' . $result['redirect_url']);
                 exit;
+            }
+
+            if (!empty($result['partner_checkout']) && (int) ($result['tracking_id'] ?? 0) > 0) {
+                $msg = 'Alumno registrado · matrícula ' . $matricula;
+                if (!empty($result['created_account']) && !empty($result['plain_password'])) {
+                    $msg .= ' · contraseña temporal del alumno: ' . $result['plain_password'];
+                }
+                flash('success', $msg);
+                redirect('/partner/caso/' . (int) $result['tracking_id']);
             }
 
             flash('success', 'Compra registrada. Matrícula ' . $matricula);

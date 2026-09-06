@@ -323,12 +323,15 @@ final class CheckoutService
             $product
         );
 
-        if ($account['created']) {
-            $this->students->loginAs($account['user']);
-        } elseif (Auth::role() === 'student' || !Auth::check()) {
-            // Si ya existía y no hay sesión admin/partner, inicia sesión del alumno
-            if (!Auth::check() || Auth::role() === 'student') {
+        // Partner/admin deben conservar su sesión; el alumno inicia la suya solo en compra directa.
+        $actorRole = Auth::role();
+        if (!in_array($actorRole, ['partner', 'admin'], true)) {
+            if ($account['created']) {
                 $this->students->loginAs($account['user']);
+            } elseif ($actorRole === 'student' || !Auth::check()) {
+                if (!Auth::check() || Auth::role() === 'student') {
+                    $this->students->loginAs($account['user']);
+                }
             }
         }
 
@@ -338,6 +341,8 @@ final class CheckoutService
             'plain_password' => $account['plain_password'],
             'openpay' => $openpay,
             'redirect_url' => is_string($redirectUrl) && $redirectUrl !== '' ? $redirectUrl : null,
+            'tracking_id' => (int) ($firstTrackingId ?? $trackingId ?? 0),
+            'partner_checkout' => $actorRole === 'partner',
         ];
     }
 

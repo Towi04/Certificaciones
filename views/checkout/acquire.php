@@ -29,6 +29,10 @@ foreach ($comboList as $c) {
     }
 }
 
+/** @var bool $isPartnerCheckout */
+/** @var array<string,mixed>|null $partner */
+$isPartnerCheckout = !empty($isPartnerCheckout);
+$partner = $partner ?? null;
 $wizardSteps = ['datos'];
 if (!empty($reglamento)) {
     $wizardSteps[] = 'reglamento';
@@ -69,7 +73,16 @@ $stepLabels = [
                 <?php endforeach; ?>
             </nav>
 
-            <form method="post" action="<?= e(url('/adquirir/' . $product['slug'])) ?>" enctype="multipart/form-data" class="checkout-form panel" id="checkout-form" novalidate>
+            
+<?php if ($isPartnerCheckout): ?>
+<div class="flash flash-info" style="margin:0 0 1rem">
+    <strong>Registro de alumno (partner<?= $partner ? ' · nivel ' . e(strtoupper((string) ($partner['tier'] ?? ''))) : '' ?>)</strong><br>
+    Completa el mismo proceso que un alumno: datos requeridos, reglamento, agenda, paquetes/combos y pago.
+    Puedes firmar el reglamento en pantalla (pasa el iPad/mouse al alumno) o descargarlo, firmarlo en papel y subir el PDF escaneado.
+    Al terminar seguirás en tu portal partner con el caso creado.
+</div>
+<?php endif; ?>
+<form method="post" action="<?= e(url('/adquirir/' . $product['slug'])) ?>" enctype="multipart/form-data" class="checkout-form panel" id="checkout-form" novalidate>
                 <?= csrf_field() ?>
                 <input type="hidden" name="payment_method" id="payment_method" value="transfer_proof">
                 <input type="hidden" name="card_msi_months" id="card_msi_months" value="1">
@@ -82,7 +95,7 @@ $stepLabels = [
                 <input type="hidden" name="combo_id" id="combo_id" value="">
 
                 <div class="wizard-step active" data-step="datos">
-                    <h2 class="step-title">Tus datos</h2>
+                    <h2 class="step-title"><?= $isPartnerCheckout ? 'Datos del alumno' : 'Tus datos' ?></h2>
                     <div class="callout callout-info">
                         Registra tu información <strong>tal cual debe aparecer en tu certificado</strong>
                         (nombres y apellidos sin abreviar, sin errores ortográficos).
