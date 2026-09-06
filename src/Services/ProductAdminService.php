@@ -199,6 +199,15 @@ final class ProductAdminService
         }
         $checkoutFields = array_values(array_unique($checkoutFields));
 
+        $checkoutFieldRequired = [];
+        if (isset($cfg['checkout_field_required']) && is_array($cfg['checkout_field_required'])) {
+            foreach ($cfg['checkout_field_required'] as $code => $flag) {
+                if (is_string($code) && $code !== '') {
+                    $checkoutFieldRequired[$code] = (bool) $flag;
+                }
+            }
+        }
+
         return [
             'exam_choose_at_checkout' => (bool) ($exam['choose_at_checkout'] ?? true),
             'exam_slot_minutes' => max(15, (int) ($exam['slot_minutes'] ?? 30)),
@@ -218,6 +227,7 @@ final class ProductAdminService
             'reglamento_source_url' => (string) ($reg['source_url'] ?? ''),
             'reglamento_doc_code' => (string) ($reg['doc_code'] ?? ''),
             'checkout_fields' => $checkoutFields,
+            'checkout_field_required' => $checkoutFieldRequired,
             'pay_transfer' => in_array('transfer_proof', $order, true),
             'pay_oxxo' => in_array('openpay_store', $order, true),
             'pay_card' => in_array('openpay_card', $order, true),
@@ -1037,6 +1047,27 @@ final class ProductAdminService
             }
         }
         $config['checkout_fields'] = array_values(array_unique($fields));
+
+        $reqRaw = $input['checkout_field_required'] ?? [];
+        if (!is_array($reqRaw)) {
+            $reqRaw = [];
+        }
+        $requiredMap = [];
+        foreach ($config['checkout_fields'] as $code) {
+            if (in_array($code, ['email', 'first_name', 'last_name_p', 'phone'], true)) {
+                continue;
+            }
+            if (!array_key_exists($code, $reqRaw)) {
+                // Sin override explícito: conservar default del catálogo.
+                continue;
+            }
+            $requiredMap[$code] = ((string) $reqRaw[$code] === '1' || $reqRaw[$code] === true || $reqRaw[$code] === 1);
+        }
+        if ($requiredMap !== []) {
+            $config['checkout_field_required'] = $requiredMap;
+        } else {
+            unset($config['checkout_field_required']);
+        }
 
         return $config;
     }

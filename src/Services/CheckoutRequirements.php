@@ -43,8 +43,12 @@ final class CheckoutRequirements
         'curp' => ['label' => 'CURP', 'required' => true, 'type' => 'text'],
         'birth_date' => ['label' => 'Fecha de nacimiento', 'required' => true, 'type' => 'date'],
         'sex' => ['label' => 'Sexo', 'required' => false, 'type' => 'select'],
-        'nationality' => ['label' => 'Nacionalidad', 'required' => false, 'type' => 'text'],
+        // Si se pide nacionalidad, debe capturarse (p. ej. trámites SEP / CENNI).
+        'nationality' => ['label' => 'Nacionalidad', 'required' => true, 'type' => 'text'],
     ];
+
+    /** Campos siempre pedidos y siempre obligatorios. */
+    public const LOCKED_FIELDS = ['email', 'first_name', 'last_name_p', 'phone'];
 
     /** Contacto mínimo para cualquier compra. */
     private const DEFAULT_FIELDS = [
@@ -241,6 +245,44 @@ final class CheckoutRequirements
         self::saveCustomFieldDefinitions($defs);
     }
 
+    /**
+     * Actualiza un campo personalizado del catálogo global.
+     *
+     * @return array{code:string,label:string,required:bool,type:string,custom:bool}
+     */
+    public static function updateCustomField(string $code, string $label, string $type = 'text', bool $required = false): array
+    {
+        $code = self::normalizeFieldCode($code);
+        if ($code === '' || isset(self::FIELD_META[$code])) {
+            throw new \InvalidArgumentException('Solo se pueden editar campos personalizados.');
+        }
+        $defs = self::customFieldDefinitions();
+        if (!isset($defs[$code])) {
+            throw new \InvalidArgumentException('Ese campo personalizado no existe.');
+        }
+        $label = trim($label);
+        if ($label === '') {
+            throw new \InvalidArgumentException('Indica el nombre del campo.');
+        }
+        if (!in_array($type, self::CUSTOM_FIELD_TYPES, true)) {
+            throw new \InvalidArgumentException('Tipo de campo no válido.');
+        }
+        $defs[$code] = [
+            'label' => $label,
+            'required' => $required,
+            'type' => $type,
+        ];
+        self::saveCustomFieldDefinitions($defs);
+
+        return [
+            'code' => $code,
+            'label' => $label,
+            'required' => $required,
+            'type' => $type,
+            'custom' => true,
+        ];
+    }
+
     public static function normalizeFieldCode(string $raw): string
     {
         $s = strtolower(trim($raw));
@@ -335,9 +377,19 @@ final class CheckoutRequirements
                 }
             }
             // Siempre exigir identificación mínima de la persona + teléfono de soporte
-            foreach (['email', 'first_name', 'last_name_p', 'phone'] as $must) {
+            foreach (self::LOCKED_FIELDS as $must) {
                 if (!in_array($must, $codes, true)) {
                     array_unshift($codes, $must);
+                }
+            }
+        }
+
+        /** @var array<string, bool> $requiredOverrides */
+        $requiredOverrides = [];
+        if (isset($cfg['checkout_field_required']) && is_array($cfg['checkout_field_required'])) {
+            foreach ($cfg['checkout_field_required'] as $code => $flag) {
+                if (is_string($code)) {
+                    $requiredOverrides[$code] = (bool) $flag;
                 }
             }
         }
@@ -345,10 +397,15 @@ final class CheckoutRequirements
         $out = [];
         foreach ($codes as $code) {
             $meta = $all[$code];
+            $required = in_array($code, self::LOCKED_FIELDS, true)
+                ? true
+                : (array_key_exists($code, $requiredOverrides)
+                    ? $requiredOverrides[$code]
+                    : (bool) $meta['required']);
             $out[] = [
                 'code' => $code,
                 'label' => $meta['label'],
-                'required' => (bool) $meta['required'],
+                'required' => $required,
                 'type' => $meta['type'],
                 'custom' => !empty($meta['custom']),
             ];

@@ -66,6 +66,7 @@ $router->get('/admin/grupos/{id}', fn (string $id) => $admin->productGroupEdit($
 $router->post('/admin/grupos/{id}', fn (string $id) => $admin->productGroupUpdate($id));
 $router->post('/admin/campos-checkout', fn () => $admin->createCheckoutField());
 $router->post('/admin/campos-checkout/eliminar', fn () => $admin->deleteCheckoutField());
+$router->post('/admin/campos-checkout/editar', fn () => $admin->updateCheckoutField());
 
 $router->get('/admin/combos', fn () => $admin->combos());
 $router->get('/admin/combos/nuevo', fn () => $admin->comboCreateForm());
