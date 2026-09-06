@@ -1,21 +1,34 @@
 <?php
-/** @var array{template_url:string,doc_code:string,required_before_checkout:bool} $reglamento */
-$docCode = $reglamento['doc_code'];
+/** @var array{template_url:string,doc_code:string,required_before_checkout?:bool} $reglamento */
+$docCode = (string) ($reglamento['doc_code'] ?? $reglamento['template_code'] ?? 'reglamento');
+$templateUrl = (string) ($reglamento['template_url'] ?? $reglamento['url'] ?? '');
 $docField = 'doc_' . $docCode;
 ?>
 <div class="reglamento-block" id="reglamento-block">
     <p class="muted" style="margin-top:0;font-size:.88rem">
-        Lee el reglamento completo. Debes firmarlo digitalmente antes de continuar.
+        Lee el reglamento. Puedes <strong>firmarlo en pantalla</strong> (ideal si pasas el iPad/mouse al alumno)
+        o <strong>descargarlo, firmarlo en papel y subir el PDF escaneado</strong>.
     </p>
+
+    <div class="reglamento-mode-tabs" role="tablist" aria-label="Cómo firmar el reglamento">
+        <button type="button" class="reglamento-mode-tab active" data-reglamento-mode="digital" role="tab" aria-selected="true">
+            Firma digital
+        </button>
+        <button type="button" class="reglamento-mode-tab" data-reglamento-mode="upload" role="tab" aria-selected="false">
+            Descargar y subir PDF
+        </button>
+    </div>
 
     <div class="reglamento-viewer">
         <iframe
-            src="<?= e($reglamento['template_url']) ?>#toolbar=1"
+            src="<?= e($templateUrl) ?>#toolbar=1"
             title="Reglamento"
             class="reglamento-frame"
         ></iframe>
         <p class="muted" style="font-size:.82rem;margin:.5rem 0 0">
-            <a href="<?= e($reglamento['template_url']) ?>" target="_blank" rel="noopener">Abrir reglamento en pestaña nueva</a>
+            <a href="<?= e($templateUrl) ?>" target="_blank" rel="noopener" download>Descargar reglamento (PDF)</a>
+            ·
+            <a href="<?= e($templateUrl) ?>" target="_blank" rel="noopener">Abrir en pestaña nueva</a>
         </p>
     </div>
 
@@ -23,14 +36,14 @@ $docField = 'doc_' . $docCode;
         <input type="checkbox" name="reglamento_accepted" id="reglamento_accepted" value="1">
         <span class="accept-box-inner">
             <strong>He leído y acepto el reglamento del examen</strong>
-            <span class="muted">Es obligatorio marcar esta casilla para continuar con tu registro.</span>
+            <span class="muted">Es obligatorio marcar esta casilla para continuar con el registro.</span>
         </span>
     </label>
 
-    <div class="signature-block">
+    <div class="signature-block" id="reglamento-mode-digital">
         <p style="margin:0 0 .5rem;font-weight:600;color:var(--doceo-blue);font-size:.92rem">Firma digital</p>
         <p class="muted" style="font-size:.82rem;margin:0 0 .65rem">
-            Firma dentro del recuadro con mouse o dedo, <strong>lo más parecida a tu firma en tu INE</strong>.
+            Firma dentro del recuadro con mouse o dedo, <strong>lo más parecida a la firma del INE</strong>.
             Se adjuntará como última página del PDF.
         </p>
         <div class="signature-pad-wrap">
@@ -42,10 +55,33 @@ $docField = 'doc_' . $docCode;
         </div>
     </div>
 
+    <div class="upload-block" id="reglamento-mode-upload" hidden>
+        <p style="margin:0 0 .5rem;font-weight:600;color:var(--doceo-blue);font-size:.92rem">PDF firmado / escaneado</p>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .65rem">
+            Descarga el reglamento, hazlo firmar al alumno en papel (o imprímelo firmado) y sube el PDF escaneado.
+            Debe ser un archivo <strong>.pdf</strong>.
+        </p>
+        <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;max-width:420px">
+            Subir reglamento firmado *
+            <input type="file" id="reglamento-upload-input" accept=".pdf,application/pdf"
+                   style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+        </label>
+        <p class="muted" id="reglamento-upload-status" style="font-size:.82rem;margin:.5rem 0 0"></p>
+    </div>
+
     <input type="file" name="<?= e($docField) ?>" id="<?= e($docField) ?>" accept=".pdf" hidden>
 </div>
 
 <style>
+.reglamento-mode-tabs { display:flex; gap:.5rem; flex-wrap:wrap; margin:0 0 .85rem; }
+.reglamento-mode-tab {
+  border:1px solid #cfd8e6; background:#fff; color:var(--doceo-blue);
+  border-radius:999px; padding:.45rem .9rem; font:inherit; font-weight:600; font-size:.86rem;
+  cursor:pointer;
+}
+.reglamento-mode-tab.active {
+  background:var(--doceo-blue); color:#fff; border-color:var(--doceo-blue);
+}
 .reglamento-viewer { border:1px solid #d5deea; border-radius:12px; overflow:hidden; background:#f8fafc; }
 .reglamento-frame { width:100%; height:min(380px,50vh); border:0; display:block; }
 .signature-pad-wrap {
@@ -70,27 +106,55 @@ $docField = 'doc_' . $docCode;
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script>
 (function () {
-  const templateUrl = <?= json_encode($reglamento['template_url'], JSON_UNESCAPED_UNICODE) ?>;
+  const templateUrl = <?= json_encode($templateUrl, JSON_UNESCAPED_UNICODE) ?>;
   const docInput = document.getElementById(<?= json_encode($docField) ?>);
   const canvas = document.getElementById('signature-canvas');
   const clearBtn = document.getElementById('signature-clear');
   const accepted = document.getElementById('reglamento_accepted');
   const acceptBox = document.getElementById('reglamento-accept-box');
   const statusEl = document.getElementById('signature-status');
+  const uploadInput = document.getElementById('reglamento-upload-input');
+  const uploadStatus = document.getElementById('reglamento-upload-status');
+  const digitalPanel = document.getElementById('reglamento-mode-digital');
+  const uploadPanel = document.getElementById('reglamento-mode-upload');
   const form = document.getElementById('checkout-form');
   if (!canvas || !form || !docInput) return;
 
-  const ctx = canvas.getContext('2d');
+  let mode = 'digital';
   let drawing = false;
   let hasStroke = false;
   let reglamentoAttached = false;
+  let uploadedFile = null;
 
+  const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.strokeStyle = '#1a2744';
   ctx.lineWidth = 2;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+
+  function setMode(next) {
+    mode = next === 'upload' ? 'upload' : 'digital';
+    document.querySelectorAll('.reglamento-mode-tab').forEach(btn => {
+      const active = btn.getAttribute('data-reglamento-mode') === mode;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    if (digitalPanel) digitalPanel.hidden = mode !== 'digital';
+    if (uploadPanel) uploadPanel.hidden = mode !== 'upload';
+    reglamentoAttached = false;
+    docInput.value = '';
+    if (mode === 'digital') {
+      uploadedFile = null;
+      if (uploadInput) uploadInput.value = '';
+      if (uploadStatus) uploadStatus.textContent = '';
+    }
+  }
+
+  document.querySelectorAll('.reglamento-mode-tab').forEach(btn => {
+    btn.addEventListener('click', () => setMode(btn.getAttribute('data-reglamento-mode')));
+  });
 
   function pos(e) {
     const rect = canvas.getBoundingClientRect();
@@ -118,7 +182,7 @@ $docField = 'doc_' . $docCode;
     ctx.lineTo(p.x, p.y);
     ctx.stroke();
     hasStroke = true;
-    statusEl.textContent = '';
+    if (statusEl) statusEl.textContent = '';
   }
 
   function end() { drawing = false; }
@@ -138,14 +202,38 @@ $docField = 'doc_' . $docCode;
     });
   }
 
-  clearBtn.addEventListener('click', () => {
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    hasStroke = false;
-    reglamentoAttached = false;
-    docInput.value = '';
-    statusEl.textContent = 'Firma borrada';
-  });
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      hasStroke = false;
+      reglamentoAttached = false;
+      docInput.value = '';
+      if (statusEl) statusEl.textContent = 'Firma borrada';
+    });
+  }
+
+  if (uploadInput) {
+    uploadInput.addEventListener('change', () => {
+      const file = uploadInput.files && uploadInput.files[0] ? uploadInput.files[0] : null;
+      uploadedFile = null;
+      reglamentoAttached = false;
+      docInput.value = '';
+      if (!file) {
+        if (uploadStatus) uploadStatus.textContent = '';
+        return;
+      }
+      const name = String(file.name || '').toLowerCase();
+      if (file.type !== 'application/pdf' && !name.endsWith('.pdf')) {
+        uploadInput.value = '';
+        if (uploadStatus) uploadStatus.textContent = 'Solo se acepta PDF.';
+        alert('Sube el reglamento firmado en PDF.');
+        return;
+      }
+      uploadedFile = file;
+      if (uploadStatus) uploadStatus.textContent = 'Archivo listo: ' + file.name;
+    });
+  }
 
   function signerName() {
     const parts = ['first_name', 'last_name_p', 'last_name_m']
@@ -162,7 +250,7 @@ $docField = 'doc_' . $docCode;
       throw new Error('Debes aceptar el reglamento marcando la casilla amarilla.');
     }
     if (!hasStroke) {
-      throw new Error('Dibuja tu firma en el recuadro (similar a tu INE).');
+      throw new Error('Dibuja la firma en el recuadro (similar a la del INE).');
     }
     if (typeof PDFLib === 'undefined') {
       throw new Error('No se pudo cargar el generador de PDF. Recarga la página.');
@@ -182,17 +270,14 @@ $docField = 'doc_' . $docCode;
     page.drawText('Firma del aspirante', { x: 50, y: 720, size: 14, font: bold, color: PDFLib.rgb(0.1, 0.15, 0.27) });
     page.drawText('Nombre: ' + signerName(), { x: 50, y: 690, size: 11, font });
     page.drawText('Fecha y hora: ' + fecha, { x: 50, y: 670, size: 11, font });
-    page.drawText('Declaro haber leído y aceptado el reglamento del examen.', { x: 50, y: 650, size: 10, font, color: PDFLib.rgb(0.35, 0.35, 0.35) });
+    page.drawText('Declaro haber leído y aceptado el reglamento del examen.', {
+      x: 50, y: 650, size: 10, font, color: PDFLib.rgb(0.35, 0.35, 0.35)
+    });
 
     const pngData = canvas.toDataURL('image/png');
     const pngImage = await pdfDoc.embedPng(pngData);
     const pngDims = pngImage.scale(0.65);
-    page.drawImage(pngImage, {
-      x: 50,
-      y: 480,
-      width: pngDims.width,
-      height: pngDims.height,
-    });
+    page.drawImage(pngImage, { x: 50, y: 480, width: pngDims.width, height: pngDims.height });
 
     const bytes = await pdfDoc.save();
     return new File([bytes], 'reglamento-firmado.pdf', { type: 'application/pdf' });
@@ -200,13 +285,19 @@ $docField = 'doc_' . $docCode;
 
   window.reglamentoWizard = {
     hasAccepted: () => accepted.checked,
-    hasSignature: () => hasStroke,
+    hasSignature: () => mode === 'upload' ? !!uploadedFile : hasStroke,
     validateStep: () => {
       if (!accepted.checked) {
         throw new Error('Marca la casilla amarilla: aceptación del reglamento.');
       }
+      if (mode === 'upload') {
+        if (!uploadedFile) {
+          throw new Error('Sube el PDF del reglamento firmado/escaneado.');
+        }
+        return;
+      }
       if (!hasStroke) {
-        throw new Error('Dibuja tu firma similar a tu INE.');
+        throw new Error('Dibuja la firma similar a la del INE, o cambia a “Descargar y subir PDF”.');
       }
     },
   };
@@ -217,19 +308,28 @@ $docField = 'doc_' . $docCode;
     if (window.checkoutWizardValidateAll && !window.checkoutWizardValidateAll()) {
       return;
     }
-    statusEl.textContent = 'Generando PDF firmado…';
     try {
-      const file = await buildSignedPdf();
+      let file = null;
+      if (mode === 'upload') {
+        if (!accepted.checked) throw new Error('Marca la casilla de aceptación del reglamento.');
+        if (!uploadedFile) throw new Error('Sube el PDF del reglamento firmado.');
+        file = uploadedFile;
+        if (uploadStatus) uploadStatus.textContent = 'Adjuntando PDF…';
+      } else {
+        if (statusEl) statusEl.textContent = 'Generando PDF firmado…';
+        file = await buildSignedPdf();
+      }
       const dt = new DataTransfer();
       dt.items.add(file);
       docInput.files = dt.files;
       reglamentoAttached = true;
-      statusEl.textContent = 'Reglamento firmado listo ✓';
+      if (statusEl) statusEl.textContent = 'Reglamento listo ✓';
+      if (uploadStatus) uploadStatus.textContent = 'Reglamento listo ✓';
       form.requestSubmit();
     } catch (err) {
       reglamentoAttached = false;
-      statusEl.textContent = '';
-      alert(err.message || 'No se pudo generar el reglamento firmado.');
+      if (statusEl) statusEl.textContent = '';
+      alert(err.message || 'No se pudo preparar el reglamento.');
     }
   });
 })();

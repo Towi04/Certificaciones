@@ -5,6 +5,8 @@
     </h1>
     <?php if ($partner): ?>
         <a class="btn btn-accent" href="<?= e(url('/partner/registrar')) ?>">Registrar alumno</a>
+        <a class="btn btn-ghost" href="<?= e(url('/catalogo')) ?>">Ver catálogo</a>
+        <a class="btn btn-ghost" href="<?= e(url('/catalogo')) ?>">Ver catálogo</a>
     <?php endif; ?>
 </div>
 <?php if ($partner): ?>
@@ -29,7 +31,11 @@
 <div class="panel">
     <h2>Alumnos / seguimientos</h2>
     <?php if ($trackings === []): ?>
-        <div class="empty">Aún no hay alumnos. <a href="<?= e(url('/partner/registrar')) ?>">Registra el primero</a>.</div>
+        <div class="empty">
+            Aún no hay alumnos.
+            <a href="<?= e(url('/partner/registrar')) ?>">Elige un producto del catálogo</a>
+            y completa el mismo flujo de registro (datos, reglamento, pago y progreso).
+        </div>
     <?php else: ?>
         <div class="table-wrap">
             <table class="data">

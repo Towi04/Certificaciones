@@ -42,17 +42,16 @@ final class PartnerController
             flash('error', $e->getMessage());
             redirect('/partner');
         }
-        $products = (new ProductRepository())->adminList(null);
-        $products = array_values(array_filter(
-            $products,
-            static fn (array $p) => (int) $p['is_active'] === 1
-        ));
+
+        // Catálogo público (mismo que ve un alumno), con precio del nivel partner.
+        $products = (new ProductRepository())->publicCatalog('all', null);
         $pricing = new PricingService();
         $priced = [];
         foreach ($products as $p) {
             $p['partner_price'] = $pricing->partnerPriceForProduct($p, (string) $partner['tier']);
             $priced[] = $p;
         }
+
         view('partner/register', [
             'title' => 'Registrar alumno',
             'partner' => $partner,
@@ -63,36 +62,10 @@ final class PartnerController
 
     public function registerSubmit(): void
     {
+        // El registro corto quedó deprecado: el partner usa /adquirir/{slug}.
         Auth::requireRole(['partner']);
-        csrf_verify();
-        try {
-            $result = (new PartnerRegistrationService())->register(
-                (int) Auth::id(),
-                (int) ($_POST['product_id'] ?? 0),
-                [
-                    'email' => trim((string) ($_POST['email'] ?? '')),
-                    'first_name' => trim((string) ($_POST['first_name'] ?? '')),
-                    'last_name_p' => trim((string) ($_POST['last_name_p'] ?? '')),
-                    'last_name_m' => trim((string) ($_POST['last_name_m'] ?? '')),
-                    'phone' => trim((string) ($_POST['phone'] ?? '')),
-                ],
-                [
-                    'exam_date' => trim((string) ($_POST['exam_date'] ?? '')),
-                    'exam_time' => trim((string) ($_POST['exam_time'] ?? '')),
-                ],
-                $_FILES
-            );
-            $msg = 'Alumno registrado · matrícula ' . $result['matricula']
-                . ' · comprobante en revisión (admin confirmará el pago)';
-            if ($result['created_account'] && $result['plain_password']) {
-                $msg .= ' · contraseña temporal ' . $result['plain_password'];
-            }
-            flash('success', $msg);
-            redirect('/partner/caso/' . $result['tracking_id']);
-        } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
-            redirect('/partner/registrar');
-        }
+        flash('info', 'Elige el producto desde el catálogo para registrar al alumno con el flujo completo.');
+        redirect('/partner/registrar');
     }
 
     public function caseShow(string $id): void

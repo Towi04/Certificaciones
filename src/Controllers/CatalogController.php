@@ -10,6 +10,8 @@ use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\TrackingRepository;
 use App\Services\CatalogFilterService;
+use App\Services\PartnerRegistrationService;
+use App\Services\PricingService;
 use App\Support\Settings;
 
 final class CatalogController
@@ -32,6 +34,27 @@ final class CatalogController
             error_log('[Doceo] Catalog: ' . $e->getMessage());
         }
 
+        $user = Auth::user();
+        $partner = null;
+        if (($user['role'] ?? '') === 'partner') {
+            try {
+                $partner = (new PartnerRegistrationService())->partnerForUser((int) Auth::id());
+                $pricing = new PricingService();
+                $annotate = static function (array $list) use ($pricing, $partner): array {
+                    $out = [];
+                    foreach ($list as $p) {
+                        $p['partner_price'] = $pricing->partnerPriceForProduct($p, (string) $partner['tier']);
+                        $out[] = $p;
+                    }
+                    return $out;
+                };
+                $products = $annotate($products);
+                $stars = $annotate($stars);
+            } catch (\Throwable) {
+                $partner = null;
+            }
+        }
+
         view('catalog/home', [
             'title' => 'Catálogo',
             'stars' => $stars,
@@ -40,7 +63,8 @@ final class CatalogController
             'filter' => $_GET['filtro'] ?? $_GET['categoria'] ?? 'all',
             'q' => $_GET['q'] ?? '',
             'dbOk' => $dbOk,
-            'user' => Auth::user(),
+            'user' => $user,
+            'partner' => $partner,
         ]);
     }
 
@@ -62,11 +86,25 @@ final class CatalogController
             error_log('[Doceo] Product media: ' . $e->getMessage());
         }
 
+        $user = Auth::user();
+        $partner = null;
+        $partnerPrice = null;
+        if (($user['role'] ?? '') === 'partner') {
+            try {
+                $partner = (new PartnerRegistrationService())->partnerForUser((int) Auth::id());
+                $partnerPrice = (new PricingService())->partnerPriceForProduct($product, (string) $partner['tier']);
+            } catch (\Throwable) {
+                $partner = null;
+            }
+        }
+
         view('catalog/show', [
             'title' => $product['name'],
             'product' => $product,
             'media' => $media,
-            'user' => Auth::user(),
+            'user' => $user,
+            'partner' => $partner,
+            'partnerPrice' => $partnerPrice,
         ]);
     }
 }

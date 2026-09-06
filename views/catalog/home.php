@@ -1,4 +1,7 @@
 <?php
+/** @var array<string,mixed>|null $partner */
+$partner = $partner ?? null;
+$user = $user ?? null;
 /** @var list<array<string,mixed>> $stars */
 /** @var list<array<string,mixed>> $products */
 /** @var list<array<string,mixed>> $catalogFilters */
