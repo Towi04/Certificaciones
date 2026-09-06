@@ -52,12 +52,13 @@ $navItems = [
                 </div>
             </div>
             <button type="button" class="nav-collapse-btn" id="admin-nav-toggle"
-                    title="Ocultar menú" aria-label="Ocultar o mostrar textos del menú" aria-expanded="true">
-                <?= icon('panel') ?>
+                    title="Ocultar menú" aria-label="Ocultar o mostrar el menú lateral" aria-expanded="true"
+                    aria-controls="admin-side-nav">
+                <?= icon('menu') ?>
             </button>
         </div>
 
-        <nav class="side-nav-links">
+        <nav class="side-nav-links" id="admin-side-nav-links">
             <?php foreach ($navItems as $item): ?>
                 <a class="side-nav-link<?= !empty($item['active']) ? ' active' : '' ?>"
                    href="<?= e(url($item['href'])) ?>"
@@ -91,10 +92,11 @@ $navItems = [
   var key = 'doceo-admin-nav-collapsed';
 
   function apply(collapsed) {
-    shell.classList.toggle('app-shell--nav-collapsed', collapsed);
-    document.documentElement.classList.remove('admin-nav-collapsed-boot');
+    shell.classList.toggle('app-shell--nav-collapsed', !!collapsed);
+    document.documentElement.classList.toggle('admin-nav-collapsed-boot', !!collapsed);
     btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     btn.title = collapsed ? 'Mostrar menú' : 'Ocultar menú';
+    btn.setAttribute('aria-label', collapsed ? 'Mostrar el menú lateral' : 'Ocultar el menú lateral');
     try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e) {}
   }
 
@@ -104,7 +106,9 @@ $navItems = [
     apply(false);
   }
 
-  btn.addEventListener('click', function () {
+  btn.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
     apply(!shell.classList.contains('app-shell--nav-collapsed'));
   });
 })();
