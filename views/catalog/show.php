@@ -1,25 +1,7 @@
 <?php
 /** @var array<string,mixed> $product */
 /** @var list<array<string,mixed>> $media */
-/** @var array{combos:list<array<string,mixed>>,addons:list<array<string,mixed>>} $comboOffers */
 $media = $media ?? [];
-$comboOffers = $comboOffers ?? ['combos' => [], 'addons' => []];
-$comboList = $comboOffers['combos'] ?? [];
-$bestCombo = $comboList[0] ?? null;
-$bestSavings = 0.0;
-foreach ($comboList as $c) {
-    $list = (float) ($c['list_price'] ?? $c['catalog_price'] ?? 0);
-    if ($list <= 0) {
-        $list = (float) ($c['public_price'] ?? 0);
-    }
-    if (!empty($c['solo_sum']) && (float) $c['solo_sum'] > $list) {
-        $savings = (float) $c['solo_sum'] - $list;
-        if ($savings > $bestSavings) {
-            $bestSavings = $savings;
-            $bestCombo = $c;
-        }
-    }
-}
 $youtubeThumb = static function (array $item): ?string {
     $url = (string) ($item['external_url'] ?? '');
     if ($url !== '' && preg_match('#/embed/([A-Za-z0-9_-]+)#', $url, $m)) {
@@ -41,58 +23,6 @@ $youtubeThumb = static function (array $item): ?string {
             <?php endif; ?>
             <p class="price" style="font-size:1.6rem;margin:.5rem 0"><?= money($product['catalog_price']) ?></p>
 
-            <?php if ($bestCombo !== null): ?>
-                <div class="product-combo-teaser">
-                    <strong>Paquete disponible</strong>
-                    <p class="muted" style="margin:.35rem 0 .5rem;font-size:.88rem">
-                        Al adquirir podrás elegir el combo <em><?= e((string) $bestCombo['name']) ?></em>
-                        <?php if ($bestSavings > 0): ?>
-                            y ahorrar hasta <strong style="color:#176b3a"><?= money($bestSavings) ?></strong>
-                        <?php endif; ?>
-                        frente a comprar cada producto por separado.
-                    </p>
-                    <ul class="muted" style="margin:0;padding-left:1.1rem;font-size:.82rem">
-                        <?php foreach ($bestCombo['items'] ?? [] as $it): ?>
-                            <?php
-                            $solo = (float) ($it['list_price'] ?? 0);
-                            if ($solo <= 0) {
-                                $solo = \App\Services\ComboAdminService::listPriceForItem($it);
-                            }
-                            ?>
-                            <li><?= e((string) $it['name']) ?> · <?= money($solo) ?> lista</li>
-                        <?php endforeach; ?>
-                        <?php
-                        $bestList = (float) ($bestCombo['list_price'] ?? $bestCombo['catalog_price'] ?? 0);
-                        if ($bestList <= 0) {
-                            $bestList = \App\Services\ComboAdminService::listPriceForCombo($bestCombo);
-                        }
-                        $bestPublic = (float) ($bestCombo['public_price'] ?? 0);
-                        ?>
-                        <li><strong>Paquete <?= money($bestList) ?></strong>
-                            <?php if ($bestSavings > 0): ?>
-                                <span style="text-decoration:line-through;margin-left:.25rem"><?= money($bestCombo['solo_sum']) ?></span>
-                            <?php endif; ?>
-                        </li>
-                        <?php if ($bestPublic > 0 && $bestList > $bestPublic + 0.009): ?>
-                            <?php $wa = \App\Support\Settings::schoolWhatsappPromoUrl((string) ($product['name'] ?? '')); ?>
-                            <li>
-                                <?php if ($wa !== null): ?>
-                                    <a href="<?= e($wa) ?>" target="_blank" rel="noopener noreferrer">
-                                        Contacta a un asesor para ver si existe algún código promocional vigente
-                                    </a>
-                                <?php else: ?>
-                                    Contacta a un asesor para ver si existe algún código promocional vigente.
-                                <?php endif; ?>
-                            </li>
-                        <?php endif; ?>
-                    </ul>
-                </div>
-            <?php elseif ($comboList !== []): ?>
-                <p class="muted" style="font-size:.85rem;margin:.25rem 0 0">
-                    Al adquirir podrás <strong>completar tu paquete</strong> con productos relacionados.
-                </p>
-            <?php endif; ?>
-
             <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem">
                 <a class="btn btn-accent" href="<?= e(url('/adquirir/' . $product['slug'])) ?>">Adquirir</a>
                 <a class="btn btn-ghost" href="<?= e(url('/catalogo')) ?>">Volver al catálogo</a>
@@ -106,11 +36,11 @@ $youtubeThumb = static function (array $item): ?string {
             <section>
                 <?php if (!empty($product['description'])): ?>
                     <h2 style="color:var(--doceo-blue);font-size:1.05rem;margin-top:0">Descripción</h2>
-                    <div><?= nl2br(e($product['description'])) ?></div>
+                    <div class="product-richtext"><?= rich_text((string) $product['description']) ?></div>
                 <?php endif; ?>
                 <?php if (!empty($product['benefits_html'])): ?>
                     <h2 style="color:var(--doceo-blue);font-size:1.05rem;margin-top:1rem">Beneficios</h2>
-                    <div><?= $product['benefits_html'] ?></div>
+                    <div class="product-richtext"><?= rich_text((string) $product['benefits_html']) ?></div>
                 <?php endif; ?>
             </section>
 
@@ -169,18 +99,17 @@ $youtubeThumb = static function (array $item): ?string {
 <?php endif; ?>
 
 <style>
+.product-richtext { line-height:1.55; color:#243247; }
+.product-richtext p { margin:.55rem 0; }
+.product-richtext ul, .product-richtext ol { margin:.55rem 0 .55rem 1.1rem; padding:0; }
+.product-richtext li { margin:.2rem 0; }
+.product-richtext strong { color:#1f3b66; }
 .product-detail-layout {
     display:grid;
     grid-template-columns:minmax(0,1fr) minmax(260px,340px);
     gap:1.25rem;
     align-items:start;
 }
-.product-combo-teaser {
-    margin-top:.75rem; padding:.85rem 1rem; border-radius:14px;
-    background:linear-gradient(135deg,#f0f6ff 0%,#f7faff 100%);
-    border:1px solid #c5d8ef; max-width:36rem;
-}
-.product-combo-teaser strong { color:var(--doceo-blue); }
 .product-media-gallery {
     border:1px solid #e6ebf2;
     border-radius:16px;
