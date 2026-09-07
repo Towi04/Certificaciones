@@ -20,6 +20,9 @@ final class ProviderRequestService
 {
     public const EXTRA_KEY = 'provider_request';
 
+    /** doc_type en documents para el comprobante DOCEO → proveedor subido por admin */
+    public const ADMIN_PROOF_DOC_TYPE = 'provider_payment_proof';
+
     /** @var list<array{value:string,label:string}> */
     public const FIELD_OPTIONS = [
         ['value' => 'full_name', 'label' => 'Nombre completo'],
@@ -853,14 +856,12 @@ final class ProviderRequestService
         return is_array($decoded) ? $decoded : [];
     }
 
-    /** @param array<string, mixed> $extra *
+    /** @param array<string, mixed> $extra */
     private function saveExtra(int $trackingId, array $extra): void
     {
         $this->pdo->prepare('UPDATE trackings SET extra_json = ?, updated_at = NOW() WHERE id = ?')
             ->execute([json_encode($extra, JSON_UNESCAPED_UNICODE), $trackingId]);
     }
-
-    public const ADMIN_PROOF_DOC_TYPE = 'provider_payment_proof';
 
     /** @return array<string, mixed>|null */
     public function findAdminPaymentProof(int $trackingId): ?array
