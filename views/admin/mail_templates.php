@@ -33,7 +33,7 @@
                                title="Editar" aria-label="Editar"><?= icon('edit') ?></a>
                             <form class="icon-btn-form" method="post"
                                   action="<?= e(url('/admin/correos/' . rawurlencode((string) $t['code']) . '/eliminar')) ?>"
-                                  onsubmit="return confirm('¿Eliminar la plantilla <?= e(addslashes((string) $t['name'])) ?>?');">
+                                  onsubmit="return confirm('¿Eliminar esta plantilla de correo?');">
                                 <?= csrf_field() ?>
                                 <button class="icon-btn" type="submit" title="Eliminar" aria-label="Eliminar"><?= icon('trash') ?></button>
                             </form>
