@@ -13,6 +13,12 @@ final class MailBranding
         return '#315285';
     }
 
+    /** Gris de marca DOCEO (encabezado de correo). */
+    public static function headerColor(): string
+    {
+        return '#C4C4C4';
+    }
+
     public static function logoUrl(): string
     {
         $fromEnv = trim((string) (Env::get('MAIL_LOGO_URL', '') ?? ''));
@@ -66,18 +72,20 @@ final class MailBranding
         $logo = htmlspecialchars(self::logoUrl(), ENT_QUOTES, 'UTF-8');
         $name = htmlspecialchars(Env::get('APP_NAME', 'Instituto DOCEO') ?? 'Instituto DOCEO', ENT_QUOTES, 'UTF-8');
         $blue = self::primaryColor();
+        $header = self::headerColor();
 
+        // Encabezado gris (el logo azul se lee bien) · pie azul con texto blanco.
         return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;background:#f4f6fa;">'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fa;padding:24px 12px;">'
             . '<tr><td align="center">'
             . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #C4C4C4;">'
-            . '<tr><td style="background:' . $blue . ';padding:20px;text-align:center;">'
-            . '<img src="' . $logo . '" alt="' . $name . '" style="max-width:180px;height:auto;">'
+            . '<tr><td style="background:' . $header . ';padding:20px;text-align:center;">'
+            . '<img src="' . $logo . '" alt="' . $name . '" style="max-width:180px;height:auto;display:inline-block;">'
             . '</td></tr>'
             . '<tr><td style="padding:28px 32px;font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#333;">'
             . $innerHtml
             . '</td></tr>'
-            . '<tr><td style="padding:16px 32px;background:#f8f9fb;font-family:Arial,sans-serif;font-size:12px;color:#667;text-align:center;">'
+            . '<tr><td style="padding:16px 32px;background:' . $blue . ';font-family:Arial,sans-serif;font-size:12px;color:#ffffff;text-align:center;">'
             . $name . ' · 🐝'
             . '</td></tr>'
             . '</table></td></tr></table></body></html>';

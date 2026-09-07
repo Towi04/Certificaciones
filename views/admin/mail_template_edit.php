@@ -119,7 +119,8 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
             <h2 style="margin:0 0 .5rem;font-size:1rem;color:var(--doceo-blue)">Placeholders habilitados</h2>
             <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
                 Selecciona las variables que esta plantilla puede usar. Luego insértalas en asunto o HTML con doble llave:
-                <code>{{matricula}}</code>.
+                <code>{{full_name}}</code>, <code>{{matricula}}</code>.
+                También aceptamos variantes con espacio (<code>{{full name}}</code>).
             </p>
             <?php foreach ($availablePlaceholders as $group => $items): ?>
                 <div style="margin:.85rem 0 0">
@@ -264,9 +265,25 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
 
   if (!textarea || !toggleBtn) return;
 
+  function normalizeKey(key) {
+    return String(key || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[\s\-]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+  }
+
   function interpolate(text) {
-    return text.replace(/\{\{(\w+)\}\}/g, function (_, key) {
-      return sampleVars[key] !== undefined ? sampleVars[key] : '{{' + key + '}}';
+    const lookup = {};
+    Object.keys(sampleVars || {}).forEach(function (k) {
+      lookup[normalizeKey(k)] = sampleVars[k];
+    });
+    if (lookup.full_name == null && lookup.name != null) lookup.full_name = lookup.name;
+    if (lookup.name == null && lookup.full_name != null) lookup.name = lookup.full_name;
+    return String(text || '').replace(/\{\{\s*([a-zA-Z0-9_\- ]+?)\s*\}\}/g, function (m, key) {
+      const n = normalizeKey(key);
+      return lookup[n] !== undefined ? lookup[n] : m;
     });
   }
 

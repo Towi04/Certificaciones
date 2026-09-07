@@ -258,7 +258,7 @@ final class MailTemplateService
         $allowed = self::availablePlaceholderKeys();
         $out = [];
         foreach ($raw as $value) {
-            $key = is_string($value) ? trim($value) : '';
+            $key = is_string($value) ? self::normalizePlaceholderKey($value) : '';
             if ($key !== '' && in_array($key, $allowed, true) && !in_array($key, $out, true)) {
                 $out[] = $key;
             }
@@ -496,15 +496,45 @@ final class MailTemplateService
     /** @param array<string, string> $vars */
     public static function interpolate(string $template, array $vars): string
     {
-        return (string) preg_replace_callback(
-            '/\{\{(\w+)\}\}/',
-            static function (array $m) use ($vars): string {
-                $key = $m[1];
+        $lookup = [];
+        foreach ($vars as $key => $value) {
+            $norm = self::normalizePlaceholderKey((string) $key);
+            if ($norm === '') {
+                continue;
+            }
+            $lookup[$norm] = (string) $value;
+        }
 
-                return $vars[$key] ?? $m[0];
+        // Alias comunes: name ↔ full_name
+        if (!isset($lookup['full_name']) && isset($lookup['name'])) {
+            $lookup['full_name'] = $lookup['name'];
+        }
+        if (!isset($lookup['name']) && isset($lookup['full_name'])) {
+            $lookup['name'] = $lookup['full_name'];
+        }
+
+        return (string) preg_replace_callback(
+            '/\{\{\s*([a-zA-Z0-9_\- ]+?)\s*\}\}/u',
+            static function (array $m) use ($lookup): string {
+                $key = self::normalizePlaceholderKey($m[1]);
+                if ($key !== '' && array_key_exists($key, $lookup)) {
+                    return $lookup[$key];
+                }
+
+                return $m[0];
             },
             $template
         );
+    }
+
+    /** Normaliza etiquetas: "full name", "Full-Name" → "full_name". */
+    public static function normalizePlaceholderKey(string $key): string
+    {
+        $key = strtolower(trim($key));
+        $key = preg_replace('/[\s\-]+/', '_', $key) ?? $key;
+        $key = preg_replace('/_+/', '_', $key) ?? $key;
+
+        return trim($key, '_');
     }
 
     public static function textFromHtml(string $html): string
@@ -605,10 +635,11 @@ final class MailTemplateService
     /** @return list<string> */
     private static function extractPlaceholders(string $text): array
     {
-        preg_match_all('/\{\{(\w+)\}\}/', $text, $matches);
+        preg_match_all('/\{\{\s*([a-zA-Z0-9_\- ]+?)\s*\}\}/u', $text, $matches);
         $out = [];
-        foreach ($matches[1] ?? [] as $key) {
-            if (!in_array($key, $out, true)) {
+        foreach ($matches[1] ?? [] as $raw) {
+            $key = self::normalizePlaceholderKey((string) $raw);
+            if ($key !== '' && !in_array($key, $out, true)) {
                 $out[] = $key;
             }
         }
