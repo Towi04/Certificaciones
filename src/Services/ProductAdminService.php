@@ -1003,6 +1003,8 @@ final class ProductAdminService
                 $code = $this->allocateUniqueGroupCode($name);
             }
         }
+        // Que el resto de la config (p. ej. reglamento_doc_code) use el código definitivo.
+        $input['code'] = $code;
 
         $supplierId = $this->nullableInt($input['supplier_id'] ?? null);
         if ($supplierId !== null && $this->suppliers->find($supplierId) === null) {
