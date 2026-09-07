@@ -4,25 +4,53 @@ $user = \App\Auth\Auth::user();
 $title = $title ?? 'Admin';
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
 
-$navItems = [
-    ['href' => '/admin', 'label' => 'Dashboard', 'icon' => 'dashboard', 'active' => $path === '/admin'],
-    ['href' => '/admin/maestra', 'label' => 'Tabla maestra', 'icon' => 'table', 'active' => str_contains($path, '/maestra')],
-    ['href' => '/admin/pagos', 'label' => 'Pagos', 'icon' => 'payments', 'active' => str_contains($path, '/pagos') || str_contains($path, '/compras')],
-    ['href' => '/admin/productos', 'label' => 'Productos', 'icon' => 'products', 'active' => str_contains($path, '/productos')],
-    ['href' => '/admin/filtros-catalogo', 'label' => 'Filtros catálogo', 'icon' => 'filters', 'active' => str_contains($path, '/filtros-catalogo')],
-    ['href' => '/admin/combos', 'label' => 'Combos', 'icon' => 'combos', 'active' => str_contains($path, '/combos')],
-    ['href' => '/admin/precios', 'label' => 'Precios', 'icon' => 'prices', 'active' => str_contains($path, '/precios')],
-    ['href' => '/admin/grupos', 'label' => 'Grupos', 'icon' => 'groups', 'active' => str_contains($path, '/grupos')],
-    ['href' => '/admin/vacaciones', 'label' => 'Vacaciones', 'icon' => 'calendar', 'active' => str_contains($path, '/vacaciones')],
-    ['href' => '/admin/promo', 'label' => 'Promo DOCEO', 'icon' => 'promo', 'active' => str_contains($path, '/promo')],
-    ['href' => '/admin/correos', 'label' => 'Correos', 'icon' => 'mail', 'active' => str_contains($path, '/correos')],
-    ['href' => '/admin/partners', 'label' => 'Partners', 'icon' => 'partners', 'active' => str_contains($path, '/partners')],
-    ['href' => '/admin/proveedores', 'label' => 'Proveedores', 'icon' => 'suppliers', 'active' => str_contains($path, '/proveedores')],
-    ['href' => '/admin/certificadoras', 'label' => 'Certificadoras', 'icon' => 'certifiers', 'active' => str_contains($path, '/certificadoras')],
-    ['href' => '/admin/exportaciones', 'label' => 'UKS', 'icon' => 'export', 'active' => str_contains($path, '/exportaciones')],
-    ['href' => '/admin/salud', 'label' => 'Salud', 'icon' => 'health', 'active' => str_contains($path, '/salud')],
-    ['href' => '/catalogo', 'label' => 'Ver catálogo', 'icon' => 'catalog', 'active' => false],
+$isOps = $path === '/admin' || str_starts_with($path, '/admin/operacion')
+    || str_starts_with($path, '/admin/seguimientos')
+    || str_starts_with($path, '/admin/compras')
+    || str_starts_with($path, '/admin/pagos')
+    || str_starts_with($path, '/admin/maestra')
+    || str_starts_with($path, '/admin/documentos');
+
+$configGroups = [
+    [
+        'label' => 'Catálogo',
+        'items' => [
+            ['href' => '/admin/productos', 'label' => 'Productos', 'icon' => 'products', 'match' => '/productos'],
+            ['href' => '/admin/grupos', 'label' => 'Grupos', 'icon' => 'groups', 'match' => '/grupos'],
+            ['href' => '/admin/combos', 'label' => 'Combos', 'icon' => 'combos', 'match' => '/combos'],
+            ['href' => '/admin/precios', 'label' => 'Precios', 'icon' => 'prices', 'match' => '/precios'],
+            ['href' => '/admin/filtros-catalogo', 'label' => 'Filtros', 'icon' => 'filters', 'match' => '/filtros-catalogo'],
+        ],
+    ],
+    [
+        'label' => 'Operadores',
+        'items' => [
+            ['href' => '/admin/partners', 'label' => 'Partners', 'icon' => 'partners', 'match' => '/partners'],
+            ['href' => '/admin/proveedores', 'label' => 'Proveedores', 'icon' => 'suppliers', 'match' => '/proveedores'],
+            ['href' => '/admin/certificadoras', 'label' => 'Certificadoras', 'icon' => 'certifiers', 'match' => '/certificadoras'],
+        ],
+    ],
+    [
+        'label' => 'Automatización',
+        'items' => [
+            ['href' => '/admin/correos', 'label' => 'Plantillas correo', 'icon' => 'mail', 'match' => '/correos'],
+            ['href' => '/admin/vacaciones', 'label' => 'Vacaciones', 'icon' => 'calendar', 'match' => '/vacaciones'],
+            ['href' => '/admin/promo', 'label' => 'Promo DOCEO', 'icon' => 'promo', 'match' => '/promo'],
+            ['href' => '/admin/exportaciones', 'label' => 'UKS import/export', 'icon' => 'export', 'match' => '/exportaciones'],
+            ['href' => '/admin/salud', 'label' => 'Salud', 'icon' => 'health', 'match' => '/salud'],
+        ],
+    ],
 ];
+
+$configOpen = false;
+foreach ($configGroups as $group) {
+    foreach ($group['items'] as $item) {
+        if (str_contains($path, $item['match'])) {
+            $configOpen = true;
+            break 2;
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -59,14 +87,41 @@ $navItems = [
         </div>
 
         <nav class="side-nav-links" id="admin-side-nav-links">
-            <?php foreach ($navItems as $item): ?>
-                <a class="side-nav-link<?= !empty($item['active']) ? ' active' : '' ?>"
-                   href="<?= e(url($item['href'])) ?>"
-                   title="<?= e($item['label']) ?>">
-                    <span class="side-nav-icon"><?= icon($item['icon']) ?></span>
-                    <span class="side-nav-label"><?= e($item['label']) ?></span>
-                </a>
-            <?php endforeach; ?>
+            <a class="side-nav-link<?= $isOps ? ' active' : '' ?>"
+               href="<?= e(url('/admin')) ?>"
+               title="Operación">
+                <span class="side-nav-icon"><?= icon('table') ?></span>
+                <span class="side-nav-label">Operación</span>
+            </a>
+
+            <div class="side-nav-section<?= $configOpen ? ' is-open' : '' ?>" id="admin-config-section">
+                <button type="button" class="side-nav-section-toggle" id="admin-config-toggle"
+                        aria-expanded="<?= $configOpen ? 'true' : 'false' ?>"
+                        aria-controls="admin-config-links">
+                    <span class="side-nav-icon"><?= icon('groups') ?></span>
+                    <span class="side-nav-label">Configuración</span>
+                    <span class="side-nav-caret" aria-hidden="true">▾</span>
+                </button>
+                <div class="side-nav-section-links" id="admin-config-links"<?= $configOpen ? '' : ' hidden' ?>>
+                    <?php foreach ($configGroups as $group): ?>
+                        <div class="side-nav-group-label"><?= e($group['label']) ?></div>
+                        <?php foreach ($group['items'] as $item): ?>
+                            <?php $active = str_contains($path, $item['match']); ?>
+                            <a class="side-nav-link side-nav-link--nested<?= $active ? ' active' : '' ?>"
+                               href="<?= e(url($item['href'])) ?>"
+                               title="<?= e($item['label']) ?>">
+                                <span class="side-nav-icon"><?= icon($item['icon']) ?></span>
+                                <span class="side-nav-label"><?= e($item['label']) ?></span>
+                            </a>
+                        <?php endforeach; ?>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <a class="side-nav-link" href="<?= e(url('/catalogo')) ?>" title="Ver catálogo">
+                <span class="side-nav-icon"><?= icon('catalog') ?></span>
+                <span class="side-nav-label">Ver catálogo</span>
+            </a>
         </nav>
 
         <form method="post" action="<?= e(url('/logout')) ?>" class="side-nav-logout">
@@ -111,6 +166,24 @@ $navItems = [
     e.stopPropagation();
     apply(!shell.classList.contains('app-shell--nav-collapsed'));
   });
+
+  var cfgBtn = document.getElementById('admin-config-toggle');
+  var cfgLinks = document.getElementById('admin-config-links');
+  var cfgSection = document.getElementById('admin-config-section');
+  if (cfgBtn && cfgLinks && cfgSection) {
+    cfgBtn.addEventListener('click', function () {
+      var open = cfgLinks.hasAttribute('hidden');
+      if (open) {
+        cfgLinks.removeAttribute('hidden');
+        cfgSection.classList.add('is-open');
+        cfgBtn.setAttribute('aria-expanded', 'true');
+      } else {
+        cfgLinks.setAttribute('hidden', '');
+        cfgSection.classList.remove('is-open');
+        cfgBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
 })();
 </script>
 </body>

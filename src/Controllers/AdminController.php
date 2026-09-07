@@ -15,6 +15,7 @@ use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\SupplierRepository;
 use App\Repositories\TrackingRepository;
+use App\Services\AdminOpsBoardService;
 use App\Services\CatalogFilterService;
 use App\Services\CheckoutService;
 use App\Services\CheckoutRequirements;
@@ -36,43 +37,192 @@ final class AdminController
     public function dashboard(): void
     {
         Auth::requireRole(['admin']);
-        $stats = [
-            'products' => 0,
-            'paid' => 0,
-            'awaiting_payment' => 0,
-            'waiting_admin' => 0,
-            'pending_provider_requests' => 0,
+        $filters = [
+            'q' => isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : null,
+            'view' => isset($_GET['view']) && is_string($_GET['view']) ? trim($_GET['view']) : 'action',
         ];
-        $upcoming = [];
-        $queue = [];
-        $paymentQueue = [];
-        $providerQueue = [];
-        try {
-            $stats['products'] = (new ProductRepository())->countActive();
-            $purchases = new PurchaseRepository();
-            $stats['paid'] = $purchases->countByStatus('paid');
-            $stats['awaiting_payment'] = $purchases->countByStatus('awaiting_payment')
-                + $purchases->countByStatus('payment_review');
-            $paymentQueue = $purchases->awaitingPaymentList(10);
-            $track = new TrackingRepository();
-            $queue = $track->waitingAdmin(10);
-            $stats['waiting_admin'] = count($queue);
-            $providerQueue = $track->pendingProviderRequests(15);
-            $stats['pending_provider_requests'] = count($providerQueue);
-            $upcoming = $track->upcomingExams(14);
-        } catch (\Throwable $e) {
-            flash('error', 'Base de datos no lista: ejecuta bin/install.php — ' . $e->getMessage());
+        if ($filters['q'] === '') {
+            $filters['q'] = null;
+        }
+        if (!isset(AdminOpsBoardService::VIEWS[$filters['view'] ?? ''])) {
+            $filters['view'] = 'action';
         }
 
-        view('admin/dashboard', [
-            'title' => 'Admin',
-            'stats' => $stats,
-            'queue' => $queue,
-            'paymentQueue' => $paymentQueue,
-            'providerQueue' => $providerQueue,
-            'upcoming' => $upcoming,
+        $board = new AdminOpsBoardService();
+        $counts = [];
+        foreach (array_keys(AdminOpsBoardService::VIEWS) as $viewKey) {
+            try {
+                $counts[$viewKey] = $board->count(['q' => $filters['q'], 'view' => $viewKey]);
+            } catch (\Throwable) {
+                $counts[$viewKey] = 0;
+            }
+        }
+
+        $pagination = Pagination::fromRequest($counts[$filters['view']] ?? 0, 40);
+        $rows = [];
+        try {
+            $rows = $board->list($filters, $pagination['limit'], $pagination['offset']);
+        } catch (\Throwable $e) {
+            flash('error', 'No se pudo cargar el tablero: ' . $e->getMessage());
+        }
+
+        view('admin/ops', [
+            'title' => 'Operación',
+            'rows' => $rows,
+            'filters' => $filters,
+            'views' => AdminOpsBoardService::VIEWS,
+            'counts' => $counts,
+            'pagination' => $pagination,
             'layout' => 'admin',
         ]);
+    }
+
+    public function opsExport(): void
+    {
+        Auth::requireRole(['admin']);
+        $filters = [
+            'q' => isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : null,
+            'view' => isset($_GET['view']) && is_string($_GET['view']) ? trim($_GET['view']) : 'all',
+        ];
+        if ($filters['q'] === '') {
+            $filters['q'] = null;
+        }
+        if (!isset(AdminOpsBoardService::VIEWS[$filters['view'] ?? ''])) {
+            $filters['view'] = 'all';
+        }
+
+        $rows = (new AdminOpsBoardService())->list($filters, null, 0);
+        $filename = 'operacion-' . date('Y-m-d-His') . '.csv';
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: no-store');
+        echo "\xEF\xBB\xBF";
+        $out = fopen('php://output', 'w');
+        if ($out === false) {
+            exit;
+        }
+        fputcsv($out, [
+            'Matrícula', 'Alumno', 'Email', 'Teléfono', 'Partner', 'Producto', 'Código producto',
+            'Pago', 'Paso', 'Estado caso', 'Examen', 'Folio', 'Clave', 'Proveedor', 'CENNI', 'Actualizado',
+        ]);
+        foreach ($rows as $r) {
+            $exam = trim((string) ($r['exam_date'] ?? '') . ' ' . (string) ($r['exam_time'] ?? ''));
+            $provider = !empty($r['provider_sent_at'])
+                ? 'enviado'
+                : (!empty($r['provider_pending']) ? 'pendiente' : (!empty($r['provider_enabled']) ? 'n/a' : '—'));
+            fputcsv($out, [
+                $r['matricula'] ?? '',
+                $r['student_full_name'] ?? '',
+                $r['student_email'] ?? '',
+                $r['student_phone'] ?? '',
+                $r['partner_code'] ?? '',
+                $r['product_name'] ?? '',
+                $r['product_code'] ?? '',
+                $r['purchase_status'] ?? '',
+                $r['current_step_code'] ?? '',
+                $r['tracking_status'] ?? '',
+                $exam,
+                $r['folio'] ?? '',
+                $r['access_key'] ?? '',
+                $provider,
+                $r['cenni_folio'] ?? '',
+                $r['updated_at'] ?? '',
+            ]);
+        }
+        fclose($out);
+        exit;
+    }
+
+    public function opsSaveAccess(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        $return = $this->opsReturnQuery();
+        try {
+            $notify = !empty($_POST['notify']);
+            $result = (new AdminOpsBoardService())->saveAccess(
+                $trackingId,
+                (string) ($_POST['folio'] ?? ''),
+                (string) ($_POST['access_key'] ?? ''),
+                (int) Auth::id(),
+                $notify
+            );
+            flash(
+                'success',
+                $result['notified']
+                    ? 'Folio/clave guardados y plantilla enviada al alumno.'
+                    : 'Folio/clave guardados.'
+            );
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin' . $return);
+    }
+
+    public function opsBulkAccess(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $return = $this->opsReturnQuery();
+        $ids = $_POST['tracking_ids'] ?? [];
+        if (!is_array($ids)) {
+            $ids = [];
+        }
+        $folios = is_array($_POST['folio'] ?? null) ? $_POST['folio'] : [];
+        $keys = is_array($_POST['access_key'] ?? null) ? $_POST['access_key'] : [];
+        $items = [];
+        foreach ($ids as $rawId) {
+            $tid = (int) $rawId;
+            if ($tid < 1) {
+                continue;
+            }
+            $items[] = [
+                'tracking_id' => $tid,
+                'folio' => (string) ($folios[(string) $tid] ?? $folios[$tid] ?? ''),
+                'access_key' => (string) ($keys[(string) $tid] ?? $keys[$tid] ?? ''),
+            ];
+        }
+        if ($items === []) {
+            flash('error', 'Selecciona al menos un caso con folio y clave.');
+            redirect('/admin' . $return);
+        }
+        try {
+            $result = (new AdminOpsBoardService())->bulkPublishAccess(
+                $items,
+                (int) Auth::id(),
+                !empty($_POST['notify'])
+            );
+            $msg = 'Procesados: ' . $result['ok'] . ' ok';
+            if ($result['fail'] > 0) {
+                $msg .= ', ' . $result['fail'] . ' con error';
+                if ($result['errors'] !== []) {
+                    $msg .= ' · ' . $result['errors'][0];
+                }
+                flash('error', $msg);
+            } else {
+                flash('success', $msg . (!empty($_POST['notify']) ? ' · plantillas enviadas.' : '.'));
+            }
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin' . $return);
+    }
+
+    /** Query string para volver al tablero con los mismos filtros. */
+    private function opsReturnQuery(): string
+    {
+        $view = isset($_POST['return_view']) && is_string($_POST['return_view']) ? trim($_POST['return_view']) : '';
+        $q = isset($_POST['return_q']) && is_string($_POST['return_q']) ? trim($_POST['return_q']) : '';
+        $params = [];
+        if ($view !== '' && isset(AdminOpsBoardService::VIEWS[$view])) {
+            $params['view'] = $view;
+        }
+        if ($q !== '') {
+            $params['q'] = $q;
+        }
+
+        return $params === [] ? '' : ('?' . http_build_query($params));
     }
 
     public function products(): void
@@ -589,87 +739,19 @@ final class AdminController
     public function master(): void
     {
         Auth::requireRole(['admin']);
-        $filters = [
-            'q' => isset($_GET['q']) && is_string($_GET['q']) ? $_GET['q'] : null,
-            'status' => isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : null,
-        ];
-        $repo = new PurchaseRepository();
-        $pagination = Pagination::fromRequest($repo->masterCount($filters));
-        $rows = $repo->masterList($filters, $pagination['limit'], $pagination['offset']);
-        view('admin/master', [
-            'title' => 'Tabla maestra',
-            'rows' => $rows,
-            'filters' => $filters,
-            'pagination' => $pagination,
-            'layout' => 'admin',
-        ]);
+        redirect('/admin?view=all');
     }
 
     public function masterExport(): void
     {
         Auth::requireRole(['admin']);
-        $filters = [
-            'q' => isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : null,
-            'status' => isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : null,
-            'date_from' => isset($_GET['date_from']) && is_string($_GET['date_from']) ? trim($_GET['date_from']) : null,
-            'date_to' => isset($_GET['date_to']) && is_string($_GET['date_to']) ? trim($_GET['date_to']) : null,
-        ];
-        if ($filters['date_from'] === '') {
-            $filters['date_from'] = null;
-        }
-        if ($filters['date_to'] === '') {
-            $filters['date_to'] = null;
-        }
-
-        $rows = (new PurchaseRepository())->masterList($filters);
-        $filename = 'tabla-maestra-' . date('Y-m-d-His') . '.csv';
-        header('Content-Type: text/csv; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Cache-Control: no-store');
-        echo "\xEF\xBB\xBF";
-
-        $out = fopen('php://output', 'w');
-        if ($out === false) {
-            exit;
-        }
-
-        fputcsv($out, [
-            'Matrícula', 'Nombre', 'Apellido paterno', 'Apellido materno', 'Email', 'Teléfono',
-            'Partner código', 'Partner nombre', 'Monto', 'Moneda', 'Estatus', 'Método pago', 'Creado',
-        ]);
-        foreach ($rows as $r) {
-            fputcsv($out, [
-                $r['matricula'] ?? '',
-                $r['first_name'] ?? '',
-                $r['last_name_p'] ?? '',
-                $r['last_name_m'] ?? '',
-                $r['student_email'] ?? '',
-                $r['student_phone'] ?? '',
-                $r['partner_code'] ?? '',
-                $r['partner_name'] ?? '',
-                $r['charged_amount'] ?? '',
-                $r['currency'] ?? '',
-                $r['status'] ?? '',
-                $r['payment_method'] ?? '',
-                $r['created_at'] ?? '',
-            ]);
-        }
-        fclose($out);
-        exit;
+        redirect('/admin/operacion/exportar?view=all');
     }
 
     public function payments(): void
     {
         Auth::requireRole(['admin']);
-        $repo = new PurchaseRepository();
-        $pagination = Pagination::fromRequest($repo->awaitingPaymentCount());
-        $rows = $repo->awaitingPaymentList($pagination['limit'], $pagination['offset']);
-        view('admin/payments', [
-            'title' => 'Pagos por confirmar',
-            'rows' => $rows,
-            'pagination' => $pagination,
-            'layout' => 'admin',
-        ]);
+        redirect('/admin?view=pay');
     }
 
     public function purchaseShow(string $id): void
@@ -711,6 +793,9 @@ final class AdminController
             flash('success', 'Pago confirmado.');
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
+        }
+        if (!empty($_POST['return_ops'])) {
+            redirect('/admin' . $this->opsReturnQuery());
         }
         redirect('/admin/compras/' . $purchaseId);
     }
@@ -867,6 +952,9 @@ final class AdminController
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
+        if (!empty($_POST['return_ops'])) {
+            redirect('/admin' . $this->opsReturnQuery());
+        }
         redirect('/admin/seguimientos/' . $trackingId);
     }
 
@@ -963,6 +1051,9 @@ final class AdminController
             flash('success', 'Solicitud enviada al proveedor.');
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
+        }
+        if (!empty($_POST['return_ops'])) {
+            redirect('/admin' . $this->opsReturnQuery());
         }
         redirect('/admin/seguimientos/' . $trackingId);
     }
