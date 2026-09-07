@@ -221,9 +221,11 @@ final class GroupStepConfig
 
         // Fallbacks si el grupo aún no configuró step_defs ricos
         $actions = array_column($buttons, 'action');
-        if (!in_array(self::ACTION_CONFIRM_PAYMENT, $actions, true)
-            && in_array((string) ($row['purchase_status'] ?? ''), ['awaiting_payment', 'payment_review'], true)
-        ) {
+        $purchaseStatus = (string) ($row['purchase_status'] ?? '');
+        $paymentPending = in_array($purchaseStatus, ['awaiting_payment', 'payment_review', 'draft', 'awaiting_docs'], true);
+        $isPaid = $purchaseStatus === 'paid';
+
+        if (!in_array(self::ACTION_CONFIRM_PAYMENT, $actions, true) && $paymentPending) {
             array_unshift($buttons, [
                 'code' => 'confirm_pago',
                 'label' => 'Confirmar pago',
@@ -243,17 +245,19 @@ final class GroupStepConfig
                 'email' => is_array($examStep['email'] ?? null) ? $examStep['email'] : [],
                 'admin_only' => true,
             ];
-            if (!self::isActionDone(self::ACTION_EXAM_ACCESS, $row, $synthetic)
-                && (string) ($row['purchase_status'] ?? '') === 'paid'
-            ) {
+            if (!self::isActionDone(self::ACTION_EXAM_ACCESS, $row, $synthetic) && $isPaid) {
                 $buttons[] = $synthetic;
             }
         }
-        if (!in_array(self::ACTION_SEND_MAIL, $actions, true)) {
+        if (!in_array(self::ACTION_SEND_MAIL, $actions, true) && $isPaid) {
             $pr = [];
             if (!empty($row['extra_json']) && is_string($row['extra_json'])) {
                 $decoded = json_decode($row['extra_json'], true);
                 $pr = is_array($decoded['provider_request'] ?? null) ? $decoded['provider_request'] : [];
+            } elseif (is_array($row['extra_json'] ?? null)) {
+                $pr = is_array($row['extra_json']['provider_request'] ?? null)
+                    ? $row['extra_json']['provider_request']
+                    : [];
             }
             $sent = trim((string) ($pr['sent_at'] ?? ''));
             if (!empty($pr['required']) && ($sent === '' || $sent === 'null')) {
@@ -267,7 +271,33 @@ final class GroupStepConfig
             }
         }
 
-        return $buttons;
+        // Si el pago no está confirmado, solo mostrar Confirmar pago (no solicitud/accesos/avance).
+        if ($paymentPending) {
+            $buttons = array_values(array_filter(
+                $buttons,
+                static fn (array $b): bool => ($b['action'] ?? '') === self::ACTION_CONFIRM_PAYMENT
+            ));
+        }
+
+        // Una sola acción por tipo (evita "Confirmar pago" duplicado amarillo/azul).
+        $seenActions = [];
+        $unique = [];
+        foreach ($buttons as $btn) {
+            $action = (string) ($btn['action'] ?? '');
+            if ($action === self::ACTION_SEND_MAIL) {
+                // Varios envíos de correo por paso distintos sí pueden coexistir.
+                $key = $action . ':' . (string) ($btn['code'] ?? '');
+            } else {
+                $key = $action;
+            }
+            if (isset($seenActions[$key])) {
+                continue;
+            }
+            $seenActions[$key] = true;
+            $unique[] = $btn;
+        }
+
+        return $unique;
     }
 
     /**

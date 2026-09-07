@@ -116,4 +116,12 @@ final class MailTemplateRepository
             'UPDATE mail_templates SET code = ?, name = ? WHERE code = ?'
         )->execute([$toCode, $newName, $fromCode]);
     }
+
+    public function deleteByCode(string $code): bool
+    {
+        $stmt = $this->pdo->prepare('DELETE FROM mail_templates WHERE code = ?');
+        $stmt->execute([$code]);
+
+        return $stmt->rowCount() > 0;
+    }
 }

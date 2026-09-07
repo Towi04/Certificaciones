@@ -27,8 +27,7 @@ $configGroups = [
         'items' => [
             ['href' => '/admin/partners', 'label' => 'Partners', 'icon' => 'partners', 'match' => '/partners'],
             ['href' => '/admin/proveedores', 'label' => 'Proveedores', 'icon' => 'suppliers', 'match' => '/proveedores'],
-            ['href' => '/admin/certificadoras', 'label' => 'Certificadoras', 'icon' => 'certifiers', 'match' => '/certificadoras'],
-        ],
+            // Certificadoras vive como pestaña dentro de Proveedores (/admin/proveedores?tab=certificadoras)        ],
     ],
     [
         'label' => 'Automatización',
@@ -50,6 +49,9 @@ foreach ($configGroups as $navGroup) {
             break 2;
         }
     }
+}
+if (!$configOpen && str_contains($path, '/certificadoras')) {
+    $configOpen = true;
 }
 ?>
 <!DOCTYPE html>
@@ -106,7 +108,13 @@ foreach ($configGroups as $navGroup) {
                     <?php foreach ($configGroups as $navGroup): ?>
                         <div class="side-nav-group-label"><?= e($navGroup['label']) ?></div>
                         <?php foreach ($navGroup['items'] as $navItem): ?>
-                            <?php $active = str_contains($path, $navItem['match']); ?>
+                            <?php
+                            $active = str_contains($path, $navItem['match'])
+                                || (
+                                    ($navItem['match'] ?? '') === '/proveedores'
+                                    && str_contains($path, '/certificadoras')
+                                );
+                            ?>
                             <a class="side-nav-link side-nav-link--nested<?= $active ? ' active' : '' ?>"
                                href="<?= e(url($navItem['href'])) ?>"
                                title="<?= e($navItem['label']) ?>">

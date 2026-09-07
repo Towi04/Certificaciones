@@ -7,7 +7,7 @@ $products = $products ?? [];
 $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px';
 $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600';
 ?>
-<p class="meta"><a href="<?= e(url('/admin/certificadoras')) ?>">← Certificadoras</a></p>
+<p class="meta"><a href="<?= e(url('/admin/proveedores?tab=certificadoras')) ?>">← Certificadoras</a></p>
 <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:.5rem">
     <div style="width:88px;height:88px;border:1px solid #e6ebf2;border-radius:16px;background:#f8fafc;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:.5rem">
         <?php if (!empty($certifier['logo_path'])): ?>

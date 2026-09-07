@@ -162,7 +162,11 @@ $q = (string) ($filters['q'] ?? '');
                                         <button class="btn btn-accent btn-sm" type="submit"><?= e($label) ?></button>
                                     </form>
                                     <?php if (!empty($r['payment_proof_path'])): ?>
-                                        <a class="btn btn-ghost btn-sm" target="_blank" href="<?= e(url('/admin/compras/' . $pid . '/comprobante')) ?>">Ver comprobante</a>
+                                        <button type="button" class="btn btn-ghost btn-sm ops-proof-btn"
+                                                data-proof-url="<?= e(url('/admin/compras/' . $pid . '/comprobante')) ?>"
+                                                data-proof-title="Comprobante · <?= e((string) ($r['matricula'] ?? '')) ?>">
+                                            Ver comprobante
+                                        </button>
                                     <?php endif; ?>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_SEND_MAIL): ?>
                                     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/solicitud-proveedor')) ?>" class="ops-inline-form">
@@ -262,7 +266,46 @@ $q = (string) ($filters['q'] ?? '');
   background:#102a56; color:#fff; box-shadow:0 8px 24px rgba(16,42,86,.18);
 }
 .ops-bulk-bar[hidden] { display:none !important; }
+
+.ops-proof-modal[hidden] { display:none !important; }
+.ops-proof-modal {
+  position:fixed; inset:0; z-index:80; display:flex; align-items:center; justify-content:center;
+  padding:1rem;
+}
+.ops-proof-backdrop {
+  position:absolute; inset:0; background:rgba(16,42,86,.55); border:0; padding:0; cursor:pointer;
+}
+.ops-proof-dialog {
+  position:relative; z-index:1; width:min(920px, 96vw); max-height:90vh;
+  background:#fff; border-radius:16px; box-shadow:0 24px 64px rgba(0,0,0,.28);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.ops-proof-head {
+  display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+  padding:.85rem 1rem; border-bottom:1px solid #e6ebf2; background:#f7fafc;
+}
+.ops-proof-head strong { color:var(--doceo-blue); font-size:.95rem; }
+.ops-proof-body { flex:1; min-height:0; background:#edf1f7; }
+.ops-proof-frame {
+  width:100%; height:min(72vh, 780px); border:0; background:#fff; display:block;
+}
 </style>
+
+<div class="ops-proof-modal" id="ops-proof-modal" hidden>
+    <button type="button" class="ops-proof-backdrop" id="ops-proof-backdrop" aria-label="Cerrar"></button>
+    <div class="ops-proof-dialog" role="dialog" aria-modal="true" aria-labelledby="ops-proof-title">
+        <div class="ops-proof-head">
+            <strong id="ops-proof-title">Comprobante</strong>
+            <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                <a class="btn btn-ghost btn-sm" id="ops-proof-open" href="#" target="_blank" rel="noopener">Abrir en pestaña</a>
+                <button type="button" class="btn btn-primary btn-sm" id="ops-proof-close">Cerrar</button>
+            </div>
+        </div>
+        <div class="ops-proof-body">
+            <iframe class="ops-proof-frame" id="ops-proof-frame" title="Vista del comprobante"></iframe>
+        </div>
+    </div>
+</div>
 
 <script>
 (function () {
@@ -270,6 +313,35 @@ $q = (string) ($filters['q'] ?? '');
   var bar = document.getElementById('ops-bulk-bar');
   var countEl = document.getElementById('ops-bulk-count');
   var clearBtn = document.getElementById('ops-bulk-clear');
+  var proofModal = document.getElementById('ops-proof-modal');
+  var proofFrame = document.getElementById('ops-proof-frame');
+  var proofTitle = document.getElementById('ops-proof-title');
+  var proofOpen = document.getElementById('ops-proof-open');
+  var proofClose = document.getElementById('ops-proof-close');
+  var proofBackdrop = document.getElementById('ops-proof-backdrop');
+
+  function closeProof() {
+    if (!proofModal) return;
+    proofModal.hidden = true;
+    if (proofFrame) proofFrame.src = 'about:blank';
+  }
+  function openProof(url, title) {
+    if (!proofModal || !proofFrame) return;
+    if (proofTitle) proofTitle.textContent = title || 'Comprobante';
+    if (proofOpen) proofOpen.href = url;
+    proofFrame.src = url;
+    proofModal.hidden = false;
+  }
+  document.querySelectorAll('.ops-proof-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      openProof(btn.getAttribute('data-proof-url') || '', btn.getAttribute('data-proof-title') || 'Comprobante');
+    });
+  });
+  proofClose && proofClose.addEventListener('click', closeProof);
+  proofBackdrop && proofBackdrop.addEventListener('click', closeProof);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && proofModal && !proofModal.hidden) closeProof();
+  });
 
   function rowChecks() {
     return Array.prototype.slice.call(document.querySelectorAll('.ops-row-check'));
