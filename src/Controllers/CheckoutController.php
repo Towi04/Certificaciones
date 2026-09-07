@@ -49,13 +49,8 @@ final class CheckoutController
         if ($isPartnerCheckout) {
             try {
                 $partner = (new PartnerRegistrationService())->partnerForUser((int) Auth::id());
-                $tierPrice = $pricing->partnerPriceForProduct($product, (string) $partner['tier']);
-                $quote['charged'] = $tierPrice;
-                $quote['base'] = $tierPrice;
-                $quote['catalog'] = $tierPrice;
-                $quote['partner_id'] = (int) $partner['id'];
-                $quote['partner_price'] = $tierPrice;
-                $quote['label'] = 'Precio partner (' . strtoupper((string) $partner['tier']) . ')';
+                // Conserva catalog (lista) y cobra precio de nivel; recalcula MSI.
+                $quote = $pricing->applyLoggedInPartnerPricing($quote, $product, $partner);
             } catch (\Throwable) {
                 $isPartnerCheckout = false;
                 $partner = null;
@@ -63,6 +58,13 @@ final class CheckoutController
         }
 
         $offers = (new ComboAdminService())->offersForProduct((int) $product['id']);
+        if ($isPartnerCheckout && $partner !== null) {
+            $tier = (string) ($partner['tier'] ?? 'c');
+            foreach ($offers['combos'] as &$comboOffer) {
+                $comboOffer['partner_price'] = $pricing->partnerPriceForProduct($comboOffer, $tier);
+            }
+            unset($comboOffer);
+        }
         view('checkout/acquire', [
             'title' => ($isPartnerCheckout ? 'Registrar alumno · ' : 'Adquirir · ') . $product['name'],
             'product' => $product,
@@ -120,6 +122,10 @@ final class CheckoutController
 
         $paymentMethod = (string) ($_POST['payment_method'] ?? 'transfer_proof');
         $promoCode = trim((string) ($_POST['promo_code'] ?? ''));
+        // Partner logueado: ya tiene precio de nivel; no aplica código promocional.
+        if ((Auth::user()['role'] ?? '') === 'partner') {
+            $promoCode = '';
+        }
         $cardMsiMonths = max(1, (int) ($_POST['card_msi_months'] ?? 1));
 
         try {
@@ -198,9 +204,14 @@ final class CheckoutController
 
             return;
         }
-        $code = isset($_GET['code']) && is_string($_GET['code']) ? $_GET['code'] : '';
+        $session = Auth::user();
+        $isPartner = ($session['role'] ?? '') === 'partner';
+        // Partner logueado no usa códigos: siempre precio de su nivel.
+        $code = (!$isPartner && isset($_GET['code']) && is_string($_GET['code'])) ? $_GET['code'] : '';
         try {
-            $quote = (new PricingService())->quoteProduct($product, $code);
+            $pricing = new PricingService();
+            $quote = $pricing->quoteProduct($product, $code !== '' ? $code : null);
+            $quote = $pricing->applySessionPartnerIfAny($quote, $product);
             echo json_encode(['ok' => true, 'quote' => $quote], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             http_response_code(422);
@@ -230,7 +241,9 @@ final class CheckoutController
             }
         }
         $comboId = isset($_GET['combo_id']) ? (int) $_GET['combo_id'] : 0;
-        $code = isset($_GET['code']) && is_string($_GET['code']) ? $_GET['code'] : '';
+        $session = Auth::user();
+        $isPartner = ($session['role'] ?? '') === 'partner';
+        $code = (!$isPartner && isset($_GET['code']) && is_string($_GET['code'])) ? $_GET['code'] : '';
         $pricing = new PricingService();
 
         try {
@@ -244,11 +257,13 @@ final class CheckoutController
             }
 
             if ($combo === null || !(int) ($combo['is_active'] ?? 0)) {
+                $soloQuote = $pricing->quoteProduct($product, $code !== '' ? $code : null);
+                $soloQuote = $pricing->applySessionPartnerIfAny($soloQuote, $product);
                 echo json_encode([
                     'ok' => true,
                     'matched' => false,
                     'combo_id' => null,
-                    'quote' => $pricing->quoteProduct($product, $code !== '' ? $code : null),
+                    'quote' => $soloQuote,
                     'message' => 'Sin combo para esa combinación; precio del producto solo.',
                 ], JSON_UNESCAPED_UNICODE);
 
@@ -261,22 +276,7 @@ final class CheckoutController
             }
 
             $quote = $pricing->quoteCombo($combo, $code !== '' ? $code : null);
-            $session = Auth::user();
-            if ($session !== null && ($session['role'] ?? '') === 'partner' && empty($quote['partner_id'])) {
-                $pdo = \App\Database\Connection::get();
-                $st = $pdo->prepare('SELECT * FROM partners WHERE user_id = ? AND is_active = 1 LIMIT 1');
-                $st->execute([(int) $session['id']]);
-                $partner = $st->fetch();
-                if ($partner) {
-                    $tierPrice = $pricing->partnerPriceForProduct($combo, (string) $partner['tier']);
-                    $quote['partner_id'] = (int) $partner['id'];
-                    $quote['partner_price'] = $tierPrice;
-                    $quote['base'] = $tierPrice;
-                    $quote['charged'] = $tierPrice;
-                    $quote['partner_credit'] = 0.0;
-                    $quote['label'] = 'Precio partner (' . strtoupper((string) $partner['tier']) . ')';
-                }
-            }
+            $quote = $pricing->applySessionPartnerIfAny($quote, $combo);
 
             $items = $comboRepo->items((int) $combo['id']);
             $charged = (float) ($quote['charged'] ?? $quote['base'] ?? $combo['public_price'] ?? 0);

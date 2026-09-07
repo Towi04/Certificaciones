@@ -134,31 +134,23 @@ final class CheckoutService
             $examSchedule->validateSlot($examProduct, $examDate, $examTime);
         }
 
+        // Partner logueado: ignora códigos promocionales y siempre cobra su nivel.
+        $session = Auth::user();
+        $isPartnerSession = $session !== null && ($session['role'] ?? '') === 'partner';
+        if ($isPartnerSession) {
+            $promoCode = null;
+        }
+
         if ($combo !== null) {
             $quote = $this->pricing->quoteCombo($combo, $promoCode);
         } else {
             $quote = $this->pricing->quoteProduct($product, $promoCode);
         }
-        $partnerId = $quote['partner_id'];
 
-        // Partner logueado adquiriendo al precio de su nivel (sin código)
-        $session = Auth::user();
-        if ($session !== null && ($session['role'] ?? '') === 'partner' && $partnerId === null) {
-            $stmt = $this->pdo->prepare('SELECT * FROM partners WHERE user_id = ? AND is_active = 1 LIMIT 1');
-            $stmt->execute([(int) $session['id']]);
-            $partner = $stmt->fetch();
-            if ($partner) {
-                $priced = $combo ?? $product;
-                $tierPrice = $this->pricing->partnerPriceForProduct($priced, (string) $partner['tier']);
-                $quote['partner_id'] = (int) $partner['id'];
-                $quote['partner_price'] = $tierPrice;
-                $quote['base'] = $tierPrice;
-                $quote['charged'] = $tierPrice;
-                $quote['partner_credit'] = 0.0;
-                $quote['label'] = 'Precio partner (' . strtoupper((string) $partner['tier']) . ')';
-                $partnerId = (int) $partner['id'];
-            }
+        if ($isPartnerSession) {
+            $quote = $this->pricing->applySessionPartnerIfAny($quote, $combo ?? $product);
         }
+        $partnerId = $quote['partner_id'];
 
         $cardMsiMonths = max(1, $cardMsiMonths);
         $baseAmount = (float) ($quote['base'] ?? $quote['charged']);

@@ -158,11 +158,65 @@ final class PricingService
         ];
         $col = $map[$tier] ?? 'price_partner_c';
         $val = $product[$col] ?? null;
-        if ($val === null || $val === '') {
-            return (float) ($product['public_price'] ?? 0);
+        if ($val !== null && $val !== '') {
+            return round((float) $val, 2);
         }
 
-        return (float) $val;
+        $public = (float) ($product['public_price'] ?? 0);
+        if ($public > 0) {
+            return round($public, 2);
+        }
+
+        return round((float) ($product['catalog_price'] ?? 0), 2);
+    }
+
+    /**
+     * Partner logueado: paga el precio de su nivel (sin crédito ni código promo).
+     * Conserva el catalog/public originales para referencia y recalcula MSI.
+     *
+     * @param array<string, mixed> $quote
+     * @param array<string, mixed> $pricedEntity producto o combo
+     * @param array<string, mixed> $partner fila partners
+     * @return array<string, mixed>
+     */
+    public function applyLoggedInPartnerPricing(array $quote, array $pricedEntity, array $partner): array
+    {
+        $tier = (string) ($partner['tier'] ?? 'c');
+        $tierPrice = $this->partnerPriceForProduct($pricedEntity, $tier);
+
+        $quote['charged'] = $tierPrice;
+        $quote['base'] = $tierPrice;
+        $quote['partner_id'] = (int) ($partner['id'] ?? 0) ?: null;
+        $quote['partner_price'] = $tierPrice;
+        $quote['partner_credit'] = 0.0;
+        $quote['discount_code_id'] = null;
+        $quote['discount_code'] = null;
+        $quote['label'] = 'Precio partner (' . strtoupper($tier) . ')';
+
+        return $this->withDeferredPlans($pricedEntity, $quote);
+    }
+
+    /**
+     * Si la sesión es partner activo, aplica siempre el precio de su nivel
+     * (sin crédito ni código promocional).
+     *
+     * @param array<string, mixed> $quote
+     * @param array<string, mixed> $pricedEntity
+     * @return array<string, mixed>
+     */
+    public function applySessionPartnerIfAny(array $quote, array $pricedEntity): array
+    {
+        $session = \App\Auth\Auth::user();
+        if ($session === null || ($session['role'] ?? '') !== 'partner') {
+            return $quote;
+        }
+        try {
+            $partner = (new PartnerRegistrationService())->partnerForUser((int) $session['id']);
+        } catch (\Throwable) {
+            return $quote;
+        }
+
+        return $this->applyLoggedInPartnerPricing($quote, $pricedEntity, $partner);
     }
 
     /**

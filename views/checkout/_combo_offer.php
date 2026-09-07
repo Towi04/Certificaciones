@@ -65,7 +65,7 @@ $whatsappUrl = \App\Support\Settings::schoolWhatsappPromoUrl($productName);
                 <span class="combo-tile-label">Solo <?= e($productName) ?></span>
             </label>
         </div>
-        <?php if ($whatsappUrl !== null): ?>
+        <?php if ($whatsappUrl !== null && empty($isPartnerCheckout)): ?>
             <p class="combo-advisor-once">
                 <a class="combo-advisor-link" href="<?= e($whatsappUrl) ?>" target="_blank" rel="noopener noreferrer">
                     Contacta a un asesor por WhatsApp para ver si existe algún código promocional vigente

@@ -24,8 +24,11 @@ foreach ($comboList as $c) {
     if ($list <= 0) {
         $list = (float) ($c['public_price'] ?? 0);
     }
-    if (!empty($c['solo_sum']) && (float) $c['solo_sum'] > $list) {
-        $maxComboSavings = max($maxComboSavings, (float) $c['solo_sum'] - $list);
+    $packagePrice = !empty($c['partner_price'])
+        ? (float) $c['partner_price']
+        : $list;
+    if (!empty($c['solo_sum']) && (float) $c['solo_sum'] > $packagePrice) {
+        $maxComboSavings = max($maxComboSavings, (float) $c['solo_sum'] - $packagePrice);
     }
 }
 
@@ -308,6 +311,7 @@ $stepLabels = [
                 </p>
             </div>
             <?php endif; ?>
+            <?php if (!$isPartnerCheckout): ?>
             <div class="sidebar-promo">
                 <label for="promo_code">Código promocional</label>
                 <div class="sidebar-promo-row">
@@ -316,13 +320,20 @@ $stepLabels = [
                 </div>
                 <p class="muted" id="quote-error" style="color:#b00020;display:none;margin:.4rem 0 0;font-size:.82rem"></p>
             </div>
+            <?php else: ?>
+                <p class="muted" id="quote-error" style="color:#b00020;display:none;margin:.4rem 0 0;font-size:.82rem"></p>
+            <?php endif; ?>
             <div class="sidebar-price">
                 <div class="muted" style="font-size:.82rem" id="price-label"><?= e($quote['label'] ?? 'Precio de lista') ?></div>
                 <div id="combo-breakdown" class="combo-breakdown" hidden></div>
                 <div class="sidebar-price-row">
-                    <span class="price" id="price-list"><?= money($catalogPrice) ?></span>
-                    <span id="price-arrow" style="display:none;color:var(--doceo-muted)">→</span>
-                    <span class="price" id="price-final" style="display:none"></span>
+                    <?php
+                    $initialCharged = (float) ($quote['charged'] ?? $quote['base'] ?? $catalogPrice);
+                    $showPartnerStrike = $isPartnerCheckout && abs($initialCharged - $catalogPrice) > 0.009;
+                    ?>
+                    <span class="price<?= $showPartnerStrike ? ' price-strike' : '' ?>" id="price-list"><?= money($catalogPrice) ?></span>
+                    <span id="price-arrow" style="<?= $showPartnerStrike ? '' : 'display:none;' ?>color:var(--doceo-muted)">→</span>
+                    <span class="price" id="price-final" style="<?= $showPartnerStrike ? '' : 'display:none' ?>"><?= $showPartnerStrike ? money($initialCharged) : '' ?></span>
                 </div>
                 <p class="muted" style="font-size:.78rem;margin:.5rem 0 0" id="sidebar-pay-note">Total a pagar</p>
                 <p id="combo-savings-note" class="combo-savings-note" hidden></p>
@@ -518,6 +529,7 @@ $stepLabels = [
   const comboStepIndex = wizardSteps.indexOf('paquete');
   const comboSidebarTeaser = document.getElementById('combo-sidebar-teaser');
   const depositCard = <?= json_encode($depositCard, JSON_UNESCAPED_UNICODE) ?>;
+  const isPartnerCheckout = <?= $isPartnerCheckout ? 'true' : 'false' ?>;
 
   let quoteData = <?= json_encode($quote, JSON_UNESCAPED_UNICODE) ?>;
   let payUi = 'transfer';
@@ -907,7 +919,8 @@ $stepLabels = [
   }
 
   function refreshQuote() {
-    const code = (codeInput && codeInput.value ? codeInput.value : '').trim();
+    // Partners no usan código promocional: su beneficio es el precio de nivel.
+    const code = isPartnerCheckout ? '' : ((codeInput && codeInput.value ? codeInput.value : '').trim());
     const comboId = comboIdInput && comboIdInput.value ? comboIdInput.value : '';
     const addons = selectedAddonIds();
     let url;
@@ -933,10 +946,10 @@ $stepLabels = [
         if (errEl) errEl.style.display = 'none';
         quoteData = data.quote;
         if (labelEl) {
-          // Solo el nombre del paquete (sin “· Precio de paquete” / “· Código promocional …”).
+          // Combo: nombre del paquete. Sin combo: etiqueta del quote (lista / partner / promo).
           labelEl.textContent = data.matched && data.combo && data.combo.name
             ? String(data.combo.name)
-            : '';
+            : String((data.quote && data.quote.label) || '');
         }
         if (comboIdInput && data.matched && data.combo_id) {
           comboIdInput.value = String(data.combo_id);
