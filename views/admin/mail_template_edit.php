@@ -382,4 +382,36 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
     if (toggleBtn.getAttribute('aria-pressed') === 'true') updatePreview();
   });
 })();
+
+(function () {
+  var en = document.getElementById('workbook-enabled');
+  var fields = document.getElementById('workbook-fields');
+  var list = document.getElementById('workbook-cells');
+  var add = document.getElementById('workbook-cell-add');
+  if (en && fields) {
+    en.addEventListener('change', function () {
+      fields.style.opacity = en.checked ? '1' : '.55';
+    });
+  }
+  if (add && list) {
+    add.addEventListener('click', function () {
+      var row = list.querySelector('.workbook-cell-row');
+      if (!row) return;
+      var clone = row.cloneNode(true);
+      clone.querySelectorAll('input').forEach(function (i) { i.value = ''; });
+      clone.querySelectorAll('select').forEach(function (s) { s.selectedIndex = 0; });
+      list.appendChild(clone);
+    });
+    list.addEventListener('click', function (e) {
+      var btn = e.target.closest('.workbook-cell-remove');
+      if (!btn) return;
+      var rows = list.querySelectorAll('.workbook-cell-row');
+      if (rows.length <= 1) {
+        rows[0].querySelectorAll('input').forEach(function (i) { i.value = ''; });
+        return;
+      }
+      btn.closest('.workbook-cell-row').remove();
+    });
+  }
+})();
 </script>
