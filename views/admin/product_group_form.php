@@ -4,12 +4,14 @@
 /** @var string $defaultConfig */
 /** @var array<string,mixed> $extras */
 /** @var array<string,string> $usedDocCodes */
-$isEdit = $group !== null;
-$action = $isEdit ? url('/admin/grupos/' . $group['id']) : url('/admin/grupos/nuevo');
+$group = is_array($group ?? null) ? $group : null;
+$groupId = (int) ($group['id'] ?? 0);
+$isEdit = $groupId > 0;
+$action = $isEdit ? url('/admin/grupos/' . $groupId) : url('/admin/grupos/nuevo');
 $extras = $extras ?? \App\Services\ProductAdminService::groupFormExtrasFromConfig($defaultConfig ?? null);
 $usedDocCodes = $usedDocCodes ?? [];
 $preselectSupplier = isset($_GET['supplier_id']) ? (int) $_GET['supplier_id'] : 0;
-if (!$isEdit && $preselectSupplier > 0 && empty($group['supplier_id'])) {
+if (!$isEdit && $preselectSupplier > 0 && (int) ($group['supplier_id'] ?? 0) < 1) {
     $group = ['supplier_id' => $preselectSupplier];
 }
 $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px';
