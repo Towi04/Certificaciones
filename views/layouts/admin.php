@@ -43,9 +43,9 @@ $configGroups = [
 ];
 
 $configOpen = false;
-foreach ($configGroups as $group) {
-    foreach ($group['items'] as $item) {
-        if (str_contains($path, $item['match'])) {
+foreach ($configGroups as $navGroup) {
+    foreach ($navGroup['items'] as $navItem) {
+        if (str_contains($path, $navItem['match'])) {
             $configOpen = true;
             break 2;
         }
@@ -103,15 +103,15 @@ foreach ($configGroups as $group) {
                     <span class="side-nav-caret" aria-hidden="true">▾</span>
                 </button>
                 <div class="side-nav-section-links" id="admin-config-links"<?= $configOpen ? '' : ' hidden' ?>>
-                    <?php foreach ($configGroups as $group): ?>
-                        <div class="side-nav-group-label"><?= e($group['label']) ?></div>
-                        <?php foreach ($group['items'] as $item): ?>
-                            <?php $active = str_contains($path, $item['match']); ?>
+                    <?php foreach ($configGroups as $navGroup): ?>
+                        <div class="side-nav-group-label"><?= e($navGroup['label']) ?></div>
+                        <?php foreach ($navGroup['items'] as $navItem): ?>
+                            <?php $active = str_contains($path, $navItem['match']); ?>
                             <a class="side-nav-link side-nav-link--nested<?= $active ? ' active' : '' ?>"
-                               href="<?= e(url($item['href'])) ?>"
-                               title="<?= e($item['label']) ?>">
-                                <span class="side-nav-icon"><?= icon($item['icon']) ?></span>
-                                <span class="side-nav-label"><?= e($item['label']) ?></span>
+                               href="<?= e(url($navItem['href'])) ?>"
+                               title="<?= e($navItem['label']) ?>">
+                                <span class="side-nav-icon"><?= icon($navItem['icon']) ?></span>
+                                <span class="side-nav-label"><?= e($navItem['label']) ?></span>
                             </a>
                         <?php endforeach; ?>
                     <?php endforeach; ?>
