@@ -42,15 +42,20 @@ $num = static function (mixed $v): string {
         <label class="muted" style="<?= e($labelStyle) ?>">
             Nombre *
             <input type="text" name="name" required value="<?= e((string) ($combo['name'] ?? '')) ?>" style="<?= e($inputStyle) ?>">
+            <?php if (!$isEdit): ?>
+                <span style="font-weight:500;font-size:.78rem">El código interno se genera a partir del nombre.</span>
+            <?php endif; ?>
         </label>
-        <label class="muted" style="<?= e($labelStyle) ?>">
-            Código *
-            <input type="text" name="code" required maxlength="60"
-                   <?= $isEdit ? 'readonly' : '' ?>
-                   value="<?= e((string) ($combo['code'] ?? '')) ?>"
-                   placeholder="ej. toefl-prep-cenni"
-                   style="<?= e($inputStyle) ?><?= $isEdit ? ';background:#f4f7fb' : '' ?>">
-        </label>
+        <?php if ($isEdit): ?>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Código interno
+                <input type="text" name="code" readonly maxlength="60"
+                       value="<?= e((string) ($combo['code'] ?? '')) ?>"
+                       style="<?= e($inputStyle) ?>;background:#f4f7fb">
+            </label>
+        <?php else: ?>
+            <input type="hidden" name="code" value="">
+        <?php endif; ?>
         <label class="muted" style="<?= e($labelStyle) ?>">
             Slug
             <input type="text" name="slug" value="<?= e((string) ($combo['slug'] ?? '')) ?>"

@@ -27,6 +27,17 @@ final class GroupStepConfig
     ];
 
     /**
+     * Acciones configurables en el editor de pasos.
+     * Confirmar pago y capturar folio se resuelven solos en Operación
+     * según el estado del caso (no se eligen aquí).
+     */
+    public const ACTIONS_EDITABLE = [
+        self::ACTION_NONE => 'Solo progreso (sin botón)',
+        self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
+        self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
+    ];
+
+    /**
      * @param array<string, mixed> $config config ya mergeado (grupo+producto)
      * @return array<string, array<string, mixed>> keyed by step code
      */
@@ -317,7 +328,16 @@ final class GroupStepConfig
             }
             $code = self::normalizeCode((string) ($row['code'] ?? ''));
             if ($code === '') {
+                $code = self::normalizeCode((string) ($row['label'] ?? ''));
+            }
+            if ($code === '') {
                 continue;
+            }
+            $base = $code;
+            $n = 2;
+            while (isset($defs[$code])) {
+                $code = $base . '_' . $n;
+                $n++;
             }
             $defs[$code] = self::normalizeDef($code, [
                 'code' => $code,

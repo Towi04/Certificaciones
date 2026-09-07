@@ -26,6 +26,25 @@ final class CertifierAdminService
         return preg_replace('/[^a-z0-9-]/', '', $code) ?? '';
     }
 
+    public function allocateUniqueCode(string $name): string
+    {
+        $base = self::normalizeCode(ProductAdminService::slugify($name));
+        if (strlen($base) < 2) {
+            $base = 'certificadora';
+        }
+        $candidate = $base;
+        $n = 2;
+        while ($this->certifiers->findByCode($candidate) !== null) {
+            $candidate = $base . '-' . $n;
+            $n++;
+            if ($n > 500) {
+                throw new \RuntimeException('No se pudo generar un código único para la certificadora.');
+            }
+        }
+
+        return $candidate;
+    }
+
     /** @param array<string, mixed> $input */
     public function create(array $input): int
     {
@@ -102,8 +121,12 @@ final class CertifierAdminService
             throw new \InvalidArgumentException('El nombre de la certificadora es obligatorio.');
         }
         $code = self::normalizeCode((string) ($input['code'] ?? ''));
-        if ($requireCode && strlen($code) < 2) {
-            throw new \InvalidArgumentException('El código es obligatorio (ej. cambridge).');
+        if ($requireCode) {
+            if (strlen($code) < 2) {
+                $code = $this->allocateUniqueCode($name);
+            } elseif ($this->certifiers->findByCode($code) !== null) {
+                $code = $this->allocateUniqueCode($name);
+            }
         }
         $website = trim((string) ($input['website'] ?? ''));
         $platform = trim((string) ($input['platform_url'] ?? ''));

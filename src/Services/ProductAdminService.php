@@ -80,6 +80,46 @@ final class ProductAdminService
         return preg_replace('/[^a-z0-9-]/', '', $code) ?? '';
     }
 
+    /** Código interno único a partir del nombre (grupos). */
+    public function allocateUniqueGroupCode(string $name): string
+    {
+        $base = self::normalizeGroupCode(self::slugify($name));
+        if (strlen($base) < 2) {
+            $base = 'grupo';
+        }
+        $candidate = $base;
+        $n = 2;
+        while ($this->groups->findByCode($candidate) !== null) {
+            $candidate = $base . '-' . $n;
+            $n++;
+            if ($n > 500) {
+                throw new \RuntimeException('No se pudo generar un código único para el grupo.');
+            }
+        }
+
+        return $candidate;
+    }
+
+    /** Código interno único a partir del nombre (productos). */
+    public function allocateUniqueProductCode(string $name): string
+    {
+        $base = self::normalizeProductCode(str_replace('-', '_', self::slugify($name)));
+        if (strlen($base) < 2) {
+            $base = 'PRODUCTO';
+        }
+        $candidate = $base;
+        $n = 2;
+        while ($this->products->findByCode($candidate) !== null) {
+            $candidate = $base . '_' . $n;
+            $n++;
+            if ($n > 500) {
+                throw new \RuntimeException('No se pudo generar un código único para el producto.');
+            }
+        }
+
+        return $candidate;
+    }
+
     /**
      * @param array<string, mixed> $input
      */
@@ -742,14 +782,21 @@ final class ProductAdminService
      */
     private function buildProductPayload(array $input, ?array $existing = null): array
     {
-        $code = self::normalizeProductCode((string) ($input['code'] ?? ($existing['code'] ?? '')));
-        if (strlen($code) < 2) {
-            throw new \InvalidArgumentException('El código del producto es obligatorio (mín. 2 caracteres).');
-        }
-
         $name = trim((string) ($input['name'] ?? ($existing['name'] ?? '')));
         if ($name === '') {
             throw new \InvalidArgumentException('El nombre del producto es obligatorio.');
+        }
+
+        if ($existing !== null) {
+            $code = self::normalizeProductCode((string) ($existing['code'] ?? ''));
+        } else {
+            $code = self::normalizeProductCode((string) ($input['code'] ?? ''));
+            if (strlen($code) < 2 || $this->products->findByCode($code) !== null) {
+                $code = $this->allocateUniqueProductCode($name);
+            }
+        }
+        if (strlen($code) < 2) {
+            throw new \InvalidArgumentException('No se pudo asignar un código interno al producto.');
         }
 
         $slugRaw = trim((string) ($input['slug'] ?? ''));
@@ -948,8 +995,13 @@ final class ProductAdminService
         }
 
         $code = self::normalizeGroupCode((string) ($input['code'] ?? ''));
-        if ($requireCode && strlen($code) < 2) {
-            throw new \InvalidArgumentException('El código del grupo es obligatorio (ej. itep-exams).');
+        if ($requireCode) {
+            if (strlen($code) < 2) {
+                $code = $this->allocateUniqueGroupCode($name);
+            } elseif ($this->groups->findByCode($code) !== null) {
+                // Si el usuario/legacy envió un código ya usado, regenerar desde el nombre.
+                $code = $this->allocateUniqueGroupCode($name);
+            }
         }
 
         $supplierId = $this->nullableInt($input['supplier_id'] ?? null);
@@ -1364,12 +1416,6 @@ final class ProductAdminService
     }
 
     /**
-     * Guarda los pasos de la plantilla de progreso seleccionada (si vienen en el formulario).
-     *
-     * @param array<string, mixed> $input
-     */
-
-    /**
      * Guarda plantilla Excel de solicitud a proveedor y deja la ruta en el input.
      *
      * @param array<string, mixed> $input
@@ -1394,6 +1440,11 @@ final class ProductAdminService
         return $input;
     }
 
+    /**
+     * Guarda los pasos de la plantilla de progreso seleccionada (si vienen en el formulario).
+     *
+     * @param array<string, mixed> $input
+     */
     public function savePipelineStepsFromInput(array $input): void
     {
         $pipelineCode = strtolower(trim((string) ($input['pipeline_code'] ?? '')));
@@ -1411,13 +1462,28 @@ final class ProductAdminService
 
         $rawSteps = $input['pipeline_steps'];
         $steps = [];
+        $used = [];
         foreach ($rawSteps as $row) {
             if (!is_array($row)) {
                 continue;
             }
+            $code = GroupStepConfig::normalizeCode((string) ($row['code'] ?? ''));
+            if ($code === '') {
+                $code = GroupStepConfig::normalizeCode((string) ($row['label'] ?? ''));
+            }
+            if ($code === '') {
+                continue;
+            }
+            $base = $code;
+            $n = 2;
+            while (isset($used[$code])) {
+                $code = $base . '_' . $n;
+                $n++;
+            }
+            $used[$code] = true;
             $steps[] = [
-                'code' => (string) ($row['code'] ?? ''),
-                'label' => (string) ($row['label'] ?? ''),
+                'code' => $code,
+                'label' => (string) ($row['label'] ?? $code),
                 'actor' => (string) ($row['actor'] ?? 'admin'),
                 'is_terminal' => !empty($row['is_terminal']),
             ];
