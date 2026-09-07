@@ -46,11 +46,13 @@ final class MailTemplateService
             'folio' => 'Folio UKS / examen',
             'access_key' => 'Clave del día',
         ],
-        'Documentos UKS' => [
+        'Documentos (enlaces)' => [
             'reglamento_url' => 'URL reglamento firmado',
-            'comprobante_url' => 'URL comprobante de pago',
-            'documentos_html' => 'Lista de documentos (HTML)',
-            'attachment_note' => 'Nota de adjuntos/enlaces',
+            'comprobante_url' => 'URL comprobante de pago (admin/alumno)',
+            'workbook_url' => 'URL plantilla Excel rellenada',
+            'documentos_html' => 'Lista HTML de enlaces a documentos',
+            'attachment_note' => 'Nota: documentos por enlace (sin adjuntos)',
+            'workbook_note' => 'Nota breve del Excel por enlace',
         ],
         'Resultados / CENNI' => [
             'results_level' => 'Nivel alcanzado',
@@ -211,7 +213,7 @@ final class MailTemplateService
     {
         $uks = [
             'certificacion', 'product_name', 'full_name', 'matricula', 'student_email',
-            'exam_date', 'exam_time', 'reglamento_url', 'comprobante_url', 'documentos_html', 'attachment_note',
+            'exam_date', 'exam_time', 'reglamento_url', 'comprobante_url', 'workbook_url', 'documentos_html', 'attachment_note', 'workbook_note',
         ];
 
         return match ($code) {
@@ -479,11 +481,15 @@ final class MailTemplateService
             'exam_date' => date('Y-m-d', strtotime('+7 days')),
             'exam_time' => '10:00',
             'reglamento_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/archivo/ejemplo-prueba',
-            'comprobante_url' => '',
+            'comprobante_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/archivo/ejemplo-comprobante',
+            'workbook_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/archivo/ejemplo-excel',
             'documentos_html' => '<p><strong>Documentos:</strong></p><ul>'
-                . '<li>Reglamento firmado (enlace seguro en el correo real)</li>'
+                . '<li><a href="#">Reglamento firmado</a></li>'
+                . '<li><a href="#">Comprobante de pago</a></li>'
+                . '<li><a href="#">Plantilla Excel</a></li>'
                 . '</ul>',
             'attachment_note' => 'Documentos por enlace (sin adjuntos en el correo).',
+            'workbook_note' => 'Plantilla Excel disponible por enlace seguro.',
         ];
     }
 
@@ -650,6 +656,9 @@ final class MailTemplateService
                 . '<li><strong>Hora examen:</strong> {{exam_time}}</li>'
                 . '</ul>'
                 . '{{documentos_html}}'
+                . '<p>Enlaces: <a href="{{reglamento_url}}">Reglamento</a> · '
+                . '<a href="{{comprobante_url}}">Comprobante</a> · '
+                . '<a href="{{workbook_url}}">Excel</a></p>'
                 . '<p>— Instituto DOCEO</p>',
                 'automatic'
             );

@@ -141,7 +141,11 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
             <?php if ($isUksSolicitud): ?>
                 <p class="muted" style="font-size:.82rem;margin:.85rem 0 0">
                     <strong>{{certificacion}}</strong> = producto comprado.
-                    <strong>{{documentos_html}}</strong> = enlaces al reglamento (sin adjuntos).
+                    Documentos <strong>solo por enlace</strong> (Neubox bloquea adjuntos):
+                    <code>{{reglamento_url}}</code>,
+                    <code>{{comprobante_url}}</code>,
+                    <code>{{workbook_url}}</code>
+                    o el bloque <code>{{documentos_html}}</code>.
                 </p>
             <?php endif; ?>
         </div>

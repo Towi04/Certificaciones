@@ -321,7 +321,7 @@ final class ProductAdminService
                 : true,
             'workbook_enabled' => !empty($wb['enabled']),
             'workbook_template_path' => trim((string) ($wb['template_path'] ?? '')),
-            'workbook_attach' => array_key_exists('attach', $wb) ? (bool) $wb['attach'] : true,
+            'workbook_attach' => array_key_exists('attach', $wb) ? (bool) $wb['attach'] : false,
             'workbook_sheet' => trim((string) ($wb['sheet'] ?? '')),
             'workbook_normalize' => in_array((string) ($wb['normalize'] ?? 'none'), ['none', 'toefl'], true)
                 ? (string) ($wb['normalize'] ?? 'none')
@@ -1243,10 +1243,8 @@ final class ProductAdminService
             return $config;
         }
 
-        $delivery = (string) ($input['provider_request_delivery'] ?? 'links');
-        if (!in_array($delivery, ['links', 'attachments', 'both'], true)) {
-            $delivery = 'links';
-        }
+        // Neubox: siempre enlaces firmados (sin adjuntos SMTP).
+        $delivery = 'links';
 
         $step = strtolower(trim((string) ($input['provider_request_step_code'] ?? 'solicitud_proveedor')));
         $step = preg_replace('/[^a-z0-9_]+/', '_', $step) ?? 'solicitud_proveedor';
@@ -1299,7 +1297,7 @@ final class ProductAdminService
             'workbook' => [
                 'enabled' => !empty($input['provider_request_workbook_enabled']),
                 'template_path' => $templatePath,
-                'attach' => !empty($input['provider_request_workbook_attach']),
+                'attach' => false,
                 'sheet' => trim((string) ($input['provider_request_workbook_sheet'] ?? '')),
                 'normalize' => $normalize,
                 'cell_map' => $cellMap,

@@ -67,10 +67,8 @@ final class ProviderRequestService
             return null;
         }
 
-        $delivery = (string) ($raw['delivery'] ?? 'links');
-        if (!in_array($delivery, ['links', 'attachments', 'both'], true)) {
-            $delivery = 'links';
-        }
+        // Neubox bloquea adjuntos: siempre enlaces firmados en el correo.
+        $delivery = 'links';
 
         $workbook = is_array($raw['workbook'] ?? null) ? $raw['workbook'] : [];
         $cellMap = [];
@@ -126,7 +124,7 @@ final class ProviderRequestService
             'workbook' => [
                 'enabled' => !empty($workbook['enabled']),
                 'template_path' => trim((string) ($workbook['template_path'] ?? '')),
-                'attach' => array_key_exists('attach', $workbook) ? (bool) $workbook['attach'] : true,
+                'attach' => array_key_exists('attach', $workbook) ? (bool) $workbook['attach'] : false,
                 'sheet' => trim((string) ($workbook['sheet'] ?? '')),
                 'normalize' => in_array((string) ($workbook['normalize'] ?? 'none'), ['none', 'toefl'], true)
                     ? (string) ($workbook['normalize'] ?? 'none')
@@ -237,29 +235,24 @@ final class ProviderRequestService
             );
         }
 
-        $vars = $this->buildMailVars($tracking, $purchase, $product, $config, $forceIncludePaymentProof);
-        $attachments = [];
         $tmpFiles = [];
-
         try {
-            if (in_array((string) $config['delivery'], ['attachments', 'both'], true)) {
-                foreach ($this->buildFileAttachments($tracking, $purchase, $product, $config, $forceIncludePaymentProof) as $att) {
-                    $attachments[] = $att;
-                }
-            }
+            $vars = $this->buildMailVars(
+                $tracking,
+                $purchase,
+                $product,
+                $config,
+                $forceIncludePaymentProof,
+                $tmpFiles
+            );
 
-            $workbookAtt = $this->buildWorkbookAttachment($tracking, $purchase, $product, $config, $tmpFiles);
-            if ($workbookAtt !== null) {
-                $attachments[] = $workbookAtt;
-                $vars['workbook_note'] = 'Se adjunta plantilla Excel con los datos del alumno.';
-            }
-
+            // Nunca adjuntar archivos: Neubox/hosting bloquea SMTP con attachments.
             $this->dispatchMail(
                 $to,
                 (string) $config['cc'],
                 (string) $config['mail_template_code'],
                 $vars,
-                $attachments
+                []
             );
 
             $step = (string) $config['step_code'];
@@ -277,9 +270,15 @@ final class ProviderRequestService
             }
 
             $this->markSent($trackingId, $to, $actorUserId);
-            $note = 'Solicitud enviada a ' . $to;
-            if ($attachments !== []) {
-                $note .= ' · ' . count($attachments) . ' adjunto(s)';
+            $note = 'Solicitud enviada a ' . $to . ' (documentos por enlace)';
+            if (($vars['workbook_url'] ?? '') !== '') {
+                $note .= ' · Excel';
+            }
+            if (($vars['reglamento_url'] ?? '') !== '') {
+                $note .= ' · reglamento';
+            }
+            if (($vars['comprobante_url'] ?? '') !== '') {
+                $note .= ' · comprobante';
             }
             $this->tracking->addLog($trackingId, $step, $note, $actorUserId);
         } finally {
@@ -318,12 +317,16 @@ final class ProviderRequestService
      * @param array<string, mixed> $config
      * @return array<string, string>
      */
+    /**
+     * @param list<string> $tmpFiles
+     */
     private function buildMailVars(
         array $tracking,
         array $purchase,
         array $product,
         array $config,
-        bool $forceIncludePaymentProof
+        bool $forceIncludePaymentProof,
+        array &$tmpFiles = []
     ): array {
         $fields = $this->fieldValues($tracking, $purchase, $product);
         $includeProof = $forceIncludePaymentProof || !empty($config['include_payment_proof']);
@@ -332,6 +335,7 @@ final class ProviderRequestService
 
         $reglamentoUrl = '';
         $comprobanteUrl = '';
+        $workbookUrl = '';
         $fileLinks = new SignedFileLinkService();
 
         if ($includeReglamento || $requireReglamento) {
@@ -354,16 +358,30 @@ final class ProviderRequestService
         }
 
         if ($includeProof) {
-            $proofPath = (string) ($purchase['payment_proof_path'] ?? $tracking['payment_proof_path'] ?? '');
-            if ($proofPath !== '') {
-                $abs = $this->documents->absolutePath($proofPath);
+            $adminDoc = $this->findAdminPaymentProof((int) ($tracking['id'] ?? 0));
+            if ($adminDoc !== null) {
+                $abs = $this->documents->absolutePath((string) $adminDoc['storage_path']);
                 if (is_file($abs)) {
-                    $comprobanteUrl = $fileLinks->purchaseProofLink((int) $purchase['id']);
+                    $comprobanteUrl = $fileLinks->documentLink((int) $adminDoc['id']);
+                }
+            } else {
+                $proofPath = (string) ($purchase['payment_proof_path'] ?? $tracking['payment_proof_path'] ?? '');
+                if ($proofPath !== '') {
+                    $abs = $this->documents->absolutePath($proofPath);
+                    if (is_file($abs)) {
+                        $comprobanteUrl = $fileLinks->purchaseProofLink((int) $purchase['id']);
+                    }
                 }
             }
         }
 
-        $hasWorkbook = !empty($config['workbook']['enabled']);
+        if (!empty($config['workbook']['enabled'])) {
+            $workbookUrl = $this->prepareWorkbookLink($tracking, $purchase, $product, $config, $tmpFiles);
+        }
+
+        $workbookNote = $workbookUrl !== ''
+            ? 'Plantilla Excel disponible por enlace seguro.'
+            : '';
 
         return [
             'certificacion' => $fields['product_name'],
@@ -376,11 +394,10 @@ final class ProviderRequestService
             'exam_time' => $fields['exam_time'],
             'reglamento_url' => $reglamentoUrl,
             'comprobante_url' => $comprobanteUrl,
-            'documentos_html' => $this->documentosHtml($reglamentoUrl, $comprobanteUrl, $hasWorkbook),
-            'attachment_note' => in_array((string) $config['delivery'], ['attachments', 'both'], true)
-                ? 'Documentos adjuntos y/o enlaces según configuración del grupo.'
-                : 'Documentos disponibles por enlace seguro.',
-            'workbook_note' => '',
+            'workbook_url' => $workbookUrl,
+            'documentos_html' => $this->documentosHtml($reglamentoUrl, $comprobanteUrl, $workbookUrl),
+            'attachment_note' => 'Documentos por enlace seguro (sin adjuntos en el correo).',
+            'workbook_note' => $workbookNote,
             'first_name' => $fields['first_name'],
             'last_name_p' => $fields['last_name_p'],
             'last_name_m' => $fields['last_name_m'],
@@ -511,18 +528,22 @@ final class ProviderRequestService
      * @param array<string, mixed> $product
      * @param array<string, mixed> $config
      * @param list<string> $tmpFiles
-     * @return array{path:string,name:string,mime:string}|null
      */
-    private function buildWorkbookAttachment(
+    /**
+     * Rellena la plantilla Excel, la guarda como documento y devuelve enlace firmado.
+     *
+     * @param list<string> $tmpFiles
+     */
+    private function prepareWorkbookLink(
         array $tracking,
         array $purchase,
         array $product,
         array $config,
         array &$tmpFiles
-    ): ?array {
+    ): string {
         $wb = is_array($config['workbook'] ?? null) ? $config['workbook'] : [];
-        if (empty($wb['enabled']) || empty($wb['attach'])) {
-            return null;
+        if (empty($wb['enabled'])) {
+            return '';
         }
 
         $relative = trim((string) ($wb['template_path'] ?? ''));
@@ -576,12 +597,39 @@ final class ProviderRequestService
         );
         $tmpFiles[] = $filled;
         $matricula = preg_replace('/[^a-zA-Z0-9_-]+/', '_', $fields['matricula']) ?: 'alumno';
+        $fileName = 'solicitud_' . $matricula . '.xlsx';
 
-        return [
-            'path' => $filled,
-            'name' => 'solicitud_' . $matricula . '.xlsx',
-            'mime' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ];
+        $dir = BASE_PATH . '/storage/uploads/provider_workbooks';
+        if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
+            throw new \RuntimeException('No se pudo guardar la plantilla Excel rellenada.');
+        }
+        $safe = bin2hex(random_bytes(16)) . '.xlsx';
+        $dest = $dir . '/' . $safe;
+        if (!@copy($filled, $dest)) {
+            throw new \RuntimeException('No se pudo copiar la plantilla Excel rellenada.');
+        }
+        $relative = 'uploads/provider_workbooks/' . $safe;
+
+        $studentUserId = (int) ($tracking['student_user_id'] ?? $tracking['purchase_student_id'] ?? 0);
+        if ($studentUserId < 1) {
+            throw new \RuntimeException('No se pudo determinar el alumno para guardar el Excel.');
+        }
+
+        $this->pdo->prepare(
+            'INSERT INTO documents (tracking_id, purchase_id, student_user_id, doc_type, original_name, storage_path, status, uploaded_by)
+             VALUES (?,?,?,?,?,?,\'approved\',?)'
+        )->execute([
+            (int) ($tracking['id'] ?? 0),
+            (int) ($purchase['id'] ?? $tracking['purchase_id'] ?? 0),
+            $studentUserId,
+            'provider_workbook',
+            $fileName,
+            $relative,
+            null,
+        ]);
+        $docId = (int) $this->pdo->lastInsertId();
+
+        return (new SignedFileLinkService())->documentLink($docId);
     }
 
     /**
@@ -632,7 +680,7 @@ final class ProviderRequestService
             . "Hora examen: {$vars['exam_time']}\n\n"
             . ($vars['reglamento_url'] !== '' ? "Reglamento: {$vars['reglamento_url']}\n" : '')
             . ($vars['comprobante_url'] !== '' ? "Comprobante: {$vars['comprobante_url']}\n" : '')
-            . ($vars['workbook_note'] !== '' ? $vars['workbook_note'] . "\n" : '')
+            . ($vars['workbook_url'] !== '' ? "Excel: {$vars['workbook_url']}\n" : ''). ($vars['workbook_note'] !== '' ? $vars['workbook_note'] . "\n" : '')
             . "\n— Instituto DOCEO\n";
 
         $html = '<p>Solicitud de registro examen <strong>' . htmlspecialchars($vars['product_name']) . '</strong></p><ul>'
@@ -643,8 +691,10 @@ final class ProviderRequestService
             . '<li><strong>Fecha:</strong> ' . htmlspecialchars($vars['exam_date']) . '</li>'
             . '<li><strong>Hora:</strong> ' . htmlspecialchars($vars['exam_time']) . '</li>'
             . '</ul>' . $vars['documentos_html'];
-        if ($vars['workbook_note'] !== '') {
-            $html .= '<p>' . htmlspecialchars($vars['workbook_note']) . '</p>';
+        if (($vars['workbook_url'] ?? '') !== '') {
+            $html .= '<p><a href="' . htmlspecialchars((string) $vars['workbook_url']) . '">Descargar plantilla Excel</a></p>';
+        } elseif (($vars['workbook_note'] ?? '') !== '') {
+            $html .= '<p>' . htmlspecialchars((string) $vars['workbook_note']) . '</p>';
         }
 
         (new Mailer())->send($to, $subject, $text, array_merge($options, [
@@ -653,9 +703,9 @@ final class ProviderRequestService
         ]));
     }
 
-    private function documentosHtml(string $reglamentoUrl, string $comprobanteUrl, bool $hasWorkbook): string
+    private function documentosHtml(string $reglamentoUrl, string $comprobanteUrl, string $workbookUrl = ''): string
     {
-        if ($reglamentoUrl === '' && $comprobanteUrl === '' && !$hasWorkbook) {
+        if ($reglamentoUrl === '' && $comprobanteUrl === '' && $workbookUrl === '') {
             return '';
         }
         $html = '<p><strong>Documentos:</strong></p><ul>';
@@ -665,8 +715,8 @@ final class ProviderRequestService
         if ($comprobanteUrl !== '') {
             $html .= '<li><a href="' . htmlspecialchars($comprobanteUrl) . '">Comprobante de pago</a></li>';
         }
-        if ($hasWorkbook) {
-            $html .= '<li>Plantilla Excel adjunta (si el envío incluye adjuntos)</li>';
+        if ($workbookUrl !== '') {
+            $html .= '<li><a href="' . htmlspecialchars($workbookUrl) . '">Plantilla Excel</a></li>';
         }
         $html .= '</ul>';
 

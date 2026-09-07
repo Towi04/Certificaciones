@@ -255,11 +255,11 @@ HTML;
             'include_reglamento' => false,
             'include_payment_proof' => true,
             'require_reglamento' => false,
-            'delivery' => 'attachments',
+            'delivery' => 'links',
             'workbook' => [
                 'enabled' => true,
                 'template_path' => '',
-                'attach' => true,
+                'attach' => false,
                 'sheet' => '1',
                 'normalize' => 'toefl',
                 'cell_map' => [
@@ -762,6 +762,10 @@ HTML;
                     . '<li><strong>Hora examen:</strong> {{exam_time}}</li>'
                     . '</ul>'
                     . '{{documentos_html}}'
+                    . '<p>Enlaces individuales (si los necesitas): '
+                    . '<a href="{{reglamento_url}}">Reglamento</a> · '
+                    . '<a href="{{comprobante_url}}">Comprobante</a> · '
+                    . '<a href="{{workbook_url}}">Excel</a></p>'
                     . '<p>— Instituto DOCEO</p>',
             ],
             [

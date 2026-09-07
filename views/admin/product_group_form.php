@@ -543,9 +543,11 @@ $renderMailTemplateField = static function (
 ?>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Solicitud al proveedor</h2>
         <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
-            Configura el correo de <strong>solicitud al proveedor</strong>. El contenido del mensaje lo define la
-            <strong>plantilla de correo</strong> (variables). El envío se dispara cuando un admin sube el
-            <strong>comprobante de pago DOCEO → proveedor</strong> en el seguimiento del caso.
+            Configura el correo de <strong>solicitud al proveedor</strong>. El contenido lo define la
+            <strong>plantilla de correo</strong> con etiquetas (p. ej. <code>{{reglamento_url}}</code>,
+            <code>{{comprobante_url}}</code>, <code>{{workbook_url}}</code>). Los archivos van por
+            <strong>enlace seguro</strong>, nunca como adjuntos (restricción Neubox). El envío se dispara
+            cuando un admin sube el <strong>comprobante DOCEO → proveedor</strong>.
         </p>
 
         <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.9rem;margin-bottom:.85rem">
@@ -611,15 +613,20 @@ $renderMailTemplateField = static function (
                 </label>
             </div>
 
-            <p style="margin:.75rem 0 .35rem;font-weight:700;color:var(--doceo-blue)">Adjuntos / requisitos</p>
+            <p style="margin:.75rem 0 .35rem;font-weight:700;color:var(--doceo-blue)">Documentos por enlace (sin adjuntos)</p>
             <p class="muted" style="font-size:.78rem;margin:0 0 .5rem">
-                Los datos del alumno y del examen los define la plantilla de correo (y el mapeo Excel).
-                Aquí solo marcas documentos a adjuntar o exigir.
+                Neubox bloquea correos con archivos adjuntos. El sistema genera <strong>enlaces firmados</strong>
+                y la plantilla de correo debe incluir las etiquetas:
+                <code>{{reglamento_url}}</code>,
+                <code>{{comprobante_url}}</code>,
+                <code>{{workbook_url}}</code>
+                o el bloque <code>{{documentos_html}}</code>.
             </p>
+            <input type="hidden" name="provider_request_delivery" value="links">
             <div style="display:flex;flex-wrap:wrap;gap:.75rem 1.25rem;margin-bottom:.85rem">
                 <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
                     <input type="checkbox" name="provider_request_include_reglamento" value="1" <?= !isset($pr['include_reglamento']) || !empty($pr['include_reglamento']) ? 'checked' : '' ?>>
-                    Incluir reglamento firmado
+                    Generar enlace al reglamento firmado
                 </label>
                 <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
                     <input type="checkbox" name="provider_request_require_reglamento" value="1" <?= !isset($pr['require_reglamento']) || !empty($pr['require_reglamento']) ? 'checked' : '' ?>>
@@ -627,25 +634,15 @@ $renderMailTemplateField = static function (
                 </label>
                 <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
                     <input type="checkbox" name="provider_request_include_proof" value="1" <?= !isset($pr['include_payment_proof']) || !empty($pr['include_payment_proof']) ? 'checked' : '' ?>>
-                    Incluir comprobante de pago al proveedor
+                    Generar enlace al comprobante de pago
                 </label>
             </div>
-
-            <label class="muted" style="<?= e($labelStyle) ?>;max-width:28rem;margin-bottom:1rem">
-                Cómo enviar documentos
-                <select name="provider_request_delivery" style="<?= e($inputStyle) ?>">
-                    <?php $del = (string) ($pr['delivery'] ?? 'links'); ?>
-                    <option value="links" <?= $del === 'links' ? 'selected' : '' ?>>Solo enlaces seguros</option>
-                    <option value="attachments" <?= $del === 'attachments' ? 'selected' : '' ?>>Solo adjuntos</option>
-                    <option value="both" <?= $del === 'both' ? 'selected' : '' ?>>Enlaces y adjuntos</option>
-                </select>
-            </label>
 
             <div style="border:1px solid #dbeafe;border-radius:12px;padding:.85rem;background:#f8fbff;margin-bottom:.5rem">
                 <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.9rem;margin-bottom:.65rem">
                     <input type="checkbox" name="provider_request_workbook_enabled" value="1" id="provider-workbook-enabled"
                         <?= !empty($pr['workbook_enabled']) ? 'checked' : '' ?>>
-                    Adjuntar plantilla Excel rellenada (p. ej. TOEFL)
+                    Generar Excel rellenado y enlace <code>{{workbook_url}}</code> (p. ej. TOEFL)
                 </label>
                 <div id="provider-workbook-fields">
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem;margin-bottom:.65rem">
@@ -672,11 +669,10 @@ $renderMailTemplateField = static function (
                             · <label style="display:inline-flex;gap:.3rem;align-items:center"><input type="checkbox" name="provider_request_clear_workbook" value="1"> Quitar</label>
                         </p>
                     <?php endif; ?>
-                    <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem;margin-bottom:.65rem">
-                        <input type="checkbox" name="provider_request_workbook_attach" value="1"
-                            <?= !isset($pr['workbook_attach']) || !empty($pr['workbook_attach']) ? 'checked' : '' ?>>
-                        Adjuntar el Excel al correo
-                    </label>
+                    <input type="hidden" name="provider_request_workbook_attach" value="0">
+                    <p class="muted" style="font-size:.78rem;margin:0 0 .65rem">
+                        El Excel no se adjunta al correo: se guarda y se expone con <code>{{workbook_url}}</code>.
+                    </p>
                     <p style="margin:.35rem 0;font-weight:700;color:var(--doceo-blue)">Mapeo de celdas</p>
                     <p class="muted" style="font-size:.78rem;margin:0 0 .5rem">Indica en qué celda (ej. B2) se escribe cada dato.</p>
                     <div id="provider-cell-map">
@@ -1127,11 +1123,11 @@ $renderMailTemplateField = static function (
         include_reglamento: !!(document.querySelector('[name="provider_request_include_reglamento"]') || {}).checked,
         include_payment_proof: !!(document.querySelector('[name="provider_request_include_proof"]') || {}).checked,
         require_reglamento: !!(document.querySelector('[name="provider_request_require_reglamento"]') || {}).checked,
-        delivery: val('provider_request_delivery', 'links'),
+        delivery: 'links',
         workbook: {
           enabled: !!(document.querySelector('[name="provider_request_workbook_enabled"]') || {}).checked,
           template_path: (base.provider_request && base.provider_request.workbook && base.provider_request.workbook.template_path) || '',
-          attach: !!(document.querySelector('[name="provider_request_workbook_attach"]') || {}).checked,
+          attach: false,
           sheet: val('provider_request_workbook_sheet', ''),
           normalize: val('provider_request_workbook_normalize', 'none'),
           cell_map: cellMap
