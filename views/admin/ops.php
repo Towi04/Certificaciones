@@ -96,7 +96,7 @@ $q = (string) ($filters['q'] ?? '');
                     ?>
                     <tr class="<?= e($rowClass) ?>" data-tracking-id="<?= $tid ?>">
                         <td class="ops-check">
-                            <?php if (!empty($r['is_elet'])): ?>
+                            <?php if (!empty($r['show_folio_fields'])): ?>
                                 <input type="checkbox" class="ops-row-check" form="ops-bulk-form" name="tracking_ids[]" value="<?= $tid ?>">
                             <?php endif; ?>
                         </td>
@@ -129,7 +129,7 @@ $q = (string) ($filters['q'] ?? '');
                             <?= $exam !== '' ? e($exam) : '—' ?>
                         </td>
                         <td>
-                            <?php if (!empty($r['is_elet'])): ?>
+                            <?php if (!empty($r['show_folio_fields'])): ?>
                                 <input class="ops-input ops-folio" type="text" form="ops-bulk-form"
                                        name="folio[<?= $tid ?>]" value="<?= e((string) ($r['folio'] ?? '')) ?>"
                                        placeholder="Folio" autocomplete="off" data-tid="<?= $tid ?>">
@@ -138,7 +138,7 @@ $q = (string) ($filters['q'] ?? '');
                             <?php endif; ?>
                         </td>
                         <td>
-                            <?php if (!empty($r['is_elet'])): ?>
+                            <?php if (!empty($r['show_folio_fields'])): ?>
                                 <input class="ops-input ops-key" type="text" form="ops-bulk-form"
                                        name="access_key[<?= $tid ?>]" value="<?= e((string) ($r['access_key'] ?? '')) ?>"
                                        placeholder="Clave" autocomplete="off" data-tid="<?= $tid ?>">
@@ -147,44 +147,56 @@ $q = (string) ($filters['q'] ?? '');
                             <?php endif; ?>
                         </td>
                         <td class="ops-actions">
-                            <?php if (!empty($r['needs_payment'])): ?>
-                                <form method="post" action="<?= e(url('/admin/compras/' . $pid . '/confirmar-pago')) ?>" class="ops-inline-form">
-                                    <?= csrf_field() ?>
-                                    <input type="hidden" name="return_ops" value="1">
-                                    <input type="hidden" name="return_view" value="<?= e($view) ?>">
-                                    <input type="hidden" name="return_q" value="<?= e($q) ?>">
-                                    <button class="btn btn-accent btn-sm" type="submit">Confirmar pago</button>
-                                </form>
-                                <?php if (!empty($r['payment_proof_path'])): ?>
-                                    <a class="btn btn-ghost btn-sm" target="_blank" href="<?= e(url('/admin/compras/' . $pid . '/comprobante')) ?>">Ver comprobante</a>
+                            <?php
+                            $opsButtons = is_array($r['ops_buttons'] ?? null) ? $r['ops_buttons'] : [];
+                            foreach ($opsButtons as $btn):
+                                $action = (string) ($btn['action'] ?? '');
+                                $label = (string) ($btn['label'] ?? 'Acción');
+                                ?>
+                                <?php if ($action === \App\Services\GroupStepConfig::ACTION_CONFIRM_PAYMENT): ?>
+                                    <form method="post" action="<?= e(url('/admin/compras/' . $pid . '/confirmar-pago')) ?>" class="ops-inline-form">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="return_ops" value="1">
+                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                        <button class="btn btn-accent btn-sm" type="submit"><?= e($label) ?></button>
+                                    </form>
+                                    <?php if (!empty($r['payment_proof_path'])): ?>
+                                        <a class="btn btn-ghost btn-sm" target="_blank" href="<?= e(url('/admin/compras/' . $pid . '/comprobante')) ?>">Ver comprobante</a>
+                                    <?php endif; ?>
+                                <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_SEND_MAIL): ?>
+                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/solicitud-proveedor')) ?>" class="ops-inline-form">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="return_ops" value="1">
+                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                        <input type="hidden" name="include_payment_proof" value="1">
+                                        <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
+                                        <button class="btn btn-accent btn-sm" type="submit"><?= e($label) ?></button>
+                                    </form>
+                                <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_EXAM_ACCESS): ?>
+                                    <form method="post" action="<?= e(url('/admin/operacion/' . $tid . '/accesos')) ?>" class="ops-inline-form ops-access-form">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                        <input type="hidden" name="folio" class="ops-sync-folio" value="<?= e((string) ($r['folio'] ?? '')) ?>">
+                                        <input type="hidden" name="access_key" class="ops-sync-key" value="<?= e((string) ($r['access_key'] ?? '')) ?>">
+                                        <button class="btn btn-primary btn-sm" type="submit" name="notify" value="1"><?= e($label) ?></button>
+                                    </form>
+                                <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_ADVANCE): ?>
+                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/avanzar')) ?>" class="ops-inline-form">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="return_ops" value="1">
+                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                        <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
+                                        <button class="btn btn-primary btn-sm" type="submit"><?= e($label) ?></button>
+                                    </form>
                                 <?php endif; ?>
-                            <?php endif; ?>
+                            <?php endforeach; ?>
 
-                            <?php if (!empty($r['provider_pending'])): ?>
-                                <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/solicitud-proveedor')) ?>" class="ops-inline-form">
-                                    <?= csrf_field() ?>
-                                    <input type="hidden" name="return_ops" value="1">
-                                    <input type="hidden" name="return_view" value="<?= e($view) ?>">
-                                    <input type="hidden" name="return_q" value="<?= e($q) ?>">
-                                    <input type="hidden" name="include_payment_proof" value="1">
-                                    <button class="btn btn-accent btn-sm" type="submit">Enviar a proveedor</button>
-                                </form>
-                            <?php elseif (!empty($r['provider_sent_at'])): ?>
-                                <span class="ops-flag ops-flag--ok">Proveedor ✓</span>
-                            <?php endif; ?>
-
-                            <?php if (!empty($r['is_elet'])): ?>
-                                <form method="post" action="<?= e(url('/admin/operacion/' . $tid . '/accesos')) ?>" class="ops-inline-form ops-access-form">
-                                    <?= csrf_field() ?>
-                                    <input type="hidden" name="return_view" value="<?= e($view) ?>">
-                                    <input type="hidden" name="return_q" value="<?= e($q) ?>">
-                                    <input type="hidden" name="folio" class="ops-sync-folio" value="<?= e((string) ($r['folio'] ?? '')) ?>">
-                                    <input type="hidden" name="access_key" class="ops-sync-key" value="<?= e((string) ($r['access_key'] ?? '')) ?>">
-                                    <button class="btn btn-primary btn-sm" type="submit" name="notify" value="1">
-                                        <?= !empty($r['has_access']) ? 'Reenviar plantilla' : 'Guardar y enviar plantilla' ?>
-                                    </button>
-                                    <button class="btn btn-ghost btn-sm" type="submit">Solo guardar</button>
-                                </form>
+                            <?php if ($opsButtons === []): ?>
+                                <span class="ops-flag ops-flag--ok">Al día</span>
                             <?php endif; ?>
 
                             <a class="btn btn-ghost btn-sm" href="<?= e(url('/admin/seguimientos/' . $tid)) ?>">Detalle</a>

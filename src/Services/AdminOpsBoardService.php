@@ -55,7 +55,7 @@ final class AdminOpsBoardService
     public function list(array $filters, ?int $limit = 50, ?int $offset = 0): array
     {
         [$where, $params] = $this->whereClause($filters);
-        $sql = 'SELECT t.id, t.purchase_id, t.product_id, t.current_step_code, t.status AS tracking_status,
+        $sql = 'SELECT t.id, t.purchase_id, t.product_id, t.pipeline_template_id, t.current_step_code, t.status AS tracking_status,
                     t.exam_date, t.exam_time, t.exam_date_2, t.exam_time_2, t.zoom_url,
                     t.folio, t.access_key, t.cenni_folio, t.extra_json, t.updated_at, t.created_at,
                     t.moodle_username, t.results_level, t.results_score,
@@ -137,25 +137,40 @@ final class AdminOpsBoardService
 
         $needsPayment = in_array($purchaseStatus, ['awaiting_payment', 'payment_review'], true);
 
-        $cfg = ProviderRequestService::configForProduct([
-            'config_json' => $row['config_json'] ?? null,
-            'group_config_json' => $row['group_config_json'] ?? null,
-        ]);
-        $providerEnabled = $cfg !== null;
+        $pipelineSteps = [];
+        $pipelineId = (int) ($row['pipeline_template_id'] ?? 0);
+        if ($pipelineId > 0) {
+            static $stepsCache = [];
+            if (!isset($stepsCache[$pipelineId])) {
+                $stepsCache[$pipelineId] = (new TrackingService())->steps($pipelineId);
+            }
+            $pipelineSteps = $stepsCache[$pipelineId];
+        }
+
+        $opsButtons = GroupStepConfig::pendingOpsButtons($row, $pipelineSteps);
+        $needsExamAccessBtn = false;
+        foreach ($opsButtons as $btn) {
+            if (($btn['action'] ?? '') === GroupStepConfig::ACTION_EXAM_ACCESS) {
+                $needsExamAccessBtn = true;
+                break;
+            }
+        }
 
         $row['student_full_name'] = trim(
             ($row['first_name'] ?? '') . ' ' . ($row['last_name_p'] ?? '') . ' ' . ($row['last_name_m'] ?? '')
         );
         $row['is_elet'] = $isElet;
         $row['needs_payment'] = $needsPayment;
-        $row['provider_enabled'] = $providerEnabled;
+        $row['provider_enabled'] = $providerRequired || $providerPending;
         $row['provider_required'] = $providerRequired;
         $row['provider_pending'] = $providerPending;
         $row['provider_sent_at'] = $providerSentAt !== '' && $providerSentAt !== 'null' ? $providerSentAt : null;
         $row['provider_error'] = trim((string) ($provider['last_error'] ?? ''));
         $row['needs_access'] = $needsAccess;
         $row['has_access'] = $hasAccess;
-        $row['needs_action'] = $needsPayment || $providerPending || $needsAccess
+        $row['ops_buttons'] = $opsButtons;
+        $row['show_folio_fields'] = $needsExamAccessBtn || $isElet;
+        $row['needs_action'] = $opsButtons !== []
             || (string) ($row['tracking_status'] ?? '') === 'waiting_admin';
 
         return $row;

@@ -266,6 +266,7 @@ final class ProductAdminService
             'initial_step_code' => trim((string) ($cfg['initial_step_code'] ?? '')),
             'provider_request' => self::providerRequestExtrasFromConfig($cfg),
             'emails' => GroupEmailAutomation::normalize($cfg['emails'] ?? null),
+            'step_defs' => GroupStepConfig::defsFromConfig($cfg),
         ];
     }
 
@@ -1183,6 +1184,10 @@ final class ProductAdminService
 
         $config = $this->applyProviderRequestConfig($config, $input);
         $config = $this->applyEmailsConfig($config, $input);
+        // Pasos unificados (botón ops + correo + admin_only) pisan on_steps / sync provider.
+        if (isset($input['pipeline_steps']) && is_array($input['pipeline_steps'])) {
+            $config = GroupStepConfig::applyFromGroupInput($input, $config);
+        }
 
         return $config;
     }
@@ -1194,6 +1199,7 @@ final class ProductAdminService
      */
     private function applyEmailsConfig(array $config, array $input): array
     {
+        $existing = GroupEmailAutomation::normalize($config['emails'] ?? null);
         $onSteps = [];
         $codes = $input['email_step_codes'] ?? [];
         $templates = $input['email_step_templates'] ?? [];
@@ -1208,21 +1214,36 @@ final class ProductAdminService
                     'audience' => (string) (is_array($audiences) ? ($audiences[$i] ?? 'student') : 'student'),
                 ];
             }
+        } else {
+            $onSteps = $existing['on_steps'];
         }
 
+        $examExisting = is_array($existing['student_exam_access'] ?? null) ? $existing['student_exam_access'] : [];
         $config['emails'] = GroupEmailAutomation::normalize([
             GroupEmailAutomation::KEY_REGISTRATION => [
-                'enabled' => !empty($input['email_registration_enabled']),
-                'template_code' => trim((string) ($input['email_registration_template'] ?? 'student_registration')),
+                'enabled' => array_key_exists('email_registration_enabled', $input)
+                    ? !empty($input['email_registration_enabled'])
+                    : !empty($existing['student_registration']['enabled']),
+                'template_code' => trim((string) ($input['email_registration_template']
+                    ?? $existing['student_registration']['template_code']
+                    ?? 'student_registration')),
             ],
             GroupEmailAutomation::KEY_PAYMENT => [
-                'enabled' => !empty($input['email_payment_enabled']),
-                'template_code' => trim((string) ($input['email_payment_template'] ?? 'student_payment_confirmed')),
+                'enabled' => array_key_exists('email_payment_enabled', $input)
+                    ? !empty($input['email_payment_enabled'])
+                    : !empty($existing['student_payment_confirmed']['enabled']),
+                'template_code' => trim((string) ($input['email_payment_template']
+                    ?? $existing['student_payment_confirmed']['template_code']
+                    ?? 'student_payment_confirmed')),
             ],
             GroupEmailAutomation::KEY_EXAM_ACCESS => [
-                'enabled' => !empty($input['email_exam_access_enabled']),
-                'template_code' => trim((string) ($input['email_exam_access_template'] ?? 'student_elet_exam_access')),
-                'mode' => (string) ($input['email_exam_access_mode'] ?? 'admin'),
+                'enabled' => array_key_exists('email_exam_access_enabled', $input)
+                    ? !empty($input['email_exam_access_enabled'])
+                    : !empty($examExisting['enabled']),
+                'template_code' => trim((string) ($input['email_exam_access_template']
+                    ?? $examExisting['template_code']
+                    ?? 'student_elet_exam_access')),
+                'mode' => (string) ($input['email_exam_access_mode'] ?? $examExisting['mode'] ?? 'admin'),
             ],
             'on_steps' => $onSteps,
         ]);
@@ -1237,8 +1258,43 @@ final class ProductAdminService
      */
     private function applyProviderRequestConfig(array $config, array $input): array
     {
-        if (empty($input['provider_request_enabled'])) {
+        // El panel legacy se unificó en Progreso (step_defs). Si vienen pipeline_steps,
+        // no borramos provider_request: GroupStepConfig lo sincroniza y conserva workbook.
+        if (isset($input['pipeline_steps']) && is_array($input['pipeline_steps'])) {
+            // Permitir subir/limpiar workbook desde el formulario unificado si viene.
+            if (!empty($input['provider_request_clear_workbook']) || !empty($input['provider_request_workbook_path'])
+                || isset($input['provider_request_workbook_enabled'])) {
+                // cae al flujo completo abajo solo para workbook
+            } else {
+                return $config;
+            }
+        }
+
+        if (empty($input['provider_request_enabled']) && !(isset($input['pipeline_steps']) && is_array($input['pipeline_steps']))) {
             unset($config['provider_request']);
+
+            return $config;
+        }
+
+        if (empty($input['provider_request_enabled']) && isset($input['pipeline_steps'])) {
+            // Solo actualizar workbook sobre el existing
+            $existing = is_array($config['provider_request'] ?? null) ? $config['provider_request'] : [];
+            if ($existing === []) {
+                return $config;
+            }
+            $wb = is_array($existing['workbook'] ?? null) ? $existing['workbook'] : [];
+            if (!empty($input['provider_request_clear_workbook'])) {
+                $wb['template_path'] = '';
+                $wb['enabled'] = false;
+            }
+            if (!empty($input['provider_request_workbook_path'])) {
+                $wb['template_path'] = trim((string) $input['provider_request_workbook_path']);
+            }
+            if (isset($input['provider_request_workbook_enabled'])) {
+                $wb['enabled'] = !empty($input['provider_request_workbook_enabled']);
+            }
+            $existing['workbook'] = $wb;
+            $config['provider_request'] = $existing;
 
             return $config;
         }

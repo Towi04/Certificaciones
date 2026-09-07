@@ -197,6 +197,69 @@ final class MailTemplateService
         }
     }
 
+    /**
+     * Config Excel asociada a una plantilla (Settings JSON).
+     *
+     * @return array{enabled:bool,template_path:string,sheet:string,normalize:string,cell_map:list<array{cell:string,field:string}>}
+     */
+    public static function workbookConfig(string $code): array
+    {
+        $raw = Settings::get('mail_tpl_' . $code . '_workbook', '') ?? '';
+        $decoded = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
+        $data = is_array($decoded) ? $decoded : [];
+        $cellMap = [];
+        foreach (is_array($data['cell_map'] ?? null) ? $data['cell_map'] : [] as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $cell = strtoupper(trim((string) ($item['cell'] ?? '')));
+            $field = trim((string) ($item['field'] ?? ''));
+            if ($cell === '' || $field === '') {
+                continue;
+            }
+            $cellMap[] = ['cell' => $cell, 'field' => $field];
+        }
+
+        return [
+            'enabled' => !empty($data['enabled']),
+            'template_path' => trim((string) ($data['template_path'] ?? '')),
+            'sheet' => trim((string) ($data['sheet'] ?? '')),
+            'normalize' => in_array((string) ($data['normalize'] ?? 'none'), ['none', 'toefl'], true)
+                ? (string) ($data['normalize'] ?? 'none')
+                : 'none',
+            'cell_map' => $cellMap,
+        ];
+    }
+
+    /**
+     * @param array{enabled?:bool,template_path?:string,sheet?:string,normalize?:string,cell_map?:list<array{cell?:string,field?:string}>} $workbook
+     */
+    public static function saveWorkbookConfig(string $code, array $workbook): void
+    {
+        $cellMap = [];
+        foreach (is_array($workbook['cell_map'] ?? null) ? $workbook['cell_map'] : [] as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $cell = strtoupper(trim((string) ($item['cell'] ?? '')));
+            $field = trim((string) ($item['field'] ?? ''));
+            if ($cell === '' || $field === '') {
+                continue;
+            }
+            $cellMap[] = ['cell' => $cell, 'field' => $field];
+        }
+        $normalized = [
+            'enabled' => !empty($workbook['enabled']),
+            'template_path' => trim((string) ($workbook['template_path'] ?? '')),
+            'sheet' => trim((string) ($workbook['sheet'] ?? '')),
+            'normalize' => in_array((string) ($workbook['normalize'] ?? 'none'), ['none', 'toefl'], true)
+                ? (string) ($workbook['normalize'] ?? 'none')
+                : 'none',
+            'cell_map' => $cellMap,
+        ];
+        Settings::set('mail_tpl_' . $code . '_workbook', json_encode($normalized, JSON_UNESCAPED_UNICODE));
+    }
+
     public function requiresFixedRecipient(string $code): bool
     {
         return in_array($code, [self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY], true);

@@ -99,9 +99,7 @@ $renderMailTemplateField = static function (
     <button type="button" class="group-tab" data-tab="schedule" role="tab" aria-selected="false">Fechas y horarios</button>
     <button type="button" class="group-tab" data-tab="rules" role="tab" aria-selected="false">Reglamento</button>
     <button type="button" class="group-tab" data-tab="payments" role="tab" aria-selected="false">Pagos</button>
-    <button type="button" class="group-tab" data-tab="progress" role="tab" aria-selected="false">Progreso</button>
-    <button type="button" class="group-tab" data-tab="provider" role="tab" aria-selected="false">Solicitud proveedor</button>
-    <button type="button" class="group-tab" data-tab="emails" role="tab" aria-selected="false">Correos</button>
+    <button type="button" class="group-tab" data-tab="progress" role="tab" aria-selected="false">Progreso y acciones</button>
     <button type="button" class="group-tab" data-tab="advanced" role="tab" aria-selected="false">Experto</button>
 </nav>
 
@@ -462,12 +460,29 @@ $renderMailTemplateField = static function (
     $selectedInitialStep = (string) ($extras['initial_step_code'] ?? '');
     ?>
     <div class="group-panel" data-panel="progress" hidden>
-        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Progreso del caso</h2>
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Progreso y acciones</h2>
         <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
-            Esta es la tarjeta de pasos que ve el alumno después de comprar
-            (Registro, Confirmación de pago, etc.). Elige una plantilla y edita
-            las etiquetas o el orden. Los productos de este grupo heredan este progreso.
+            Define los pasos del caso. Cada paso puede ser visible al alumno o solo admin,
+            y puede mostrar un <strong>botón en Operación</strong> (se oculta cuando ya se hizo).
+            Si el paso envía correo, elige la plantilla y si se dispara al activarlo el admin o automáticamente.
         </p>
+
+        <div class="panel" style="margin:0 0 1rem;padding:.85rem 1rem;background:#f8fafc">
+            <strong style="color:var(--doceo-blue);font-size:.92rem">Correos del ciclo (alumno)</strong>
+            <p class="muted" style="font-size:.78rem;margin:.25rem 0 .65rem">
+                Estos no son pasos del progreso: se envían al registrarse o al confirmar el pago.
+            </p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.65rem">
+                <label class="muted" style="font-size:.82rem;display:flex;flex-direction:column;gap:.3rem">
+                    <span><input type="checkbox" name="email_registration_enabled" value="1" <?= !empty($emailReg['enabled']) ? 'checked' : '' ?>> Al registrarse</span>
+                    <?php $renderMailTemplateField('email_registration_template', (string) ($emailReg['template_code'] ?? 'student_registration'), $mailTemplates, $inputStyle); ?>
+                </label>
+                <label class="muted" style="font-size:.82rem;display:flex;flex-direction:column;gap:.3rem">
+                    <span><input type="checkbox" name="email_payment_enabled" value="1" <?= !empty($emailPay['enabled']) ? 'checked' : '' ?>> Al confirmar pago</span>
+                    <?php $renderMailTemplateField('email_payment_template', (string) ($emailPay['template_code'] ?? 'student_payment_confirmed'), $mailTemplates, $inputStyle); ?>
+                </label>
+            </div>
+        </div>
 
         <?php if ($pipelines === []): ?>
             <div class="flash flash-error" style="margin:0">
@@ -497,30 +512,16 @@ $renderMailTemplateField = static function (
             </label>
 
             <div style="display:flex;justify-content:space-between;gap:.75rem;align-items:center;flex-wrap:wrap;margin-bottom:.55rem">
-                <strong style="color:var(--doceo-blue)">Pasos (tarjeta del alumno)</strong>
+                <strong style="color:var(--doceo-blue)">Pasos</strong>
                 <button type="button" class="btn btn-ghost btn-sm" id="pipeline-add-step">+ Agregar paso</button>
             </div>
             <p class="muted" style="font-size:.78rem;margin:0 0 .65rem">
-                Nota: al guardar, estos pasos actualizan la plantilla seleccionada.
-                Si otro grupo usa la misma plantilla, verá los mismos cambios.
-                No borres ni renombres códigos de pasos ya usados en casos existentes
-                (puedes cambiar solo la etiqueta visible).
+                Al guardar se actualiza la plantilla seleccionada (compartida si otros grupos la usan).
+                Los botones de Operación salen de los pasos con “Mostrar en Operación” activos.
+                La plantilla Excel del correo se configura en
+                <a href="<?= e(url('/admin/correos')) ?>">Correos</a>.
             </p>
-            <div class="table-wrap">
-                <table class="data" id="pipeline-steps-table">
-                    <thead>
-                    <tr>
-                        <th style="width:3rem">#</th>
-                        <th>Código</th>
-                        <th>Etiqueta (visible al alumno)</th>
-                        <th>Actor</th>
-                        <th>Final</th>
-                        <th></th>
-                    </tr>
-                    </thead>
-                    <tbody id="pipeline-steps-body"></tbody>
-                </table>
-            </div>
+            <div id="pipeline-steps-body" class="progress-steps-list"></div>
             <p id="pipeline-steps-empty" class="muted" style="display:none;margin:.5rem 0 0">
                 Elige una plantilla para editar sus pasos.
             </p>
@@ -528,303 +529,12 @@ $renderMailTemplateField = static function (
     </div>
 
     <div class="group-panel" data-panel="provider" hidden>
-<?php
-    $pr = is_array($extras['provider_request'] ?? null) ? $extras['provider_request'] : [];
-    $prEnabled = !empty($pr['enabled']);
-    $prCells = is_array($pr['workbook_cell_map'] ?? null) ? $pr['workbook_cell_map'] : [];
-    if ($prCells === []) {
-        $prCells = [['cell' => '', 'field' => '']];
-    }
-    $fieldOptions = \App\Services\ProviderRequestService::FIELD_OPTIONS;
-    $selectedMailTpl = (string) ($pr['mail_template_code'] ?? '');
-    $selectedStep = (string) ($pr['step_code'] ?? 'solicitud_proveedor');
-    $wbNormalize = (string) ($pr['workbook_normalize'] ?? 'none');
-    $wbSheet = (string) ($pr['workbook_sheet'] ?? '');
-?>
-        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Solicitud al proveedor</h2>
-        <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
-            Configura el correo de <strong>solicitud al proveedor</strong>. El contenido lo define la
-            <strong>plantilla de correo</strong> con etiquetas (p. ej. <code>{{reglamento_url}}</code>,
-            <code>{{comprobante_url}}</code>, <code>{{workbook_url}}</code>). Los archivos van por
-            <strong>enlace seguro</strong>, nunca como adjuntos (restricción Neubox). El envío se dispara
-            cuando un admin sube el <strong>comprobante DOCEO → proveedor</strong>.
-        </p>
-
-        <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.9rem;margin-bottom:.85rem">
-            <input type="checkbox" name="provider_request_enabled" value="1" id="provider-request-enabled"
-                <?= $prEnabled ? 'checked' : '' ?>>
-            Este grupo requiere solicitud al proveedor tras el pago
-        </label>
-
-        <div id="provider-request-fields" style="<?= $prEnabled ? '' : 'opacity:.55;pointer-events:none' ?>">
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem;margin-bottom:.85rem">
-                <label class="muted" style="<?= e($labelStyle) ?>">
-                    Correo destino (Para)
-                    <input type="email" name="provider_request_to" value="<?= e((string) ($pr['to'] ?? '')) ?>"
-                           placeholder="proveedor@ejemplo.com" style="<?= e($inputStyle) ?>">
-                </label>
-                <label class="muted" style="<?= e($labelStyle) ?>">
-                    CC (opcional)
-                    <input type="text" name="provider_request_cc" value="<?= e((string) ($pr['cc'] ?? '')) ?>"
-                           placeholder="ops@doceo.mx" style="<?= e($inputStyle) ?>">
-                </label>
-                <label class="muted" style="<?= e($labelStyle) ?>">
-                    Plantilla de correo
-                    <select name="provider_request_mail_template" style="<?= e($inputStyle) ?>">
-                        <option value="">— Genérico (sin plantilla) —</option>
-                        <?php foreach ($mailTemplates as $tpl): ?>
-                            <?php
-                                $code = (string) ($tpl['code'] ?? '');
-                                $name = (string) ($tpl['name'] ?? $code);
-                                if ($code === '') {
-                                    continue;
-                                }
-                            ?>
-                            <option value="<?= e($code) ?>" <?= $selectedMailTpl === $code ? 'selected' : '' ?>>
-                                <?= e($name) ?> (<?= e($code) ?>)
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </label>
-                <label class="muted" style="<?= e($labelStyle) ?>">
-                    Paso en el progreso
-                    <select name="provider_request_step_code" id="provider-request-step-code" style="<?= e($inputStyle) ?>">
-                        <option value="">— Elige un paso —</option>
-                    </select>
-                    <input type="hidden" id="provider-request-step-current" value="<?= e($selectedStep) ?>">
-                </label>
-            </div>
-
-            <div style="display:flex;flex-wrap:wrap;gap:.75rem 1.25rem;margin-bottom:.85rem">
-                <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
-                    <input type="checkbox" name="provider_request_require_admin_proof" value="1"
-                        <?= !isset($pr['require_admin_payment_proof']) || !empty($pr['require_admin_payment_proof']) ? 'checked' : '' ?>>
-                    Exigir comprobante de pago (admin) antes de enviar
-                </label>
-                <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
-                    <input type="checkbox" name="provider_request_auto_send_admin_proof" value="1"
-                        <?= !isset($pr['auto_send_on_admin_proof']) || !empty($pr['auto_send_on_admin_proof']) ? 'checked' : '' ?>>
-                    Enviar automáticamente al subir ese comprobante
-                </label>
-                <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
-                    <input type="checkbox" name="provider_request_auto_send" value="1"
-                        <?= !empty($pr['auto_send_on_payment']) ? 'checked' : '' ?>>
-                    (Avanzado) Enviar también al confirmar el pago del alumno
-                </label>
-            </div>
-
-            <p style="margin:.75rem 0 .35rem;font-weight:700;color:var(--doceo-blue)">Documentos por enlace (sin adjuntos)</p>
-            <p class="muted" style="font-size:.78rem;margin:0 0 .5rem">
-                Neubox bloquea correos con archivos adjuntos. El sistema genera <strong>enlaces firmados</strong>
-                y la plantilla de correo debe incluir las etiquetas:
-                <code>{{reglamento_url}}</code>,
-                <code>{{comprobante_url}}</code>,
-                <code>{{workbook_url}}</code>
-                o el bloque <code>{{documentos_html}}</code>.
-            </p>
-            <input type="hidden" name="provider_request_delivery" value="links">
-            <div style="display:flex;flex-wrap:wrap;gap:.75rem 1.25rem;margin-bottom:.85rem">
-                <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
-                    <input type="checkbox" name="provider_request_include_reglamento" value="1" <?= !isset($pr['include_reglamento']) || !empty($pr['include_reglamento']) ? 'checked' : '' ?>>
-                    Generar enlace al reglamento firmado
-                </label>
-                <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
-                    <input type="checkbox" name="provider_request_require_reglamento" value="1" <?= !isset($pr['require_reglamento']) || !empty($pr['require_reglamento']) ? 'checked' : '' ?>>
-                    Exigir reglamento para poder enviar
-                </label>
-                <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
-                    <input type="checkbox" name="provider_request_include_proof" value="1" <?= !isset($pr['include_payment_proof']) || !empty($pr['include_payment_proof']) ? 'checked' : '' ?>>
-                    Generar enlace al comprobante de pago
-                </label>
-            </div>
-
-            <div style="border:1px solid #dbeafe;border-radius:12px;padding:.85rem;background:#f8fbff;margin-bottom:.5rem">
-                <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.9rem;margin-bottom:.65rem">
-                    <input type="checkbox" name="provider_request_workbook_enabled" value="1" id="provider-workbook-enabled"
-                        <?= !empty($pr['workbook_enabled']) ? 'checked' : '' ?>>
-                    Generar Excel rellenado y enlace <code>{{workbook_url}}</code> (p. ej. TOEFL)
-                </label>
-                <div id="provider-workbook-fields">
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem;margin-bottom:.65rem">
-                        <label class="muted" style="<?= e($labelStyle) ?>">
-                            Plantilla .xlsx
-                            <input type="file" name="provider_request_workbook" accept=".xlsx,.xls" style="<?= e($inputStyle) ?>">
-                        </label>
-                        <label class="muted" style="<?= e($labelStyle) ?>">
-                            Hoja del archivo
-                            <input type="text" name="provider_request_workbook_sheet" value="<?= e($wbSheet) ?>"
-                                   placeholder="Nombre o número (1, 2…)" style="<?= e($inputStyle) ?>">
-                        </label>
-                        <label class="muted" style="<?= e($labelStyle) ?>">
-                            Transcripción de datos
-                            <select name="provider_request_workbook_normalize" style="<?= e($inputStyle) ?>">
-                                <option value="none" <?= $wbNormalize === 'none' ? 'selected' : '' ?>>Sin cambios</option>
-                                <option value="toefl" <?= $wbNormalize === 'toefl' ? 'selected' : '' ?>>TOEFL: MAYÚSCULAS, sin acentos ni Ñ</option>
-                            </select>
-                        </label>
-                    </div>
-                    <?php if (!empty($pr['workbook_template_path'])): ?>
-                        <p class="muted" style="font-size:.8rem;margin:.2rem 0 .65rem">
-                            Actual: <code><?= e((string) $pr['workbook_template_path']) ?></code>
-                            · <label style="display:inline-flex;gap:.3rem;align-items:center"><input type="checkbox" name="provider_request_clear_workbook" value="1"> Quitar</label>
-                        </p>
-                    <?php endif; ?>
-                    <input type="hidden" name="provider_request_workbook_attach" value="0">
-                    <p class="muted" style="font-size:.78rem;margin:0 0 .65rem">
-                        El Excel no se adjunta al correo: se guarda y se expone con <code>{{workbook_url}}</code>.
-                    </p>
-                    <p style="margin:.35rem 0;font-weight:700;color:var(--doceo-blue)">Mapeo de celdas</p>
-                    <p class="muted" style="font-size:.78rem;margin:0 0 .5rem">Indica en qué celda (ej. B2) se escribe cada dato.</p>
-                    <div id="provider-cell-map">
-                        <?php foreach ($prCells as $map): ?>
-                            <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;align-items:center" class="provider-cell-row">
-                                <input type="text" name="provider_request_cells[]" value="<?= e((string) ($map['cell'] ?? '')) ?>"
-                                       placeholder="B2" style="width:5rem;<?= e($inputStyle) ?>">
-                                <select name="provider_request_fields[]" style="<?= e($inputStyle) ?>">
-                                    <option value="">— Dato —</option>
-                                    <?php foreach ($fieldOptions as $opt): ?>
-                                        <option value="<?= e($opt['value']) ?>" <?= (($map['field'] ?? '') === $opt['value']) ? 'selected' : '' ?>>
-                                            <?= e($opt['label']) ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                                <button type="button" class="btn btn-ghost btn-sm provider-cell-remove">✕</button>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                    <button type="button" class="btn btn-ghost btn-sm" id="provider-cell-add">+ Celda</button>
-                </div>
-            </div>
-        </div>
+        <p class="muted">La solicitud a proveedor ahora se configura como un paso en <strong>Progreso y acciones</strong>
+            (acción “Enviar correo”, audiencia proveedor). Esta sección quedó oculta.</p>
     </div>
 
     <div class="group-panel" data-panel="emails" hidden>
-        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Correos automáticos</h2>
-        <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
-            Define qué correos se envían al alumno (y opcionalmente al proveedor en un paso del progreso)
-            y con qué plantilla. El correo de solicitud al proveedor tras el pago se configura en
-            <strong>Solicitud proveedor</strong>, no aquí.
-        </p>
-
-        <h3 style="margin:0 0 .55rem;font-size:.95rem;color:var(--doceo-blue)">Correos al alumno</h3>
-        <p class="muted" style="font-size:.8rem;margin:0 0 .75rem">
-            Activa o desactiva cada momento del ciclo y elige la plantilla.
-            En acceso al examen, <em>Admin</em> significa que un administrador dispara el envío;
-            <em>Automático</em> lo envía el sistema cuando corresponda.
-        </p>
-
-        <div style="display:flex;flex-direction:column;gap:.85rem;margin-bottom:1.25rem">
-            <div style="border:1px solid #dbeafe;border-radius:12px;padding:.85rem;background:#f8fbff">
-                <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.9rem;margin-bottom:.55rem">
-                    <input type="checkbox" name="email_registration_enabled" value="1"
-                        <?= !empty($emailReg['enabled']) ? 'checked' : '' ?>>
-                    Al registrarse / crear la cuenta
-                </label>
-                <label class="muted" style="<?= e($labelStyle) ?>;max-width:28rem">
-                    Plantilla
-                    <?php $renderMailTemplateField(
-                        'email_registration_template',
-                        (string) ($emailReg['template_code'] ?? 'student_registration'),
-                        $mailTemplates,
-                        $inputStyle,
-                        'student_registration'
-                    ); ?>
-                </label>
-            </div>
-
-            <div style="border:1px solid #dbeafe;border-radius:12px;padding:.85rem;background:#f8fbff">
-                <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.9rem;margin-bottom:.55rem">
-                    <input type="checkbox" name="email_payment_enabled" value="1"
-                        <?= !empty($emailPay['enabled']) ? 'checked' : '' ?>>
-                    Cuando se confirma el pago
-                </label>
-                <label class="muted" style="<?= e($labelStyle) ?>;max-width:28rem">
-                    Plantilla
-                    <?php $renderMailTemplateField(
-                        'email_payment_template',
-                        (string) ($emailPay['template_code'] ?? 'student_payment_confirmed'),
-                        $mailTemplates,
-                        $inputStyle,
-                        'student_payment_confirmed'
-                    ); ?>
-                </label>
-            </div>
-
-            <div style="border:1px solid #dbeafe;border-radius:12px;padding:.85rem;background:#f8fbff">
-                <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.9rem;margin-bottom:.55rem">
-                    <input type="checkbox" name="email_exam_access_enabled" value="1"
-                        <?= !empty($emailExam['enabled']) ? 'checked' : '' ?>>
-                    Acceso al examen (enlace / clave)
-                </label>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem">
-                    <label class="muted" style="<?= e($labelStyle) ?>">
-                        Plantilla
-                        <?php $renderMailTemplateField(
-                            'email_exam_access_template',
-                            (string) ($emailExam['template_code'] ?? 'student_elet_exam_access'),
-                            $mailTemplates,
-                            $inputStyle,
-                            'student_elet_exam_access'
-                        ); ?>
-                    </label>
-                    <label class="muted" style="<?= e($labelStyle) ?>">
-                        Quién lo envía
-                        <?php $examMode = (string) ($emailExam['mode'] ?? 'admin'); ?>
-                        <select name="email_exam_access_mode" style="<?= e($inputStyle) ?>">
-                            <option value="admin" <?= $examMode !== 'auto' ? 'selected' : '' ?>>Admin (manual)</option>
-                            <option value="auto" <?= $examMode === 'auto' ? 'selected' : '' ?>>Automático</option>
-                        </select>
-                    </label>
-                </div>
-            </div>
-        </div>
-
-        <h3 style="margin:0 0 .55rem;font-size:.95rem;color:var(--doceo-blue)">Correos al entrar a un paso del progreso</h3>
-        <p class="muted" style="font-size:.8rem;margin:0 0 .65rem">
-            Cuando el caso pasa a un paso (código de la pestaña Progreso), se puede enviar un correo.
-            <em>Automático</em> se dispara solo; <em>Admin</em> queda para envío manual desde el caso.
-            Destinatario: alumno o proveedor.
-        </p>
-        <div id="email-step-rows">
-            <?php foreach ($emailSteps as $stepRow): ?>
-                <div class="email-step-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.5rem;margin-bottom:.55rem;align-items:end;padding:.65rem;border:1px solid #e2e8f0;border-radius:10px;background:#fff">
-                    <label class="muted" style="<?= e($labelStyle) ?>">
-                        Código del paso
-                        <input type="text" name="email_step_codes[]"
-                               value="<?= e((string) ($stepRow['step_code'] ?? '')) ?>"
-                               placeholder="ej. resultados" style="<?= e($inputStyle) ?>">
-                    </label>
-                    <label class="muted" style="<?= e($labelStyle) ?>">
-                        Plantilla
-                        <?php $renderMailTemplateField(
-                            'email_step_templates[]',
-                            (string) ($stepRow['template_code'] ?? ''),
-                            $mailTemplates,
-                            $inputStyle,
-                            'código_plantilla'
-                        ); ?>
-                    </label>
-                    <label class="muted" style="<?= e($labelStyle) ?>">
-                        Modo
-                        <?php $sm = (string) ($stepRow['mode'] ?? 'admin'); ?>
-                        <select name="email_step_modes[]" style="<?= e($inputStyle) ?>">
-                            <option value="admin" <?= $sm !== 'auto' ? 'selected' : '' ?>>Admin</option>
-                            <option value="auto" <?= $sm === 'auto' ? 'selected' : '' ?>>Automático</option>
-                        </select>
-                    </label>
-                    <label class="muted" style="<?= e($labelStyle) ?>">
-                        Destinatario
-                        <?php $aud = (string) ($stepRow['audience'] ?? 'student'); ?>
-                        <select name="email_step_audiences[]" style="<?= e($inputStyle) ?>">
-                            <option value="student" <?= $aud !== 'provider' ? 'selected' : '' ?>>Alumno</option>
-                            <option value="provider" <?= $aud === 'provider' ? 'selected' : '' ?>>Proveedor</option>
-                        </select>
-                    </label>
-                    <button type="button" class="btn btn-ghost btn-sm email-step-remove" style="margin-bottom:.15rem">Quitar</button>
-                </div>
-            <?php endforeach; ?>
-        </div>
-        <button type="button" class="btn btn-ghost btn-sm" id="email-step-add">+ Agregar correo por paso</button>
+        <p class="muted">Los correos por paso se configuran en cada fila de <strong>Progreso y acciones</strong>.</p>
     </div>
 
     <div class="group-panel" data-panel="advanced" hidden>
@@ -866,6 +576,18 @@ $renderMailTemplateField = static function (
     border-radius:999px; padding:.45rem .9rem; font-weight:700; font-size:.86rem; cursor:pointer;
 }
 .group-tab.active { background:var(--doceo-blue); border-color:var(--doceo-blue); color:#fff; }
+.progress-steps-list { display:flex; flex-direction:column; gap:.75rem; }
+.progress-step-card {
+  border:1px solid #dbe3ef; border-radius:12px; padding:.75rem .85rem; background:#fff;
+}
+.progress-step-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:.55rem; }
+.progress-step-grid {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:.55rem;
+}
+.progress-step-flags {
+  display:flex; flex-wrap:wrap; gap:.65rem 1rem; margin:.7rem 0 .35rem; font-size:.84rem;
+}
+.progress-step-email { margin-top:.45rem; padding-top:.55rem; border-top:1px dashed #e6ebf2; }
 .day-check {
     display:inline-flex; align-items:center; gap:.35rem;
     border:1px solid #cfd8e6; border-radius:999px; padding:.35rem .7rem;
@@ -1369,8 +1091,13 @@ $renderMailTemplateField = static function (
   }
 
 
-  // ---- Editor de progreso (tarjeta del alumno) ----
+  // ---- Editor de progreso (tarjeta + acciones ops) ----
   var stepsByCode = <?= json_encode($pipelineStepsByCode ?? [], JSON_UNESCAPED_UNICODE) ?> || {};
+  var stepDefs = <?= json_encode($extras['step_defs'] ?? [], JSON_UNESCAPED_UNICODE) ?> || {};
+  var mailTemplatesJs = <?= json_encode(array_values(array_map(static function ($t) {
+      return ['code' => (string) ($t['code'] ?? ''), 'name' => (string) ($t['name'] ?? '')];
+  }, $mailTemplates)), JSON_UNESCAPED_UNICODE) ?> || [];
+  var actionOptions = <?= json_encode(\App\Services\GroupStepConfig::ACTIONS, JSON_UNESCAPED_UNICODE) ?>;
   var initialSelectedStep = <?= json_encode($selectedInitialStep ?? '', JSON_UNESCAPED_UNICODE) ?>;
   var pipelineSelect = document.getElementById('pipeline-code-select');
   var initialSelect = document.getElementById('pipeline-initial-step');
@@ -1384,6 +1111,7 @@ $renderMailTemplateField = static function (
     { value: 'partner', label: 'Partner' },
     { value: 'provider', label: 'Proveedor' }
   ];
+  var inp = 'padding:.4rem .5rem;border:1px solid #cfd8e6;border-radius:8px;font:inherit;width:100%';
 
   function escapeHtml(s) {
     return String(s || '')
@@ -1391,19 +1119,56 @@ $renderMailTemplateField = static function (
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  function mergeStepDef(s) {
+    var def = stepDefs[s.code] || {};
+    return Object.assign({}, s, {
+      admin_only: def.admin_only ? 1 : 0,
+      ops_button: def.ops_button ? 1 : 0,
+      ops_label: def.ops_label || '',
+      action: def.action || 'none',
+      email_enabled: def.email && def.email.enabled ? 1 : 0,
+      email_trigger: (def.email && def.email.trigger) || 'admin',
+      email_template: (def.email && def.email.template_code) || '',
+      email_audience: (def.email && def.email.audience) || 'student',
+      email_to: (def.email && def.email.to) || '',
+      email_cc: (def.email && def.email.cc) || ''
+    });
+  }
+
   function currentStepsFromDom() {
     if (!stepsBody) return [];
     var rows = [];
-    stepsBody.querySelectorAll('tr').forEach(function (tr) {
-      var code = tr.querySelector('[data-field="code"]');
-      var label = tr.querySelector('[data-field="label"]');
-      var actor = tr.querySelector('[data-field="actor"]');
-      var term = tr.querySelector('[data-field="terminal"]');
+    stepsBody.querySelectorAll('.progress-step-card').forEach(function (card) {
+      var g = function (field) { return card.querySelector('[data-field="' + field + '"]'); };
+      var code = g('code');
+      var label = g('label');
+      var actor = g('actor');
+      var term = g('terminal');
+      var adminOnly = g('admin_only');
+      var opsBtn = g('ops_button');
+      var opsLabel = g('ops_label');
+      var action = g('action');
+      var emailEn = g('email_enabled');
+      var emailTr = g('email_trigger');
+      var emailTpl = g('email_template');
+      var emailAud = g('email_audience');
+      var emailTo = g('email_to');
+      var emailCc = g('email_cc');
       rows.push({
         code: code ? code.value : '',
         label: label ? label.value : '',
         actor: actor ? actor.value : 'admin',
-        is_terminal: !!(term && term.checked)
+        is_terminal: !!(term && term.checked),
+        admin_only: !!(adminOnly && adminOnly.checked),
+        ops_button: !!(opsBtn && opsBtn.checked),
+        ops_label: opsLabel ? opsLabel.value : '',
+        action: action ? action.value : 'none',
+        email_enabled: !!(emailEn && emailEn.checked),
+        email_trigger: emailTr ? emailTr.value : 'admin',
+        email_template: emailTpl ? emailTpl.value : '',
+        email_audience: emailAud ? emailAud.value : 'student',
+        email_to: emailTo ? emailTo.value : '',
+        email_cc: emailCc ? emailCc.value : ''
       });
     });
     return rows;
@@ -1419,6 +1184,24 @@ $renderMailTemplateField = static function (
     initialSelect.innerHTML = html;
   }
 
+  function mailTplSelect(name, idx, value) {
+    var html = '<select data-field="email_template" name="pipeline_steps[' + idx + '][email_template]" style="' + inp + '">';
+    html += '<option value="">— Plantilla —</option>';
+    var found = false;
+    mailTemplatesJs.forEach(function (t) {
+      if (!t.code) return;
+      var sel = t.code === value;
+      if (sel) found = true;
+      html += '<option value="' + escapeHtml(t.code) + '"' + (sel ? ' selected' : '') + '>'
+        + escapeHtml(t.name || t.code) + ' (' + escapeHtml(t.code) + ')</option>';
+    });
+    if (value && !found) {
+      html += '<option value="' + escapeHtml(value) + '" selected>' + escapeHtml(value) + '</option>';
+    }
+    html += '</select>';
+    return html;
+  }
+
   function renderSteps(steps) {
     if (!stepsBody) return;
     stepsBody.innerHTML = '';
@@ -1428,23 +1211,48 @@ $renderMailTemplateField = static function (
       return;
     }
     if (stepsEmpty) stepsEmpty.style.display = 'none';
-    steps.forEach(function (s, idx) {
-      var tr = document.createElement('tr');
+    steps.forEach(function (raw, idx) {
+      var s = mergeStepDef(raw);
+      var card = document.createElement('div');
+      card.className = 'progress-step-card';
       var actorOpts = actors.map(function (a) {
         return '<option value="' + a.value + '"' + ((s.actor || 'admin') === a.value ? ' selected' : '') + '>' + a.label + '</option>';
       }).join('');
-      tr.innerHTML =
-        '<td class="muted">' + (idx + 1) + '</td>' +
-        '<td><input data-field="code" name="pipeline_steps[' + idx + '][code]" value="' + escapeHtml(s.code || '') + '" ' +
-          'style="width:100%;min-width:7rem;padding:.35rem .45rem;border:1px solid #cfd8e6;border-radius:8px;font:inherit" required></td>' +
-        '<td><input data-field="label" name="pipeline_steps[' + idx + '][label]" value="' + escapeHtml(s.label || '') + '" ' +
-          'style="width:100%;min-width:12rem;padding:.35rem .45rem;border:1px solid #cfd8e6;border-radius:8px;font:inherit" required></td>' +
-        '<td><select data-field="actor" name="pipeline_steps[' + idx + '][actor]" ' +
-          'style="padding:.35rem .45rem;border:1px solid #cfd8e6;border-radius:8px;font:inherit">' + actorOpts + '</select></td>' +
-        '<td style="text-align:center"><input data-field="terminal" type="checkbox" name="pipeline_steps[' + idx + '][is_terminal]" value="1"' +
-          (s.is_terminal == 1 || s.is_terminal === true ? ' checked' : '') + '></td>' +
-        '<td><button type="button" class="btn btn-ghost btn-sm pipeline-remove-step" title="Quitar">✕</button></td>';
-      stepsBody.appendChild(tr);
+      var actionOpts = Object.keys(actionOptions).map(function (k) {
+        return '<option value="' + k + '"' + ((s.action || 'none') === k ? ' selected' : '') + '>' + escapeHtml(actionOptions[k]) + '</option>';
+      }).join('');
+      card.innerHTML =
+        '<div class="progress-step-head">' +
+          '<strong class="muted">#' + (idx + 1) + '</strong>' +
+          '<button type="button" class="btn btn-ghost btn-sm pipeline-remove-step" title="Quitar">✕</button>' +
+        '</div>' +
+        '<div class="progress-step-grid">' +
+          '<label class="muted">Código<input data-field="code" name="pipeline_steps[' + idx + '][code]" value="' + escapeHtml(s.code || '') + '" style="' + inp + '" required></label>' +
+          '<label class="muted">Etiqueta<input data-field="label" name="pipeline_steps[' + idx + '][label]" value="' + escapeHtml(s.label || '') + '" style="' + inp + '" required></label>' +
+          '<label class="muted">Actor<select data-field="actor" name="pipeline_steps[' + idx + '][actor]" style="' + inp + '">' + actorOpts + '</select></label>' +
+          '<label class="muted">Acción en Operación<select data-field="action" name="pipeline_steps[' + idx + '][action]" style="' + inp + '">' + actionOpts + '</select></label>' +
+          '<label class="muted">Texto del botón<input data-field="ops_label" name="pipeline_steps[' + idx + '][ops_label]" value="' + escapeHtml(s.ops_label || '') + '" placeholder="Ej. Enviar solicitud" style="' + inp + '"></label>' +
+        '</div>' +
+        '<div class="progress-step-flags">' +
+          '<label><input data-field="ops_button" type="checkbox" name="pipeline_steps[' + idx + '][ops_button]" value="1"' + (s.ops_button == 1 || s.ops_button === true ? ' checked' : '') + '> Mostrar en Operación</label>' +
+          '<label><input data-field="admin_only" type="checkbox" name="pipeline_steps[' + idx + '][admin_only]" value="1"' + (s.admin_only == 1 || s.admin_only === true ? ' checked' : '') + '> Solo admin (oculto al alumno)</label>' +
+          '<label><input data-field="terminal" type="checkbox" name="pipeline_steps[' + idx + '][is_terminal]" value="1"' + (s.is_terminal == 1 || s.is_terminal === true ? ' checked' : '') + '> Paso final</label>' +
+          '<label><input data-field="email_enabled" type="checkbox" name="pipeline_steps[' + idx + '][email_enabled]" value="1"' + (s.email_enabled == 1 || s.email_enabled === true ? ' checked' : '') + '> Enviar correo</label>' +
+        '</div>' +
+        '<div class="progress-step-grid progress-step-email">' +
+          '<label class="muted">Cuándo<select data-field="email_trigger" name="pipeline_steps[' + idx + '][email_trigger]" style="' + inp + '">' +
+            '<option value="admin"' + ((s.email_trigger || 'admin') === 'admin' ? ' selected' : '') + '>Al activarlo el admin</option>' +
+            '<option value="auto"' + (s.email_trigger === 'auto' ? ' selected' : '') + '>Automático al llegar al paso</option>' +
+          '</select></label>' +
+          '<label class="muted">Plantilla' + mailTplSelect('email_template', idx, s.email_template || '') + '</label>' +
+          '<label class="muted">Para<select data-field="email_audience" name="pipeline_steps[' + idx + '][email_audience]" style="' + inp + '">' +
+            '<option value="student"' + ((s.email_audience || 'student') !== 'provider' ? ' selected' : '') + '>Alumno</option>' +
+            '<option value="provider"' + (s.email_audience === 'provider' ? ' selected' : '') + '>Proveedor</option>' +
+          '</select></label>' +
+          '<label class="muted">Destino proveedor (opcional)<input data-field="email_to" name="pipeline_steps[' + idx + '][email_to]" value="' + escapeHtml(s.email_to || '') + '" placeholder="proveedor@…" style="' + inp + '"></label>' +
+          '<label class="muted">CC<input data-field="email_cc" name="pipeline_steps[' + idx + '][email_cc]" value="' + escapeHtml(s.email_cc || '') + '" style="' + inp + '"></label>' +
+        '</div>';
+      stepsBody.appendChild(card);
     });
     renderInitialOptions(steps, initialSelectedStep || (initialSelect && initialSelect.value) || '');
   }
@@ -1487,21 +1295,18 @@ $renderMailTemplateField = static function (
     stepsBody.addEventListener('click', function (e) {
       var btn = e.target.closest('.pipeline-remove-step');
       if (!btn) return;
-      var tr = btn.closest('tr');
-      if (tr) tr.remove();
-      var steps = currentStepsFromDom();
-      renderSteps(steps);
+      var card = btn.closest('.progress-step-card');
+      if (card) card.remove();
+      renderSteps(currentStepsFromDom());
     });
   }
 
 })();
 
 
-  // ---- Paso de solicitud proveedor según plantilla de progreso ----
+  // ---- (legacy) Paso de solicitud proveedor: elementos eliminados del DOM ----
   (function () {
-    var pipelineSelect = document.getElementById('pipeline-code-select');
     var stepSelect = document.getElementById('provider-request-step-code');
-    var currentEl = document.getElementById('provider-request-step-current');
     if (!stepSelect) return;
     var stepsByCode = <?= json_encode($pipelineStepsByCode ?? [], JSON_UNESCAPED_UNICODE) ?> || {};
     function fillSteps() {

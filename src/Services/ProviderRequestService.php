@@ -95,7 +95,7 @@ final class ProviderRequestService
             ? (bool) $raw['include_reglamento']
             : true;
 
-        return [
+        $out = [
             'enabled' => true,
             'auto_send_on_payment' => array_key_exists('auto_send_on_payment', $raw)
                 ? (bool) $raw['auto_send_on_payment']
@@ -135,6 +135,17 @@ final class ProviderRequestService
                 'cell_map' => $cellMap,
             ],
         ];
+
+        // Si el grupo no tiene Excel, usar el de la plantilla de correo.
+        $mailCode = (string) ($out['mail_template_code'] ?? '');
+        if ($mailCode !== '' && empty($out['workbook']['enabled'])) {
+            $fromMail = MailTemplateService::workbookConfig($mailCode);
+            if (!empty($fromMail['enabled']) && $fromMail['template_path'] !== '') {
+                $out['workbook'] = array_merge($out['workbook'], $fromMail, ['attach' => false]);
+            }
+        }
+
+        return $out;
     }
 
     /** @param array<string, mixed> $tracking */
