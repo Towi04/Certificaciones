@@ -119,17 +119,20 @@ $renderMailTemplateField = static function (
                        placeholder="Ej. iTEP / Oxford · Exámenes"
                        style="<?= e($inputStyle) ?>">
             </label>
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Código *
-                <input type="text" name="code" id="group-code" required maxlength="40"
-                       <?= $isEdit ? 'readonly' : '' ?>
-                       value="<?= e($groupCode) ?>"
-                       placeholder="Ej. itep-exams"
-                       style="<?= e($inputStyle) ?><?= $isEdit ? ';background:#f4f7fb' : '' ?>">
-                <?php if ($isEdit): ?>
-                    <span style="font-weight:500;font-size:.78rem">El código no se cambia después de crear el grupo.</span>
-                <?php endif; ?>
-            </label>
+            <?php if ($isEdit): ?>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Código interno
+                    <input type="text" name="code" id="group-code" readonly maxlength="40"
+                           value="<?= e($groupCode) ?>"
+                           style="<?= e($inputStyle) ?>;background:#f4f7fb">
+                    <span style="font-weight:500;font-size:.78rem">Se asignó al crear el grupo; no se edita.</span>
+                </label>
+            <?php else: ?>
+                <input type="hidden" name="code" id="group-code" value="">
+                <p class="muted" style="margin:0;font-size:.8rem;align-self:end;padding-bottom:.35rem">
+                    El código interno se genera solo a partir del nombre.
+                </p>
+            <?php endif; ?>
             <label class="muted" style="<?= e($labelStyle) ?>">
                 Proveedor
                 <select name="supplier_id" style="<?= e($inputStyle) ?>">
@@ -192,9 +195,9 @@ $renderMailTemplateField = static function (
                             Obligatorio en toda compra
                         </span>
                     <?php else: ?>
-                        <label class="field-required-toggle muted">
-                            Si se pide:
-                            <select name="checkout_field_required[<?= e($code) ?>]" class="field-required-select">
+                        <label class="field-required-toggle muted" title="Si el campo se pide al alumno">
+                            <select name="checkout_field_required[<?= e($code) ?>]" class="field-required-select"
+                                    aria-label="Obligatorio u opcional">
                                 <option value="1" <?= $isRequired ? 'selected' : '' ?>>Obligatorio</option>
                                 <option value="0" <?= !$isRequired ? 'selected' : '' ?>>Opcional</option>
                             </select>
@@ -466,7 +469,8 @@ $renderMailTemplateField = static function (
         <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
             Define los pasos del caso. Cada paso puede ser visible al alumno o solo admin,
             y puede mostrar un <strong>botón en Operación</strong> (se oculta cuando ya se hizo).
-            Si el paso envía correo, elige la plantilla y si se dispara al activarlo el admin o automáticamente.
+            Confirmar pago y capturar folio/clave aparecen solos en Operación según el estado del caso.
+            El destinatario y CC del correo se configuran en la <strong>plantilla de correo</strong>.
         </p>
 
         <div class="panel" style="margin:0 0 1rem;padding:.85rem 1rem;background:#f8fafc">
@@ -608,11 +612,12 @@ $renderMailTemplateField = static function (
 .field-custom-badge{display:inline-block;margin-left:.35rem;padding:.05rem .4rem;border-radius:999px;background:#e8f0ff;color:#2a4d8f;font-size:.68rem;font-weight:700;vertical-align:middle}
 .field-check-main { display:flex; gap:.65rem; align-items:flex-start; cursor:pointer; }
 .field-required-toggle {
-  display:flex; gap:.4rem; align-items:center; margin:.35rem 0 0 1.55rem;
+  display:block; margin:.35rem 0 0 1.55rem;
   font-size:.75rem; font-weight:600;
 }
 .field-required-select {
-  font:inherit; font-size:.75rem; padding:.2rem .4rem; border:1px solid #cfd8e6; border-radius:8px;
+  display:block; width:100%; max-width:100%; box-sizing:border-box;
+  font:inherit; font-size:.75rem; padding:.25rem .4rem; border:1px solid #cfd8e6; border-radius:8px;
 }
 .btn-link {
   background:none; border:0; color:var(--doceo-blue); cursor:pointer; font:inherit;
@@ -653,10 +658,11 @@ $renderMailTemplateField = static function (
   var hash = (location.hash || '').replace(/^#/, '');
   if (hash && document.querySelector('.group-panel[data-panel="' + hash + '"]')) activate(hash);
 
-  var usedDocCodes = <?= json_encode($usedDocCodes, JSON_UNESCAPED_UNICODE) ?> || {};
+  var usedDocCodes = <?= json_encode($usedDocCodes, JSON_UNESCAPED_UNICODE) ?>;
   var currentGroupCode = <?= json_encode($groupCode, JSON_UNESCAPED_UNICODE) ?>;
   var docInput = document.getElementById('reglamento_doc_code');
   var codeInput = document.getElementById('group-code');
+  var nameInput = form && form.querySelector('input[name="name"]');
   var hint = document.getElementById('doc-code-hint');
   var docTouched = <?= json_encode(trim((string) ($extras['reglamento_doc_code'] ?? '')) !== '') ?>;
 
@@ -664,7 +670,10 @@ $renderMailTemplateField = static function (
     return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'nuevo';
   }
   function autoDoc() {
-    var code = codeInput ? codeInput.value : currentGroupCode;
+    var code = codeInput && codeInput.value ? codeInput.value : currentGroupCode;
+    if (!code && nameInput && nameInput.value) {
+      code = nameInput.value;
+    }
     return 'reglamento_' + slugify(code);
   }
   function validateDocCode() {
@@ -678,7 +687,7 @@ $renderMailTemplateField = static function (
       if (duplicate) {
         hint.innerHTML = '<span class="doc-code-error">Este código ya lo usa el grupo <code>' + owner + '</code>.</span>';
       } else {
-        hint.textContent = 'Se propone automáticamente según el código del grupo. Puedes editarlo.';
+        hint.textContent = 'Se propone automáticamente según el nombre del grupo. Puedes editarlo.';
       }
     }
     return !duplicate;
@@ -689,6 +698,14 @@ $renderMailTemplateField = static function (
   }
   if (codeInput && !codeInput.readOnly) {
     codeInput.addEventListener('input', function () {
+      if (!docTouched && docInput) {
+        docInput.value = autoDoc();
+        validateDocCode();
+      }
+    });
+  }
+  if (nameInput && !(codeInput && codeInput.readOnly && codeInput.value)) {
+    nameInput.addEventListener('input', function () {
       if (!docTouched && docInput) {
         docInput.value = autoDoc();
         validateDocCode();
@@ -963,8 +980,8 @@ $renderMailTemplateField = static function (
       + '<input type="checkbox" class="field-include" name="checkout_fields[]" value="' + field.code + '" checked>'
       + '<span><strong class="field-label-text"></strong>'
       + '<span class="field-custom-badge">Personalizado</span></span></label>'
-      + '<label class="field-required-toggle muted">Si se pide: '
-      + '<select name="checkout_field_required[' + field.code + ']" class="field-required-select">'
+      + '<label class="field-required-toggle muted" title="Si el campo se pide al alumno">'
+      + '<select name="checkout_field_required[' + field.code + ']" class="field-required-select" aria-label="Obligatorio u opcional">'
       + '<option value="1">Obligatorio</option><option value="0">Opcional</option></select></label>'
       + '<button type="button" class="btn-link field-edit-btn">Editar campo</button>';
     card.querySelector('.field-label-text').textContent = field.label || field.code;
@@ -1099,7 +1116,8 @@ $renderMailTemplateField = static function (
   var mailTemplatesJs = <?= json_encode(array_values(array_map(static function ($t) {
       return ['code' => (string) ($t['code'] ?? ''), 'name' => (string) ($t['name'] ?? '')];
   }, $mailTemplates)), JSON_UNESCAPED_UNICODE) ?> || [];
-  var actionOptions = <?= json_encode(\App\Services\GroupStepConfig::ACTIONS, JSON_UNESCAPED_UNICODE) ?>;
+  var actionOptions = <?= json_encode(\App\Services\GroupStepConfig::ACTIONS_EDITABLE, JSON_UNESCAPED_UNICODE) ?>;
+  var allActionLabels = <?= json_encode(\App\Services\GroupStepConfig::ACTIONS, JSON_UNESCAPED_UNICODE) ?>;
   var initialSelectedStep = <?= json_encode($selectedInitialStep ?? '', JSON_UNESCAPED_UNICODE) ?>;
   var pipelineSelect = document.getElementById('pipeline-code-select');
   var initialSelect = document.getElementById('pipeline-initial-step');
@@ -1119,6 +1137,14 @@ $renderMailTemplateField = static function (
     return String(s || '')
       .replace(/&/g, '&amp;').replace(/</g, '&lt;')
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function slugStepCode(label) {
+    return String(label || '')
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '') || 'paso';
   }
 
   function mergeStepDef(s) {
@@ -1154,11 +1180,12 @@ $renderMailTemplateField = static function (
       var emailTr = g('email_trigger');
       var emailTpl = g('email_template');
       var emailAud = g('email_audience');
-      var emailTo = g('email_to');
-      var emailCc = g('email_cc');
+      var labelVal = label ? label.value : '';
+      var codeVal = code ? code.value : '';
+      if (!codeVal && labelVal) codeVal = slugStepCode(labelVal);
       rows.push({
-        code: code ? code.value : '',
-        label: label ? label.value : '',
+        code: codeVal,
+        label: labelVal,
         actor: actor ? actor.value : 'admin',
         is_terminal: !!(term && term.checked),
         admin_only: !!(adminOnly && adminOnly.checked),
@@ -1169,8 +1196,8 @@ $renderMailTemplateField = static function (
         email_trigger: emailTr ? emailTr.value : 'admin',
         email_template: emailTpl ? emailTpl.value : '',
         email_audience: emailAud ? emailAud.value : 'student',
-        email_to: emailTo ? emailTo.value : '',
-        email_cc: emailCc ? emailCc.value : ''
+        email_to: '',
+        email_cc: ''
       });
     });
     return rows;
@@ -1204,6 +1231,20 @@ $renderMailTemplateField = static function (
     return html;
   }
 
+  function actionSelectHtml(idx, current) {
+    var opts = Object.assign({}, actionOptions);
+    if (current && !opts[current] && allActionLabels[current]) {
+      opts[current] = allActionLabels[current] + ' (heredado)';
+    }
+    var html = '<select data-field="action" name="pipeline_steps[' + idx + '][action]" style="' + inp + '">';
+    Object.keys(opts).forEach(function (k) {
+      html += '<option value="' + escapeHtml(k) + '"' + ((current || 'none') === k ? ' selected' : '') + '>'
+        + escapeHtml(opts[k]) + '</option>';
+    });
+    html += '</select>';
+    return html;
+  }
+
   function renderSteps(steps) {
     if (!stepsBody) return;
     stepsBody.innerHTML = '';
@@ -1215,13 +1256,11 @@ $renderMailTemplateField = static function (
     if (stepsEmpty) stepsEmpty.style.display = 'none';
     steps.forEach(function (raw, idx) {
       var s = mergeStepDef(raw);
+      if (!s.code && s.label) s.code = slugStepCode(s.label);
       var card = document.createElement('div');
       card.className = 'progress-step-card';
       var actorOpts = actors.map(function (a) {
         return '<option value="' + a.value + '"' + ((s.actor || 'admin') === a.value ? ' selected' : '') + '>' + a.label + '</option>';
-      }).join('');
-      var actionOpts = Object.keys(actionOptions).map(function (k) {
-        return '<option value="' + k + '"' + ((s.action || 'none') === k ? ' selected' : '') + '>' + escapeHtml(actionOptions[k]) + '</option>';
       }).join('');
       card.innerHTML =
         '<div class="progress-step-head">' +
@@ -1229,10 +1268,10 @@ $renderMailTemplateField = static function (
           '<button type="button" class="btn btn-ghost btn-sm pipeline-remove-step" title="Quitar">✕</button>' +
         '</div>' +
         '<div class="progress-step-grid">' +
-          '<label class="muted">Código<input data-field="code" name="pipeline_steps[' + idx + '][code]" value="' + escapeHtml(s.code || '') + '" style="' + inp + '" required></label>' +
+          '<input type="hidden" data-field="code" name="pipeline_steps[' + idx + '][code]" value="' + escapeHtml(s.code || '') + '">' +
           '<label class="muted">Etiqueta<input data-field="label" name="pipeline_steps[' + idx + '][label]" value="' + escapeHtml(s.label || '') + '" style="' + inp + '" required></label>' +
           '<label class="muted">Actor<select data-field="actor" name="pipeline_steps[' + idx + '][actor]" style="' + inp + '">' + actorOpts + '</select></label>' +
-          '<label class="muted">Acción en Operación<select data-field="action" name="pipeline_steps[' + idx + '][action]" style="' + inp + '">' + actionOpts + '</select></label>' +
+          '<label class="muted">Acción en Operación' + actionSelectHtml(idx, s.action || 'none') + '</label>' +
           '<label class="muted">Texto del botón<input data-field="ops_label" name="pipeline_steps[' + idx + '][ops_label]" value="' + escapeHtml(s.ops_label || '') + '" placeholder="Ej. Enviar solicitud" style="' + inp + '"></label>' +
         '</div>' +
         '<div class="progress-step-flags">' +
@@ -1251,10 +1290,19 @@ $renderMailTemplateField = static function (
             '<option value="student"' + ((s.email_audience || 'student') !== 'provider' ? ' selected' : '') + '>Alumno</option>' +
             '<option value="provider"' + (s.email_audience === 'provider' ? ' selected' : '') + '>Proveedor</option>' +
           '</select></label>' +
-          '<label class="muted">Destino proveedor (opcional)<input data-field="email_to" name="pipeline_steps[' + idx + '][email_to]" value="' + escapeHtml(s.email_to || '') + '" placeholder="proveedor@…" style="' + inp + '"></label>' +
-          '<label class="muted">CC<input data-field="email_cc" name="pipeline_steps[' + idx + '][email_cc]" value="' + escapeHtml(s.email_cc || '') + '" style="' + inp + '"></label>' +
         '</div>';
       stepsBody.appendChild(card);
+      var labelInput = card.querySelector('[data-field="label"]');
+      var codeHidden = card.querySelector('[data-field="code"]');
+      if (labelInput && codeHidden && !codeHidden.value) {
+        labelInput.addEventListener('input', function () {
+          if (!codeHidden.dataset.locked) {
+            codeHidden.value = slugStepCode(labelInput.value);
+          }
+        });
+      } else if (codeHidden && codeHidden.value) {
+        codeHidden.dataset.locked = '1';
+      }
     });
     renderInitialOptions(steps, initialSelectedStep || (initialSelect && initialSelect.value) || '');
   }

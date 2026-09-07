@@ -28,6 +28,25 @@ final class ComboAdminService
         return preg_replace('/[^a-z0-9-]/', '', $code) ?? '';
     }
 
+    public function allocateUniqueCode(string $name): string
+    {
+        $base = self::normalizeCode(self::slugify($name));
+        if (strlen($base) < 2) {
+            $base = 'combo';
+        }
+        $candidate = $base;
+        $n = 2;
+        while ($this->combos->findByCode($candidate) !== null) {
+            $candidate = $base . '-' . $n;
+            $n++;
+            if ($n > 500) {
+                throw new \RuntimeException('No se pudo generar un código único para el combo.');
+            }
+        }
+
+        return $candidate;
+    }
+
     public static function slugify(string $name): string
     {
         $s = strtolower(trim($name));
@@ -254,8 +273,12 @@ final class ComboAdminService
             throw new \InvalidArgumentException('El nombre del combo es obligatorio.');
         }
         $code = self::normalizeCode((string) ($input['code'] ?? ''));
-        if ($requireCode && strlen($code) < 2) {
-            throw new \InvalidArgumentException('El código del combo es obligatorio (ej. toefl-prep-cenni).');
+        if ($requireCode) {
+            if (strlen($code) < 2) {
+                $code = $this->allocateUniqueCode($name);
+            } elseif ($this->combos->findByCode($code) !== null) {
+                $code = $this->allocateUniqueCode($name);
+            }
         }
         $slug = trim((string) ($input['slug'] ?? ''));
         if ($slug === '') {

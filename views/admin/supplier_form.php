@@ -16,15 +16,20 @@ $action = $isEdit ? url('/admin/proveedores/' . $supplier['id']) : url('/admin/p
             <input type="text" name="name" required
                    value="<?= e((string) ($supplier['name'] ?? '')) ?>"
                    style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            <?php if (!$isEdit): ?>
+                <span style="font-weight:500;font-size:.78rem">El código interno se genera a partir del nombre.</span>
+            <?php endif; ?>
         </label>
-        <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-            Código *
-            <input type="text" name="code" required maxlength="40"
-                   <?= $isEdit ? 'readonly' : '' ?>
-                   value="<?= e((string) ($supplier['code'] ?? '')) ?>"
-                   placeholder="ej. itep"
-                   style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px<?= $isEdit ? ';background:#f4f7fb' : '' ?>">
-        </label>
+        <?php if ($isEdit): ?>
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                Código interno
+                <input type="text" name="code" readonly maxlength="40"
+                       value="<?= e((string) ($supplier['code'] ?? '')) ?>"
+                       style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;background:#f4f7fb">
+            </label>
+        <?php else: ?>
+            <input type="hidden" name="code" value="">
+        <?php endif; ?>
         <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
             Sitio web
             <input type="url" name="website"

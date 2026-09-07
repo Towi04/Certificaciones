@@ -18,15 +18,20 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
             <input type="text" name="name" required
                    value="<?= e((string) ($certifier['name'] ?? '')) ?>"
                    style="<?= e($inputStyle) ?>">
+            <?php if (!$isEdit): ?>
+                <span style="font-weight:500;font-size:.78rem">El código interno se genera a partir del nombre.</span>
+            <?php endif; ?>
         </label>
-        <label class="muted" style="<?= e($labelStyle) ?>">
-            Código *
-            <input type="text" name="code" required maxlength="40"
-                   <?= $isEdit ? 'readonly' : '' ?>
-                   value="<?= e((string) ($certifier['code'] ?? '')) ?>"
-                   placeholder="ej. cambridge"
-                   style="<?= e($inputStyle) ?><?= $isEdit ? ';background:#f4f7fb' : '' ?>">
-        </label>
+        <?php if ($isEdit): ?>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Código interno
+                <input type="text" name="code" readonly maxlength="40"
+                       value="<?= e((string) ($certifier['code'] ?? '')) ?>"
+                       style="<?= e($inputStyle) ?>;background:#f4f7fb">
+            </label>
+        <?php else: ?>
+            <input type="hidden" name="code" value="">
+        <?php endif; ?>
         <label class="muted" style="<?= e($labelStyle) ?>">
             Sitio web
             <input type="url" name="website"

@@ -83,7 +83,7 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
 </h1>
 <p class="muted">
     Asigna un <a href="<?= e(url('/admin/grupos')) ?>">grupo de proceso</a> para heredar pagos/MSI.
-    Código y nombre se pueden cambiar aquí.
+    El código interno se asigna solo al crear el producto.
 </p>
 
 <?php if ($groups === []): ?>
@@ -110,18 +110,25 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
         <div class="product-tab-panel" data-tab-panel="general" role="tabpanel">
             <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Identidad</h2>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem">
-                <label class="muted" style="<?= e($labelStyle) ?>">
-                    Código *
-                    <input type="text" name="code" required maxlength="60"
-                           value="<?= e((string) ($product['code'] ?? '')) ?>"
-                           placeholder="Ej. ITEP-PLUS"
-                           style="<?= e($inputStyle) ?>;text-transform:uppercase">
-                </label>
+                <?php if ($isEdit): ?>
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Código interno
+                        <input type="text" name="code" readonly maxlength="60"
+                               value="<?= e((string) ($product['code'] ?? '')) ?>"
+                               style="<?= e($inputStyle) ?>;background:#f4f7fb;text-transform:uppercase">
+                        <span style="font-weight:500;font-size:.78rem">Se asignó al crear; no se edita.</span>
+                    </label>
+                <?php else: ?>
+                    <input type="hidden" name="code" value="">
+                <?php endif; ?>
                 <label class="muted" style="<?= e($labelStyle) ?>">
                     Nombre *
                     <input type="text" name="name" required
                            value="<?= e((string) ($product['name'] ?? '')) ?>"
                            style="<?= e($inputStyle) ?>">
+                    <?php if (!$isEdit): ?>
+                        <span style="font-weight:500;font-size:.78rem">El código interno se genera a partir del nombre.</span>
+                    <?php endif; ?>
                 </label>
                 <label class="muted" style="<?= e($labelStyle) ?>">
                     Slug (URL)
