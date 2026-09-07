@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Database\Connection;
 use App\Integrations\Mailer;
 use App\Repositories\PurchaseRepository;
+use App\Support\AsciiUpperNormalizer;
 use App\Support\XlsxCellFiller;
 use PDO;
 
@@ -36,6 +37,11 @@ final class ProviderRequestService
         ['value' => 'birth_date', 'label' => 'Fecha de nacimiento'],
         ['value' => 'sex', 'label' => 'Sexo'],
         ['value' => 'nationality', 'label' => 'Nacionalidad'],
+        ['value' => 'passport', 'label' => 'Pasaporte / ID'],
+        ['value' => 'address', 'label' => 'Dirección'],
+        ['value' => 'city', 'label' => 'Ciudad'],
+        ['value' => 'state', 'label' => 'Estado'],
+        ['value' => 'partner_code', 'label' => 'Código partner'],
     ];
 
     private PDO $pdo;
@@ -92,7 +98,7 @@ final class ProviderRequestService
             'enabled' => true,
             'auto_send_on_payment' => array_key_exists('auto_send_on_payment', $raw)
                 ? (bool) $raw['auto_send_on_payment']
-                : true,
+                : false,
             'step_code' => $step,
             'to' => trim((string) ($raw['to'] ?? '')),
             'cc' => trim((string) ($raw['cc'] ?? '')),
@@ -111,10 +117,20 @@ final class ProviderRequestService
                 ? (bool) $raw['require_reglamento']
                 : $includeReglamento,
             'delivery' => $delivery,
+            'require_admin_payment_proof' => array_key_exists('require_admin_payment_proof', $raw)
+                ? (bool) $raw['require_admin_payment_proof']
+                : true,
+            'auto_send_on_admin_proof' => array_key_exists('auto_send_on_admin_proof', $raw)
+                ? (bool) $raw['auto_send_on_admin_proof']
+                : true,
             'workbook' => [
                 'enabled' => !empty($workbook['enabled']),
                 'template_path' => trim((string) ($workbook['template_path'] ?? '')),
                 'attach' => array_key_exists('attach', $workbook) ? (bool) $workbook['attach'] : true,
+                'sheet' => trim((string) ($workbook['sheet'] ?? '')),
+                'normalize' => in_array((string) ($workbook['normalize'] ?? 'none'), ['none', 'toefl'], true)
+                    ? (string) ($workbook['normalize'] ?? 'none')
+                    : 'none',
                 'cell_map' => $cellMap,
             ],
         ];
@@ -144,14 +160,19 @@ final class ProviderRequestService
 
         $this->markRequired($trackingId, $tracking, $config);
 
-        $auto = !empty($config['auto_send_on_payment']);
+        $needsAdminProof = !empty($config['require_admin_payment_proof']);
+        $auto = !empty($config['auto_send_on_payment']) && !$needsAdminProof;
+        $note = 'Pago confirmado · pendiente enviar solicitud al proveedor';
+        if ($needsAdminProof) {
+            $note = 'Pago confirmado · sube el comprobante de pago al proveedor para enviar la solicitud';
+        } elseif ($auto) {
+            $note = 'Pago confirmado · preparando solicitud al proveedor';
+        }
         $this->tracking->setStep(
             $trackingId,
             (string) $config['step_code'],
             $adminUserId,
-            $auto
-                ? 'Pago confirmado · preparando solicitud al proveedor'
-                : 'Pago confirmado · pendiente enviar solicitud al proveedor',
+            $note,
             $auto ? 'waiting_provider' : 'waiting_admin'
         );
 
@@ -207,6 +228,12 @@ final class ProviderRequestService
             throw new \RuntimeException(
                 'Configura el correo destino en Grupos → Solicitud a proveedor (campo Para), '
                 . 'o en Admin → Correos si usas la plantilla UKS.'
+            );
+        }
+
+        if (!empty($config['require_admin_payment_proof']) && $this->findAdminPaymentProof($trackingId) === null) {
+            throw new \RuntimeException(
+                'Debes subir el comprobante de pago (DOCEO → proveedor) antes de enviar la solicitud.'
             );
         }
 
@@ -383,7 +410,7 @@ final class ProviderRequestService
         $lp = (string) ($tracking['last_name_p'] ?? $checkout['last_name_p'] ?? '');
         $lm = (string) ($tracking['last_name_m'] ?? $checkout['last_name_m'] ?? '');
 
-        return [
+        $values = [
             'full_name' => trim(implode(' ', array_filter([$first, $lp, $lm]))),
             'first_name' => $first,
             'last_name_p' => $lp,
@@ -399,7 +426,23 @@ final class ProviderRequestService
             'birth_date' => (string) ($checkout['birth_date'] ?? $tracking['birth_date'] ?? ''),
             'sex' => (string) ($checkout['sex'] ?? $tracking['sex'] ?? ''),
             'nationality' => (string) ($checkout['nationality'] ?? $tracking['nationality'] ?? ''),
+            'passport' => (string) ($checkout['passport'] ?? $checkout['id_number'] ?? $tracking['passport'] ?? ''),
+            'address' => (string) ($checkout['address'] ?? $checkout['street'] ?? ''),
+            'city' => (string) ($checkout['city'] ?? ''),
+            'state' => (string) ($checkout['state'] ?? $checkout['estado'] ?? ''),
+            'partner_code' => (string) ($tracking['partner_code'] ?? $purchase['partner_code'] ?? $checkout['partner_code'] ?? ''),
         ];
+
+        foreach ($checkout as $key => $val) {
+            if (!is_string($key) || $key === '' || array_key_exists($key, $values)) {
+                continue;
+            }
+            if (is_scalar($val)) {
+                $values[$key] = (string) $val;
+            }
+        }
+
+        return $values;
     }
 
     /**
@@ -432,16 +475,29 @@ final class ProviderRequestService
         }
 
         if ($forceIncludePaymentProof || !empty($config['include_payment_proof'])) {
-            $proofPath = (string) ($purchase['payment_proof_path'] ?? '');
-            if ($proofPath !== '') {
-                $abs = $this->documents->absolutePath($proofPath);
+            $adminDoc = $this->findAdminPaymentProof((int) ($tracking['id'] ?? 0));
+            if ($adminDoc !== null) {
+                $abs = $this->documents->absolutePath((string) $adminDoc['storage_path']);
                 if (is_file($abs)) {
                     $ext = strtolower(pathinfo($abs, PATHINFO_EXTENSION) ?: 'pdf');
                     $out[] = [
                         'path' => $abs,
-                        'name' => 'comprobante_pago.' . $ext,
+                        'name' => 'comprobante_pago_proveedor.' . $ext,
                         'mime' => $ext === 'pdf' ? 'application/pdf' : 'application/octet-stream',
                     ];
+                }
+            } else {
+                $proofPath = (string) ($purchase['payment_proof_path'] ?? '');
+                if ($proofPath !== '') {
+                    $abs = $this->documents->absolutePath($proofPath);
+                    if (is_file($abs)) {
+                        $ext = strtolower(pathinfo($abs, PATHINFO_EXTENSION) ?: 'pdf');
+                        $out[] = [
+                            'path' => $abs,
+                            'name' => 'comprobante_pago.' . $ext,
+                            'mime' => $ext === 'pdf' ? 'application/pdf' : 'application/octet-stream',
+                        ];
+                    }
                 }
             }
         }
@@ -488,6 +544,7 @@ final class ProviderRequestService
         }
 
         $fields = $this->fieldValues($tracking, $purchase, $product);
+        $normalize = (string) ($wb['normalize'] ?? 'none');
         $cellValues = [];
         foreach (is_array($wb['cell_map'] ?? null) ? $wb['cell_map'] : [] as $map) {
             if (!is_array($map)) {
@@ -498,7 +555,11 @@ final class ProviderRequestService
             if ($cell === '' || $field === '') {
                 continue;
             }
-            $cellValues[$cell] = $fields[$field] ?? '';
+            $value = (string) ($fields[$field] ?? '');
+            if ($normalize === 'toefl') {
+                $value = AsciiUpperNormalizer::normalize($value);
+            }
+            $cellValues[$cell] = $value;
         }
         if ($cellValues === []) {
             throw new \RuntimeException(
@@ -506,7 +567,13 @@ final class ProviderRequestService
             );
         }
 
-        $filled = (new XlsxCellFiller())->fill($abs, $cellValues);
+        $sheet = trim((string) ($wb['sheet'] ?? ''));
+        $filled = (new XlsxCellFiller())->fill(
+            $abs,
+            $cellValues,
+            null,
+            $sheet !== '' ? $sheet : null
+        );
         $tmpFiles[] = $filled;
         $matricula = preg_replace('/[^a-zA-Z0-9_-]+/', '_', $fields['matricula']) ?: 'alumno';
 
@@ -736,10 +803,95 @@ final class ProviderRequestService
         return is_array($decoded) ? $decoded : [];
     }
 
-    /** @param array<string, mixed> $extra */
+    /** @param array<string, mixed> $extra *
     private function saveExtra(int $trackingId, array $extra): void
     {
         $this->pdo->prepare('UPDATE trackings SET extra_json = ?, updated_at = NOW() WHERE id = ?')
             ->execute([json_encode($extra, JSON_UNESCAPED_UNICODE), $trackingId]);
     }
+
+    public const ADMIN_PROOF_DOC_TYPE = 'provider_payment_proof';
+
+    /** @return array<string, mixed>|null */
+    public function findAdminPaymentProof(int $trackingId): ?array
+    {
+        if ($trackingId < 1) {
+            return null;
+        }
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM documents WHERE tracking_id = ? AND doc_type = ? ORDER BY id DESC LIMIT 1'
+        );
+        $stmt->execute([$trackingId, self::ADMIN_PROOF_DOC_TYPE]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    /**
+     * Sube el comprobante de pago DOCEO → proveedor. Si auto_send_on_admin_proof, envía la solicitud.
+     *
+     * @param array{tmp_name?:string,name?:string,error?:int,size?:int,type?:string} $file
+     * @return array{document_id:int,sent:bool}
+     */
+    public function uploadAdminPaymentProof(int $trackingId, array $file, int $adminUserId): array
+    {
+        $tracking = $this->tracking->find($trackingId);
+        if ($tracking === null) {
+            throw new \InvalidArgumentException('Seguimiento no encontrado.');
+        }
+
+        $product = $this->productRowForTracking($tracking);
+        $config = self::configForProduct($product);
+        if ($config === null) {
+            throw new \RuntimeException('Este producto no tiene solicitud a proveedor habilitada.');
+        }
+
+        $stored = $this->documents->storeUploaded($file, 'provider_payment_proofs', '.pdf,.jpg,.jpeg,.png,.webp');
+        $studentUserId = (int) ($tracking['student_user_id'] ?? $tracking['purchase_student_id'] ?? 0);
+        if ($studentUserId < 1) {
+            throw new \RuntimeException('No se pudo determinar el alumno del seguimiento.');
+        }
+
+        $this->pdo->prepare(
+            'INSERT INTO documents (tracking_id, purchase_id, student_user_id, doc_type, original_name, storage_path, status, uploaded_by)
+             VALUES (?,?,?,?,?,?,\'approved\',?)'
+        )->execute([
+            $trackingId,
+            (int) ($tracking['purchase_id'] ?? 0),
+            $studentUserId,
+            self::ADMIN_PROOF_DOC_TYPE,
+            $stored['original_name'],
+            $stored['path'],
+            $adminUserId,
+        ]);
+        $docId = (int) $this->pdo->lastInsertId();
+
+        $extra = $this->decodeExtra($tracking['extra_json'] ?? null);
+        $prev = is_array($extra[self::EXTRA_KEY] ?? null) ? $extra[self::EXTRA_KEY] : [];
+        $extra[self::EXTRA_KEY] = array_merge($prev, [
+            'required' => true,
+            'admin_proof_document_id' => $docId,
+            'admin_proof_path' => $stored['path'],
+            'admin_proof_uploaded_at' => date('c'),
+            'admin_proof_uploaded_by' => $adminUserId,
+        ]);
+        $this->saveExtra($trackingId, $extra);
+
+        $this->tracking->addLog(
+            $trackingId,
+            (string) $config['step_code'],
+            'Comprobante de pago al proveedor subido por admin',
+            $adminUserId
+        );
+
+        $sent = false;
+        if (!empty($config['auto_send_on_admin_proof'])) {
+            $this->send($trackingId, (int) $tracking['purchase_id'], $adminUserId, true);
+            $sent = true;
+        }
+
+        return ['document_id' => $docId, 'sent' => $sent];
+    }
+
+
 }

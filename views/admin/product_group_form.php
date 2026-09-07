@@ -527,6 +527,7 @@ $renderMailTemplateField = static function (
         <?php endif; ?>
     </div>
 
+    <div class="group-panel" data-panel="provider" hidden>
 <?php
     $pr = is_array($extras['provider_request'] ?? null) ? $extras['provider_request'] : [];
     $prEnabled = !empty($pr['enabled']);
@@ -535,14 +536,16 @@ $renderMailTemplateField = static function (
         $prCells = [['cell' => '', 'field' => '']];
     }
     $fieldOptions = \App\Services\ProviderRequestService::FIELD_OPTIONS;
+    $selectedMailTpl = (string) ($pr['mail_template_code'] ?? '');
+    $selectedStep = (string) ($pr['step_code'] ?? 'solicitud_proveedor');
+    $wbNormalize = (string) ($pr['workbook_normalize'] ?? 'none');
+    $wbSheet = (string) ($pr['workbook_sheet'] ?? '');
 ?>
-    <div class="group-panel" data-panel="provider" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Solicitud al proveedor</h2>
         <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
-            Esta pestaña es solo para el correo de <strong>solicitud al proveedor</strong> después del pago
-            (datos del alumno, fecha/hora, reglamento, comprobante y/o Excel). Los casos pendientes
-            aparecen en el Dashboard. Los correos del ciclo del alumno (registro, pago confirmado,
-            acceso al examen, pasos del progreso) se configuran en la pestaña <strong>Correos</strong>.
+            Configura el correo de <strong>solicitud al proveedor</strong>. El contenido del mensaje lo define la
+            <strong>plantilla de correo</strong> (variables). El envío se dispara cuando un admin sube el
+            <strong>comprobante de pago DOCEO → proveedor</strong> en el seguimiento del caso.
         </p>
 
         <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.9rem;margin-bottom:.85rem">
@@ -564,37 +567,59 @@ $renderMailTemplateField = static function (
                            placeholder="ops@doceo.mx" style="<?= e($inputStyle) ?>">
                 </label>
                 <label class="muted" style="<?= e($labelStyle) ?>">
-                    Código de plantilla de correo
-                    <input type="text" name="provider_request_mail_template" value="<?= e((string) ($pr['mail_template_code'] ?? '')) ?>"
-                           placeholder="uks_solicitud o vacío = genérico" style="<?= e($inputStyle) ?>">
+                    Plantilla de correo
+                    <select name="provider_request_mail_template" style="<?= e($inputStyle) ?>">
+                        <option value="">— Genérico (sin plantilla) —</option>
+                        <?php foreach ($mailTemplates as $tpl): ?>
+                            <?php
+                                $code = (string) ($tpl['code'] ?? '');
+                                $name = (string) ($tpl['name'] ?? $code);
+                                if ($code === '') {
+                                    continue;
+                                }
+                            ?>
+                            <option value="<?= e($code) ?>" <?= $selectedMailTpl === $code ? 'selected' : '' ?>>
+                                <?= e($name) ?> (<?= e($code) ?>)
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
                 </label>
                 <label class="muted" style="<?= e($labelStyle) ?>">
-                    Código de paso en el progreso
-                    <input type="text" name="provider_request_step_code" value="<?= e((string) ($pr['step_code'] ?? 'solicitud_proveedor')) ?>"
-                           style="<?= e($inputStyle) ?>">
+                    Paso en el progreso
+                    <select name="provider_request_step_code" id="provider-request-step-code" style="<?= e($inputStyle) ?>">
+                        <option value="">— Elige un paso —</option>
+                    </select>
+                    <input type="hidden" id="provider-request-step-current" value="<?= e($selectedStep) ?>">
                 </label>
             </div>
 
-            <label class="muted" style="display:flex;gap:.45rem;align-items:center;font-size:.88rem;margin-bottom:.55rem">
-                <input type="checkbox" name="provider_request_auto_send" value="1"
-                    <?= array_key_exists('auto_send_on_payment', $pr) ? (!empty($pr['auto_send_on_payment']) ? 'checked' : '') : 'checked' ?>>
-                Enviar automáticamente al confirmar el pago
-                <span class="muted" style="font-weight:500">(si se desactiva, queda en la cola del Dashboard)</span>
-            </label>
-
-            <p style="margin:.75rem 0 .35rem;font-weight:700;color:var(--doceo-blue)">Contenido del correo</p>
             <div style="display:flex;flex-wrap:wrap;gap:.75rem 1.25rem;margin-bottom:.85rem">
                 <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
-                    <input type="checkbox" name="provider_request_include_student" value="1" <?= !isset($pr['include_student_data']) || !empty($pr['include_student_data']) ? 'checked' : '' ?>>
-                    Datos del alumno
+                    <input type="checkbox" name="provider_request_require_admin_proof" value="1"
+                        <?= !isset($pr['require_admin_payment_proof']) || !empty($pr['require_admin_payment_proof']) ? 'checked' : '' ?>>
+                    Exigir comprobante de pago (admin) antes de enviar
                 </label>
                 <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
-                    <input type="checkbox" name="provider_request_include_exam" value="1" <?= !isset($pr['include_exam_schedule']) || !empty($pr['include_exam_schedule']) ? 'checked' : '' ?>>
-                    Fecha y hora de examen
+                    <input type="checkbox" name="provider_request_auto_send_admin_proof" value="1"
+                        <?= !isset($pr['auto_send_on_admin_proof']) || !empty($pr['auto_send_on_admin_proof']) ? 'checked' : '' ?>>
+                    Enviar automáticamente al subir ese comprobante
                 </label>
+                <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
+                    <input type="checkbox" name="provider_request_auto_send" value="1"
+                        <?= !empty($pr['auto_send_on_payment']) ? 'checked' : '' ?>>
+                    (Avanzado) Enviar también al confirmar el pago del alumno
+                </label>
+            </div>
+
+            <p style="margin:.75rem 0 .35rem;font-weight:700;color:var(--doceo-blue)">Adjuntos / requisitos</p>
+            <p class="muted" style="font-size:.78rem;margin:0 0 .5rem">
+                Los datos del alumno y del examen los define la plantilla de correo (y el mapeo Excel).
+                Aquí solo marcas documentos a adjuntar o exigir.
+            </p>
+            <div style="display:flex;flex-wrap:wrap;gap:.75rem 1.25rem;margin-bottom:.85rem">
                 <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
                     <input type="checkbox" name="provider_request_include_reglamento" value="1" <?= !isset($pr['include_reglamento']) || !empty($pr['include_reglamento']) ? 'checked' : '' ?>>
-                    Reglamento firmado
+                    Incluir reglamento firmado
                 </label>
                 <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
                     <input type="checkbox" name="provider_request_require_reglamento" value="1" <?= !isset($pr['require_reglamento']) || !empty($pr['require_reglamento']) ? 'checked' : '' ?>>
@@ -602,7 +627,7 @@ $renderMailTemplateField = static function (
                 </label>
                 <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
                     <input type="checkbox" name="provider_request_include_proof" value="1" <?= !isset($pr['include_payment_proof']) || !empty($pr['include_payment_proof']) ? 'checked' : '' ?>>
-                    Comprobante de pago
+                    Incluir comprobante de pago al proveedor
                 </label>
             </div>
 
@@ -623,10 +648,24 @@ $renderMailTemplateField = static function (
                     Adjuntar plantilla Excel rellenada (p. ej. TOEFL)
                 </label>
                 <div id="provider-workbook-fields">
-                    <label class="muted" style="<?= e($labelStyle) ?>;margin-bottom:.65rem">
-                        Plantilla .xlsx
-                        <input type="file" name="provider_request_workbook" accept=".xlsx,.xls" style="<?= e($inputStyle) ?>">
-                    </label>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem;margin-bottom:.65rem">
+                        <label class="muted" style="<?= e($labelStyle) ?>">
+                            Plantilla .xlsx
+                            <input type="file" name="provider_request_workbook" accept=".xlsx,.xls" style="<?= e($inputStyle) ?>">
+                        </label>
+                        <label class="muted" style="<?= e($labelStyle) ?>">
+                            Hoja del archivo
+                            <input type="text" name="provider_request_workbook_sheet" value="<?= e($wbSheet) ?>"
+                                   placeholder="Nombre o número (1, 2…)" style="<?= e($inputStyle) ?>">
+                        </label>
+                        <label class="muted" style="<?= e($labelStyle) ?>">
+                            Transcripción de datos
+                            <select name="provider_request_workbook_normalize" style="<?= e($inputStyle) ?>">
+                                <option value="none" <?= $wbNormalize === 'none' ? 'selected' : '' ?>>Sin cambios</option>
+                                <option value="toefl" <?= $wbNormalize === 'toefl' ? 'selected' : '' ?>>TOEFL: MAYÚSCULAS, sin acentos ni Ñ</option>
+                            </select>
+                        </label>
+                    </div>
                     <?php if (!empty($pr['workbook_template_path'])): ?>
                         <p class="muted" style="font-size:.8rem;margin:.2rem 0 .65rem">
                             Actual: <code><?= e((string) $pr['workbook_template_path']) ?></code>
@@ -641,7 +680,7 @@ $renderMailTemplateField = static function (
                     <p style="margin:.35rem 0;font-weight:700;color:var(--doceo-blue)">Mapeo de celdas</p>
                     <p class="muted" style="font-size:.78rem;margin:0 0 .5rem">Indica en qué celda (ej. B2) se escribe cada dato.</p>
                     <div id="provider-cell-map">
-                        <?php foreach ($prCells as $i => $map): ?>
+                        <?php foreach ($prCells as $map): ?>
                             <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.4rem;align-items:center" class="provider-cell-row">
                                 <input type="text" name="provider_request_cells[]" value="<?= e((string) ($map['cell'] ?? '')) ?>"
                                        placeholder="B2" style="width:5rem;<?= e($inputStyle) ?>">
@@ -1077,12 +1116,14 @@ $renderMailTemplateField = static function (
       base.provider_request = {
         enabled: true,
         auto_send_on_payment: !!(document.querySelector('[name="provider_request_auto_send"]') || {}).checked,
+        require_admin_payment_proof: !!(document.querySelector('[name="provider_request_require_admin_proof"]') || {}).checked,
+        auto_send_on_admin_proof: !!(document.querySelector('[name="provider_request_auto_send_admin_proof"]') || {}).checked,
         step_code: val('provider_request_step_code', 'solicitud_proveedor'),
         to: val('provider_request_to', ''),
         cc: val('provider_request_cc', ''),
         mail_template_code: val('provider_request_mail_template', ''),
-        include_student_data: !!(document.querySelector('[name="provider_request_include_student"]') || {}).checked,
-        include_exam_schedule: !!(document.querySelector('[name="provider_request_include_exam"]') || {}).checked,
+        include_student_data: true,
+        include_exam_schedule: true,
         include_reglamento: !!(document.querySelector('[name="provider_request_include_reglamento"]') || {}).checked,
         include_payment_proof: !!(document.querySelector('[name="provider_request_include_proof"]') || {}).checked,
         require_reglamento: !!(document.querySelector('[name="provider_request_require_reglamento"]') || {}).checked,
@@ -1091,6 +1132,8 @@ $renderMailTemplateField = static function (
           enabled: !!(document.querySelector('[name="provider_request_workbook_enabled"]') || {}).checked,
           template_path: (base.provider_request && base.provider_request.workbook && base.provider_request.workbook.template_path) || '',
           attach: !!(document.querySelector('[name="provider_request_workbook_attach"]') || {}).checked,
+          sheet: val('provider_request_workbook_sheet', ''),
+          normalize: val('provider_request_workbook_normalize', 'none'),
           cell_map: cellMap
         }
       };
@@ -1456,6 +1499,49 @@ $renderMailTemplateField = static function (
   }
 
 })();
+
+
+  // ---- Paso de solicitud proveedor según plantilla de progreso ----
+  (function () {
+    var pipelineSelect = document.getElementById('pipeline-code-select');
+    var stepSelect = document.getElementById('provider-request-step-code');
+    var currentEl = document.getElementById('provider-request-step-current');
+    if (!stepSelect) return;
+    var stepsByCode = <?= json_encode($pipelineStepsByCode ?? [], JSON_UNESCAPED_UNICODE) ?> || {};
+    function fillSteps() {
+      var code = pipelineSelect ? String(pipelineSelect.value || '') : '';
+      var steps = stepsByCode[code] || [];
+      var current = currentEl ? String(currentEl.value || '') : '';
+      stepSelect.innerHTML = '';
+      var opt0 = document.createElement('option');
+      opt0.value = '';
+      opt0.textContent = steps.length ? '— Elige un paso —' : '— Elige primero una plantilla de progreso —';
+      stepSelect.appendChild(opt0);
+      var seen = false;
+      steps.forEach(function (s) {
+        var opt = document.createElement('option');
+        opt.value = s.code || '';
+        opt.textContent = (s.label || s.code || '') + (s.code ? ' (' + s.code + ')' : '');
+        if (opt.value && opt.value === current) {
+          opt.selected = true;
+          seen = true;
+        }
+        stepSelect.appendChild(opt);
+      });
+      if (current && !seen) {
+        var orphan = document.createElement('option');
+        orphan.value = current;
+        orphan.textContent = current + ' (no está en la plantilla actual)';
+        orphan.selected = true;
+        stepSelect.appendChild(orphan);
+      }
+    }
+    fillSteps();
+    if (pipelineSelect) pipelineSelect.addEventListener('change', fillSteps);
+    stepSelect.addEventListener('change', function () {
+      if (currentEl) currentEl.value = stepSelect.value || '';
+    });
+  })();
 
   // ---- Solicitud a proveedor ----
   (function () {

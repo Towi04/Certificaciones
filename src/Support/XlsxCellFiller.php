@@ -12,10 +12,15 @@ final class XlsxCellFiller
 {
     /**
      * @param array<string, string> $cellValues keyed by cell ref (e.g. B2 => "Juan Pérez")
+     * @param string|null $sheetSelector Nombre de hoja (p. ej. "Datos") o índice 1-based ("1", "2")
      * @return string absolute path to generated temp xlsx
      */
-    public function fill(string $templateAbsolutePath, array $cellValues, ?string $outputAbsolutePath = null): string
-    {
+    public function fill(
+        string $templateAbsolutePath,
+        array $cellValues,
+        ?string $outputAbsolutePath = null,
+        ?string $sheetSelector = null
+    ): string {
         if (!is_file($templateAbsolutePath)) {
             throw new \InvalidArgumentException('Plantilla Excel no encontrada.');
         }
@@ -37,46 +42,140 @@ final class XlsxCellFiller
             throw new \RuntimeException('No se pudo abrir la plantilla Excel.');
         }
 
-        $sheetPath = $this->resolveFirstWorksheetPath($zip);
-        $sheetXml = $zip->getFromName($sheetPath);
-        if ($sheetXml === false) {
+        try {
+            $sheetPath = $this->resolveWorksheetPath($zip, $sheetSelector);
+            $sheetXml = $zip->getFromName($sheetPath);
+            if ($sheetXml === false) {
+                throw new \RuntimeException('La plantilla Excel no tiene hoja de cálculo legible.');
+            }
+
+            $updated = $this->applyCellsToSheetXml($sheetXml, $cellValues);
+            $zip->addFromString($sheetPath, $updated);
+        } catch (\Throwable $e) {
             $zip->close();
             @unlink($out);
-            throw new \RuntimeException('La plantilla Excel no tiene hoja de cálculo legible.');
+            throw $e;
         }
 
-        $updated = $this->applyCellsToSheetXml($sheetXml, $cellValues);
-        $zip->addFromString($sheetPath, $updated);
         $zip->close();
 
         return $out;
     }
 
-    private function resolveFirstWorksheetPath(\ZipArchive $zip): string
+    /**
+     * @return list<array{name:string,path:string,index:int}>
+     */
+    public function listSheets(string $templateAbsolutePath): array
     {
-        $workbook = $zip->getFromName('xl/workbook.xml');
-        if ($workbook === false) {
+        if (!is_file($templateAbsolutePath) || !class_exists(\ZipArchive::class)) {
+            return [];
+        }
+        $zip = new \ZipArchive();
+        if ($zip->open($templateAbsolutePath) !== true) {
+            return [];
+        }
+        $sheets = $this->workbookSheets($zip);
+        $zip->close();
+
+        return $sheets;
+    }
+
+    private function resolveWorksheetPath(\ZipArchive $zip, ?string $sheetSelector): string
+    {
+        $sheets = $this->workbookSheets($zip);
+        if ($sheets === []) {
             return 'xl/worksheets/sheet1.xml';
         }
 
-        if (preg_match('/sheet[^>]*r:id="(rId\d+)"/i', $workbook, $m)) {
-            $rid = $m[1];
-            $rels = $zip->getFromName('xl/_rels/workbook.xml.rels');
-            if (is_string($rels) && preg_match(
-                '/Relationship[^>]*Id="' . preg_quote($rid, '/') . '"[^>]*Target="([^"]+)"/i',
-                $rels,
-                $tm
-            )) {
-                $target = ltrim(str_replace('\\', '/', $tm[1]), '/');
-                if (!str_starts_with($target, 'xl/')) {
-                    $target = 'xl/' . $target;
-                }
+        $selector = trim((string) $sheetSelector);
+        if ($selector === '') {
+            return $sheets[0]['path'];
+        }
 
-                return $target;
+        if (ctype_digit($selector)) {
+            $idx = (int) $selector;
+            foreach ($sheets as $sheet) {
+                if ((int) $sheet['index'] === $idx) {
+                    return $sheet['path'];
+                }
+            }
+            throw new \RuntimeException('No existe la hoja #' . $idx . ' en la plantilla Excel.');
+        }
+
+        foreach ($sheets as $sheet) {
+            if (strcasecmp($sheet['name'], $selector) === 0) {
+                return $sheet['path'];
             }
         }
 
-        return 'xl/worksheets/sheet1.xml';
+        throw new \RuntimeException(
+            'No se encontró la hoja "' . $selector . '" en la plantilla Excel. '
+            . 'Hojas disponibles: ' . implode(', ', array_column($sheets, 'name'))
+        );
+    }
+
+    /**
+     * @return list<array{name:string,path:string,index:int}>
+     */
+    private function workbookSheets(\ZipArchive $zip): array
+    {
+        $workbook = $zip->getFromName('xl/workbook.xml');
+        $rels = $zip->getFromName('xl/_rels/workbook.xml.rels');
+        if ($workbook === false) {
+            return [['name' => 'Sheet1', 'path' => 'xl/worksheets/sheet1.xml', 'index' => 1]];
+        }
+
+        $ridToTarget = [];
+        if (is_string($rels) && preg_match_all(
+            '/Relationship[^>]*Id="(rId\d+)"[^>]*Target="([^"]+)"/i',
+            $rels,
+            $rm,
+            PREG_SET_ORDER
+        )) {
+            foreach ($rm as $row) {
+                $target = ltrim(str_replace('\\', '/', $row[2]), '/');
+                if (!str_starts_with($target, 'xl/')) {
+                    $target = 'xl/' . $target;
+                }
+                $ridToTarget[$row[1]] = $target;
+            }
+        }
+
+        $sheets = [];
+        if (preg_match_all(
+            '/<sheet\b[^>]*>/i',
+            $workbook,
+            $sm,
+            PREG_SET_ORDER
+        )) {
+            $i = 0;
+            foreach ($sm as $tagMatch) {
+                $tag = $tagMatch[0];
+                $name = 'Hoja' . ($i + 1);
+                if (preg_match('/\bname="([^"]+)"/i', $tag, $nm)) {
+                    $name = html_entity_decode($nm[1], ENT_QUOTES | ENT_XML1, 'UTF-8');
+                }
+                $rid = '';
+                if (preg_match('/\br:id="(rId\d+)"/i', $tag, $rmatch)) {
+                    $rid = $rmatch[1];
+                }
+                $path = $rid !== '' && isset($ridToTarget[$rid])
+                    ? $ridToTarget[$rid]
+                    : ('xl/worksheets/sheet' . ($i + 1) . '.xml');
+                $sheets[] = [
+                    'name' => $name,
+                    'path' => $path,
+                    'index' => $i + 1,
+                ];
+                $i++;
+            }
+        }
+
+        if ($sheets === []) {
+            return [['name' => 'Sheet1', 'path' => 'xl/worksheets/sheet1.xml', 'index' => 1]];
+        }
+
+        return $sheets;
     }
 
     /**

@@ -907,6 +907,40 @@ final class AdminController
     }
 
 
+    
+    public function trackingUploadProviderProof(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        $svc = new TrackingService();
+        $tracking = $svc->find($trackingId);
+        if ($tracking === null) {
+            flash('error', 'Seguimiento no encontrado.');
+            redirect('/admin');
+        }
+        try {
+            $file = $_FILES['provider_payment_proof'] ?? null;
+            if (!is_array($file)) {
+                throw new \InvalidArgumentException('Selecciona el comprobante de pago.');
+            }
+            $result = (new ProviderRequestService())->uploadAdminPaymentProof(
+                $trackingId,
+                $file,
+                (int) Auth::id()
+            );
+            flash(
+                'success',
+                !empty($result['sent'])
+                    ? 'Comprobante guardado y solicitud enviada al proveedor.'
+                    : 'Comprobante guardado. Ya puedes enviar la solicitud al proveedor.'
+            );
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/seguimientos/' . $trackingId);
+    }
+
     public function trackingSendProviderRequest(string $id): void
     {
         Auth::requireRole(['admin']);
