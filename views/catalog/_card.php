@@ -4,7 +4,9 @@ $isPartner = !empty($partner) || (($user['role'] ?? '') === 'partner');
 $productUrl = $isPartner
     ? url('/adquirir/' . $p['slug'])
     : url('/producto/' . $p['slug']);
-$displayPrice = $isPartner && isset($p['partner_price'])
+// Preferir precio de nivel; si falta anotación, no mostrar lista como si fuera partner price.
+$hasPartnerPrice = $isPartner && array_key_exists('partner_price', $p) && $p['partner_price'] !== null && $p['partner_price'] !== '';
+$displayPrice = $hasPartnerPrice
     ? (float) $p['partner_price']
     : (float) ($p['catalog_price'] ?? $p['public_price'] ?? 0);
 ?>
@@ -25,7 +27,7 @@ $displayPrice = $isPartner && isset($p['partner_price'])
         <?php endif; ?>
         <div class="price">
             <?= money($displayPrice) ?>
-            <?php if ($isPartner && isset($p['partner_price'])): ?>
+            <?php if ($hasPartnerPrice): ?>
                 <span class="muted" style="font-size:.72rem;font-weight:600"> · tu nivel</span>
             <?php endif; ?>
         </div>
