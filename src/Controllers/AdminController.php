@@ -882,6 +882,9 @@ final class AdminController
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
+        if (!empty($_POST['return_ops'])) {
+            redirect('/admin' . $this->opsReturnQuery());
+        }
         redirect('/admin/seguimientos/' . $trackingId);
     }
 
@@ -2188,6 +2191,37 @@ public function promoCode(): void
                 }
                 $svc->saveRouting($effectiveCode, $toEmail, $ccEmail);
             }
+
+            // Excel opcional ligado a la plantilla
+            $wbPath = trim((string) ($_POST['workbook_template_path'] ?? ''));
+            if (!empty($_POST['workbook_clear'])) {
+                $wbPath = '';
+            }
+            if (isset($_FILES['workbook_file']) && is_array($_FILES['workbook_file'])
+                && (int) ($_FILES['workbook_file']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK
+            ) {
+                $docs = new \App\Services\DocumentService();
+                $stored = $docs->storeUploaded($_FILES['workbook_file'], 'mail_workbooks', '.xlsx');
+                $wbPath = $stored['path'];
+            }
+            $cells = $_POST['workbook_cells'] ?? [];
+            $fields = $_POST['workbook_fields'] ?? [];
+            $cellMap = [];
+            if (is_array($cells) && is_array($fields)) {
+                foreach ($cells as $i => $cell) {
+                    $cellMap[] = [
+                        'cell' => (string) $cell,
+                        'field' => (string) ($fields[$i] ?? ''),
+                    ];
+                }
+            }
+            MailTemplateService::saveWorkbookConfig($effectiveCode, [
+                'enabled' => !empty($_POST['workbook_enabled']) && $wbPath !== '',
+                'template_path' => $wbPath,
+                'sheet' => trim((string) ($_POST['workbook_sheet'] ?? '')),
+                'normalize' => (string) ($_POST['workbook_normalize'] ?? 'none'),
+                'cell_map' => $cellMap,
+            ]);
 
             $messages = ['Plantilla guardada.'];
 

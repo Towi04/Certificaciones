@@ -41,10 +41,14 @@ final class StudentController
         ];
         $checklist = $svc->registrationChecklist((int) $tracking['id'], $product);
         $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
+        $steps = $pipelineId > 0 ? $svc->steps($pipelineId) : [];
+        $cfg = \App\Services\CheckoutRequirements::config($tracking);
+        $defs = \App\Services\GroupStepConfig::defsFromConfig($cfg);
+        $steps = \App\Services\GroupStepConfig::visibleToStudent($steps, $defs);
         view('student/case', [
             'title' => 'Caso ' . $tracking['matricula'],
             'tracking' => $tracking,
-            'steps' => $pipelineId > 0 ? $svc->steps($pipelineId) : [],
+            'steps' => $steps,
             'documents' => $svc->documentsForTracking((int) $tracking['id']),
             'registrationDocs' => $checklist,
             'logs' => $svc->logs((int) $tracking['id']),

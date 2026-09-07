@@ -23,7 +23,7 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
 </p>
 
 <div class="panel" style="margin-top:1rem;max-width:720px">
-    <form method="post" action="<?= e($formAction) ?>" id="mail-template-form">
+    <form method="post" action="<?= e($formAction) ?>" id="mail-template-form" enctype="multipart/form-data">
         <?= csrf_field() ?>
 
         <?php if ($isNew): ?>
@@ -150,6 +150,72 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
                 </p>
             <?php endif; ?>
         </div>
+
+        <?php if (!$isNew): ?>
+        <?php
+            $wb = \App\Services\MailTemplateService::workbookConfig((string) $template['code']);
+            $wbCells = $wb['cell_map'] !== [] ? $wb['cell_map'] : [['cell' => '', 'field' => '']];
+            $fieldOptions = \App\Services\ProviderRequestService::FIELD_OPTIONS;
+        ?>
+        <div style="margin:1.25rem 0;padding:1rem;background:#f8fafc;border:1px solid #e6ebf2;border-radius:12px">
+            <h2 style="margin:0 0 .35rem;font-size:1rem;color:var(--doceo-blue)">Plantilla Excel (opcional)</h2>
+            <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
+                Si marcas esta opción, al enviar el correo se genera un Excel rellenado y se incluye
+                como enlace <code>{{workbook_url}}</code> (sin adjuntos SMTP).
+            </p>
+            <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem;margin-bottom:.75rem">
+                <input type="checkbox" name="workbook_enabled" value="1" id="workbook-enabled" <?= !empty($wb['enabled']) ? 'checked' : '' ?>>
+                Este correo incluye plantilla Excel
+            </label>
+            <div id="workbook-fields" style="<?= !empty($wb['enabled']) ? '' : 'opacity:.55' ?>">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.65rem;margin-bottom:.65rem">
+                    <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.85rem;font-weight:600">
+                        Archivo actual
+                        <input type="text" name="workbook_template_path" value="<?= e($wb['template_path']) ?>"
+                               readonly style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px;background:#fff">
+                    </label>
+                    <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.85rem;font-weight:600">
+                        Subir / reemplazar .xlsx
+                        <input type="file" name="workbook_file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+                    </label>
+                    <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.85rem;font-weight:600">
+                        Hoja (opcional)
+                        <input type="text" name="workbook_sheet" value="<?= e($wb['sheet']) ?>" placeholder="Sheet1"
+                               style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                    </label>
+                    <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.85rem;font-weight:600">
+                        Normalización
+                        <select name="workbook_normalize" style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                            <option value="none" <?= $wb['normalize'] === 'none' ? 'selected' : '' ?>>Ninguna</option>
+                            <option value="toefl" <?= $wb['normalize'] === 'toefl' ? 'selected' : '' ?>>TOEFL</option>
+                        </select>
+                    </label>
+                </div>
+                <p style="margin:0 0 .35rem;font-weight:700;font-size:.85rem;color:var(--doceo-blue)">Celdas → campos</p>
+                <div id="workbook-cells">
+                    <?php foreach ($wbCells as $i => $cell): ?>
+                        <div style="display:grid;grid-template-columns:7rem 1fr auto;gap:.4rem;margin-bottom:.35rem" class="workbook-cell-row">
+                            <input type="text" name="workbook_cells[]" value="<?= e((string) ($cell['cell'] ?? '')) ?>" placeholder="B2"
+                                   style="padding:.4rem .5rem;border:1px solid #cfd8e6;border-radius:8px">
+                            <select name="workbook_fields[]" style="padding:.4rem .5rem;border:1px solid #cfd8e6;border-radius:8px">
+                                <option value="">— Campo —</option>
+                                <?php foreach ($fieldOptions as $opt): ?>
+                                    <option value="<?= e($opt['value']) ?>" <?= ($cell['field'] ?? '') === $opt['value'] ? 'selected' : '' ?>>
+                                        <?= e($opt['label']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="button" class="btn btn-ghost btn-sm workbook-cell-remove">✕</button>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" id="workbook-cell-add">+ Celda</button>
+                <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.82rem;margin-top:.65rem">
+                    <input type="checkbox" name="workbook_clear" value="1"> Quitar archivo Excel
+                </label>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <?php if (!$isNew): ?>
         <div style="margin:1.25rem 0;padding:1rem;border-top:1px solid #e6ebf2;border-bottom:1px solid #e6ebf2">
