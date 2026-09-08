@@ -82,6 +82,76 @@ final class SupplierAdminService
         $this->suppliers->update($id, $data);
     }
 
+    /**
+     * Guarda datos + logos (+ contacto/acceso nuevos opcionales) en una sola acción.
+     *
+     * @param array<string, mixed> $input
+     * @param array<string, mixed> $files
+     * @return list<string> mensajes de lo aplicado
+     */
+    public function saveAll(int $id, array $input, array $files = []): array
+    {
+        $this->update($id, $input);
+        $applied = ['Datos del proveedor'];
+
+        $logoJobs = [
+            self::LOGO_MARK => [
+                'file' => 'logo_mark',
+                'remove' => 'remove_logo_mark',
+                'label' => 'Logo sin denominación',
+            ],
+            self::LOGO_WORDMARK => [
+                'file' => 'logo_wordmark',
+                'remove' => 'remove_logo_wordmark',
+                'label' => 'Logo con denominación',
+            ],
+        ];
+        foreach ($logoJobs as $variant => $job) {
+            if (!empty($input[$job['remove']])) {
+                $this->clearLogo($id, $variant);
+                $applied[] = $job['label'] . ' eliminado';
+                continue;
+            }
+            $file = $files[$job['file']] ?? null;
+            if (is_array($file) && (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+                $this->uploadLogo($id, $file, $variant);
+                $applied[] = $job['label'] . ' actualizado';
+            }
+        }
+
+        $contactRole = trim((string) ($input['contact_role_label'] ?? ''));
+        if ($contactRole !== '') {
+            $this->addContact($id, [
+                'role_label' => $contactRole,
+                'name' => (string) ($input['contact_name'] ?? ''),
+                'phone' => (string) ($input['contact_phone'] ?? ''),
+                'email' => (string) ($input['contact_email'] ?? ''),
+                'notes' => (string) ($input['contact_notes'] ?? ''),
+            ]);
+            $applied[] = 'Contacto agregado';
+        }
+
+        $accountLabel = trim((string) ($input['account_label'] ?? ''));
+        $accountPassword = (string) ($input['account_password'] ?? '');
+        if ($accountLabel !== '') {
+            if ($accountPassword === '') {
+                throw new \InvalidArgumentException(
+                    'Para agregar un acceso indica también la contraseña (o deja vacío el nombre del acceso).'
+                );
+            }
+            $this->addAccount($id, [
+                'label' => $accountLabel,
+                'login_url' => (string) ($input['account_login_url'] ?? ''),
+                'username' => (string) ($input['account_username'] ?? ''),
+                'password' => $accountPassword,
+                'notes' => (string) ($input['account_notes'] ?? ''),
+            ]);
+            $applied[] = 'Acceso agregado';
+        }
+
+        return $applied;
+    }
+
     public function delete(int $id): void
     {
         $supplier = $this->suppliers->find($id);
