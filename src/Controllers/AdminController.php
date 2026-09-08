@@ -925,14 +925,21 @@ final class AdminController
         csrf_verify();
         $trackingId = (int) $id;
         try {
-            (new TrackingService())->saveExamSchedule($trackingId, [
+            $examData = [
                 'exam_date' => $_POST['exam_date'] ?? null,
                 'exam_time' => $_POST['exam_time'] ?? null,
-                'exam_date_2' => $_POST['exam_date_2'] ?? null,
-                'exam_time_2' => $_POST['exam_time_2'] ?? null,
-                'zoom_url' => $_POST['zoom_url'] ?? null,
                 'notify' => !empty($_POST['notify']),
-            ], (int) Auth::id());
+            ];
+            if (array_key_exists('exam_date_2', $_POST)) {
+                $examData['exam_date_2'] = $_POST['exam_date_2'];
+            }
+            if (array_key_exists('exam_time_2', $_POST)) {
+                $examData['exam_time_2'] = $_POST['exam_time_2'];
+            }
+            if (array_key_exists('zoom_url', $_POST)) {
+                $examData['zoom_url'] = $_POST['zoom_url'];
+            }
+            (new TrackingService())->saveExamSchedule($trackingId, $examData, (int) Auth::id());
             $stepCode = trim((string) ($_POST['step_code'] ?? ''));
             if ($stepCode !== '') {
                 (new TrackingService())->markStepDone(
