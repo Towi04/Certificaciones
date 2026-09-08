@@ -322,16 +322,12 @@ final class MailTemplateService
 
     /**
      * audience: preferencia guardada en settings; si no hay, heurística por código.
-     * Plantillas de reagendar/reagenda siempre van al alumno (nunca solicitud a proveedor).
+     * Respeta Proveedor/Alumno/Partner guardados (p. ej. reagendar_uks → proveedor).
      */
     public static function audienceForTemplate(string $code): string
     {
         $code = trim($code);
         if ($code === '') {
-            return 'student';
-        }
-        // Reagendar → alumno, aunque en settings se haya marcado Proveedor por error.
-        if (self::rescheduleTemplateHeuristic($code)) {
             return 'student';
         }
         $saved = strtolower(trim(Settings::get('mail_tpl_' . $code . '_audience', '') ?? ''));
@@ -345,7 +341,13 @@ final class MailTemplateService
         return self::providerTemplateHeuristic($code) ? 'provider' : 'student';
     }
 
-    /** Códigos de plantilla de reagendar / reprogramar examen (alumno). */
+    /** ¿Plantilla de solicitud inicial UKS (reglamento / pago / workbook)? */
+    public static function isUksSolicitudCode(string $code): bool
+    {
+        return in_array(trim($code), [self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY], true);
+    }
+
+    /** Códigos que sugieren reagendar / reprogramar examen (por nombre). */
     public static function rescheduleTemplateHeuristic(string $code): bool
     {
         $code = mb_strtolower(trim($code));
@@ -359,7 +361,11 @@ final class MailTemplateService
             || str_contains($code, 're-agend');
     }
 
-    /** Heurística legacy por código (uks_*, *_provider*, *proveedor*). */
+    /**
+     * Heurística legacy por código (uks_*, *_provider*, *proveedor*).
+     * No aplica a reagendar_*: sin audiencia guardada default = alumno;
+     * si el admin elige Proveedor, audienceForTemplate respeta el setting.
+     */
     public static function providerTemplateHeuristic(string $code): bool
     {
         $code = trim($code);
@@ -367,7 +373,7 @@ final class MailTemplateService
             return false;
         }
 
-        return in_array($code, [self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY], true)
+        return self::isUksSolicitudCode($code)
             || str_starts_with($code, 'uks_')
             || str_contains($code, '_provider')
             || str_contains($code, 'proveedor');
@@ -401,6 +407,13 @@ final class MailTemplateService
             'exam_date', 'exam_time', 'reglamento_url', 'pago_proveedor', 'comprobante_url',
             'workbook_url', 'documentos_html', 'attachment_note', 'workbook_note',
         ];
+
+        if (self::rescheduleTemplateHeuristic($code)) {
+            return [
+                'full_name', 'matricula', 'student_email', 'product_name', 'certificacion',
+                'exam_date', 'exam_time', 'folio',
+            ];
+        }
 
         return match ($code) {
             self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY => $uks,

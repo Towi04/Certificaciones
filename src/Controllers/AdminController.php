@@ -2154,7 +2154,7 @@ public function promoCode(): void
 
     private function isUksSolicitudTemplate(string $code): bool
     {
-        return in_array($code, [MailTemplateService::UKS_SOLICITUD, MailTemplateService::UKS_SOLICITUD_LEGACY], true);
+        return MailTemplateService::isUksSolicitudCode($code);
     }
 
     public function mailTemplates(): void
