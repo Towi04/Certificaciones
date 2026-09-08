@@ -2164,12 +2164,43 @@ public function promoCode(): void
         $svc->ensureDefaults();
         $repo = new \App\Repositories\MailTemplateRepository();
         $pagination = Pagination::fromRequest($repo->countAll());
+        $branding = \App\Mail\MailBranding::config();
         view('admin/mail_templates', [
             'title' => 'Plantillas de correo',
             'templates' => $repo->all($pagination['limit'], $pagination['offset']),
             'pagination' => $pagination,
+            'branding' => $branding,
+            'brandingPreviewHtml' => \App\Mail\MailBranding::wrap(
+                '<p style="margin:0 0 8px"><strong>Vista previa</strong></p>'
+                . '<p style="margin:0">El contenido de cada plantilla aparece aquí, entre el encabezado y el pie globales.</p>'
+            ),
             'layout' => 'admin',
         ]);
+    }
+
+    public function mailBrandingUpdate(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $action = trim((string) ($_POST['action'] ?? 'save'));
+        try {
+            if ($action === 'reset') {
+                \App\Mail\MailBranding::reset();
+                flash('success', 'Encabezado y pie restablecidos a los valores por defecto.');
+                redirect('/admin/correos#mail-branding');
+            }
+
+            $input = $_POST;
+            $file = $_FILES['logo_file'] ?? null;
+            if (is_array($file) && (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+                $input['logo_url'] = \App\Mail\MailBranding::storeLogoUpload($file);
+            }
+            \App\Mail\MailBranding::save($input);
+            flash('success', 'Marca de correo actualizada. Se aplica a todos los correos con envoltura DOCEO.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/correos#mail-branding');
     }
 
     public function catalogFilters(): void

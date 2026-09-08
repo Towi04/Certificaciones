@@ -145,6 +145,7 @@ $router->post('/admin/vacaciones', fn () => $admin->vacationsSave());
 $router->get('/admin/promo', fn () => $admin->promoCode());
 $router->post('/admin/promo', fn () => $admin->promoCodeUpdate());
 $router->get('/admin/correos', fn () => $admin->mailTemplates());
+$router->post('/admin/correos/marca', fn () => $admin->mailBrandingUpdate());
 $router->get('/admin/correos/nueva', fn () => $admin->mailTemplateCreate());
 $router->post('/admin/correos/nueva', fn () => $admin->mailTemplateStore());
 $router->post('/admin/correos/{code}/eliminar', fn (string $code) => $admin->mailTemplateDelete($code));
