@@ -1170,7 +1170,8 @@ final class ProductAdminService
         if ($newLabel !== '') {
             $newType = (string) ($input['new_checkout_field_type'] ?? 'text');
             $newRequired = !empty($input['new_checkout_field_required']);
-            $created = CheckoutRequirements::addCustomField($newLabel, $newType, $newRequired);
+            $newOptions = $input['new_checkout_field_options'] ?? null;
+            $created = CheckoutRequirements::addCustomField($newLabel, $newType, $newRequired, null, $newOptions);
             $fieldsRaw = $input['checkout_fields'] ?? [];
             if (!is_array($fieldsRaw)) {
                 $fieldsRaw = [];

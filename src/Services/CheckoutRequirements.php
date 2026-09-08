@@ -62,9 +62,16 @@ final class CheckoutRequirements
     public const CUSTOM_FIELDS_SETTING = 'checkout_custom_fields';
 
     /** @var list<string> */
-    public const CUSTOM_FIELD_TYPES = ['text', 'email', 'tel', 'date', 'number'];
+    public const CUSTOM_FIELD_TYPES = ['text', 'email', 'tel', 'date', 'number', 'select'];
 
-    /** @var array<string, array{label:string,required:bool,type:string,custom?:bool}>|null */
+    /** Opciones por defecto del campo built-in «sex». */
+    public const SEX_OPTIONS = [
+        ['value' => 'F', 'label' => 'Femenino'],
+        ['value' => 'M', 'label' => 'Masculino'],
+        ['value' => 'X', 'label' => 'Otro / X'],
+    ];
+
+    /** @var array<string, array{label:string,required:bool,type:string,custom?:bool,options?:list<array{value:string,label:string}>}>|null */
     private static ?array $metaCache = null;
 
     /**
@@ -81,17 +88,24 @@ final class CheckoutRequirements
         $meta = [];
         foreach (self::FIELD_META as $code => $row) {
             $meta[$code] = $row + ['custom' => false];
+            if ($code === 'sex' && empty($meta[$code]['options'])) {
+                $meta[$code]['options'] = self::SEX_OPTIONS;
+            }
         }
         foreach (self::customFieldDefinitions() as $code => $def) {
             if (isset($meta[$code])) {
                 continue;
             }
-            $meta[$code] = [
+            $entry = [
                 'label' => (string) $def['label'],
                 'required' => (bool) ($def['required'] ?? false),
                 'type' => (string) ($def['type'] ?? 'text'),
                 'custom' => true,
             ];
+            if (($entry['type'] ?? '') === 'select') {
+                $entry['options'] = self::normalizeSelectOptions($def['options'] ?? []);
+            }
+            $meta[$code] = $entry;
         }
         self::$metaCache = $meta;
 
@@ -109,7 +123,7 @@ final class CheckoutRequirements
     }
 
     /**
-     * @return array<string, array{label:string,required:bool,type:string}>
+     * @return array<string, array{label:string,required:bool,type:string,options?:list<array{value:string,label:string}>}>
      */
     public static function customFieldDefinitions(): array
     {
@@ -136,18 +150,85 @@ final class CheckoutRequirements
             if (!in_array($type, self::CUSTOM_FIELD_TYPES, true)) {
                 $type = 'text';
             }
-            $out[$code] = [
+            $entry = [
                 'label' => $label,
                 'required' => (bool) ($row['required'] ?? false),
                 'type' => $type,
             ];
+            if ($type === 'select') {
+                $entry['options'] = self::normalizeSelectOptions($row['options'] ?? []);
+            }
+            $out[$code] = $entry;
         }
 
         return $out;
     }
 
     /**
-     * @param array<string, array{label:string,required:bool,type:string}> $defs
+     * Normaliza opciones de un campo select (lista de value/label).
+     *
+     * @param mixed $raw
+     * @return list<array{value:string,label:string}>
+     */
+    public static function normalizeSelectOptions(mixed $raw): array
+    {
+        if (is_string($raw)) {
+            $lines = preg_split('/\r\n|\r|\n/', $raw) ?: [];
+            $raw = [];
+            foreach ($lines as $line) {
+                $line = trim((string) $line);
+                if ($line === '') {
+                    continue;
+                }
+                $raw[] = $line;
+            }
+        }
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $out = [];
+        $seen = [];
+        foreach ($raw as $item) {
+            if (is_string($item) || is_numeric($item)) {
+                $label = trim((string) $item);
+                if ($label === '') {
+                    continue;
+                }
+                $value = self::normalizeFieldCode($label);
+                if ($value === '') {
+                    $value = 'opcion_' . (count($out) + 1);
+                }
+            } elseif (is_array($item)) {
+                $label = trim((string) ($item['label'] ?? $item['text'] ?? $item['name'] ?? ''));
+                $value = trim((string) ($item['value'] ?? $item['code'] ?? ''));
+                if ($label === '' && $value === '') {
+                    continue;
+                }
+                if ($label === '') {
+                    $label = $value;
+                }
+                if ($value === '') {
+                    $value = self::normalizeFieldCode($label);
+                }
+                if ($value === '') {
+                    $value = 'opcion_' . (count($out) + 1);
+                }
+            } else {
+                continue;
+            }
+            if (isset($seen[$value])) {
+                continue;
+            }
+            $seen[$value] = true;
+            $out[] = ['value' => $value, 'label' => $label];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, array{label:string,required:bool,type:string,options?:list<array{value:string,label:string}>}> $defs
      */
     public static function saveCustomFieldDefinitions(array $defs): void
     {
@@ -168,11 +249,19 @@ final class CheckoutRequirements
             if (!in_array($type, self::CUSTOM_FIELD_TYPES, true)) {
                 $type = 'text';
             }
-            $clean[$code] = [
+            $entry = [
                 'label' => $label,
                 'required' => (bool) ($row['required'] ?? false),
                 'type' => $type,
             ];
+            if ($type === 'select') {
+                $options = self::normalizeSelectOptions($row['options'] ?? []);
+                if ($options === []) {
+                    continue;
+                }
+                $entry['options'] = $options;
+            }
+            $clean[$code] = $entry;
         }
         Settings::set(
             self::CUSTOM_FIELDS_SETTING,
@@ -182,16 +271,32 @@ final class CheckoutRequirements
     }
 
     /**
-     * @return array{code:string,label:string,required:bool,type:string,custom:bool}
+     * @param list<array{value:string,label:string}>|string|null $options
+     * @return array{code:string,label:string,required:bool,type:string,custom:bool,options?:list<array{value:string,label:string}>}
      */
-    public static function addCustomField(string $label, string $type = 'text', bool $required = false, ?string $codeHint = null): array
-    {
+    public static function addCustomField(
+        string $label,
+        string $type = 'text',
+        bool $required = false,
+        ?string $codeHint = null,
+        mixed $options = null
+    ): array {
         $label = trim($label);
         if ($label === '') {
             throw new \InvalidArgumentException('Indica el nombre del campo.');
         }
         if (!in_array($type, self::CUSTOM_FIELD_TYPES, true)) {
             throw new \InvalidArgumentException('Tipo de campo no válido.');
+        }
+
+        $normalizedOptions = [];
+        if ($type === 'select') {
+            $normalizedOptions = self::normalizeSelectOptions($options);
+            if ($normalizedOptions === []) {
+                throw new \InvalidArgumentException(
+                    'Para un campo de opción múltiple indica al menos una opción (una por línea).'
+                );
+            }
         }
 
         $base = $codeHint !== null && trim($codeHint) !== ''
@@ -220,15 +325,23 @@ final class CheckoutRequirements
             'required' => $required,
             'type' => $type,
         ];
+        if ($type === 'select') {
+            $defs[$code]['options'] = $normalizedOptions;
+        }
         self::saveCustomFieldDefinitions($defs);
 
-        return [
+        $out = [
             'code' => $code,
             'label' => $label,
             'required' => $required,
             'type' => $type,
             'custom' => true,
         ];
+        if ($type === 'select') {
+            $out['options'] = $normalizedOptions;
+        }
+
+        return $out;
     }
 
     public static function removeCustomField(string $code): void
@@ -248,10 +361,16 @@ final class CheckoutRequirements
     /**
      * Actualiza un campo personalizado del catálogo global.
      *
-     * @return array{code:string,label:string,required:bool,type:string,custom:bool}
+     * @param list<array{value:string,label:string}>|string|null $options
+     * @return array{code:string,label:string,required:bool,type:string,custom:bool,options?:list<array{value:string,label:string}>}
      */
-    public static function updateCustomField(string $code, string $label, string $type = 'text', bool $required = false): array
-    {
+    public static function updateCustomField(
+        string $code,
+        string $label,
+        string $type = 'text',
+        bool $required = false,
+        mixed $options = null
+    ): array {
         $code = self::normalizeFieldCode($code);
         if ($code === '' || isset(self::FIELD_META[$code])) {
             throw new \InvalidArgumentException('Solo se pueden editar campos personalizados.');
@@ -267,20 +386,63 @@ final class CheckoutRequirements
         if (!in_array($type, self::CUSTOM_FIELD_TYPES, true)) {
             throw new \InvalidArgumentException('Tipo de campo no válido.');
         }
+
+        $normalizedOptions = [];
+        if ($type === 'select') {
+            $normalizedOptions = self::normalizeSelectOptions(
+                $options !== null ? $options : ($defs[$code]['options'] ?? [])
+            );
+            if ($normalizedOptions === []) {
+                throw new \InvalidArgumentException(
+                    'Para un campo de opción múltiple indica al menos una opción (una por línea).'
+                );
+            }
+        }
+
         $defs[$code] = [
             'label' => $label,
             'required' => $required,
             'type' => $type,
         ];
+        if ($type === 'select') {
+            $defs[$code]['options'] = $normalizedOptions;
+        }
         self::saveCustomFieldDefinitions($defs);
 
-        return [
+        $out = [
             'code' => $code,
             'label' => $label,
             'required' => $required,
             'type' => $type,
             'custom' => true,
         ];
+        if ($type === 'select') {
+            $out['options'] = $normalizedOptions;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Valores permitidos para un campo select (vacío si no es select).
+     *
+     * @param array{type?:string,options?:list<array{value:string,label:string}>,code?:string} $field
+     * @return list<string>
+     */
+    public static function allowedSelectValues(array $field): array
+    {
+        if (($field['type'] ?? '') !== 'select') {
+            return [];
+        }
+        $options = self::normalizeSelectOptions($field['options'] ?? []);
+        if ($options === [] && ($field['code'] ?? '') === 'sex') {
+            $options = self::SEX_OPTIONS;
+        }
+
+        return array_values(array_map(
+            static fn (array $opt): string => (string) $opt['value'],
+            $options
+        ));
     }
 
     public static function normalizeFieldCode(string $raw): string
@@ -402,13 +564,21 @@ final class CheckoutRequirements
                 : (array_key_exists($code, $requiredOverrides)
                     ? $requiredOverrides[$code]
                     : (bool) $meta['required']);
-            $out[] = [
+            $row = [
                 'code' => $code,
                 'label' => $meta['label'],
                 'required' => $required,
                 'type' => $meta['type'],
                 'custom' => !empty($meta['custom']),
             ];
+            if (($meta['type'] ?? '') === 'select') {
+                $opts = self::normalizeSelectOptions($meta['options'] ?? []);
+                if ($opts === [] && $code === 'sex') {
+                    $opts = self::SEX_OPTIONS;
+                }
+                $row['options'] = $opts;
+            }
+            $out[] = $row;
         }
 
         return $out;

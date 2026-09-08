@@ -138,6 +138,22 @@ final class CheckoutController
                     throw new \InvalidArgumentException('Completa el campo: ' . $field['label']);
                 }
             }
+            foreach (CheckoutRequirements::fieldsForProduct($product) as $field) {
+                if (($field['type'] ?? '') !== 'select') {
+                    continue;
+                }
+                $code = (string) ($field['code'] ?? '');
+                $value = (string) ($buyer[$code] ?? '');
+                if ($value === '') {
+                    continue;
+                }
+                $allowed = CheckoutRequirements::allowedSelectValues($field);
+                if ($allowed !== [] && !in_array($value, $allowed, true)) {
+                    throw new \InvalidArgumentException(
+                        'Elige una opción válida para: ' . $field['label']
+                    );
+                }
+            }
 
             $result = (new CheckoutService())->complete(
                 (int) $product['id'],
