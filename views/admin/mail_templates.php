@@ -1,5 +1,11 @@
 <?php
 /** @var list<array<string,mixed>> $templates */
+/** @var array<string,string> $branding */
+/** @var string $brandingPreviewHtml */
+$branding = is_array($branding ?? null) ? $branding : \App\Mail\MailBranding::config();
+$brandingPreviewHtml = (string) ($brandingPreviewHtml ?? \App\Mail\MailBranding::wrap(
+    '<p style="margin:0">Así se verá el cuerpo de tus plantillas entre el encabezado y el pie.</p>'
+));
 ?>
 <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
     <h1 style="margin:0;color:var(--doceo-blue)">Plantillas de correo</h1>
@@ -8,6 +14,103 @@
 <p class="muted">
     Edita asunto, contenido y destinatarios en cada plantilla. Variables con doble llave, por ejemplo <code>{{matricula}}</code> o <code>{{certificacion}}</code>.
 </p>
+
+<div class="panel" style="margin-top:1rem" id="mail-branding">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Encabezado y pie (todos los correos)</h2>
+    <p class="muted" style="font-size:.85rem;margin:0 0 1rem">
+        Esta marca se aplica a <strong>todas</strong> las plantillas que usan la envoltura DOCEO
+        (no a HTML completo pegado desde Outlook). Ideal para cambiar el logo en festividades
+        o agregar redes sociales en el pie.
+    </p>
+
+    <form method="post" action="<?= e(url('/admin/correos/marca')) ?>" enctype="multipart/form-data">
+        <?= csrf_field() ?>
+        <div style="display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:1.25rem;align-items:start">
+            <div style="display:grid;gap:.85rem">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem">
+                    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                        Nombre en correos
+                        <input type="text" name="app_name" value="<?= e((string) ($branding['app_name'] ?? '')) ?>"
+                               placeholder="Instituto DOCEO"
+                               style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                    </label>
+                    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                        Color encabezado
+                        <input type="color" name="header_bg" value="<?= e((string) ($branding['header_bg'] ?? '#C4C4C4')) ?>"
+                               style="height:42px;padding:.25rem;border:1px solid #cfd8e6;border-radius:10px;background:#fff">
+                    </label>
+                    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                        Color pie
+                        <input type="color" name="footer_bg" value="<?= e((string) ($branding['footer_bg'] ?? '#315285')) ?>"
+                               style="height:42px;padding:.25rem;border:1px solid #cfd8e6;border-radius:10px;background:#fff">
+                    </label>
+                    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                        Color texto del pie
+                        <input type="color" name="footer_text_color" value="<?= e((string) ($branding['footer_text_color'] ?? '#ffffff')) ?>"
+                               style="height:42px;padding:.25rem;border:1px solid #cfd8e6;border-radius:10px;background:#fff">
+                    </label>
+                </div>
+
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    Logo (URL)
+                    <input type="text" name="logo_url" value="<?= e((string) ($branding['logo_url'] ?? '')) ?>"
+                           placeholder="/uploads/mail/branding/logo.png o https://…"
+                           style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                    <span style="font-weight:500;font-size:.75rem">
+                        Vacío = logo por defecto. Actual:
+                        <a href="<?= e(\App\Mail\MailBranding::logoUrl()) ?>" target="_blank" rel="noopener">ver</a>
+                    </span>
+                </label>
+
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    Subir logo (PNG/JPG/WEBP)
+                    <input type="file" name="logo_file" accept=".png,.jpg,.jpeg,.webp,.gif,image/*"
+                           style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;background:#fff">
+                    <?php if (trim((string) ($branding['logo_url'] ?? '')) !== ''): ?>
+                        <label style="display:flex;align-items:center;gap:.4rem;font-weight:500;font-size:.78rem;margin-top:.2rem">
+                            <input type="checkbox" name="clear_logo" value="1"> Quitar logo personalizado
+                        </label>
+                    <?php endif; ?>
+                </label>
+
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    HTML del encabezado (opcional)
+                    <textarea name="header_html" rows="4"
+                              placeholder="Vacío = se muestra el logo. Puedes poner imagen + lema, banner de temporada, etc."
+                              style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;font-family:ui-monospace,monospace;font-size:.82rem;resize:vertical"><?= e((string) ($branding['header_html'] ?? '')) ?></textarea>
+                </label>
+
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    HTML del pie
+                    <textarea name="footer_html" rows="5"
+                              placeholder="Ejemplo: Instituto DOCEO · <a href=&quot;https://instagram.com/…&quot; style=&quot;color:#fff&quot;>Instagram</a>"
+                              style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;font-family:ui-monospace,monospace;font-size:.82rem;resize:vertical"><?= e((string) ($branding['footer_html'] ?? '')) ?></textarea>
+                    <span style="font-weight:500;font-size:.75rem">
+                        Vacío = «<?= e(\App\Mail\MailBranding::appName()) ?> · 🐝». Puedes agregar enlaces a redes, sitio web, aviso legal, etc.
+                    </span>
+                </label>
+
+                <div style="display:flex;flex-wrap:wrap;gap:.55rem;align-items:center">
+                    <button class="btn btn-accent" type="submit" name="action" value="save">Guardar marca</button>
+                    <button class="btn btn-ghost" type="submit" name="action" value="reset"
+                            onclick="return confirm('¿Restablecer encabezado y pie a los valores por defecto?');">
+                        Restablecer defaults
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <div class="muted" style="font-size:.82rem;font-weight:600;margin-bottom:.45rem">Vista previa</div>
+                <div style="border:1px solid #dbe3ef;border-radius:12px;overflow:hidden;background:#eef2f7;padding:.65rem">
+                    <iframe title="Vista previa de marca de correo"
+                            sandbox=""
+                            srcdoc="<?= e($brandingPreviewHtml) ?>"
+                            style="width:100%;min-height:320px;border:0;background:#fff;border-radius:8px"></iframe>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
 
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Plantillas</h2>

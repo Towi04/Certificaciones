@@ -17,7 +17,9 @@ $selectedPlaceholders = $selectedPlaceholders ?? $placeholders;
 $availablePlaceholders = $availablePlaceholders ?? [];
 $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $template['code']);
 ?>
-<p class="meta"><a href="<?= e(url('/admin/correos')) ?>">← Plantillas de correo</a></p>
+<p class="meta"><a href="<?= e(url('/admin/correos')) ?>">← Plantillas de correo</a>
+    · <a href="<?= e(url('/admin/correos#mail-branding')) ?>">Encabezado y pie globales</a>
+</p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)"><?= $isNew ? 'Nueva plantilla de correo' : e($template['name']) ?></h1>
 <p class="muted">Código: <code><?= e($template['code'] ?: 'por definir') ?></code>
     <?php if (!(int) ($template['is_active'] ?? 0)): ?>
