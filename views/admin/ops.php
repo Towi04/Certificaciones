@@ -167,7 +167,46 @@ $q = (string) ($filters['q'] ?? '');
                                 $btnClass = $done ? 'btn btn-ops-done btn-sm' : 'btn btn-accent btn-sm';
                                 $statusIcon = $done ? icon('check') : icon('clock');
                                 ?>
-                                <?php if ($action === \App\Services\GroupStepConfig::ACTION_CONFIRM_PAYMENT): ?>
+                                <?php
+                                $collectExam = !empty($btn['collect_exam'])
+                                    || $action === \App\Services\GroupStepConfig::ACTION_EDIT_EXAM;
+                                $audience = (string) ($btn['audience'] ?? ($btn['email']['audience'] ?? 'student'));
+                                $examMailOn = !empty($btn['email']['enabled'])
+                                    && trim((string) ($btn['email']['template_code'] ?? '')) !== '';
+                                ?>
+                                <?php if (
+                                    $collectExam
+                                    && $audience !== 'provider'
+                                    && in_array($action, [
+                                        \App\Services\GroupStepConfig::ACTION_EDIT_EXAM,
+                                        \App\Services\GroupStepConfig::ACTION_ADVANCE,
+                                        \App\Services\GroupStepConfig::ACTION_SEND_MAIL,
+                                    ], true)
+                                ): ?>
+                                    <?php
+                                    $examDateVal = (string) ($r['exam_date'] ?? '');
+                                    $examTimeVal = !empty($r['exam_time']) ? substr((string) $r['exam_time'], 0, 5) : '';
+                                    ?>
+                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/examen')) ?>"
+                                          class="ops-inline-form ops-collect-form">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="return_ops" value="1">
+                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                        <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
+                                        <input type="hidden" name="notify" value="<?= $examMailOn ? '1' : '0' ?>">
+                                        <div class="ops-collect-fields">
+                                            <input class="ops-input" type="date" name="exam_date" required
+                                                   value="<?= e($examDateVal) ?>" title="Fecha examen">
+                                            <input class="ops-input" type="time" name="exam_time"
+                                                   value="<?= e($examTimeVal) ?>" title="Hora examen">
+                                        </div>
+                                        <button class="<?= e($btnClass) ?>" type="submit"
+                                            title="<?= $examMailOn ? 'Guardar fecha y enviar plantilla' : 'Guardar fecha de examen' ?>">
+                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
+                                        </button>
+                                    </form>
+                                <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_CONFIRM_PAYMENT): ?>
                                     <form method="post" action="<?= e(url('/admin/compras/' . $pid . '/confirmar-pago')) ?>" class="ops-inline-form">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="return_ops" value="1">
@@ -231,32 +270,6 @@ $q = (string) ($filters['q'] ?? '');
                                             Guardar
                                         </button>
                                         <button class="<?= e($btnClass) ?>" type="submit" name="notify" value="1">
-                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
-                                        </button>
-                                    </form>
-                                <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_EDIT_EXAM): ?>
-                                    <?php
-                                    $examDateVal = (string) ($r['exam_date'] ?? '');
-                                    $examTimeVal = !empty($r['exam_time']) ? substr((string) $r['exam_time'], 0, 5) : '';
-                                    $examMailOn = !empty($btn['email']['enabled'])
-                                        && trim((string) ($btn['email']['template_code'] ?? '')) !== '';
-                                    ?>
-                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/examen')) ?>"
-                                          class="ops-inline-form ops-collect-form">
-                                        <?= csrf_field() ?>
-                                        <input type="hidden" name="return_ops" value="1">
-                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
-                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
-                                        <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
-                                        <input type="hidden" name="notify" value="<?= $examMailOn ? '1' : '0' ?>">
-                                        <div class="ops-collect-fields">
-                                            <input class="ops-input" type="date" name="exam_date" required
-                                                   value="<?= e($examDateVal) ?>" title="Fecha examen">
-                                            <input class="ops-input" type="time" name="exam_time"
-                                                   value="<?= e($examTimeVal) ?>" title="Hora examen">
-                                        </div>
-                                        <button class="<?= e($btnClass) ?>" type="submit"
-                                            title="<?= $examMailOn ? 'Guardar fecha y avisar por correo' : 'Guardar fecha de examen' ?>">
                                             <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
                                         </button>
                                     </form>

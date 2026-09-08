@@ -22,27 +22,31 @@ final class GroupStepConfig
 
     public const ACTIONS = [
         self::ACTION_NONE => 'Solo progreso (sin botón)',
-        self::ACTION_CONFIRM_PAYMENT => 'Confirmar pago',
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
-        self::ACTION_EXAM_ACCESS => 'Capturar folio/clave y notificar',
-        self::ACTION_EDIT_EXAM => 'Editar / reagendar fecha y hora de examen',
-        self::ACTION_EDIT_STUDENT => 'Editar datos del alumno',
-        self::ACTION_ADVANCE => 'Avanzar / marcar hecho (ej. presentado)',
+        self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
+        // Legado (ya no se eligen en el editor; se siguen ejecutando si existen).
+        self::ACTION_CONFIRM_PAYMENT => 'Confirmar pago (legado)',
+        self::ACTION_EXAM_ACCESS => 'Capturar folio/clave (legado)',
+        self::ACTION_EDIT_EXAM => 'Editar / reagendar examen (legado)',
+        self::ACTION_EDIT_STUDENT => 'Editar datos del alumno (legado)',
     ];
 
     /**
-     * Acciones configurables en el editor de pasos del grupo.
-     * Lo que marques con «Mostrar en Operación» es lo que aparece en el tablero
-     * (sin botones fantasma de configuraciones viejas).
+     * Acciones del editor de grupo. El correo y los datos los define la plantilla/paso,
+     * no acciones especiales en código.
      */
     public const ACTIONS_EDITABLE = [
         self::ACTION_NONE => 'Solo progreso (sin botón)',
-        self::ACTION_CONFIRM_PAYMENT => 'Confirmar pago',
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
-        self::ACTION_EXAM_ACCESS => 'Capturar folio/clave y notificar',
-        self::ACTION_EDIT_EXAM => 'Editar / reagendar fecha y hora de examen',
-        self::ACTION_EDIT_STUDENT => 'Editar datos del alumno',
-        self::ACTION_ADVANCE => 'Avanzar / marcar hecho (ej. presentado)',
+        self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
+    ];
+
+    /** Mapeo de acciones legadas → acción editable al re-guardar el grupo. */
+    public const LEGACY_ACTION_MAP = [
+        self::ACTION_CONFIRM_PAYMENT => self::ACTION_ADVANCE,
+        self::ACTION_EXAM_ACCESS => self::ACTION_SEND_MAIL,
+        self::ACTION_EDIT_EXAM => self::ACTION_ADVANCE,
+        self::ACTION_EDIT_STUDENT => self::ACTION_ADVANCE,
     ];
 
     /**
@@ -231,19 +235,19 @@ final class GroupStepConfig
             $label = trim((string) ($step['ops_label'] ?? '')) !== ''
                 ? (string) $step['ops_label']
                 : (string) ($step['label'] ?? $step['code']);
-            if ($done) {
+            $email = is_array($step['email'] ?? null) ? $step['email'] : [];
+            $audience = self::audienceFromEmail($email);
+            $email['audience'] = $audience;
+            $collectExam = self::stepCollectsExamSchedule($step);
+            if ($done && !$collectExam) {
                 $label = match ($action) {
                     self::ACTION_SEND_MAIL => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
                     self::ACTION_EXAM_ACCESS => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
-                    self::ACTION_EDIT_EXAM => $label . ' (actualizado)',
                     self::ACTION_EDIT_STUDENT => $label . ' (actualizado)',
                     self::ACTION_ADVANCE => $label . ' (hecho)',
                     default => $label,
                 };
             }
-            $email = is_array($step['email'] ?? null) ? $step['email'] : [];
-            $audience = self::audienceFromEmail($email);
-            $email['audience'] = $audience;
             $buttons[] = [
                 'code' => (string) $step['code'],
                 'label' => $label,
@@ -252,6 +256,7 @@ final class GroupStepConfig
                 'audience' => $audience,
                 'admin_only' => !empty($step['admin_only']),
                 'done' => $done,
+                'collect_exam' => $collectExam,
             ];
         }
 
@@ -393,6 +398,10 @@ final class GroupStepConfig
         }
 
         if ($action === self::ACTION_SEND_MAIL) {
+            // Reagendar/fecha: no convertir a folio/clave aunque el texto mencione «examen».
+            if (self::stepCollectsExamSchedule($step)) {
+                return self::ACTION_SEND_MAIL;
+            }
             $email = is_array($step['email'] ?? null) ? $step['email'] : [];
             $audience = self::audienceFromEmail($email);
             $tpl = mb_strtolower((string) ($email['template_code'] ?? ''));
@@ -408,6 +417,46 @@ final class GroupStepConfig
         }
 
         return $action;
+    }
+
+    /**
+     * ¿Este paso captura/reagenda fecha de examen en Operación?
+     * (por acción legada o por etiqueta/código/plantilla).
+     *
+     * @param array<string, mixed> $step
+     */
+    public static function stepCollectsExamSchedule(array $step): bool
+    {
+        $action = (string) ($step['action'] ?? self::ACTION_NONE);
+        if ($action === self::ACTION_EDIT_EXAM) {
+            return true;
+        }
+        $blob = mb_strtolower(trim(
+            (string) ($step['code'] ?? '') . ' '
+            . (string) ($step['ops_label'] ?? '') . ' '
+            . (string) ($step['label'] ?? '')
+        ));
+        if (preg_match('/reagend|re-?agend|fecha.*exam|exam.*fecha|examen.*hora|hora.*examen|programar.*exam/u', $blob) === 1) {
+            // Evitar falsos positivos de «solicitud examen» a proveedor.
+            $email = is_array($step['email'] ?? null) ? $step['email'] : [];
+            $audience = self::audienceFromEmail($email);
+            if ($audience === 'provider') {
+                return false;
+            }
+
+            return true;
+        }
+        $tpl = mb_strtolower((string) (($step['email']['template_code'] ?? '')));
+        if (
+            str_contains($tpl, 'reagend')
+            || str_contains($tpl, 'exam_schedule')
+            || str_contains($tpl, 'examen_fecha')
+            || str_contains($tpl, 'reschedule')
+        ) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -431,6 +480,11 @@ final class GroupStepConfig
      */
     public static function isActionDone(string $action, array $row, array $step = []): bool
     {
+        // Reagendar/fecha: verde si ya hay fecha, pero los controles siguen visibles siempre.
+        if (self::stepCollectsExamSchedule($step) || $action === self::ACTION_EDIT_EXAM) {
+            return trim((string) ($row['exam_date'] ?? '')) !== '';
+        }
+
         return match ($action) {
             self::ACTION_CONFIRM_PAYMENT => !in_array(
                 (string) ($row['purchase_status'] ?? ''),
@@ -440,7 +494,6 @@ final class GroupStepConfig
             self::ACTION_SEND_MAIL => self::isMailStepDone($row, $step),
             self::ACTION_EXAM_ACCESS => trim((string) ($row['folio'] ?? '')) !== ''
                 && trim((string) ($row['access_key'] ?? '')) !== '',
-            self::ACTION_EDIT_EXAM => self::isAdvanceDone($row, $step),
             self::ACTION_EDIT_STUDENT => self::isAdvanceDone($row, $step),
             self::ACTION_ADVANCE => self::isAdvanceDone($row, $step),
             default => false,
@@ -503,7 +556,8 @@ final class GroupStepConfig
                 'admin_only' => !empty($row['admin_only']),
                 'ops_button' => !empty($row['ops_button']),
                 'ops_label' => trim((string) ($row['ops_label'] ?? '')),
-                'action' => (string) ($row['action'] ?? self::ACTION_NONE),
+                'action' => self::LEGACY_ACTION_MAP[(string) ($row['action'] ?? self::ACTION_NONE)]
+                    ?? (string) ($row['action'] ?? self::ACTION_NONE),
                 'email' => [
                     'enabled' => !empty($row['email_enabled']),
                     'trigger' => (string) ($row['email_trigger'] ?? 'admin'),
