@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Database\Connection;
-use App\Integrations\Mailer;
 use PDO;
 
 final class TrackingService
@@ -478,7 +477,6 @@ final class TrackingService
                 'UPDATE trackings SET status = \'waiting_student\' WHERE id = ?'
             )->execute([$trackingId]);
             $this->log($trackingId, 'doc_rejected', 'Rechazado ' . $doc['doc_type'] . ': ' . $reason, $adminUserId);
-            $this->notifyStudentDocRejected($trackingId, (string) $doc['doc_type'], $reason);
         }
     }
 
@@ -693,7 +691,7 @@ final class TrackingService
 
             if ($productType === 'course') {
                 try {
-                    $result = (new MoodleEnrolmentService())->syncTracking($trackingId, $adminUserId, true);
+                    $result = (new MoodleEnrolmentService())->syncTracking($trackingId, $adminUserId, false);
                     if (!empty($result['skipped'])) {
                         $this->log(
                             $trackingId,
@@ -812,13 +810,6 @@ final class TrackingService
                 // Pipelines sin paso examen (cursos): solo guarda fechas
             }
         }
-
-        if (!empty($data['notify'])) {
-            $fresh = $this->find($trackingId);
-            if ($fresh) {
-                $this->notifyExamScheduled($fresh);
-            }
-        }
     }
 
     /**
@@ -897,43 +888,6 @@ final class TrackingService
         return null;
     }
 
-    /** @param array<string, mixed> $tracking */
-    private function notifyExamScheduled(array $tracking): void
-    {
-        try {
-            $name = trim(($tracking['first_name'] ?? '') . ' ' . ($tracking['last_name_p'] ?? ''));
-            $when = (string) $tracking['exam_date'];
-            if (!empty($tracking['exam_time'])) {
-                $when .= ' ' . substr((string) $tracking['exam_time'], 0, 5);
-            }
-            $url = rtrim((string) (\App\Config\Env::get('APP_URL', '') ?? ''), '/')
-                . '/alumno/caso/' . (int) $tracking['id'];
-            $zoom = !empty($tracking['zoom_url'])
-                ? "\nEnlace: " . $tracking['zoom_url'] . "\n"
-                : "\n";
-            $text = "Hola {$name},\n\nTu examen de {$tracking['product_name']} quedó programado.\n"
-                . "Fecha: {$when}\n"
-                . $zoom
-                . "Detalle: {$url}\n\n— Instituto DOCEO\n";
-            $html = '<p>Hola ' . htmlspecialchars($name) . ',</p>'
-                . '<p>Tu examen de <strong>' . htmlspecialchars((string) $tracking['product_name']) . '</strong> quedó programado.</p>'
-                . '<p><strong>Fecha:</strong> ' . htmlspecialchars($when) . '</p>'
-                . (!empty($tracking['zoom_url'])
-                    ? '<p><a href="' . htmlspecialchars((string) $tracking['zoom_url']) . '">Enlace de sesión</a></p>'
-                    : '')
-                . '<p><a href="' . htmlspecialchars($url) . '">Ver tu caso</a></p>'
-                . '<p>— Instituto DOCEO</p>';
-            (new \App\Integrations\Mailer())->send(
-                (string) $tracking['student_email'],
-                'Examen programado — caso ' . $tracking['matricula'],
-                $text,
-                ['html' => true, 'body_html' => $html]
-            );
-        } catch (\Throwable $e) {
-            error_log('[Doceo] Exam email: ' . $e->getMessage());
-        }
-    }
-
     private function productType(int $productId): string
     {
         $stmt = $this->pdo->prepare('SELECT type FROM products WHERE id = ?');
@@ -978,33 +932,5 @@ final class TrackingService
         $this->pdo->prepare(
             'INSERT INTO tracking_step_logs (tracking_id, step_code, note, actor_user_id) VALUES (?,?,?,?)'
         )->execute([$trackingId, $stepCode, $note, $actorUserId]);
-    }
-
-    private function notifyStudentDocRejected(int $trackingId, string $docType, string $reason): void
-    {
-        try {
-            $t = $this->find($trackingId);
-            if ($t === null) {
-                return;
-            }
-            $name = trim(($t['first_name'] ?? '') . ' ' . ($t['last_name_p'] ?? ''));
-            $url = rtrim((string) (\App\Config\Env::get('APP_URL', '') ?? ''), '/') . '/alumno/caso/' . $trackingId;
-            $text = "Hola {$name},\n\nRechazamos el documento \"{$docType}\" de tu caso {$t['matricula']}.\n"
-                . "Motivo: {$reason}\n\nSube una nueva versión aquí: {$url}\n\n— Instituto DOCEO\n";
-            $html = '<p>Hola ' . htmlspecialchars($name) . ',</p>'
-                . '<p>Rechazamos el documento <strong>' . htmlspecialchars($docType) . '</strong> '
-                . 'de tu caso ' . htmlspecialchars((string) $t['matricula']) . '.</p>'
-                . '<p><strong>Motivo:</strong> ' . htmlspecialchars($reason) . '</p>'
-                . '<p><a href="' . htmlspecialchars($url) . '">Subir nueva versión</a></p>'
-                . '<p>— Instituto DOCEO</p>';
-            (new Mailer())->send(
-                (string) $t['student_email'],
-                'Documento rechazado — caso ' . $t['matricula'],
-                $text,
-                ['html' => true, 'body_html' => $html]
-            );
-        } catch (\Throwable $e) {
-            error_log('[Doceo] doc reject email: ' . $e->getMessage());
-        }
     }
 }

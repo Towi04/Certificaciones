@@ -915,11 +915,10 @@ final class AdminController
         csrf_verify();
         $trackingId = (int) $id;
         try {
-            $sendEmail = !empty($_POST['send_email']);
             $result = (new \App\Services\MoodleEnrolmentService())->syncTracking(
                 $trackingId,
                 (int) Auth::id(),
-                $sendEmail
+                false
             );
             if (!empty($result['skipped'])) {
                 flash('info', 'Moodle omitido: ' . ($result['reason'] ?? ''));
@@ -963,8 +962,8 @@ final class AdminController
             $examData = [
                 'exam_date' => $_POST['exam_date'] ?? null,
                 'exam_time' => $_POST['exam_time'] ?? null,
-                // Si el paso tiene plantilla, el envío lo hace StepMailService (evita doble correo).
-                'notify' => $wantNotify && !$useStepMail,
+                // Correos solo vía StepMailService / automatización de pasos.
+                'notify' => false,
             ];
             if (array_key_exists('exam_date_2', $_POST)) {
                 $examData['exam_date_2'] = $_POST['exam_date_2'];
@@ -979,7 +978,7 @@ final class AdminController
             // No usar step_done para bloquear reagendas: la fecha se puede cambiar N veces.
 
             $mailMsg = '';
-            if ($useStepMail) {
+            if ($wantNotify && $useStepMail) {
                 try {
                     $result = (new StepMailService())->sendForStep($trackingId, $stepCode, (int) Auth::id());
                     $mailMsg = ' Correo «' . $result['template'] . '» enviado a ' . $result['to'] . '.';
@@ -993,8 +992,6 @@ final class AdminController
                     }
                     redirect('/admin/seguimientos/' . $trackingId);
                 }
-            } elseif ($wantNotify) {
-                $mailMsg = ' Aviso enviado al alumno.';
             }
             flash('success', 'Fecha de examen guardada.' . $mailMsg);
         } catch (\Throwable $e) {
@@ -1079,7 +1076,6 @@ final class AdminController
             redirect('/admin');
         }
         try {
-            $uks = new UksEletService();
             if (($tracking['current_step_code'] ?? '') !== 'solicitud_uks') {
                 $svc->setStep(
                     $trackingId,
@@ -1090,7 +1086,12 @@ final class AdminController
                 );
             }
             $includeProof = !empty($_POST['include_payment_proof']);
-            $uks->sendSolicitudEmail($trackingId, (int) $tracking['purchase_id'], $includeProof);
+            (new ProviderRequestService())->send(
+                $trackingId,
+                (int) $tracking['purchase_id'],
+                (int) Auth::id(),
+                $includeProof
+            );
             $msg = 'Correo enviado a UKS (reglamento firmado';
             $msg .= $includeProof ? ' + comprobante)' : ')';
             if (($tracking['current_step_code'] ?? '') !== 'solicitud_uks') {
@@ -1298,19 +1299,12 @@ final class AdminController
                 'notes' => (string) ($_POST['notes'] ?? ''),
                 'is_active' => !empty($_POST['is_active']),
                 'must_change_password' => !empty($_POST['must_change_password']),
-                'send_email' => !empty($_POST['send_email']),
             ]);
-            $msg = 'Partner creado. Contraseña temporal: ' . $result['plain_password'];
-            if (!empty($result['email_sent'])) {
-                $msg .= ' · Correo de acceso enviado.';
-            } elseif (!empty($_POST['send_email'])) {
-                $msg .= ' · No se pudo enviar el correo'
-                    . (!empty($result['email_error']) ? ': ' . $result['email_error'] : '.')
-                    . ' Comparte la contraseña manualmente.';
-            } else {
-                $msg .= ' · Correo no solicitado; guárdala y compártela.';
-            }
-            flash('success', $msg);
+            flash(
+                'success',
+                'Partner creado. Contraseña temporal: ' . $result['plain_password']
+                . ' · Guárdala y compártela con el partner (no se envía por correo).'
+            );
             redirect('/admin/partners/' . $result['partner_id']);
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
@@ -1355,17 +1349,11 @@ final class AdminController
                 'notes' => (string) ($_POST['notes'] ?? ''),
                 'is_active' => !empty($_POST['is_active']),
                 'must_change_password' => !empty($_POST['must_change_password']),
-                'send_email' => !empty($_POST['send_email']),
             ]);
             $msg = 'Partner actualizado.';
             if (!empty($result['plain_password'])) {
-                $msg .= ' Nueva contraseña: ' . $result['plain_password'];
-                if (!empty($result['email_sent'])) {
-                    $msg .= ' · Correo enviado.';
-                } elseif (!empty($_POST['send_email'])) {
-                    $msg .= ' · No se pudo enviar el correo'
-                        . (!empty($result['email_error']) ? ': ' . $result['email_error'] : '.');
-                }
+                $msg .= ' Nueva contraseña: ' . $result['plain_password']
+                    . ' · Compártela con el partner (no se envía por correo).';
             }
             flash('success', $msg);
         } catch (\Throwable $e) {
@@ -1385,18 +1373,11 @@ final class AdminController
                 $partnerId,
                 $password !== '' ? $password : null
             );
-            $msg = 'Contraseña temporal: ' . $result['plain_password'];
-            if (!empty($result['email_sent'])) {
-                $msg = 'Correo de acceso reenviado. ' . $msg;
-                flash('success', $msg);
-            } else {
-                flash(
-                    'error',
-                    'No se pudo enviar el correo'
-                    . (!empty($result['email_error']) ? ': ' . $result['email_error'] : '.')
-                    . ' ' . $msg
-                );
-            }
+            flash(
+                'success',
+                'Contraseña temporal: ' . $result['plain_password']
+                . ' · Compártela con el partner (no se envía por correo).'
+            );
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }

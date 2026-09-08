@@ -38,6 +38,7 @@ final class MailTemplateService
         'Pago y cuenta' => [
             'pay_instructions_html' => 'Instrucciones de pago (HTML)',
             'password_block_html' => 'Bloque usuario/contraseña (HTML)',
+            'temp_password' => 'Contraseña temporal (registro)',
         ],
         'Examen ELeT' => [
             'exam_url' => 'URL del examen',
@@ -54,6 +55,13 @@ final class MailTemplateService
             'documentos_html' => 'Lista HTML de enlaces a documentos',
             'attachment_note' => 'Nota: documentos por enlace (sin adjuntos)',
             'workbook_note' => 'Nota breve del Excel por enlace',
+        ],
+        'Campus Moodle' => [
+            'moodle_url' => 'URL Campus / Moodle',
+            'moodle_username' => 'Usuario Moodle',
+            'moodle_password' => 'Contraseña Moodle',
+            'moodle_access_starts_at' => 'Inicio acceso Moodle',
+            'moodle_access_ends_at' => 'Fin acceso Moodle',
         ],
         'Resultados / CENNI' => [
             'results_level' => 'Nivel alcanzado',

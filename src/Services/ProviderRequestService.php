@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Database\Connection;
-use App\Integrations\Mailer;
 use App\Repositories\PurchaseRepository;
 use App\Support\AsciiUpperNormalizer;
 use App\Support\XlsxCellFiller;
@@ -192,25 +191,8 @@ final class ProviderRequestService
             return;
         }
 
-        try {
-            $this->send($trackingId, $purchaseId, $adminUserId, false);
-        } catch (\Throwable $e) {
-            error_log('[Doceo] ProviderRequest auto-send: ' . $e->getMessage());
-            $this->storeSendError($trackingId, $e->getMessage());
-            $this->tracking->setStep(
-                $trackingId,
-                (string) $config['step_code'],
-                $adminUserId,
-                'Pago confirmado (solicitud al proveedor falló: ' . $e->getMessage() . ')',
-                'waiting_admin'
-            );
-            $this->tracking->addLog(
-                $trackingId,
-                (string) $config['step_code'],
-                'Error al enviar solicitud: ' . $e->getMessage(),
-                $adminUserId
-            );
-        }
+        // El envío automático lo dispara GroupEmailAutomation al entrar al paso
+        // (trigger=auto en Progreso). No reenviar aquí para evitar duplicados.
     }
 
     public function send(
@@ -677,10 +659,7 @@ final class ProviderRequestService
 
         $mailTpl = new MailTemplateService();
         if ($templateCode !== '') {
-            if (
-                $templateCode === MailTemplateService::UKS_SOLICITUD
-                || $templateCode === MailTemplateService::UKS_SOLICITUD_LEGACY
-            ) {
+            if (MailTemplateService::isUksSolicitudCode($templateCode)) {
                 $mailTpl->sendUksSolicitud($to, $vars, $options);
 
                 return;
@@ -692,38 +671,10 @@ final class ProviderRequestService
             }
         }
 
-        $subject = 'Solicitud ' . $vars['product_name'] . ' · ' . $vars['full_name'] . ' · ' . $vars['matricula'];
-        $text = "Solicitud de registro examen {$vars['product_name']} — Instituto DOCEO\n\n"
-            . "Certificación: {$vars['product_name']}\n"
-            . "Alumno: {$vars['full_name']}\n"
-            . "Matrícula: {$vars['matricula']}\n"
-            . "Correo: {$vars['student_email']}\n"
-            . "Teléfono: {$vars['student_phone']}\n"
-            . "Fecha examen: {$vars['exam_date']}\n"
-            . "Hora examen: {$vars['exam_time']}\n\n"
-            . ($vars['reglamento_url'] !== '' ? "Reglamento: {$vars['reglamento_url']}\n" : '')
-            . ($vars['comprobante_url'] !== '' ? "Comprobante: {$vars['comprobante_url']}\n" : '')
-            . ($vars['workbook_url'] !== '' ? "Excel: {$vars['workbook_url']}\n" : ''). ($vars['workbook_note'] !== '' ? $vars['workbook_note'] . "\n" : '')
-            . "\n— Instituto DOCEO\n";
-
-        $html = '<p>Solicitud de registro examen <strong>' . htmlspecialchars($vars['product_name']) . '</strong></p><ul>'
-            . '<li><strong>Alumno:</strong> ' . htmlspecialchars($vars['full_name']) . '</li>'
-            . '<li><strong>Matrícula:</strong> ' . htmlspecialchars($vars['matricula']) . '</li>'
-            . '<li><strong>Correo:</strong> ' . htmlspecialchars($vars['student_email']) . '</li>'
-            . '<li><strong>Teléfono:</strong> ' . htmlspecialchars($vars['student_phone']) . '</li>'
-            . '<li><strong>Fecha:</strong> ' . htmlspecialchars($vars['exam_date']) . '</li>'
-            . '<li><strong>Hora:</strong> ' . htmlspecialchars($vars['exam_time']) . '</li>'
-            . '</ul>' . $vars['documentos_html'];
-        if (($vars['workbook_url'] ?? '') !== '') {
-            $html .= '<p><a href="' . htmlspecialchars((string) $vars['workbook_url']) . '">Descargar plantilla Excel</a></p>';
-        } elseif (($vars['workbook_note'] ?? '') !== '') {
-            $html .= '<p>' . htmlspecialchars((string) $vars['workbook_note']) . '</p>';
-        }
-
-        (new Mailer())->send($to, $subject, $text, array_merge($options, [
-            'html' => true,
-            'body_html' => $html,
-        ]));
+        throw new \RuntimeException(
+            'Configura la plantilla de solicitud al proveedor en el paso del grupo '
+            . '(Progreso → Enviar correo + plantilla). No hay correo hardcodeado de respaldo.'
+        );
     }
 
     private function documentosHtml(string $reglamentoUrl, string $comprobanteUrl, string $workbookUrl = ''): string
@@ -955,13 +906,8 @@ final class ProviderRequestService
             $adminUserId
         );
 
-        $sent = false;
-        if (!empty($config['auto_send_on_admin_proof'])) {
-            $this->send($trackingId, (int) $tracking['purchase_id'], $adminUserId, true);
-            $sent = true;
-        }
-
-        return ['document_id' => $docId, 'sent' => $sent];
+        // El envío al proveedor se hace desde Operación (o auto al llegar al paso).
+        return ['document_id' => $docId, 'sent' => false];
     }
 
 

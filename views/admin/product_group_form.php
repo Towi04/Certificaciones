@@ -39,8 +39,6 @@ $mailTemplates = isset($mailTemplates) && is_array($mailTemplates) ? $mailTempla
 $emailsCfg = is_array($extras['emails'] ?? null)
     ? $extras['emails']
     : \App\Services\GroupEmailAutomation::normalize(null);
-$emailReg = is_array($emailsCfg['student_registration'] ?? null) ? $emailsCfg['student_registration'] : ['enabled' => true, 'template_code' => 'student_registration'];
-$emailPay = is_array($emailsCfg['student_payment_confirmed'] ?? null) ? $emailsCfg['student_payment_confirmed'] : ['enabled' => true, 'template_code' => 'student_payment_confirmed'];
 $emailExam = is_array($emailsCfg['student_exam_access'] ?? null) ? $emailsCfg['student_exam_access'] : ['enabled' => true, 'template_code' => 'student_elet_exam_access', 'mode' => 'admin'];
 $emailSteps = is_array($emailsCfg['on_steps'] ?? null) ? $emailsCfg['on_steps'] : [];
 if ($emailSteps === []) {
@@ -475,23 +473,13 @@ $renderMailTemplateField = static function (
         </p>
 
         <div class="panel" style="margin:0 0 1rem;padding:.85rem 1rem;background:#f8fafc">
-            <strong style="color:var(--doceo-blue);font-size:.92rem">Correos automáticos del ciclo</strong>
+            <strong style="color:var(--doceo-blue);font-size:.92rem">Correos del ciclo</strong>
             <p class="muted" style="font-size:.78rem;margin:.25rem 0 .65rem">
-                Solo estos dos se disparan solos (registro / pago).
-                Los correos de UKS, accesos, etc. se configuran en <strong>cada paso</strong> más abajo
-                (casilla «Enviar correo» + plantilla) — no aparecen aquí.
+                Todos los correos se configuran en <strong>cada paso</strong> del progreso
+                («Enviar correo» + plantilla + Cuándo auto/admin).
+                No hay envíos hardcodeados de registro o pago.
             </p>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.65rem">
-                <label class="muted" style="font-size:.82rem;display:flex;flex-direction:column;gap:.3rem">
-                    <span><input type="checkbox" name="email_registration_enabled" value="1" <?= !empty($emailReg['enabled']) ? 'checked' : '' ?>> Al registrarse</span>
-                    <?php $renderMailTemplateField('email_registration_template', (string) ($emailReg['template_code'] ?? 'student_registration'), $mailTemplates, $inputStyle); ?>
-                </label>
-                <label class="muted" style="font-size:.82rem;display:flex;flex-direction:column;gap:.3rem">
-                    <span><input type="checkbox" name="email_payment_enabled" value="1" <?= !empty($emailPay['enabled']) ? 'checked' : '' ?>> Al confirmar pago</span>
-                    <?php $renderMailTemplateField('email_payment_template', (string) ($emailPay['template_code'] ?? 'student_payment_confirmed'), $mailTemplates, $inputStyle); ?>
-                </label>
-            </div>
-            <div id="step-emails-summary" class="muted" style="font-size:.78rem;margin:.75rem 0 0;padding-top:.65rem;border-top:1px dashed #d5deea"></div>
+            <div id="step-emails-summary" class="muted" style="font-size:.78rem;margin:.35rem 0 0"></div>
         </div>
 
         <?php if ($pipelines === []): ?>
@@ -943,12 +931,12 @@ $renderMailTemplateField = static function (
     })();
     base.emails = {
       student_registration: {
-        enabled: !!(document.querySelector('[name="email_registration_enabled"]') || {}).checked,
-        template_code: emailTpl('email_registration_template', 'student_registration')
+        enabled: false,
+        template_code: 'student_registration'
       },
       student_payment_confirmed: {
-        enabled: !!(document.querySelector('[name="email_payment_enabled"]') || {}).checked,
-        template_code: emailTpl('email_payment_template', 'student_payment_confirmed')
+        enabled: false,
+        template_code: 'student_payment_confirmed'
       },
       student_exam_access: examAccessEmail,
       on_steps: onSteps

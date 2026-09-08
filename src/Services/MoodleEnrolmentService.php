@@ -6,7 +6,6 @@ namespace App\Services;
 
 use App\Config\Env;
 use App\Database\Connection;
-use App\Integrations\Mailer;
 use App\Integrations\MoodleClient;
 use App\Support\Settings;
 use PDO;
@@ -46,7 +45,7 @@ final class MoodleEnrolmentService
      *   access_ends_at?:string
      * }
      */
-    public function syncTracking(int $trackingId, ?int $actorUserId = null, bool $sendEmail = true): array
+    public function syncTracking(int $trackingId, ?int $actorUserId = null, bool $sendEmail = false): array
     {
         if (!self::isConfigured()) {
             return ['ok' => false, 'skipped' => true, 'reason' => 'Moodle no configurado (MOODLE_URL / MOODLE_TOKEN).'];
@@ -100,7 +99,6 @@ final class MoodleEnrolmentService
                 $plainPassword = $password;
             } catch (\Throwable $e) {
                 error_log('[Doceo] Moodle reset password: ' . $e->getMessage());
-                // Si ya tenía clave en el tracking, la reutilizamos en el correo
                 $plainPassword = !empty($row['moodle_password']) ? (string) $row['moodle_password'] : null;
             }
         } else {
@@ -156,16 +154,12 @@ final class MoodleEnrolmentService
             $actorUserId,
         ]);
 
-        // Avanza a "activo" si el pipeline lo tiene
+        // Avanza a "activo" si el pipeline lo tiene (correos auto vía GroupEmailAutomation).
         try {
             $trackSvc = new TrackingService();
             $trackSvc->setStep($trackingId, 'activo', $actorUserId, 'Acceso Moodle activo', 'waiting_student');
         } catch (\Throwable $e) {
             error_log('[Doceo] Moodle step activo: ' . $e->getMessage());
-        }
-
-        if ($sendEmail) {
-            $this->sendAccessEmail($row, $username, $plainPassword ?? $password, $startsAt, $endsAt);
         }
 
         return [
@@ -191,46 +185,5 @@ final class MoodleEnrolmentService
         }
 
         return MoodleClient::sanitizeUsername($base . substr(bin2hex(random_bytes(2)), 0, 4));
-    }
-
-    /** @param array<string, mixed> $row */
-    private function sendAccessEmail(
-        array $row,
-        string $username,
-        string $password,
-        string $startsAt,
-        string $endsAt
-    ): void {
-        try {
-            $name = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name_p'] ?? ''));
-            $campus = 'https://campus.institutodoceo.com';
-            $moodleUrl = (string) (Env::get('MOODLE_URL', '') ?? '');
-            if (preg_match('#^(https?://[^/]+)#', $moodleUrl, $m)) {
-                $campus = $m[1];
-            }
-            $product = (string) ($row['product_name'] ?? 'curso');
-            $text = "Hola {$name},\n\nYa tienes acceso a {$product} en Campus DOCEO.\n\n"
-                . "URL: {$campus}\n"
-                . "Usuario: {$username}\n"
-                . "Contraseña: {$password}\n"
-                . "Acceso: {$startsAt} → {$endsAt}\n\n"
-                . "Te pedirá cambiar la contraseña al entrar.\n\n— Instituto DOCEO\n";
-            $html = '<p>Hola ' . htmlspecialchars($name) . ',</p>'
-                . '<p>Ya tienes acceso a <strong>' . htmlspecialchars($product) . '</strong> en Campus DOCEO.</p>'
-                . '<p><a href="' . htmlspecialchars($campus) . '">' . htmlspecialchars($campus) . '</a><br>'
-                . '<strong>Usuario:</strong> ' . htmlspecialchars($username) . '<br>'
-                . '<strong>Contraseña:</strong> ' . htmlspecialchars($password) . '<br>'
-                . '<strong>Vigencia:</strong> ' . htmlspecialchars($startsAt) . ' → ' . htmlspecialchars($endsAt) . '</p>'
-                . '<p>Te pedirá cambiar la contraseña al entrar.</p><p>— Instituto DOCEO</p>';
-
-            (new Mailer())->send(
-                (string) $row['email'],
-                'Acceso Campus DOCEO — ' . ($row['matricula'] ?? ''),
-                $text,
-                ['html' => true, 'body_html' => $html]
-            );
-        } catch (\Throwable $e) {
-            error_log('[Doceo] Moodle access email: ' . $e->getMessage());
-        }
     }
 }
