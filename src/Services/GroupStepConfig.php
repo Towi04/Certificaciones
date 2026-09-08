@@ -248,6 +248,9 @@ final class GroupStepConfig
                     default => $label,
                 };
             }
+            $rescheduleCount = $collectExam
+                ? \App\Services\TrackingService::examRescheduleCountFromTracking($row)
+                : 0;
             $buttons[] = [
                 'code' => (string) $step['code'],
                 'label' => $label,
@@ -257,6 +260,7 @@ final class GroupStepConfig
                 'admin_only' => !empty($step['admin_only']),
                 'done' => $done,
                 'collect_exam' => $collectExam,
+                'reschedule_count' => $rescheduleCount,
             ];
         }
 

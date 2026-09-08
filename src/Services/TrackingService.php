@@ -775,11 +775,20 @@ final class TrackingService
             throw new \InvalidArgumentException('La fecha de examen es obligatoria.');
         }
 
+        $prevDate = $this->normalizeDate($tracking['exam_date'] ?? null);
+        $prevTime = $this->normalizeTime($tracking['exam_time'] ?? null);
+        $scheduleChanged = $prevDate !== $examDate
+            || substr((string) ($prevTime ?? ''), 0, 5) !== substr((string) ($examTime ?? ''), 0, 5);
+
         $this->pdo->prepare(
             'UPDATE trackings
              SET exam_date = ?, exam_time = ?, exam_date_2 = ?, exam_time_2 = ?, zoom_url = ?
              WHERE id = ?'
         )->execute([$examDate, $examTime, $examDate2, $examTime2, $zoom, $trackingId]);
+
+        if ($scheduleChanged) {
+            $this->bumpExamRescheduleCount($trackingId, $tracking);
+        }
 
         $note = 'Examen: ' . $examDate . ($examTime ? ' ' . substr($examTime, 0, 5) : '');
         if ($examDate2) {
@@ -787,6 +796,10 @@ final class TrackingService
         }
         if ($zoom && array_key_exists('zoom_url', $data)) {
             $note .= ' · enlace Zoom asignado';
+        }
+        if ($scheduleChanged) {
+            $count = $this->bumpExamRescheduleCount($trackingId, $tracking);
+            $note .= ' · #' . $count;
         }
         $this->log($trackingId, 'examen', $note, $actorUserId);
 
@@ -806,6 +819,54 @@ final class TrackingService
                 $this->notifyExamScheduled($fresh);
             }
         }
+    }
+
+    /**
+     * Cuántas veces se ha programado/reagendado la fecha de examen.
+     *
+     * @param array<string, mixed> $tracking
+     */
+    public static function examRescheduleCountFromTracking(array $tracking): int
+    {
+        $extra = [];
+        if (is_array($tracking['extra_json'] ?? null)) {
+            $extra = $tracking['extra_json'];
+        } elseif (!empty($tracking['extra_json']) && is_string($tracking['extra_json'])) {
+            $decoded = json_decode($tracking['extra_json'], true);
+            $extra = is_array($decoded) ? $decoded : [];
+        }
+        $count = (int) ($extra['exam_reschedule_count'] ?? 0);
+        if ($count < 1 && trim((string) ($tracking['exam_date'] ?? '')) !== '') {
+            // Casos previos: ya tenían fecha pero sin contador.
+            return 1;
+        }
+
+        return max(0, $count);
+    }
+
+    /**
+     * @param array<string, mixed> $tracking
+     */
+    private function bumpExamRescheduleCount(int $trackingId, array $tracking): int
+    {
+        $extra = [];
+        if (!empty($tracking['extra_json']) && is_string($tracking['extra_json'])) {
+            $decoded = json_decode($tracking['extra_json'], true);
+            $extra = is_array($decoded) ? $decoded : [];
+        } elseif (is_array($tracking['extra_json'] ?? null)) {
+            $extra = $tracking['extra_json'];
+        }
+        $current = (int) ($extra['exam_reschedule_count'] ?? 0);
+        if ($current < 1 && trim((string) ($tracking['exam_date'] ?? '')) !== '') {
+            // Primera reagenda sobre un caso que ya tenía fecha sin contador.
+            $current = 1;
+        }
+        $next = $current + 1;
+        $extra['exam_reschedule_count'] = $next;
+        $this->pdo->prepare('UPDATE trackings SET extra_json = ? WHERE id = ?')
+            ->execute([json_encode($extra, JSON_UNESCAPED_UNICODE), $trackingId]);
+
+        return $next;
     }
 
     private function normalizeDate(mixed $value): ?string

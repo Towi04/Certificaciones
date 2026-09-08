@@ -28,6 +28,7 @@ $q = (string) ($filters['q'] ?? '');
     <div class="ops-legend" aria-label="Leyenda de botones">
         <span class="ops-legend-item"><span class="ops-swatch ops-swatch--pending"></span> Amarillo = pendiente <?= icon('clock') ?></span>
         <span class="ops-legend-item"><span class="ops-swatch ops-swatch--done"></span> Verde = ya hecho (clic = reenviar) <?= icon('check') ?></span>
+        <span class="ops-legend-item"><span class="ops-reschedule-count" style="position:static">2</span> Número = veces reagendado</span>
         <span class="ops-legend-item"><span class="ops-swatch ops-swatch--ghost"></span> Blanco = ver / detalle</span>
     </div>
 
@@ -186,6 +187,7 @@ $q = (string) ($filters['q'] ?? '');
                                     <?php
                                     $examDateVal = (string) ($r['exam_date'] ?? '');
                                     $examTimeVal = !empty($r['exam_time']) ? substr((string) $r['exam_time'], 0, 5) : '';
+                                    $rescheduleCount = (int) ($btn['reschedule_count'] ?? 0);
                                     ?>
                                     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/examen')) ?>"
                                           class="ops-inline-form ops-collect-form">
@@ -202,8 +204,17 @@ $q = (string) ($filters['q'] ?? '');
                                                    value="<?= e($examTimeVal) ?>" title="Hora examen">
                                         </div>
                                         <button class="<?= e($btnClass) ?>" type="submit"
-                                            title="<?= $examMailOn ? 'Guardar fecha y enviar plantilla' : 'Guardar fecha de examen' ?>">
-                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
+                                            title="<?= $examMailOn
+                                                ? 'Guardar fecha y enviar plantilla'
+                                                : 'Guardar fecha de examen' ?><?= $rescheduleCount > 0
+                                                ? ' · Reagendado ' . $rescheduleCount . ' vez' . ($rescheduleCount === 1 ? '' : 'es')
+                                                : '' ?>">
+                                            <span class="ops-btn-ico">
+                                                <?= $statusIcon ?>
+                                                <?php if ($rescheduleCount > 0): ?>
+                                                    <span class="ops-reschedule-count" aria-label="Reagendado <?= (int) $rescheduleCount ?> veces"><?= (int) $rescheduleCount ?></span>
+                                                <?php endif; ?>
+                                            </span><?= e($label) ?>
                                         </button>
                                     </form>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_CONFIRM_PAYMENT): ?>
@@ -420,7 +431,17 @@ $q = (string) ($filters['q'] ?? '');
 }
 .btn-ops-done:hover { filter:brightness(.95); }
 .ops-btn-ico {
-  display:inline-flex; align-items:center; margin-right:.3rem; vertical-align:-2px;
+  display:inline-flex; align-items:center; gap:.2rem; margin-right:.35rem; vertical-align:-2px;
+}
+.ops-reschedule-count {
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:1.15rem; height:1.15rem; padding:0 .28rem;
+  border-radius:999px; font-size:.72rem; font-weight:800; line-height:1;
+  background:rgba(255,255,255,.95); color:#15803d;
+  border:1px solid rgba(21,128,61,.35);
+}
+.btn-accent .ops-reschedule-count {
+  background:#fff7cc; color:#92400e; border-color:rgba(146,64,14,.25);
 }
 .ops-file-btn { position:relative; overflow:hidden; cursor:pointer; }
 .ops-file-btn input[type="file"] {
