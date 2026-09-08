@@ -14,11 +14,19 @@ final class AdminOpsBoardService
 {
     public const VIEWS = [
         'action' => 'Por atender',
-        'pay' => 'Por pagar',
-        'provider' => 'Proveedor',
+        'provider' => 'Solicitud proveedor',
         'access' => 'Folio / clave',
         'exams' => 'Exámenes',
         'all' => 'Todos',
+    ];
+
+    /** Texto corto bajo las pestañas. */
+    public const VIEW_HINTS = [
+        'action' => 'Casos que requieren acción tuya: pago por confirmar, solicitud a proveedor pendiente o accesos incompletos.',
+        'provider' => 'Pagados con solicitud al proveedor pendiente de enviar (p. ej. UKS / Lingua Franca).',
+        'access' => 'Exámenes ELeT pagados: captura o revisa folio y clave del día.',
+        'exams' => 'Exámenes de hoy a 21 días. Semáforo: rojo = hoy, ámbar = mañana, verde = posteriores.',
+        'all' => 'Todos los casos (usa la búsqueda para acotar).',
     ];
 
     private PDO $pdo;

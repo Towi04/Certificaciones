@@ -48,7 +48,12 @@ final class AdminController
             $filters['q'] = null;
         }
         if (!isset(AdminOpsBoardService::VIEWS[$filters['view'] ?? ''])) {
-            $filters['view'] = 'action';
+            // Compat: «Por pagar» se absorbió en «Por atender».
+            if (($filters['view'] ?? '') === 'pay') {
+                $filters['view'] = 'action';
+            } else {
+                $filters['view'] = 'action';
+            }
         }
 
         $board = new AdminOpsBoardService();
@@ -74,6 +79,7 @@ final class AdminController
             'rows' => $rows,
             'filters' => $filters,
             'views' => AdminOpsBoardService::VIEWS,
+            'viewHints' => AdminOpsBoardService::VIEW_HINTS,
             'counts' => $counts,
             'pagination' => $pagination,
             'layout' => 'admin',
@@ -180,20 +186,30 @@ final class AdminController
         $keys = is_array($_POST['access_key'] ?? null) ? $_POST['access_key'] : [];
         $zooms = is_array($_POST['zoom_url'] ?? null) ? $_POST['zoom_url'] : [];
         $items = [];
+        $idSet = [];
         foreach ($ids as $rawId) {
             $tid = (int) $rawId;
-            if ($tid < 1) {
-                continue;
+            if ($tid > 0) {
+                $idSet[$tid] = true;
             }
+        }
+        // Guardar todo: IDs vienen de las claves de folio/clave/zoom sin checkboxes.
+        foreach (array_keys($folios + $keys + $zooms) as $rawId) {
+            $tid = (int) $rawId;
+            if ($tid > 0) {
+                $idSet[$tid] = true;
+            }
+        }
+        foreach (array_keys($idSet) as $tid) {
             $items[] = [
-                'tracking_id' => $tid,
+                'tracking_id' => (int) $tid,
                 'folio' => (string) ($folios[(string) $tid] ?? $folios[$tid] ?? ''),
                 'access_key' => (string) ($keys[(string) $tid] ?? $keys[$tid] ?? ''),
                 'zoom_url' => (string) ($zooms[(string) $tid] ?? $zooms[$tid] ?? ''),
             ];
         }
         if ($items === []) {
-            flash('error', 'Selecciona al menos un caso.');
+            flash('error', 'No hay folio, clave o Zoom para guardar en las filas visibles.');
             redirect('/admin' . $return);
         }
         try {
