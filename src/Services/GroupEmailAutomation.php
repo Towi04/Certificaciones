@@ -293,10 +293,6 @@ final class GroupEmailAutomation
             }
             $mode = ((string) ($row['mode'] ?? 'admin')) === 'auto' ? 'auto' : 'admin';
             $audience = MailTemplateService::audienceForTemplate($template);
-            if (($row['audience'] ?? '') !== '' && $audience === 'student') {
-                // Si no hay audiencia en plantilla guardada, respeta la del rule solo como fallback tipado.
-                $audience = MailTemplateService::normalizeAudience((string) $row['audience']);
-            }
             $out[] = [
                 'step_code' => $step,
                 'template_code' => $template,

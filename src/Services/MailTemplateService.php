@@ -148,16 +148,20 @@ final class MailTemplateService
             throw new \RuntimeException('Plantilla de correo no encontrada o desactivada: ' . $code);
         }
 
-        // Plantillas de proveedor: aplicar Para/CC guardados en la plantilla.
-        if (self::isProviderTemplate($code)) {
-            $routing = $this->routing($code);
-            if (trim($to) === '' && $routing['to'] !== '') {
-                $to = $routing['to'];
-            }
-            $existingCc = trim((string) ($options['cc'] ?? ''));
-            if ($existingCc === '' && $routing['cc'] !== '') {
-                $options['cc'] = $routing['cc'];
-            }
+        $routing = $this->routing($code);
+        if (self::isProviderTemplate($code) && trim($to) === '' && $routing['to'] !== '') {
+            $to = $routing['to'];
+        }
+
+        $ccSource = trim((string) ($options['cc'] ?? ''));
+        if ($ccSource === '') {
+            $ccSource = $routing['cc'];
+        }
+        $resolvedCc = self::resolveAddressList($ccSource, $vars);
+        if ($resolvedCc !== '') {
+            $options['cc'] = $resolvedCc;
+        } else {
+            unset($options['cc']);
         }
 
         $this->deliver($to, $rendered, $options);
@@ -178,8 +182,15 @@ final class MailTemplateService
         if ($routing['to'] !== '') {
             $to = $routing['to'];
         }
-        if ($routing['cc'] !== '') {
-            $options['cc'] = $routing['cc'];
+        $ccSource = trim((string) ($options['cc'] ?? ''));
+        if ($ccSource === '') {
+            $ccSource = $routing['cc'];
+        }
+        $resolvedCc = self::resolveAddressList($ccSource, $vars);
+        if ($resolvedCc !== '') {
+            $options['cc'] = $resolvedCc;
+        } else {
+            unset($options['cc']);
         }
 
         $this->deliver($to, $rendered, $options);
@@ -688,6 +699,36 @@ final class MailTemplateService
             },
             $template
         );
+    }
+
+    /**
+     * Resuelve una lista de correos (CC) con placeholders.
+     * Si {{partner_email}} queda vacío (sin partner), no se agrega a nadie.
+     *
+     * @param array<string, string> $vars
+     */
+    public static function resolveAddressList(string $raw, array $vars): string
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return '';
+        }
+        $interpolated = self::interpolate($raw, $vars);
+        // Quitar placeholders no resueltos (p. ej. {{partner_email}} sin partner).
+        $interpolated = (string) preg_replace('/\{\{\s*[^}]+\s*\}\}/u', '', $interpolated);
+        $parts = preg_split('/\s*,\s*/', $interpolated) ?: [];
+        $valid = [];
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($part === '' || !filter_var($part, FILTER_VALIDATE_EMAIL)) {
+                continue;
+            }
+            if (!in_array($part, $valid, true)) {
+                $valid[] = $part;
+            }
+        }
+
+        return implode(', ', $valid);
     }
 
     /** Normaliza etiquetas: "full name", "Full-Name" → "full_name". */
