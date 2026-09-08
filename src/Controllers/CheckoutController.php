@@ -104,7 +104,9 @@ final class CheckoutController
             'phone' => in_array('phone', $fieldCodes, true) ? trim((string) ($_POST['phone'] ?? '')) : '',
             'curp' => in_array('curp', $fieldCodes, true) ? strtoupper(trim((string) ($_POST['curp'] ?? ''))) : '',
             'birth_date' => in_array('birth_date', $fieldCodes, true) ? trim((string) ($_POST['birth_date'] ?? '')) : '',
-            'sex' => in_array('sex', $fieldCodes, true) ? trim((string) ($_POST['sex'] ?? '')) : '',
+            'sex' => in_array('sex', $fieldCodes, true)
+                ? CheckoutRequirements::normalizeSexValue(trim((string) ($_POST['sex'] ?? '')))
+                : '',
             'nationality' => in_array('nationality', $fieldCodes, true)
                 ? trim((string) ($_POST['nationality'] ?? 'México'))
                 : '',
@@ -136,6 +138,11 @@ final class CheckoutController
                 $code = $field['code'];
                 if (($buyer[$code] ?? '') === '') {
                     throw new \InvalidArgumentException('Completa el campo: ' . $field['label']);
+                }
+            }
+            if (in_array('sex', $fieldCodes, true) && ($buyer['sex'] ?? '') !== '') {
+                if (!in_array((string) $buyer['sex'], CheckoutRequirements::allowedSexValues(), true)) {
+                    throw new \InvalidArgumentException('Elige Sexo: Femenino o Masculino.');
                 }
             }
 

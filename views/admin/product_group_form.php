@@ -186,6 +186,9 @@ $renderMailTemplateField = static function (
                             <?php if ($isCustom): ?>
                                 <span class="field-custom-badge">Personalizado</span>
                             <?php endif; ?>
+                            <?php if ($code === 'sex'): ?>
+                                <span class="field-custom-badge" title="El alumno elige Femenino o Masculino; en BD y proveedor se guarda F o M">Selector M/F</span>
+                            <?php endif; ?>
                         </span>
                     </label>
                     <?php if ($locked): ?>
@@ -193,6 +196,11 @@ $renderMailTemplateField = static function (
                             Obligatorio en toda compra
                         </span>
                     <?php else: ?>
+                        <?php if ($code === 'sex'): ?>
+                            <span class="muted" style="display:block;font-size:.75rem;font-weight:500;margin:.15rem 0 .35rem 1.55rem">
+                                El alumno ve «Femenino / Masculino»; se guarda como <strong>F</strong> o <strong>M</strong>.
+                            </span>
+                        <?php endif; ?>
                         <label class="field-required-toggle muted" title="Si el campo se pide al alumno">
                             <select name="checkout_field_required[<?= e($code) ?>]" class="field-required-select"
                                     aria-label="Obligatorio u opcional">

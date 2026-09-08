@@ -110,14 +110,35 @@ $stepLabels = [
                             $val = $prefill[$code] ?? '';
                             $req = !empty($field['required']);
                             ?>
-                            <?php if ($field['type'] === 'select' && $code === 'sex'): ?>
+                            <?php if (($field['type'] ?? '') === 'select'): ?>
+                                <?php
+                                $options = is_array($field['options'] ?? null) ? $field['options'] : [];
+                                if ($options === [] && $code === 'sex') {
+                                    $options = \App\Services\CheckoutRequirements::SEX_OPTIONS;
+                                }
+                                $selected = (string) $val;
+                                if ($code === 'sex') {
+                                    $selected = \App\Services\CheckoutRequirements::normalizeSexValue($selected);
+                                }
+                                ?>
                                 <label><?= e($field['label']) ?><?= $req ? ' *' : '' ?>
-                                    <select name="sex" <?= $req ? 'required' : '' ?>>
-                                        <option value="">—</option>
-                                        <option value="F">Femenino</option>
-                                        <option value="M">Masculino</option>
-                                        <option value="X">Otro / X</option>
+                                    <select name="<?= e($code) ?>" <?= $req ? 'required' : '' ?>>
+                                        <option value="">— Selecciona —</option>
+                                        <?php foreach ($options as $opt): ?>
+                                            <?php
+                                            $optVal = (string) ($opt['value'] ?? '');
+                                            $optLabel = (string) ($opt['label'] ?? $optVal);
+                                            ?>
+                                            <option value="<?= e($optVal) ?>" <?= $selected === $optVal ? 'selected' : '' ?>>
+                                                <?= e($optLabel) ?>
+                                            </option>
+                                        <?php endforeach; ?>
                                     </select>
+                                    <?php if ($code === 'sex'): ?>
+                                        <span class="muted" style="display:block;font-size:.75rem;font-weight:500;margin-top:.25rem">
+                                            Se registra como M o F para el proveedor.
+                                        </span>
+                                    <?php endif; ?>
                                 </label>
                             <?php else: ?>
                                 <label><?= e($field['label']) ?><?= $req ? ' *' : '' ?>

@@ -47,6 +47,17 @@ final class CheckoutRequirements
         'nationality' => ['label' => 'Nacionalidad', 'required' => true, 'type' => 'text'],
     ];
 
+    /**
+     * Opciones del campo Sexo en checkout.
+     * El alumno ve la etiqueta; en BD / proveedor se guarda value (M|F).
+     *
+     * @var list<array{value:string,label:string}>
+     */
+    public const SEX_OPTIONS = [
+        ['value' => 'F', 'label' => 'Femenino'],
+        ['value' => 'M', 'label' => 'Masculino'],
+    ];
+
     /** Campos siempre pedidos y siempre obligatorios. */
     public const LOCKED_FIELDS = ['email', 'first_name', 'last_name_p', 'phone'];
 
@@ -296,6 +307,33 @@ final class CheckoutRequirements
         return $s;
     }
 
+    /**
+     * Normaliza sexo a código de BD (F|M). Acepta etiquetas o códigos.
+     * Vacío si no se reconoce (para no guardar «hombre»/«mujer» literales).
+     */
+    public static function normalizeSexValue(string $raw): string
+    {
+        $v = mb_strtolower(trim($raw), 'UTF-8');
+        if ($v === '') {
+            return '';
+        }
+
+        return match ($v) {
+            'f', 'femenino', 'femenina', 'mujer', 'female' => 'F',
+            'm', 'masculino', 'masculina', 'hombre', 'male' => 'M',
+            default => in_array(strtoupper($raw), ['F', 'M'], true) ? strtoupper($raw) : '',
+        };
+    }
+
+    /** @return list<string> */
+    public static function allowedSexValues(): array
+    {
+        return array_values(array_map(
+            static fn (array $opt): string => (string) $opt['value'],
+            self::SEX_OPTIONS
+        ));
+    }
+
 
     /** @return array<string, mixed> */
     public static function config(array $product): array
@@ -402,13 +440,19 @@ final class CheckoutRequirements
                 : (array_key_exists($code, $requiredOverrides)
                     ? $requiredOverrides[$code]
                     : (bool) $meta['required']);
-            $out[] = [
+            $row = [
                 'code' => $code,
                 'label' => $meta['label'],
                 'required' => $required,
                 'type' => $meta['type'],
                 'custom' => !empty($meta['custom']),
             ];
+            if ($code === 'sex' || ($meta['type'] ?? '') === 'select') {
+                $row['options'] = $code === 'sex'
+                    ? self::SEX_OPTIONS
+                    : (is_array($meta['options'] ?? null) ? $meta['options'] : []);
+            }
+            $out[] = $row;
         }
 
         return $out;
