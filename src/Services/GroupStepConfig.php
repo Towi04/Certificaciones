@@ -435,12 +435,26 @@ final class GroupStepConfig
         if ($action === self::ACTION_EDIT_EXAM) {
             return true;
         }
+
+        $tpl = mb_strtolower(trim((string) (($step['email']['template_code'] ?? ''))));
+        if (
+            MailTemplateService::rescheduleTemplateHeuristic($tpl)
+            || str_contains($tpl, 'exam_schedule')
+            || str_contains($tpl, 'examen_fecha')
+        ) {
+            return true;
+        }
+
         $blob = mb_strtolower(trim(
             (string) ($step['code'] ?? '') . ' '
             . (string) ($step['ops_label'] ?? '') . ' '
             . (string) ($step['label'] ?? '')
         ));
-        if (preg_match('/reagend|re-?agend|fecha.*exam|exam.*fecha|examen.*hora|hora.*examen|programar.*exam/u', $blob) === 1) {
+        // Botón/etiqueta de reagendar: siempre captura fecha (nunca solicitud a proveedor).
+        if (preg_match('/reagend|re-?agend|reschedule/u', $blob) === 1) {
+            return true;
+        }
+        if (preg_match('/fecha.*exam|exam.*fecha|examen.*hora|hora.*examen|programar.*exam/u', $blob) === 1) {
             // Evitar falsos positivos de «solicitud examen» a proveedor.
             $email = is_array($step['email'] ?? null) ? $step['email'] : [];
             $audience = self::audienceFromEmail($email);
@@ -448,15 +462,6 @@ final class GroupStepConfig
                 return false;
             }
 
-            return true;
-        }
-        $tpl = mb_strtolower((string) (($step['email']['template_code'] ?? '')));
-        if (
-            str_contains($tpl, 'reagend')
-            || str_contains($tpl, 'exam_schedule')
-            || str_contains($tpl, 'examen_fecha')
-            || str_contains($tpl, 'reschedule')
-        ) {
             return true;
         }
 
