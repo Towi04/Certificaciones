@@ -205,17 +205,25 @@ final class GroupStepConfig
             if ($action === self::ACTION_NONE) {
                 continue;
             }
-            if (self::isActionDone($action, $row, $step)) {
-                continue;
+            $done = self::isActionDone($action, $row, $step);
+            $label = trim((string) ($step['ops_label'] ?? '')) !== ''
+                ? (string) $step['ops_label']
+                : (string) ($step['label'] ?? $step['code']);
+            if ($done) {
+                $label = match ($action) {
+                    self::ACTION_SEND_MAIL => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
+                    self::ACTION_EXAM_ACCESS => 'Reenviar accesos',
+                    self::ACTION_ADVANCE => $label . ' (hecho)',
+                    default => $label,
+                };
             }
             $buttons[] = [
                 'code' => (string) $step['code'],
-                'label' => trim((string) ($step['ops_label'] ?? '')) !== ''
-                    ? (string) $step['ops_label']
-                    : (string) ($step['label'] ?? $step['code']),
+                'label' => $label,
                 'action' => $action,
                 'email' => is_array($step['email'] ?? null) ? $step['email'] : [],
                 'admin_only' => !empty($step['admin_only']),
+                'done' => $done,
             ];
         }
 
@@ -232,11 +240,12 @@ final class GroupStepConfig
                 'action' => self::ACTION_CONFIRM_PAYMENT,
                 'email' => [],
                 'admin_only' => false,
+                'done' => false,
             ]);
         }
         $pipeline = (string) ($row['pipeline_code'] ?? '');
         $isElet = $pipeline === 'elet_uks' || (string) ($row['product_code'] ?? '') === 'ELET-UKS';
-        if ($isElet && !in_array(self::ACTION_EXAM_ACCESS, $actions, true)) {
+        if ($isElet && !in_array(self::ACTION_EXAM_ACCESS, $actions, true) && $isPaid) {
             $examStep = $defs['codigos'] ?? null;
             $synthetic = [
                 'code' => 'codigos',
@@ -245,9 +254,12 @@ final class GroupStepConfig
                 'email' => is_array($examStep['email'] ?? null) ? $examStep['email'] : [],
                 'admin_only' => true,
             ];
-            if (!self::isActionDone(self::ACTION_EXAM_ACCESS, $row, $synthetic) && $isPaid) {
-                $buttons[] = $synthetic;
+            $done = self::isActionDone(self::ACTION_EXAM_ACCESS, $row, $synthetic);
+            $synthetic['done'] = $done;
+            if ($done) {
+                $synthetic['label'] = 'Reenviar accesos';
             }
+            $buttons[] = $synthetic;
         }
         if (!in_array(self::ACTION_SEND_MAIL, $actions, true) && $isPaid) {
             $pr = [];
@@ -259,14 +271,16 @@ final class GroupStepConfig
                     ? $row['extra_json']['provider_request']
                     : [];
             }
-            $sent = trim((string) ($pr['sent_at'] ?? ''));
-            if (!empty($pr['required']) && ($sent === '' || $sent === 'null')) {
+            if (!empty($pr['required']) || !empty($pr['enabled']) || trim((string) ($pr['sent_at'] ?? '')) !== '') {
+                $sent = trim((string) ($pr['sent_at'] ?? ''));
+                $done = $sent !== '' && $sent !== 'null';
                 $buttons[] = [
                     'code' => (string) ($pr['step_code'] ?? 'solicitud_proveedor'),
-                    'label' => 'Enviar solicitud',
+                    'label' => $done ? 'Reenviar solicitud' : 'Enviar solicitud',
                     'action' => self::ACTION_SEND_MAIL,
                     'email' => ['audience' => 'provider', 'enabled' => true],
                     'admin_only' => true,
+                    'done' => $done,
                 ];
             }
         }
@@ -276,6 +290,12 @@ final class GroupStepConfig
             $buttons = array_values(array_filter(
                 $buttons,
                 static fn (array $b): bool => ($b['action'] ?? '') === self::ACTION_CONFIRM_PAYMENT
+            ));
+        } else {
+            // Pago confirmado: no mostrar botón de confirmar pago.
+            $buttons = array_values(array_filter(
+                $buttons,
+                static fn (array $b): bool => ($b['action'] ?? '') !== self::ACTION_CONFIRM_PAYMENT
             ));
         }
 
@@ -294,6 +314,9 @@ final class GroupStepConfig
                 continue;
             }
             $seenActions[$key] = true;
+            if (!array_key_exists('done', $btn)) {
+                $btn['done'] = false;
+            }
             $unique[] = $btn;
         }
 

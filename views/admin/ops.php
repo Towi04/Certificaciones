@@ -12,9 +12,9 @@ $q = (string) ($filters['q'] ?? '');
     <div class="ops-header">
         <div>
             <h1 style="margin:0;color:var(--doceo-blue)">Operación</h1>
-            <p class="muted" style="margin:.35rem 0 0;max-width:42rem">
-                Una sola tabla con los casos. Aquí confirmas pagos, envías solicitud al proveedor,
-                capturas folio/clave y disparas las plantillas con la info de la fila.
+            <p class="muted" style="margin:.35rem 0 0;max-width:48rem">
+                Una sola tabla con los casos. Aquí confirmas pagos, subes el comprobante DOCEO→proveedor,
+                envías solicitud, capturas folio/clave y disparas las plantillas.
             </p>
         </div>
         <div class="ops-header-actions">
@@ -22,6 +22,12 @@ $q = (string) ($filters['q'] ?? '');
                 Descargar Excel (CSV)
             </a>
         </div>
+    </div>
+
+    <div class="ops-legend" aria-label="Leyenda de botones">
+        <span class="ops-legend-item"><span class="ops-swatch ops-swatch--pending"></span> Amarillo = pendiente <?= icon('clock') ?></span>
+        <span class="ops-legend-item"><span class="ops-swatch ops-swatch--done"></span> Verde = ya hecho (clic = reenviar) <?= icon('check') ?></span>
+        <span class="ops-legend-item"><span class="ops-swatch ops-swatch--ghost"></span> Blanco = ver / detalle</span>
     </div>
 
     <form method="get" class="ops-toolbar" action="<?= e(url('/admin')) ?>">
@@ -130,8 +136,10 @@ $q = (string) ($filters['q'] ?? '');
                         </td>
                         <td>
                             <?php if (!empty($r['show_folio_fields'])): ?>
-                                <input class="ops-input ops-folio" type="text" form="ops-bulk-form"
-                                       name="folio[<?= $tid ?>]" value="<?= e((string) ($r['folio'] ?? '')) ?>"
+                                <input class="ops-input ops-folio" type="text"
+                                       id="ops-folio-<?= $tid ?>"
+                                       form="ops-access-form-<?= $tid ?>"
+                                       name="folio" value="<?= e((string) ($r['folio'] ?? '')) ?>"
                                        placeholder="Folio" autocomplete="off" data-tid="<?= $tid ?>">
                             <?php else: ?>
                                 <span class="muted">—</span>
@@ -139,8 +147,10 @@ $q = (string) ($filters['q'] ?? '');
                         </td>
                         <td>
                             <?php if (!empty($r['show_folio_fields'])): ?>
-                                <input class="ops-input ops-key" type="text" form="ops-bulk-form"
-                                       name="access_key[<?= $tid ?>]" value="<?= e((string) ($r['access_key'] ?? '')) ?>"
+                                <input class="ops-input ops-key" type="text"
+                                       id="ops-key-<?= $tid ?>"
+                                       form="ops-access-form-<?= $tid ?>"
+                                       name="access_key" value="<?= e((string) ($r['access_key'] ?? '')) ?>"
                                        placeholder="Clave" autocomplete="off" data-tid="<?= $tid ?>">
                             <?php else: ?>
                                 <span class="muted">—</span>
@@ -149,9 +159,17 @@ $q = (string) ($filters['q'] ?? '');
                         <td class="ops-actions">
                             <?php
                             $opsButtons = is_array($r['ops_buttons'] ?? null) ? $r['ops_buttons'] : [];
+                            $hasPending = false;
+                            $renderedAccessForm = false;
                             foreach ($opsButtons as $btn):
                                 $action = (string) ($btn['action'] ?? '');
                                 $label = (string) ($btn['label'] ?? 'Acción');
+                                $done = !empty($btn['done']);
+                                if (!$done) {
+                                    $hasPending = true;
+                                }
+                                $btnClass = $done ? 'btn btn-ops-done btn-sm' : 'btn btn-accent btn-sm';
+                                $statusIcon = $done ? icon('check') : icon('clock');
                                 ?>
                                 <?php if ($action === \App\Services\GroupStepConfig::ACTION_CONFIRM_PAYMENT): ?>
                                     <form method="post" action="<?= e(url('/admin/compras/' . $pid . '/confirmar-pago')) ?>" class="ops-inline-form">
@@ -159,16 +177,35 @@ $q = (string) ($filters['q'] ?? '');
                                         <input type="hidden" name="return_ops" value="1">
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
-                                        <button class="btn btn-accent btn-sm" type="submit"><?= e($label) ?></button>
+                                        <button class="<?= e($btnClass) ?>" type="submit">
+                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
+                                        </button>
                                     </form>
                                     <?php if (!empty($r['payment_proof_path'])): ?>
                                         <button type="button" class="btn btn-ghost btn-sm ops-proof-btn"
                                                 data-proof-url="<?= e(url('/admin/compras/' . $pid . '/comprobante')) ?>"
-                                                data-proof-title="Comprobante · <?= e((string) ($r['matricula'] ?? '')) ?>">
-                                            Ver comprobante
+                                                data-proof-title="Comprobante alumno · <?= e((string) ($r['matricula'] ?? '')) ?>">
+                                            Ver comprobante alumno
                                         </button>
                                     <?php endif; ?>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_SEND_MAIL): ?>
+                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/comprobante-proveedor')) ?>"
+                                          enctype="multipart/form-data" class="ops-inline-form ops-proof-upload">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="return_ops" value="1">
+                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                        <label class="btn btn-ghost btn-sm ops-file-btn">
+                                            <span class="ops-btn-ico"><?= icon('upload') ?></span>
+                                            <?= !empty($r['admin_proof_uploaded']) ? 'Cambiar comprobante DOCEO' : 'Subir comprobante DOCEO' ?>
+                                            <input type="file" name="provider_payment_proof"
+                                                   accept=".pdf,.jpg,.jpeg,.png,.webp" required
+                                                   onchange="this.form.requestSubmit()">
+                                        </label>
+                                        <?php if (!empty($r['admin_proof_uploaded'])): ?>
+                                            <span class="ops-mini-ok" title="Comprobante DOCEO→proveedor listo"><?= icon('check') ?> comprobante</span>
+                                        <?php endif; ?>
+                                    </form>
                                     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/solicitud-proveedor')) ?>" class="ops-inline-form">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="return_ops" value="1">
@@ -176,16 +213,20 @@ $q = (string) ($filters['q'] ?? '');
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                         <input type="hidden" name="include_payment_proof" value="1">
                                         <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
-                                        <button class="btn btn-accent btn-sm" type="submit"><?= e($label) ?></button>
+                                        <button class="<?= e($btnClass) ?>" type="submit">
+                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
+                                        </button>
                                     </form>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_EXAM_ACCESS): ?>
-                                    <form method="post" action="<?= e(url('/admin/operacion/' . $tid . '/accesos')) ?>" class="ops-inline-form ops-access-form">
+                                    <?php $renderedAccessForm = true; ?>
+                                    <form method="post" action="<?= e(url('/admin/operacion/' . $tid . '/accesos')) ?>"
+                                          class="ops-inline-form ops-access-form" id="ops-access-form-<?= $tid ?>">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
-                                        <input type="hidden" name="folio" class="ops-sync-folio" value="<?= e((string) ($r['folio'] ?? '')) ?>">
-                                        <input type="hidden" name="access_key" class="ops-sync-key" value="<?= e((string) ($r['access_key'] ?? '')) ?>">
-                                        <button class="btn btn-primary btn-sm" type="submit" name="notify" value="1"><?= e($label) ?></button>
+                                        <button class="<?= e($btnClass) ?>" type="submit" name="notify" value="1">
+                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
+                                        </button>
                                     </form>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_ADVANCE): ?>
                                     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/avanzar')) ?>" class="ops-inline-form">
@@ -194,10 +235,24 @@ $q = (string) ($filters['q'] ?? '');
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                         <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
-                                        <button class="btn btn-primary btn-sm" type="submit"><?= e($label) ?></button>
+                                        <button class="<?= e($btnClass) ?>" type="submit">
+                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
+                                        </button>
                                     </form>
                                 <?php endif; ?>
                             <?php endforeach; ?>
+
+                            <?php if (!empty($r['show_folio_fields']) && !$renderedAccessForm): ?>
+                                <form method="post" action="<?= e(url('/admin/operacion/' . $tid . '/accesos')) ?>"
+                                      class="ops-inline-form ops-access-form" id="ops-access-form-<?= $tid ?>">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                    <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                    <button class="btn btn-accent btn-sm" type="submit" name="notify" value="1">
+                                        <span class="ops-btn-ico"><?= icon('clock') ?></span>Enviar folio/clave
+                                    </button>
+                                </form>
+                            <?php endif; ?>
 
                             <?php if ($opsButtons === []): ?>
                                 <span class="ops-flag ops-flag--ok">Al día</span>
@@ -253,8 +308,8 @@ $q = (string) ($filters['q'] ?? '');
   width:7.5rem; max-width:100%; font:inherit; padding:.35rem .45rem;
   border:1px solid #cfd8e6; border-radius:8px;
 }
-.ops-actions { min-width:11.5rem; }
-.ops-inline-form { display:flex; flex-wrap:wrap; gap:.3rem; margin:.15rem 0; }
+.ops-actions { min-width:12.5rem; }
+.ops-inline-form { display:flex; flex-wrap:wrap; gap:.3rem; margin:.15rem 0; align-items:center; }
 .ops-flag { display:inline-block; font-size:.75rem; font-weight:700; padding:.15rem .4rem; border-radius:6px; }
 .ops-flag--ok { background:#e8f7ee; color:#0f7a3a; }
 .ops-row--pay { background:#fffbeb; }
@@ -266,6 +321,34 @@ $q = (string) ($filters['q'] ?? '');
   background:#102a56; color:#fff; box-shadow:0 8px 24px rgba(16,42,86,.18);
 }
 .ops-bulk-bar[hidden] { display:none !important; }
+.ops-legend {
+  display:flex; flex-wrap:wrap; gap:.75rem 1.25rem; margin:0 0 .85rem;
+  padding:.55rem .8rem; border-radius:12px; background:#f7fafc; border:1px solid #e6ebf2;
+  font-size:.8rem; color:#445; font-weight:600;
+}
+.ops-legend-item { display:inline-flex; align-items:center; gap:.4rem; }
+.ops-swatch {
+  width:.85rem; height:.85rem; border-radius:4px; display:inline-block; border:1px solid rgba(0,0,0,.08);
+}
+.ops-swatch--pending { background: var(--doceo-yellow, #f5c518); }
+.ops-swatch--done { background:#16a34a; }
+.ops-swatch--ghost { background:#fff; border-color:#cfd8e6; }
+.btn-ops-done {
+  background:#16a34a !important; border-color:#15803d !important; color:#fff !important;
+}
+.btn-ops-done:hover { filter:brightness(.95); }
+.ops-btn-ico {
+  display:inline-flex; align-items:center; margin-right:.3rem; vertical-align:-2px;
+}
+.ops-file-btn { position:relative; overflow:hidden; cursor:pointer; }
+.ops-file-btn input[type="file"] {
+  position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;
+}
+.ops-mini-ok {
+  display:inline-flex; align-items:center; gap:.2rem;
+  font-size:.72rem; font-weight:700; color:#15803d; background:#e8f7ee;
+  border-radius:999px; padding:.1rem .45rem;
+}
 
 .ops-proof-modal[hidden] { display:none !important; }
 .ops-proof-modal {
@@ -366,22 +449,29 @@ $q = (string) ($filters['q'] ?? '');
     refreshBulk();
   });
 
-  document.querySelectorAll('.ops-table tbody tr').forEach(function (tr) {
-    var tid = tr.getAttribute('data-tracking-id');
-    if (!tid) return;
-    var folioInput = tr.querySelector('.ops-folio');
-    var keyInput = tr.querySelector('.ops-key');
-    var form = tr.querySelector('.ops-access-form');
-    if (!form || !folioInput || !keyInput) return;
-    var syncFolio = form.querySelector('.ops-sync-folio');
-    var syncKey = form.querySelector('.ops-sync-key');
-    function sync() {
-      if (syncFolio) syncFolio.value = folioInput.value;
-      if (syncKey) syncKey.value = keyInput.value;
-    }
-    folioInput.addEventListener('input', sync);
-    keyInput.addEventListener('input', sync);
-    form.addEventListener('submit', sync);
-  });
+  // Lote: inyectar folio/clave de las filas seleccionadas (ya no usan form=ops-bulk-form).
+  var bulkForm = document.getElementById('ops-bulk-form');
+  if (bulkForm) {
+    bulkForm.addEventListener('submit', function () {
+      Array.prototype.slice.call(bulkForm.querySelectorAll('.ops-bulk-injected')).forEach(function (el) {
+        el.parentNode.removeChild(el);
+      });
+      rowChecks().filter(function (c) { return c.checked; }).forEach(function (c) {
+        var tid = c.value;
+        var folioEl = document.getElementById('ops-folio-' + tid);
+        var keyEl = document.getElementById('ops-key-' + tid);
+        function inject(name, value) {
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = name;
+          input.value = value || '';
+          input.className = 'ops-bulk-injected';
+          bulkForm.appendChild(input);
+        }
+        inject('folio[' + tid + ']', folioEl ? folioEl.value : '');
+        inject('access_key[' + tid + ']', keyEl ? keyEl.value : '');
+      });
+    });
+  }
 })();
 </script>

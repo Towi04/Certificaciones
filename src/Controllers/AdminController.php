@@ -1029,6 +1029,9 @@ final class AdminController
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
+        if (!empty($_POST['return_ops'])) {
+            redirect('/admin' . $this->opsReturnQuery());
+        }
         redirect('/admin/seguimientos/' . $trackingId);
     }
 
