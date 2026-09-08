@@ -384,7 +384,7 @@ final class GroupStepConfig
 
         if ($action === self::ACTION_SEND_MAIL) {
             $email = is_array($step['email'] ?? null) ? $step['email'] : [];
-            $audience = (string) ($email['audience'] ?? 'student');
+            $audience = self::audienceFromEmail($email);
             $tpl = mb_strtolower((string) ($email['template_code'] ?? ''));
             if ($audience === 'student'
                 && (
