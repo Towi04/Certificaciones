@@ -717,6 +717,13 @@ HTML;
         }
         Settings::set('doceo_promo_code', $promoCode);
 
+        try {
+            $synced = (new \App\Services\PartnerAdminService())->syncAllPartnerPromoCodes();
+            $log[] = 'Códigos partner sincronizados a discount_codes: ' . $synced;
+        } catch (\Throwable $e) {
+            $log[] = 'Aviso: no se pudieron sincronizar códigos partner (' . $e->getMessage() . ')';
+        }
+
         Settings::set('oxxo_deposit_card', Settings::get('oxxo_deposit_card', '4555113010972414') ?? '4555113010972414');
         Settings::set('elet_exam_url', Settings::get('elet_exam_url', 'https://exam.elet.com.mx/') ?? 'https://exam.elet.com.mx/');
         Settings::set('uks_elet_request_email', Settings::get('uks_elet_request_email', '') ?? '');

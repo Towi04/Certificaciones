@@ -33,6 +33,10 @@ $action = $isEdit
                    value="<?= e((string) ($partner['code'] ?? '')) ?>"
                    placeholder="Ej. ESCUELA01"
                    style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;text-transform:uppercase">
+            <span class="muted" style="font-size:.78rem;font-weight:500">
+                Este código funciona en el checkout como un código promocional DOCEO:
+                el alumno paga precio público y la diferencia vs tu nivel se abona como crédito al partner.
+            </span>
         </label>
         <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
             Nivel de precio *

@@ -313,11 +313,14 @@ $stepLabels = [
             <?php endif; ?>
             <?php if (!$isPartnerCheckout): ?>
             <div class="sidebar-promo">
-                <label for="promo_code">Código promocional</label>
+                <label for="promo_code">Código promocional o de partner</label>
                 <div class="sidebar-promo-row">
-                    <input type="text" name="promo_code" id="promo_code" placeholder="Opcional" form="checkout-form" style="text-transform:uppercase">
+                    <input type="text" name="promo_code" id="promo_code" placeholder="DOCEO26 o código partner" form="checkout-form" style="text-transform:uppercase">
                     <button type="button" class="btn btn-primary btn-sm" id="apply-promo">Aplicar</button>
                 </div>
+                <p class="muted" style="font-size:.78rem;margin:.35rem 0 0">
+                    Un código partner baja el precio al público; la diferencia se abona como crédito al partner.
+                </p>
                 <p class="muted" id="quote-error" style="color:#b00020;display:none;margin:.4rem 0 0;font-size:.82rem"></p>
             </div>
             <?php else: ?>
