@@ -1140,6 +1140,32 @@ final class AdminController
         redirect('/admin/seguimientos/' . $trackingId);
     }
 
+    public function trackingSendStepMail(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        $stepCode = trim((string) ($_POST['step_code'] ?? ''));
+        try {
+            $result = (new StepMailService())->sendForStep($trackingId, $stepCode, (int) Auth::id());
+            $who = match ($result['audience']) {
+                'partner' => 'partner',
+                'provider' => 'proveedor',
+                default => 'alumno',
+            };
+            flash(
+                'success',
+                'Correo «' . $result['template'] . '» enviado al ' . $who . ' (' . $result['to'] . ').'
+            );
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        if (!empty($_POST['return_ops'])) {
+            redirect('/admin' . $this->opsReturnQuery());
+        }
+        redirect('/admin/seguimientos/' . $trackingId);
+    }
+
     public function documentApprove(string $id): void
     {
         Auth::requireRole(['admin']);
@@ -2257,7 +2283,7 @@ public function promoCode(): void
         $svc = new MailTemplateService();
         $placeholders = $this->mailTemplatePlaceholdersFromPost();
         $code = trim((string) ($_POST['code'] ?? ''));
-        $audience = ((string) ($_POST['audience'] ?? 'student')) === 'provider' ? 'provider' : 'student';
+        $audience = MailTemplateService::normalizeAudience((string) ($_POST['audience'] ?? 'student'));
 
         try {
             if ($audience === 'provider') {
@@ -2356,7 +2382,7 @@ public function promoCode(): void
         $svc = new MailTemplateService();
         $svc->ensureDefaults();
         $svc->migrateUksSolicitudTemplate();
-        $audience = ((string) ($_POST['audience'] ?? '')) === 'provider' ? 'provider' : 'student';
+        $audience = MailTemplateService::normalizeAudience((string) ($_POST['audience'] ?? 'student'));
         $requiresFixed = $audience === 'provider';
         $effectiveCode = $code;
         if ($code === MailTemplateService::UKS_SOLICITUD_LEGACY && $svc->find(MailTemplateService::UKS_SOLICITUD) !== null) {
@@ -2497,7 +2523,7 @@ public function promoCode(): void
         array $routing = ['to' => '', 'cc' => ''],
         string $audience = 'student'
     ): array {
-        $audience = $audience === 'provider' ? 'provider' : 'student';
+        $audience = MailTemplateService::normalizeAudience($audience);
         $old = old_input();
         if ($old === []) {
             $selected = MailTemplateService::placeholdersForTemplate($template);
@@ -2525,7 +2551,7 @@ public function promoCode(): void
             $routing['cc'] = (string) $old['cc_email'];
         }
         if (array_key_exists('audience', $old)) {
-            $audience = ((string) $old['audience']) === 'provider' ? 'provider' : 'student';
+            $audience = MailTemplateService::normalizeAudience((string) $old['audience']);
         }
 
         return [$template, $placeholders, $routing, $audience];

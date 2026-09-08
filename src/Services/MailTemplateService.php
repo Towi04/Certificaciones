@@ -62,6 +62,11 @@ final class MailTemplateService
             'cenni_folio' => 'Folio CENNI',
             'sep_consulta_url' => 'URL consulta SEP',
         ],
+        'Partner' => [
+            'partner_name' => 'Nombre del partner',
+            'partner_code' => 'Código del partner',
+            'partner_email' => 'Correo del partner',
+        ],
     ];
 
     private MailTemplateRepository $repo;
@@ -210,7 +215,7 @@ final class MailTemplateService
         }
     }
 
-    /** Destinatario configurado: student | provider. */
+    /** Destinatario configurado: student | provider | partner. */
     public function audience(string $code): string
     {
         return self::audienceForTemplate($code);
@@ -218,8 +223,16 @@ final class MailTemplateService
 
     public function saveAudience(string $code, string $audience): void
     {
-        $audience = $audience === 'provider' ? 'provider' : 'student';
-        Settings::set('mail_tpl_' . $code . '_audience', $audience);
+        Settings::set('mail_tpl_' . $code . '_audience', self::normalizeAudience($audience));
+    }
+
+    public static function normalizeAudience(string $audience): string
+    {
+        return match (strtolower(trim($audience))) {
+            'provider' => 'provider',
+            'partner' => 'partner',
+            default => 'student',
+        };
     }
 
     /**
@@ -306,8 +319,11 @@ final class MailTemplateService
             return 'student';
         }
         $saved = strtolower(trim(Settings::get('mail_tpl_' . $code . '_audience', '') ?? ''));
-        if ($saved === 'provider' || $saved === 'student') {
+        if (in_array($saved, ['provider', 'student', 'partner'], true)) {
             return $saved;
+        }
+        if (self::partnerTemplateHeuristic($code)) {
+            return 'partner';
         }
 
         return self::providerTemplateHeuristic($code) ? 'provider' : 'student';
@@ -322,6 +338,20 @@ final class MailTemplateService
             || str_starts_with($code, 'uks_')
             || str_contains($code, '_provider')
             || str_contains($code, 'proveedor');
+    }
+
+    /** Heurística por código (*partner*). */
+    public static function partnerTemplateHeuristic(string $code): bool
+    {
+        $code = trim($code);
+        if ($code === '') {
+            return false;
+        }
+
+        return str_starts_with($code, 'partner_')
+            || str_contains($code, '_partner')
+            || str_ends_with($code, '_partner')
+            || $code === 'partner';
     }
 
     /** @return array<string, array<string, string>> */
@@ -582,6 +612,9 @@ final class MailTemplateService
             'results_url' => 'https://certificados.example/elet/9999',
             'cenni_folio' => 'CENNI-ABC-123',
             'sep_consulta_url' => 'https://cennisistema.sep.gob.mx/cenni/consulta/consultaEstatus.jsp',
+            'partner_name' => 'Partner Ejemplo',
+            'partner_code' => 'PARTNER01',
+            'partner_email' => 'partner@ejemplo.com',
         ]);
 
         $out = [];

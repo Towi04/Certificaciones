@@ -206,13 +206,14 @@ $q = (string) ($filters['q'] ?? '');
                                         <span class="ops-mini-ok" title="Comprobante DOCEO→proveedor listo (detalle)"><?= icon('check') ?> comprobante</span>
                                     <?php endif; ?>
                                     <?php else: ?>
-                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/avanzar')) ?>" class="ops-inline-form">
+                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/enviar-correo-paso')) ?>" class="ops-inline-form">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="return_ops" value="1">
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                         <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
-                                        <button class="<?= e($btnClass) ?>" type="submit">
+                                        <button class="<?= e($btnClass) ?>" type="submit"
+                                            title="<?= $audience === 'partner' ? 'Enviar al partner del caso' : 'Enviar plantilla al alumno' ?>">
                                             <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
                                         </button>
                                     </form>

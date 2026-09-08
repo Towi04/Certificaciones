@@ -25,11 +25,16 @@
             <?php foreach ($templates as $t): ?>
                 <?php
                 $aud = \App\Services\MailTemplateService::audienceForTemplate((string) ($t['code'] ?? ''));
+                $audLabel = match ($aud) {
+                    'provider' => 'Proveedor',
+                    'partner' => 'Partner',
+                    default => 'Alumno',
+                };
                 ?>
                 <tr>
                     <td><?= e($t['name']) ?></td>
                     <td><code><?= e($t['code']) ?></code></td>
-                    <td><?= $aud === 'provider' ? 'Proveedor' : 'Alumno' ?></td>
+                    <td><?= e($audLabel) ?></td>
                     <td><?= (int) $t['is_active'] ? 'Sí' : 'No' ?></td>
                     <td>
                         <span class="row-actions">

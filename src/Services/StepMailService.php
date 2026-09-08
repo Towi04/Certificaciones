@@ -1,0 +1,206 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services;
+
+use App\Database\Connection;
+use App\Repositories\PartnerRepository;
+use PDO;
+
+/**
+ * Envía la plantilla de un paso de Operación al destinatario según la plantilla
+ * (alumno, partner o proveedor fijo vía ProviderRequestService).
+ */
+final class StepMailService
+{
+    private PDO $pdo;
+    private TrackingService $tracking;
+
+    public function __construct()
+    {
+        $this->pdo = Connection::get();
+        $this->tracking = new TrackingService();
+    }
+
+    /**
+     * @return array{to:string,template:string,audience:string}
+     */
+    public function sendForStep(int $trackingId, string $stepCode, ?int $actorUserId = null): array
+    {
+        $stepCode = trim($stepCode);
+        if ($stepCode === '') {
+            throw new \InvalidArgumentException('Indica el paso a enviar.');
+        }
+
+        $tracking = $this->tracking->find($trackingId);
+        if ($tracking === null) {
+            throw new \InvalidArgumentException('Seguimiento no encontrado.');
+        }
+
+        $product = [
+            'config_json' => $tracking['config_json'] ?? null,
+            'group_config_json' => $tracking['group_config_json'] ?? null,
+            'id' => $tracking['product_id'] ?? 0,
+            'name' => $tracking['product_name'] ?? '',
+            'code' => $tracking['product_code'] ?? '',
+        ];
+        $defs = GroupStepConfig::defsFromConfig(CheckoutRequirements::config($product));
+        $def = is_array($defs[$stepCode] ?? null) ? $defs[$stepCode] : null;
+        if ($def === null) {
+            throw new \InvalidArgumentException('El paso «' . $stepCode . '» no está en el grupo.');
+        }
+
+        $emailCfg = is_array($def['email'] ?? null) ? $def['email'] : [];
+        $tplCode = trim((string) ($emailCfg['template_code'] ?? ''));
+        if ($tplCode === '') {
+            throw new \InvalidArgumentException('El paso no tiene plantilla de correo configurada.');
+        }
+        if (empty($emailCfg['enabled'])) {
+            throw new \InvalidArgumentException('El paso no tiene «Enviar correo» activado.');
+        }
+
+        $audience = MailTemplateService::audienceForTemplate($tplCode);
+        if ($audience === 'provider') {
+            throw new \InvalidArgumentException(
+                'Esta plantilla es de proveedor. Usa el botón de solicitud a proveedor.'
+            );
+        }
+
+        $vars = $this->buildVars($tracking);
+        $to = $this->resolveRecipient($tracking, $audience);
+        $mail = new MailTemplateService();
+        if ($mail->render($tplCode, $vars) === null) {
+            throw new \RuntimeException('Plantilla no encontrada o desactivada: ' . $tplCode);
+        }
+        $mail->send($tplCode, $to, $vars);
+
+        $this->markSent($trackingId, $stepCode, $actorUserId, $to, $tplCode, $audience);
+        $this->tracking->markStepDone(
+            $trackingId,
+            $stepCode,
+            $actorUserId,
+            'Correo «' . $tplCode . '» enviado a ' . $to . ' (' . $audience . ')'
+        );
+
+        return [
+            'to' => $to,
+            'template' => $tplCode,
+            'audience' => $audience,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $tracking
+     * @return array<string, string>
+     */
+    public function buildVars(array $tracking): array
+    {
+        $name = trim((string) (($tracking['first_name'] ?? '') . ' ' . ($tracking['last_name_p'] ?? '')));
+        $fullName = trim($name . ' ' . (string) ($tracking['last_name_m'] ?? ''));
+        $partner = $this->partnerRowForTracking($tracking);
+
+        return [
+            'name' => $name,
+            'full_name' => $fullName !== '' ? $fullName : $name,
+            'first_name' => (string) ($tracking['first_name'] ?? ''),
+            'last_name_p' => (string) ($tracking['last_name_p'] ?? ''),
+            'last_name_m' => (string) ($tracking['last_name_m'] ?? ''),
+            'student_email' => (string) ($tracking['student_email'] ?? ''),
+            'student_phone' => (string) ($tracking['student_phone'] ?? ''),
+            'matricula' => (string) ($tracking['matricula'] ?? ''),
+            'product_name' => (string) ($tracking['product_name'] ?? ''),
+            'certificacion' => (string) ($tracking['product_name'] ?? ''),
+            'exam_date' => (string) ($tracking['exam_date'] ?? ''),
+            'exam_time' => !empty($tracking['exam_time'])
+                ? substr((string) $tracking['exam_time'], 0, 5)
+                : '',
+            'folio' => (string) ($tracking['folio'] ?? ''),
+            'access_key' => (string) ($tracking['access_key'] ?? ''),
+            'partner_email' => (string) ($partner['email'] ?? ''),
+            'partner_name' => (string) ($partner['display_name'] ?? ''),
+            'partner_code' => (string) ($partner['code'] ?? ''),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $tracking
+     */
+    public function resolveRecipient(array $tracking, string $audience): string
+    {
+        $audience = MailTemplateService::normalizeAudience($audience);
+        if ($audience === 'partner') {
+            $partner = $this->partnerRowForTracking($tracking);
+            $email = trim((string) ($partner['email'] ?? ''));
+            if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new \RuntimeException(
+                    'Este caso no tiene partner con correo. '
+                    . 'El alumno debió inscribirse con código de partner o ser registrado por un partner.'
+                );
+            }
+
+            return $email;
+        }
+
+        $email = trim((string) ($tracking['student_email'] ?? $tracking['email'] ?? ''));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new \RuntimeException('El alumno no tiene un correo válido.');
+        }
+
+        return $email;
+    }
+
+    /**
+     * @param array<string, mixed> $tracking
+     * @return array<string, mixed>|null
+     */
+    public function partnerRowForTracking(array $tracking): ?array
+    {
+        $partnerId = (int) ($tracking['partner_id'] ?? 0);
+        if ($partnerId < 1) {
+            $purchaseId = (int) ($tracking['purchase_id'] ?? 0);
+            if ($purchaseId > 0) {
+                $stmt = $this->pdo->prepare('SELECT partner_id FROM purchases WHERE id = ? LIMIT 1');
+                $stmt->execute([$purchaseId]);
+                $partnerId = (int) $stmt->fetchColumn();
+            }
+        }
+        if ($partnerId < 1) {
+            return null;
+        }
+
+        return (new PartnerRepository())->find($partnerId);
+    }
+
+    private function markSent(
+        int $trackingId,
+        string $stepCode,
+        ?int $actorUserId,
+        string $to,
+        string $templateCode,
+        string $audience
+    ): void {
+        $tracking = $this->tracking->find($trackingId);
+        if ($tracking === null) {
+            return;
+        }
+        $extra = [];
+        if (!empty($tracking['extra_json']) && is_string($tracking['extra_json'])) {
+            $decoded = json_decode($tracking['extra_json'], true);
+            $extra = is_array($decoded) ? $decoded : [];
+        } elseif (is_array($tracking['extra_json'] ?? null)) {
+            $extra = $tracking['extra_json'];
+        }
+        $sentMap = is_array($extra['step_mail_sent'] ?? null) ? $extra['step_mail_sent'] : [];
+        $sentMap[$stepCode] = [
+            'at' => date('c'),
+            'by' => $actorUserId,
+            'to' => $to,
+            'template' => $templateCode,
+            'audience' => $audience,
+        ];
+        $extra['step_mail_sent'] = $sentMap;
+        $this->pdo->prepare('UPDATE trackings SET extra_json = ? WHERE id = ?')
+            ->execute([json_encode($extra, JSON_UNESCAPED_UNICODE), $trackingId]);
+    }
+}

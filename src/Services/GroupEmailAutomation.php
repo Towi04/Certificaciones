@@ -204,20 +204,23 @@ final class GroupEmailAutomation
             'name' => $tracking['product_name'] ?? '',
             'code' => $tracking['product_code'] ?? '',
         ];
-        $email = trim((string) ($tracking['student_email'] ?? $tracking['email'] ?? ''));
-        if ($email === '') {
-            return;
-        }
 
         $mail = new MailTemplateService();
+        $stepMail = new StepMailService();
         foreach (self::rulesForStep($product, $stepCode) as $rule) {
-            if ($rule['mode'] !== 'auto' || $rule['audience'] !== 'student') {
+            if ($rule['mode'] !== 'auto') {
                 continue;
             }
             $code = $rule['template_code'];
+            $audience = MailTemplateService::audienceForTemplate($code);
+            if ($audience === 'provider') {
+                continue;
+            }
             try {
-                if ($mail->render($code, $vars) !== null) {
-                    $mail->send($code, $email, $vars);
+                $to = $stepMail->resolveRecipient($tracking, $audience);
+                $mergedVars = array_merge($stepMail->buildVars($tracking), $vars);
+                if ($mail->render($code, $mergedVars) !== null) {
+                    $mail->send($code, $to, $mergedVars);
                 }
             } catch (\Throwable $e) {
                 error_log('[Doceo] Correo automático paso ' . $stepCode . '/' . $code . ': ' . $e->getMessage());
@@ -289,7 +292,11 @@ final class GroupEmailAutomation
                 continue;
             }
             $mode = ((string) ($row['mode'] ?? 'admin')) === 'auto' ? 'auto' : 'admin';
-            $audience = ((string) ($row['audience'] ?? 'student')) === 'provider' ? 'provider' : 'student';
+            $audience = MailTemplateService::audienceForTemplate($template);
+            if (($row['audience'] ?? '') !== '' && $audience === 'student') {
+                // Si no hay audiencia en plantilla guardada, respeta la del rule solo como fallback tipado.
+                $audience = MailTemplateService::normalizeAudience((string) $row['audience']);
+            }
             $out[] = [
                 'step_code' => $step,
                 'template_code' => $template,
