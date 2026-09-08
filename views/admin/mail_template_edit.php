@@ -32,13 +32,13 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
             <div style="display:grid;gap:.75rem">
                 <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
                     Nombre *
-                    <input type="text" name="name" required value=""
+                    <input type="text" name="name" required value="<?= e((string) ($template['name'] ?? '')) ?>"
                         placeholder="Alumno · Recordatorio de examen"
                         style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
                 </label>
                 <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
                     Código *
-                    <input type="text" name="code" required pattern="[a-z0-9_]{3,60}" value=""
+                    <input type="text" name="code" required pattern="[a-z0-9_]{3,60}" value="<?= e((string) ($template['code'] ?? '')) ?>"
                         placeholder="student_exam_reminder"
                         style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
                     <span style="font-size:.78rem">Usa minúsculas, números y guion bajo. Este código se usará para invocar la plantilla.</span>
@@ -46,8 +46,8 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
                 <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
                     Modo
                     <select name="trigger_mode" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-                        <option value="manual">Manual / configurable</option>
-                        <option value="automatic">Automática</option>
+                        <option value="manual" <?= (($template['trigger_mode'] ?? 'manual') === 'manual') ? 'selected' : '' ?>>Manual / configurable</option>
+                        <option value="automatic" <?= (($template['trigger_mode'] ?? '') === 'automatic') ? 'selected' : '' ?>>Automática</option>
                     </select>
                 </label>
             </div>

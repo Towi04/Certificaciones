@@ -140,6 +140,100 @@ function flash(string $key, mixed $value = null): mixed
     return $msg;
 }
 
+/**
+ * Guarda el POST (sin secretos) para rellenar el formulario tras un error de validación.
+ *
+ * @param array<string, mixed> $input
+ */
+function flash_input(array $input): void
+{
+    $_SESSION['_flash']['_old_input'] = sanitize_old_input($input);
+}
+
+/**
+ * Input capturado en el intento fallido (una sola vez por request).
+ *
+ * @return array<string, mixed>
+ */
+function old_input(): array
+{
+    static $bag = null;
+    if ($bag === null) {
+        $raw = $_SESSION['_flash']['_old_input'] ?? null;
+        unset($_SESSION['_flash']['_old_input']);
+        $bag = is_array($raw) ? $raw : [];
+    }
+
+    return $bag;
+}
+
+function has_old_input(): bool
+{
+    return old_input() !== [];
+}
+
+/** Valor previo del formulario; $default si no hay intento fallido. */
+function old(string $key, mixed $default = null): mixed
+{
+    $bag = old_input();
+    if (array_key_exists($key, $bag)) {
+        return $bag[$key];
+    }
+
+    return $default;
+}
+
+function old_checked(string $key, bool $default = false): bool
+{
+    $bag = old_input();
+    if ($bag === []) {
+        return $default;
+    }
+
+    return !empty($bag[$key]);
+}
+
+/**
+ * @param array<string, mixed> $input
+ * @return array<string, mixed>
+ */
+function sanitize_old_input(array $input): array
+{
+    foreach (['_csrf', 'password', 'password_confirmation', 'current_password', 'new_password'] as $secret) {
+        unset($input[$secret]);
+    }
+    // Quitar posibles binarios / recursos
+    array_walk_recursive($input, static function (mixed &$v): void {
+        if (is_string($v) && strlen($v) > 200000) {
+            $v = substr($v, 0, 200000);
+        }
+        if (!is_scalar($v) && !is_array($v) && $v !== null) {
+            $v = null;
+        }
+    });
+
+    $encoded = json_encode($input);
+    if ($encoded === false || strlen($encoded) > 800000) {
+        $slim = [];
+        foreach ($input as $k => $v) {
+            if (is_scalar($v) || is_array($v) || $v === null) {
+                $slim[$k] = $v;
+            }
+        }
+
+        return $slim;
+    }
+
+    return $input;
+}
+
+/** Flash de error + conservar lo capturado (redirect back to form). */
+function flash_form_error(string $message, ?array $input = null): void
+{
+    flash('error', $message);
+    flash_input($input ?? $_POST);
+}
+
 function csrf_token(): string
 {
     if (empty($_SESSION['_csrf'])) {
