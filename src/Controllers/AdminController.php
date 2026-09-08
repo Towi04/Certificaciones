@@ -942,10 +942,27 @@ final class AdminController
         csrf_verify();
         $trackingId = (int) $id;
         try {
+            $stepCode = trim((string) ($_POST['step_code'] ?? ''));
+            $wantNotify = !empty($_POST['notify']);
+            $useStepMail = false;
+            if ($stepCode !== '') {
+                $tracking = (new TrackingService())->find($trackingId);
+                if ($tracking !== null) {
+                    $defs = GroupStepConfig::defsFromConfig(CheckoutRequirements::config([
+                        'config_json' => $tracking['config_json'] ?? null,
+                        'group_config_json' => $tracking['group_config_json'] ?? null,
+                    ]));
+                    $emailCfg = is_array(($defs[$stepCode]['email'] ?? null)) ? $defs[$stepCode]['email'] : [];
+                    $useStepMail = !empty($emailCfg['enabled'])
+                        && trim((string) ($emailCfg['template_code'] ?? '')) !== '';
+                }
+            }
+
             $examData = [
                 'exam_date' => $_POST['exam_date'] ?? null,
                 'exam_time' => $_POST['exam_time'] ?? null,
-                'notify' => !empty($_POST['notify']),
+                // Si el paso tiene plantilla, el envío lo hace StepMailService (evita doble correo).
+                'notify' => $wantNotify && !$useStepMail,
             ];
             if (array_key_exists('exam_date_2', $_POST)) {
                 $examData['exam_date_2'] = $_POST['exam_date_2'];
@@ -957,7 +974,6 @@ final class AdminController
                 $examData['zoom_url'] = $_POST['zoom_url'];
             }
             (new TrackingService())->saveExamSchedule($trackingId, $examData, (int) Auth::id());
-            $stepCode = trim((string) ($_POST['step_code'] ?? ''));
             if ($stepCode !== '') {
                 (new TrackingService())->markStepDone(
                     $trackingId,
@@ -966,7 +982,15 @@ final class AdminController
                     'Fecha/hora de examen actualizada'
                 );
             }
-            flash('success', 'Fecha de examen guardada.');
+
+            $mailMsg = '';
+            if ($useStepMail) {
+                $result = (new StepMailService())->sendForStep($trackingId, $stepCode, (int) Auth::id());
+                $mailMsg = ' Correo «' . $result['template'] . '» enviado a ' . $result['to'] . '.';
+            } elseif ($wantNotify) {
+                $mailMsg = ' Aviso enviado al alumno.';
+            }
+            flash('success', 'Fecha de examen guardada.' . $mailMsg);
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
@@ -1131,6 +1155,32 @@ final class AdminController
                 $includeProof
             );
             flash('success', 'Solicitud enviada al proveedor.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        if (!empty($_POST['return_ops'])) {
+            redirect('/admin' . $this->opsReturnQuery());
+        }
+        redirect('/admin/seguimientos/' . $trackingId);
+    }
+
+    public function trackingSendStepMail(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        $stepCode = trim((string) ($_POST['step_code'] ?? ''));
+        try {
+            $result = (new StepMailService())->sendForStep($trackingId, $stepCode, (int) Auth::id());
+            $who = match ($result['audience']) {
+                'partner' => 'partner',
+                'provider' => 'proveedor',
+                default => 'alumno',
+            };
+            flash(
+                'success',
+                'Correo «' . $result['template'] . '» enviado al ' . $who . ' (' . $result['to'] . ').'
+            );
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
@@ -2257,21 +2307,17 @@ public function promoCode(): void
         $svc = new MailTemplateService();
         $placeholders = $this->mailTemplatePlaceholdersFromPost();
         $code = trim((string) ($_POST['code'] ?? ''));
-        $audience = ((string) ($_POST['audience'] ?? 'student')) === 'provider' ? 'provider' : 'student';
+        $audience = MailTemplateService::normalizeAudience((string) ($_POST['audience'] ?? 'student'));
 
         try {
+            $toEmail = '';
+            $ccEmail = trim((string) ($_POST['cc_email'] ?? ''));
+            $this->assertMailCcValid($ccEmail);
             if ($audience === 'provider') {
                 $toEmail = trim((string) ($_POST['to_email'] ?? ''));
                 if ($toEmail === '' || !filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
                     throw new \InvalidArgumentException('Indica un correo válido en Para (proveedor).');
                 }
-                $ccEmail = trim((string) ($_POST['cc_email'] ?? ''));
-                if ($ccEmail !== '' && !preg_match('/^[^@\s]+@[^@\s]+\.[^@\s]+(\s*,\s*[^@\s]+@[^@\s]+\.[^@\s]+)*$/', $ccEmail)) {
-                    throw new \InvalidArgumentException('CC inválido. Usa uno o más correos separados por coma.');
-                }
-            } else {
-                $toEmail = '';
-                $ccEmail = '';
             }
 
             $svc->create(
@@ -2284,9 +2330,7 @@ public function promoCode(): void
                 (string) ($_POST['trigger_mode'] ?? 'manual')
             );
             $svc->saveAudience($code, $audience);
-            if ($audience === 'provider') {
-                $svc->saveRouting($code, $toEmail, $ccEmail);
-            }
+            $svc->saveRouting($code, $toEmail, $ccEmail);
             flash('success', 'Plantilla creada. Ya puedes editarla o probarla.');
             redirect('/admin/correos/' . $code);
         } catch (\Throwable $e) {
@@ -2356,7 +2400,7 @@ public function promoCode(): void
         $svc = new MailTemplateService();
         $svc->ensureDefaults();
         $svc->migrateUksSolicitudTemplate();
-        $audience = ((string) ($_POST['audience'] ?? '')) === 'provider' ? 'provider' : 'student';
+        $audience = MailTemplateService::normalizeAudience((string) ($_POST['audience'] ?? 'student'));
         $requiresFixed = $audience === 'provider';
         $effectiveCode = $code;
         if ($code === MailTemplateService::UKS_SOLICITUD_LEGACY && $svc->find(MailTemplateService::UKS_SOLICITUD) !== null) {
@@ -2374,17 +2418,16 @@ public function promoCode(): void
             );
             $svc->saveAudience($effectiveCode, $audience);
 
+            $toEmail = '';
             if ($requiresFixed) {
                 $toEmail = trim((string) ($_POST['to_email'] ?? ''));
                 if ($toEmail === '' || !filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
                     throw new \InvalidArgumentException('Indica un correo válido en Para (proveedor).');
                 }
-                $ccEmail = trim((string) ($_POST['cc_email'] ?? ''));
-                if ($ccEmail !== '' && !preg_match('/^[^@\s]+@[^@\s]+\.[^@\s]+(\s*,\s*[^@\s]+@[^@\s]+\.[^@\s]+)*$/', $ccEmail)) {
-                    throw new \InvalidArgumentException('CC inválido. Usa uno o más correos separados por coma.');
-                }
-                $svc->saveRouting($effectiveCode, $toEmail, $ccEmail);
             }
+            $ccEmail = trim((string) ($_POST['cc_email'] ?? ''));
+            $this->assertMailCcValid($ccEmail);
+            $svc->saveRouting($effectiveCode, $toEmail, $ccEmail);
 
             // Excel opcional ligado a la plantilla
             $wbPath = trim((string) ($_POST['workbook_template_path'] ?? ''));
@@ -2481,6 +2524,30 @@ public function promoCode(): void
         return MailTemplateService::sanitizePlaceholders(array_values($raw));
     }
 
+    /** CC: correos fijos y/o placeholders como {{partner_email}}. */
+    private function assertMailCcValid(string $ccEmail): void
+    {
+        $ccEmail = trim($ccEmail);
+        if ($ccEmail === '') {
+            return;
+        }
+        $parts = preg_split('/\s*,\s*/', $ccEmail) ?: [];
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($part === '') {
+                continue;
+            }
+            if (preg_match('/^\{\{\s*[a-zA-Z0-9_]+\s*\}\}$/', $part) === 1) {
+                continue;
+            }
+            if (!filter_var($part, FILTER_VALIDATE_EMAIL)) {
+                throw new \InvalidArgumentException(
+                    'CC inválido. Usa correos, {{partner_email}} o ambos separados por coma.'
+                );
+            }
+        }
+    }
+
     /** Conserva POST y muestra el error al volver al formulario. */
     private function formError(string $message, ?array $input = null): void
     {
@@ -2497,7 +2564,7 @@ public function promoCode(): void
         array $routing = ['to' => '', 'cc' => ''],
         string $audience = 'student'
     ): array {
-        $audience = $audience === 'provider' ? 'provider' : 'student';
+        $audience = MailTemplateService::normalizeAudience($audience);
         $old = old_input();
         if ($old === []) {
             $selected = MailTemplateService::placeholdersForTemplate($template);
@@ -2525,7 +2592,7 @@ public function promoCode(): void
             $routing['cc'] = (string) $old['cc_email'];
         }
         if (array_key_exists('audience', $old)) {
-            $audience = ((string) $old['audience']) === 'provider' ? 'provider' : 'student';
+            $audience = MailTemplateService::normalizeAudience((string) $old['audience']);
         }
 
         return [$template, $placeholders, $routing, $audience];

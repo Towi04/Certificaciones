@@ -11,7 +11,7 @@
 /** @var list<string> $selectedPlaceholders */
 /** @var bool $isNew */
 $isNew = $isNew ?? false;
-$audience = ($audience ?? 'student') === 'provider' ? 'provider' : 'student';
+$audience = \App\Services\MailTemplateService::normalizeAudience((string) ($audience ?? 'student'));
 $requiresFixedRecipient = $requiresFixedRecipient ?? ($audience === 'provider');
 $selectedPlaceholders = $selectedPlaceholders ?? $placeholders;
 $availablePlaceholders = $availablePlaceholders ?? [];
@@ -58,8 +58,8 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
         <?php endif; ?>
 
         <?php
-        $audience = ($audience ?? 'student') === 'provider' ? 'provider' : 'student';
-        $showRouting = $audience === 'provider';
+        $audience = \App\Services\MailTemplateService::normalizeAudience((string) ($audience ?? 'student'));
+        $showProviderTo = $audience === 'provider';
         ?>
         <div style="margin-bottom:1.25rem;padding:1rem;background:#f4f7fb;border-radius:12px;border:1px solid #dbeafe">
             <h2 style="margin:0 0 .75rem;font-size:1rem;color:var(--doceo-blue)">Destinatario</h2>
@@ -68,32 +68,44 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
                     ¿A quién se envía?
                     <select name="audience" id="mail-audience" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
                         <option value="student" <?= $audience === 'student' ? 'selected' : '' ?>>Alumno (correo de su cuenta)</option>
+                        <option value="partner" <?= $audience === 'partner' ? 'selected' : '' ?>>Partner (según el alumno inscrito)</option>
                         <option value="provider" <?= $audience === 'provider' ? 'selected' : '' ?>>Proveedor (correo fijo)</option>
                     </select>
                 </label>
             </div>
 
-            <div id="mail-student-hint" class="muted" style="margin:.75rem 0 0;font-size:.88rem;<?= $showRouting ? 'display:none' : '' ?>">
+            <div id="mail-student-hint" class="muted" style="margin:.75rem 0 0;font-size:.88rem;<?= $audience === 'student' ? '' : 'display:none' ?>">
                 Este correo se envía al <strong>alumno</strong> (correo de su cuenta). No requiere destinatario fijo.
             </div>
 
-            <div id="mail-routing-fields" style="<?= $showRouting ? 'display:grid;gap:.75rem;margin-top:.85rem' : 'display:none;margin-top:.85rem' ?>">
+            <div id="mail-partner-hint" class="muted" style="margin:.75rem 0 0;font-size:.88rem;<?= $audience === 'partner' ? '' : 'display:none' ?>">
+                Se envía al <strong>partner vinculado al caso</strong>: el del código usado al inscribirse o el que registró al alumno.
+                Usa etiquetas como <code>{{partner_name}}</code>, <code>{{partner_code}}</code> o <code>{{partner_email}}</code> en el contenido.
+            </div>
+
+            <div id="mail-provider-to" style="<?= $showProviderTo ? 'display:grid;gap:.75rem;margin-top:.85rem' : 'display:none;margin-top:.85rem' ?>">
                 <p class="muted" style="margin:0;font-size:.85rem">
-                    Configura el correo del <strong>proveedor</strong> y, si quieres, una copia (CC) para el partner u otros buzones.
+                    Configura el correo fijo del <strong>proveedor</strong>.
                 </p>
                 <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
                     Para (proveedor) *
                     <input type="email" name="to_email" id="mail-to-email" value="<?= e($routing['to'] ?? '') ?>"
                         placeholder="operaciones@proveedor.com"
                         style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px"
-                        <?= $showRouting ? 'required' : '' ?>>
+                        <?= $showProviderTo ? 'required' : '' ?>>
                 </label>
+            </div>
+
+            <div id="mail-cc-fields" style="display:grid;gap:.55rem;margin-top:.85rem">
                 <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-                    CC partner / copias (opcional)
+                    CC (opcional)
                     <input type="text" name="cc_email" id="mail-cc-email" value="<?= e($routing['cc'] ?? '') ?>"
-                        placeholder="partner@ejemplo.com, copia@institutodoceo.com"
+                        placeholder="{{partner_email}} o copia@institutodoceo.com"
                         style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-                    <span style="font-size:.78rem">Separa varios correos con coma.</span>
+                    <span style="font-size:.78rem">
+                        Puedes poner <code>{{partner_email}}</code>: si el alumno no tiene partner, <strong>no se envía copia a nadie</strong>.
+                        También acepta correos fijos separados por coma.
+                    </span>
                 </label>
             </div>
         </div>
@@ -575,15 +587,21 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
 })();
 (function () {
   var audience = document.getElementById('mail-audience');
-  var routing = document.getElementById('mail-routing-fields');
+  var providerTo = document.getElementById('mail-provider-to');
   var studentHint = document.getElementById('mail-student-hint');
+  var partnerHint = document.getElementById('mail-partner-hint');
   var toInput = document.getElementById('mail-to-email');
-  if (!audience || !routing) return;
+  if (!audience) return;
   function syncAudienceUi() {
-    var isProvider = audience.value === 'provider';
-    routing.style.display = isProvider ? 'grid' : 'none';
-    routing.style.gap = isProvider ? '.75rem' : '';
-    if (studentHint) studentHint.style.display = isProvider ? 'none' : '';
+    var value = audience.value;
+    var isProvider = value === 'provider';
+    var isPartner = value === 'partner';
+    if (providerTo) {
+      providerTo.style.display = isProvider ? 'grid' : 'none';
+      providerTo.style.gap = isProvider ? '.75rem' : '';
+    }
+    if (studentHint) studentHint.style.display = value === 'student' ? '' : 'none';
+    if (partnerHint) partnerHint.style.display = isPartner ? '' : 'none';
     if (toInput) {
       if (isProvider) toInput.setAttribute('required', 'required');
       else toInput.removeAttribute('required');

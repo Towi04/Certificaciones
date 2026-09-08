@@ -421,9 +421,8 @@ final class GroupStepConfig
         if ($tpl !== '') {
             return MailTemplateService::audienceForTemplate($tpl);
         }
-        $aud = (string) ($email['audience'] ?? 'student');
 
-        return $aud === 'provider' ? 'provider' : 'student';
+        return MailTemplateService::normalizeAudience((string) ($email['audience'] ?? 'student'));
     }
 
     /**

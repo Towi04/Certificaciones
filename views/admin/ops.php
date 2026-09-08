@@ -206,13 +206,14 @@ $q = (string) ($filters['q'] ?? '');
                                         <span class="ops-mini-ok" title="Comprobante DOCEO→proveedor listo (detalle)"><?= icon('check') ?> comprobante</span>
                                     <?php endif; ?>
                                     <?php else: ?>
-                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/avanzar')) ?>" class="ops-inline-form">
+                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/enviar-correo-paso')) ?>" class="ops-inline-form">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="return_ops" value="1">
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                         <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
-                                        <button class="<?= e($btnClass) ?>" type="submit">
+                                        <button class="<?= e($btnClass) ?>" type="submit"
+                                            title="<?= $audience === 'partner' ? 'Enviar al partner del caso' : 'Enviar plantilla al alumno' ?>">
                                             <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
                                         </button>
                                     </form>
@@ -237,6 +238,8 @@ $q = (string) ($filters['q'] ?? '');
                                     <?php
                                     $examDateVal = (string) ($r['exam_date'] ?? '');
                                     $examTimeVal = !empty($r['exam_time']) ? substr((string) $r['exam_time'], 0, 5) : '';
+                                    $examMailOn = !empty($btn['email']['enabled'])
+                                        && trim((string) ($btn['email']['template_code'] ?? '')) !== '';
                                     ?>
                                     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/examen')) ?>"
                                           class="ops-inline-form ops-collect-form">
@@ -245,14 +248,15 @@ $q = (string) ($filters['q'] ?? '');
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                         <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
-                                        <input type="hidden" name="notify" value="0">
+                                        <input type="hidden" name="notify" value="<?= $examMailOn ? '1' : '0' ?>">
                                         <div class="ops-collect-fields">
                                             <input class="ops-input" type="date" name="exam_date" required
                                                    value="<?= e($examDateVal) ?>" title="Fecha examen">
                                             <input class="ops-input" type="time" name="exam_time"
                                                    value="<?= e($examTimeVal) ?>" title="Hora examen">
                                         </div>
-                                        <button class="<?= e($btnClass) ?>" type="submit">
+                                        <button class="<?= e($btnClass) ?>" type="submit"
+                                            title="<?= $examMailOn ? 'Guardar fecha y avisar por correo' : 'Guardar fecha de examen' ?>">
                                             <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
                                         </button>
                                     </form>
