@@ -231,12 +231,14 @@ final class GroupStepConfig
                 };
             }
             $email = is_array($step['email'] ?? null) ? $step['email'] : [];
+            $audience = self::audienceFromEmail($email);
+            $email['audience'] = $audience;
             $buttons[] = [
                 'code' => (string) $step['code'],
                 'label' => $label,
                 'action' => $action,
                 'email' => $email,
-                'audience' => (string) ($email['audience'] ?? 'student'),
+                'audience' => $audience,
                 'admin_only' => !empty($step['admin_only']),
                 'done' => $done,
             ];
@@ -399,6 +401,22 @@ final class GroupStepConfig
     }
 
     /**
+     * Destinatario según la plantilla (no se pregunta en el grupo).
+     *
+     * @param array<string, mixed> $email
+     */
+    public static function audienceFromEmail(array $email): string
+    {
+        $tpl = trim((string) ($email['template_code'] ?? ''));
+        if ($tpl !== '') {
+            return MailTemplateService::audienceForTemplate($tpl);
+        }
+        $aud = (string) ($email['audience'] ?? 'student');
+
+        return $aud === 'provider' ? 'provider' : 'student';
+    }
+
+    /**
      * @param array<string, mixed> $row
      * @param array<string, mixed> $step
      */
@@ -479,7 +497,8 @@ final class GroupStepConfig
                     'enabled' => !empty($row['email_enabled']),
                     'trigger' => (string) ($row['email_trigger'] ?? 'admin'),
                     'template_code' => trim((string) ($row['email_template'] ?? '')),
-                    'audience' => (string) ($row['email_audience'] ?? 'student'),
+                    // Destinatario lo define la plantilla; no se pide en el grupo.
+                    'audience' => '',
                     'to' => trim((string) ($row['email_to'] ?? '')),
                     'cc' => trim((string) ($row['email_cc'] ?? '')),
                 ],
@@ -491,8 +510,9 @@ final class GroupStepConfig
         // Mantener provider_request sincronizado para runtime existente
         $providerStep = null;
         foreach ($defs as $def) {
+            $email = is_array($def['email'] ?? null) ? $def['email'] : [];
             if (($def['action'] ?? '') === self::ACTION_SEND_MAIL
-                && (($def['email']['audience'] ?? '') === 'provider')
+                && self::audienceFromEmail($email) === 'provider'
             ) {
                 $providerStep = $def;
                 break;
@@ -557,10 +577,11 @@ final class GroupStepConfig
         if (!in_array($trigger, ['admin', 'auto'], true)) {
             $trigger = 'admin';
         }
-        $audience = (string) ($emailRaw['audience'] ?? $row['email_audience'] ?? 'student');
-        if (!in_array($audience, ['student', 'provider'], true)) {
-            $audience = 'student';
-        }
+        $templateCode = trim((string) ($emailRaw['template_code'] ?? $row['email_template'] ?? ''));
+        $audience = self::audienceFromEmail([
+            'template_code' => $templateCode,
+            'audience' => (string) ($emailRaw['audience'] ?? $row['email_audience'] ?? ''),
+        ]);
 
         return [
             'code' => $code,
@@ -575,7 +596,7 @@ final class GroupStepConfig
             'email' => [
                 'enabled' => !empty($emailRaw['enabled']) || !empty($row['email_enabled']),
                 'trigger' => $trigger,
-                'template_code' => trim((string) ($emailRaw['template_code'] ?? $row['email_template'] ?? '')),
+                'template_code' => $templateCode,
                 'audience' => $audience,
                 'to' => trim((string) ($emailRaw['to'] ?? $row['email_to'] ?? '')),
                 'cc' => trim((string) ($emailRaw['cc'] ?? $row['email_cc'] ?? '')),
@@ -598,7 +619,8 @@ final class GroupStepConfig
     private static function isMailStepDone(array $row, array $step): bool
     {
         $extra = self::decodeExtra($row);
-        $audience = (string) (($step['email']['audience'] ?? '') ?: 'student');
+        $email = is_array($step['email'] ?? null) ? $step['email'] : [];
+        $audience = self::audienceFromEmail($email);
         $code = (string) ($step['code'] ?? '');
 
         if ($audience === 'provider') {
