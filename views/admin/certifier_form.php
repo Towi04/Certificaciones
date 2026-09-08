@@ -5,7 +5,7 @@ $action = $isEdit ? url('/admin/certificadoras/' . $certifier['id']) : url('/adm
 $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px';
 $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600';
 ?>
-<p class="meta"><a href="<?= e(url('/admin/certificadoras')) ?>">← Certificadoras</a></p>
+<p class="meta"><a href="<?= e(url('/admin/proveedores?tab=certificadoras')) ?>">← Certificadoras</a></p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">
     <?= $isEdit ? 'Editar certificadora' : 'Nueva certificadora' ?>
 </h1>
@@ -58,6 +58,6 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
     </label>
     <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1rem">
         <button class="btn btn-accent" type="submit"><?= $isEdit ? 'Guardar' : 'Crear certificadora' ?></button>
-        <a class="btn btn-ghost" href="<?= e(url('/admin/certificadoras')) ?>">Cancelar</a>
+        <a class="btn btn-ghost" href="<?= e(url('/admin/proveedores?tab=certificadoras')) ?>">Cancelar</a>
     </div>
 </form>

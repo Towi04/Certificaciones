@@ -27,7 +27,18 @@
                     <td><?= e($t['name']) ?></td>
                     <td><code><?= e($t['code']) ?></code></td>
                     <td><?= (int) $t['is_active'] ? 'Sí' : 'No' ?></td>
-                    <td><a href="<?= e(url('/admin/correos/' . $t['code'])) ?>">Editar</a></td>
+                    <td>
+                        <span class="row-actions">
+                            <a class="icon-btn" href="<?= e(url('/admin/correos/' . rawurlencode((string) $t['code']))) ?>"
+                               title="Editar" aria-label="Editar"><?= icon('edit') ?></a>
+                            <form class="icon-btn-form" method="post"
+                                  action="<?= e(url('/admin/correos/' . rawurlencode((string) $t['code']) . '/eliminar')) ?>"
+                                  onsubmit="return confirm('¿Eliminar esta plantilla de correo?');">
+                                <?= csrf_field() ?>
+                                <button class="icon-btn" type="submit" title="Eliminar" aria-label="Eliminar"><?= icon('trash') ?></button>
+                            </form>
+                        </span>
+                    </td>
                 </tr>
             <?php endforeach; ?>
             </tbody>

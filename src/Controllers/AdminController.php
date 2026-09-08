@@ -1271,6 +1271,29 @@ final class AdminController
     public function suppliers(): void
     {
         Auth::requireRole(['admin']);
+        $tab = (string) ($_GET['tab'] ?? 'proveedores');
+        if ($tab === 'certificadoras') {
+            $repo = new CertifierRepository();
+            $pagination = Pagination::fromRequest($repo->countAll());
+            $certifiers = $repo->all($pagination['limit'], $pagination['offset']);
+            $certifierCounts = [];
+            foreach ($certifiers as $c) {
+                $certifierCounts[(int) $c['id']] = $repo->countProducts((int) $c['id']);
+            }
+            view('admin/suppliers', [
+                'title' => 'Certificadoras',
+                'tab' => 'certificadoras',
+                'suppliers' => [],
+                'counts' => [],
+                'certifiers' => $certifiers,
+                'certifierCounts' => $certifierCounts,
+                'pagination' => $pagination,
+                'layout' => 'admin',
+            ]);
+
+            return;
+        }
+
         $repo = new SupplierRepository();
         $pagination = Pagination::fromRequest($repo->countAll());
         $suppliers = $repo->all($pagination['limit'], $pagination['offset']);
@@ -1284,8 +1307,11 @@ final class AdminController
         }
         view('admin/suppliers', [
             'title' => 'Proveedores',
+            'tab' => 'proveedores',
             'suppliers' => $suppliers,
             'counts' => $counts,
+            'certifiers' => [],
+            'certifierCounts' => [],
             'pagination' => $pagination,
             'layout' => 'admin',
         ]);
@@ -1497,20 +1523,7 @@ final class AdminController
     public function certifiers(): void
     {
         Auth::requireRole(['admin']);
-        $repo = new CertifierRepository();
-        $pagination = Pagination::fromRequest($repo->countAll());
-        $certifiers = $repo->all($pagination['limit'], $pagination['offset']);
-        $counts = [];
-        foreach ($certifiers as $c) {
-            $counts[(int) $c['id']] = $repo->countProducts((int) $c['id']);
-        }
-        view('admin/certifiers', [
-            'title' => 'Casas certificadoras',
-            'certifiers' => $certifiers,
-            'counts' => $counts,
-            'pagination' => $pagination,
-            'layout' => 'admin',
-        ]);
+        redirect('/admin/proveedores?tab=certificadoras');
     }
 
     public function certifierCreateForm(): void
@@ -1608,7 +1621,7 @@ final class AdminController
         try {
             (new \App\Services\CertifierAdminService())->delete((int) $id);
             flash('success', 'Certificadora eliminada.');
-            redirect('/admin/certificadoras');
+            redirect('/admin/proveedores?tab=certificadoras');
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
             redirect('/admin/certificadoras/' . (int) $id);
@@ -2256,6 +2269,24 @@ public function promoCode(): void
         }
 
         redirect('/admin/correos/' . $effectiveCode);
+    }
+
+    public function mailTemplateDelete(string $code): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $code = trim($code);
+        try {
+            $repo = new \App\Repositories\MailTemplateRepository();
+            if ($repo->findByCode($code) === null) {
+                throw new \InvalidArgumentException('Plantilla no encontrada.');
+            }
+            $repo->deleteByCode($code);
+            flash('success', 'Plantilla eliminada.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/correos');
     }
 
     /** @return list<string> */
