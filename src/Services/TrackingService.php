@@ -168,6 +168,89 @@ final class TrackingService
         }
     }
 
+    /** Marca un paso como hecho en extra_json.step_done (botones de Operación). */
+    public function markStepDone(int $trackingId, string $stepCode, ?int $actorUserId = null, ?string $note = null): void
+    {
+        $stepCode = trim($stepCode);
+        if ($stepCode === '') {
+            return;
+        }
+        $tracking = $this->find($trackingId);
+        if ($tracking === null) {
+            throw new \InvalidArgumentException('Seguimiento no encontrado.');
+        }
+        $extra = [];
+        if (!empty($tracking['extra_json']) && is_string($tracking['extra_json'])) {
+            $decoded = json_decode($tracking['extra_json'], true);
+            $extra = is_array($decoded) ? $decoded : [];
+        } elseif (is_array($tracking['extra_json'] ?? null)) {
+            $extra = $tracking['extra_json'];
+        }
+        $done = is_array($extra['step_done'] ?? null) ? $extra['step_done'] : [];
+        $done[$stepCode] = [
+            'at' => date('c'),
+            'by' => $actorUserId,
+            'note' => $note,
+        ];
+        $extra['step_done'] = $done;
+        $this->pdo->prepare('UPDATE trackings SET extra_json = ? WHERE id = ?')
+            ->execute([json_encode($extra, JSON_UNESCAPED_UNICODE), $trackingId]);
+        if ($note !== null && $note !== '') {
+            $this->log($trackingId, $stepCode, $note, $actorUserId);
+        }
+    }
+
+    /**
+     * Actualiza nombre/teléfono del alumno del caso.
+     *
+     * @param array{first_name?:string,last_name_p?:string,last_name_m?:string,phone?:string,email?:string} $data
+     */
+    public function updateStudentProfile(int $trackingId, array $data, ?int $actorUserId = null): void
+    {
+        $tracking = $this->find($trackingId);
+        if ($tracking === null) {
+            throw new \InvalidArgumentException('Seguimiento no encontrado.');
+        }
+        $userId = (int) ($tracking['student_user_id'] ?? 0);
+        if ($userId < 1) {
+            throw new \InvalidArgumentException('El caso no tiene alumno asociado.');
+        }
+
+        $first = trim((string) ($data['first_name'] ?? ''));
+        $lp = trim((string) ($data['last_name_p'] ?? ''));
+        $lm = trim((string) ($data['last_name_m'] ?? ''));
+        $phone = trim((string) ($data['phone'] ?? ''));
+        $email = strtolower(trim((string) ($data['email'] ?? '')));
+        if ($first === '' || $lp === '') {
+            throw new \InvalidArgumentException('Nombre y apellido paterno son obligatorios.');
+        }
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new \InvalidArgumentException('Correo inválido.');
+        }
+
+        if ($email !== '') {
+            $dup = $this->pdo->prepare('SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1');
+            $dup->execute([$email, $userId]);
+            if ($dup->fetch()) {
+                throw new \InvalidArgumentException('Ese correo ya está en uso por otra cuenta.');
+            }
+            $this->pdo->prepare(
+                'UPDATE users SET first_name = ?, last_name_p = ?, last_name_m = ?, phone = ?, email = ? WHERE id = ?'
+            )->execute([$first, $lp, $lm !== '' ? $lm : null, $phone !== '' ? $phone : null, $email, $userId]);
+        } else {
+            $this->pdo->prepare(
+                'UPDATE users SET first_name = ?, last_name_p = ?, last_name_m = ?, phone = ? WHERE id = ?'
+            )->execute([$first, $lp, $lm !== '' ? $lm : null, $phone !== '' ? $phone : null, $userId]);
+        }
+
+        $this->log(
+            $trackingId,
+            'alumno',
+            'Datos del alumno actualizados: ' . trim($first . ' ' . $lp . ' ' . $lm),
+            $actorUserId
+        );
+    }
+
     public function advance(int $trackingId, ?int $actorUserId, ?string $note = null): string
     {
         $tracking = $this->find($trackingId);

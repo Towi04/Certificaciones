@@ -17,13 +17,17 @@ final class GroupStepConfig
     public const ACTION_SEND_MAIL = 'send_mail';
     public const ACTION_EXAM_ACCESS = 'exam_access';
     public const ACTION_ADVANCE = 'advance';
+    public const ACTION_EDIT_EXAM = 'edit_exam';
+    public const ACTION_EDIT_STUDENT = 'edit_student';
 
     public const ACTIONS = [
         self::ACTION_NONE => 'Solo progreso (sin botón)',
         self::ACTION_CONFIRM_PAYMENT => 'Confirmar pago',
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
         self::ACTION_EXAM_ACCESS => 'Capturar folio/clave y notificar',
-        self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
+        self::ACTION_EDIT_EXAM => 'Editar / reagendar fecha y hora de examen',
+        self::ACTION_EDIT_STUDENT => 'Editar datos del alumno',
+        self::ACTION_ADVANCE => 'Avanzar / marcar hecho (ej. presentado)',
     ];
 
     /**
@@ -36,7 +40,9 @@ final class GroupStepConfig
         self::ACTION_CONFIRM_PAYMENT => 'Confirmar pago',
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
         self::ACTION_EXAM_ACCESS => 'Capturar folio/clave y notificar',
-        self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
+        self::ACTION_EDIT_EXAM => 'Editar / reagendar fecha y hora de examen',
+        self::ACTION_EDIT_STUDENT => 'Editar datos del alumno',
+        self::ACTION_ADVANCE => 'Avanzar / marcar hecho (ej. presentado)',
     ];
 
     /**
@@ -202,7 +208,10 @@ final class GroupStepConfig
                     self::ACTION_CONFIRM_PAYMENT => 0,
                     self::ACTION_SEND_MAIL => 1,
                     self::ACTION_EXAM_ACCESS => 2,
-                    default => 5,
+                    self::ACTION_EDIT_EXAM => 3,
+                    self::ACTION_EDIT_STUDENT => 4,
+                    self::ACTION_ADVANCE => 5,
+                    default => 9,
                 };
             };
 
@@ -226,17 +235,21 @@ final class GroupStepConfig
                 $label = match ($action) {
                     self::ACTION_SEND_MAIL => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
                     self::ACTION_EXAM_ACCESS => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
+                    self::ACTION_EDIT_EXAM => $label . ' (actualizado)',
+                    self::ACTION_EDIT_STUDENT => $label . ' (actualizado)',
                     self::ACTION_ADVANCE => $label . ' (hecho)',
                     default => $label,
                 };
             }
             $email = is_array($step['email'] ?? null) ? $step['email'] : [];
+            $audience = self::audienceFromEmail($email);
+            $email['audience'] = $audience;
             $buttons[] = [
                 'code' => (string) $step['code'],
                 'label' => $label,
                 'action' => $action,
                 'email' => $email,
-                'audience' => (string) ($email['audience'] ?? 'student'),
+                'audience' => $audience,
                 'admin_only' => !empty($step['admin_only']),
                 'done' => $done,
             ];
@@ -331,15 +344,14 @@ final class GroupStepConfig
             ));
         }
 
-        // Una sola acción por tipo (excepto varios send_mail por paso).
+        // Varias acciones del mismo tipo pueden coexistir (un botón por paso).
         $seenActions = [];
         $unique = [];
         foreach ($buttons as $btn) {
             $action = (string) ($btn['action'] ?? '');
-            if ($action === self::ACTION_SEND_MAIL) {
-                $key = $action . ':' . (string) ($btn['code'] ?? '');
-            } else {
-                $key = $action;
+            $key = $action . ':' . (string) ($btn['code'] ?? '');
+            if ($action === self::ACTION_CONFIRM_PAYMENT) {
+                $key = $action; // solo un confirmar pago
             }
             if (isset($seenActions[$key])) {
                 continue;
@@ -382,7 +394,7 @@ final class GroupStepConfig
 
         if ($action === self::ACTION_SEND_MAIL) {
             $email = is_array($step['email'] ?? null) ? $step['email'] : [];
-            $audience = (string) ($email['audience'] ?? 'student');
+            $audience = self::audienceFromEmail($email);
             $tpl = mb_strtolower((string) ($email['template_code'] ?? ''));
             if ($audience === 'student'
                 && (
@@ -396,6 +408,22 @@ final class GroupStepConfig
         }
 
         return $action;
+    }
+
+    /**
+     * Destinatario según la plantilla (no se pregunta en el grupo).
+     *
+     * @param array<string, mixed> $email
+     */
+    public static function audienceFromEmail(array $email): string
+    {
+        $tpl = trim((string) ($email['template_code'] ?? ''));
+        if ($tpl !== '') {
+            return MailTemplateService::audienceForTemplate($tpl);
+        }
+        $aud = (string) ($email['audience'] ?? 'student');
+
+        return $aud === 'provider' ? 'provider' : 'student';
     }
 
     /**
@@ -413,6 +441,8 @@ final class GroupStepConfig
             self::ACTION_SEND_MAIL => self::isMailStepDone($row, $step),
             self::ACTION_EXAM_ACCESS => trim((string) ($row['folio'] ?? '')) !== ''
                 && trim((string) ($row['access_key'] ?? '')) !== '',
+            self::ACTION_EDIT_EXAM => self::isAdvanceDone($row, $step),
+            self::ACTION_EDIT_STUDENT => self::isAdvanceDone($row, $step),
             self::ACTION_ADVANCE => self::isAdvanceDone($row, $step),
             default => false,
         };
@@ -479,7 +509,8 @@ final class GroupStepConfig
                     'enabled' => !empty($row['email_enabled']),
                     'trigger' => (string) ($row['email_trigger'] ?? 'admin'),
                     'template_code' => trim((string) ($row['email_template'] ?? '')),
-                    'audience' => (string) ($row['email_audience'] ?? 'student'),
+                    // Destinatario lo define la plantilla; no se pide en el grupo.
+                    'audience' => '',
                     'to' => trim((string) ($row['email_to'] ?? '')),
                     'cc' => trim((string) ($row['email_cc'] ?? '')),
                 ],
@@ -491,8 +522,9 @@ final class GroupStepConfig
         // Mantener provider_request sincronizado para runtime existente
         $providerStep = null;
         foreach ($defs as $def) {
+            $email = is_array($def['email'] ?? null) ? $def['email'] : [];
             if (($def['action'] ?? '') === self::ACTION_SEND_MAIL
-                && (($def['email']['audience'] ?? '') === 'provider')
+                && self::audienceFromEmail($email) === 'provider'
             ) {
                 $providerStep = $def;
                 break;
@@ -557,10 +589,11 @@ final class GroupStepConfig
         if (!in_array($trigger, ['admin', 'auto'], true)) {
             $trigger = 'admin';
         }
-        $audience = (string) ($emailRaw['audience'] ?? $row['email_audience'] ?? 'student');
-        if (!in_array($audience, ['student', 'provider'], true)) {
-            $audience = 'student';
-        }
+        $templateCode = trim((string) ($emailRaw['template_code'] ?? $row['email_template'] ?? ''));
+        $audience = self::audienceFromEmail([
+            'template_code' => $templateCode,
+            'audience' => (string) ($emailRaw['audience'] ?? $row['email_audience'] ?? ''),
+        ]);
 
         return [
             'code' => $code,
@@ -575,7 +608,7 @@ final class GroupStepConfig
             'email' => [
                 'enabled' => !empty($emailRaw['enabled']) || !empty($row['email_enabled']),
                 'trigger' => $trigger,
-                'template_code' => trim((string) ($emailRaw['template_code'] ?? $row['email_template'] ?? '')),
+                'template_code' => $templateCode,
                 'audience' => $audience,
                 'to' => trim((string) ($emailRaw['to'] ?? $row['email_to'] ?? '')),
                 'cc' => trim((string) ($emailRaw['cc'] ?? $row['email_cc'] ?? '')),
@@ -598,7 +631,8 @@ final class GroupStepConfig
     private static function isMailStepDone(array $row, array $step): bool
     {
         $extra = self::decodeExtra($row);
-        $audience = (string) (($step['email']['audience'] ?? '') ?: 'student');
+        $email = is_array($step['email'] ?? null) ? $step['email'] : [];
+        $audience = self::audienceFromEmail($email);
         $code = (string) ($step['code'] ?? '');
 
         if ($audience === 'provider') {

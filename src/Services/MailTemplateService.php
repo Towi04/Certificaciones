@@ -263,7 +263,24 @@ final class MailTemplateService
 
     public function requiresFixedRecipient(string $code): bool
     {
-        return in_array($code, [self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY], true);
+        return self::isProviderTemplate($code);
+    }
+
+    /** Plantillas con destinatario fijo (proveedor / UKS), no al alumno. */
+    public static function isProviderTemplate(string $code): bool
+    {
+        $code = trim($code);
+
+        return in_array($code, [self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY], true)
+            || str_starts_with($code, 'uks_')
+            || str_contains($code, '_provider')
+            || str_contains($code, 'proveedor');
+    }
+
+    /** audience inferida desde el código de plantilla. */
+    public static function audienceForTemplate(string $code): string
+    {
+        return self::isProviderTemplate($code) ? 'provider' : 'student';
     }
 
     /** @return array<string, array<string, string>> */

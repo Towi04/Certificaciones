@@ -139,8 +139,8 @@ $q = (string) ($filters['q'] ?? '');
                             <?php if (!empty($r['show_folio_fields'])): ?>
                                 <input class="ops-input ops-folio" type="text"
                                        id="ops-folio-<?= $tid ?>"
-                                       form="ops-access-form-<?= $tid ?>"
-                                       name="folio" value="<?= e((string) ($r['folio'] ?? '')) ?>"
+                                       name="folio_display"
+                                       value="<?= e((string) ($r['folio'] ?? '')) ?>"
                                        placeholder="Folio" autocomplete="off" data-tid="<?= $tid ?>">
                             <?php else: ?>
                                 <span class="muted">—</span>
@@ -150,8 +150,8 @@ $q = (string) ($filters['q'] ?? '');
                             <?php if (!empty($r['show_folio_fields'])): ?>
                                 <input class="ops-input ops-key" type="text"
                                        id="ops-key-<?= $tid ?>"
-                                       form="ops-access-form-<?= $tid ?>"
-                                       name="access_key" value="<?= e((string) ($r['access_key'] ?? '')) ?>"
+                                       name="access_key_display"
+                                       value="<?= e((string) ($r['access_key'] ?? '')) ?>"
                                        placeholder="Clave" autocomplete="off" data-tid="<?= $tid ?>">
                             <?php else: ?>
                                 <span class="muted">—</span>
@@ -219,14 +219,70 @@ $q = (string) ($filters['q'] ?? '');
                                     <?php endif; ?>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_EXAM_ACCESS): ?>
                                     <form method="post" action="<?= e(url('/admin/operacion/' . $tid . '/accesos')) ?>"
-                                          class="ops-inline-form ops-access-form" id="ops-access-form-<?= $tid ?>">
+                                          class="ops-inline-form ops-access-form" id="ops-access-form-<?= $tid ?>"
+                                          data-tid="<?= $tid ?>">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                        <input type="hidden" name="folio" class="ops-access-folio-hidden" value="<?= e((string) ($r['folio'] ?? '')) ?>">
+                                        <input type="hidden" name="access_key" class="ops-access-key-hidden" value="<?= e((string) ($r['access_key'] ?? '')) ?>">
+                                        <button class="btn btn-ghost btn-sm" type="submit" name="notify" value="0" title="Guardar folio y clave sin enviar correo">
+                                            Guardar
+                                        </button>
                                         <button class="<?= e($btnClass) ?>" type="submit" name="notify" value="1">
                                             <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
                                         </button>
                                     </form>
+                                <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_EDIT_EXAM): ?>
+                                    <?php
+                                    $examDateVal = (string) ($r['exam_date'] ?? '');
+                                    $examTimeVal = !empty($r['exam_time']) ? substr((string) $r['exam_time'], 0, 5) : '';
+                                    ?>
+                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/examen')) ?>"
+                                          class="ops-inline-form ops-collect-form">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="return_ops" value="1">
+                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                        <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
+                                        <input type="hidden" name="notify" value="0">
+                                        <div class="ops-collect-fields">
+                                            <input class="ops-input" type="date" name="exam_date" required
+                                                   value="<?= e($examDateVal) ?>" title="Fecha examen">
+                                            <input class="ops-input" type="time" name="exam_time"
+                                                   value="<?= e($examTimeVal) ?>" title="Hora examen">
+                                        </div>
+                                        <button class="<?= e($btnClass) ?>" type="submit">
+                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
+                                        </button>
+                                    </form>
+                                <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_EDIT_STUDENT): ?>
+                                    <details class="ops-collect-details">
+                                        <summary class="<?= e($btnClass) ?>" style="list-style:none;cursor:pointer">
+                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
+                                        </summary>
+                                        <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/alumno')) ?>"
+                                              class="ops-inline-form ops-collect-form" style="margin-top:.4rem">
+                                            <?= csrf_field() ?>
+                                            <input type="hidden" name="return_ops" value="1">
+                                            <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                            <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                            <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
+                                            <div class="ops-collect-fields ops-collect-fields--stack">
+                                                <input class="ops-input" type="text" name="first_name" required
+                                                       value="<?= e((string) ($r['first_name'] ?? '')) ?>" placeholder="Nombre(s)">
+                                                <input class="ops-input" type="text" name="last_name_p" required
+                                                       value="<?= e((string) ($r['last_name_p'] ?? '')) ?>" placeholder="Apellido paterno">
+                                                <input class="ops-input" type="text" name="last_name_m"
+                                                       value="<?= e((string) ($r['last_name_m'] ?? '')) ?>" placeholder="Apellido materno">
+                                                <input class="ops-input" type="email" name="email"
+                                                       value="<?= e((string) ($r['student_email'] ?? '')) ?>" placeholder="Correo">
+                                                <input class="ops-input" type="text" name="phone"
+                                                       value="<?= e((string) ($r['student_phone'] ?? '')) ?>" placeholder="Teléfono">
+                                            </div>
+                                            <button class="btn btn-accent btn-sm" type="submit">Guardar datos</button>
+                                        </form>
+                                    </details>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_ADVANCE): ?>
                                     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/avanzar')) ?>" class="ops-inline-form">
                                         <?= csrf_field() ?>
@@ -240,6 +296,19 @@ $q = (string) ($filters['q'] ?? '');
                                     </form>
                                 <?php endif; ?>
                             <?php endforeach; ?>
+
+                            <?php if (!empty($r['show_folio_fields']) && empty(array_filter($opsButtons, static fn ($b) => ($b['action'] ?? '') === \App\Services\GroupStepConfig::ACTION_EXAM_ACCESS))): ?>
+                                <form method="post" action="<?= e(url('/admin/operacion/' . $tid . '/accesos')) ?>"
+                                      class="ops-inline-form ops-access-form" id="ops-access-form-<?= $tid ?>"
+                                      data-tid="<?= $tid ?>">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                    <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                    <input type="hidden" name="folio" class="ops-access-folio-hidden" value="<?= e((string) ($r['folio'] ?? '')) ?>">
+                                    <input type="hidden" name="access_key" class="ops-access-key-hidden" value="<?= e((string) ($r['access_key'] ?? '')) ?>">
+                                    <button class="btn btn-ghost btn-sm" type="submit" name="notify" value="0">Guardar folio/clave</button>
+                                </form>
+                            <?php endif; ?>
 
                             <?php if ($opsButtons === []): ?>
                                 <span class="ops-flag ops-flag--ok">Al día</span>
@@ -297,6 +366,15 @@ $q = (string) ($filters['q'] ?? '');
 }
 .ops-actions { min-width:12.5rem; }
 .ops-inline-form { display:flex; flex-wrap:wrap; gap:.3rem; margin:.15rem 0; align-items:center; }
+.ops-collect-fields { display:flex; flex-wrap:wrap; gap:.3rem; align-items:center; }
+.ops-collect-fields--stack { flex-direction:column; align-items:stretch; width:100%; }
+.ops-collect-fields .ops-input { min-width:7.5rem; }
+.ops-collect-details {
+  margin:.15rem 0; padding:.35rem .45rem; border:1px solid #e6ebf2; border-radius:10px; background:#fff;
+}
+.ops-collect-details > summary {
+  display:inline-flex; align-items:center; gap:.35rem;
+}
 .ops-flag { display:inline-block; font-size:.75rem; font-weight:700; padding:.15rem .4rem; border-radius:6px; }
 .ops-flag--ok { background:#e8f7ee; color:#0f7a3a; }
 .ops-row--pay { background:#fffbeb; }
@@ -436,6 +514,44 @@ $q = (string) ($filters['q'] ?? '');
     refreshBulk();
   });
 
+  // Sincronizar folio/clave visibles → hidden del form de accesos (el atributo form= fallaba a veces).
+  function syncAccessFields(tid) {
+    var folioEl = document.getElementById('ops-folio-' + tid);
+    var keyEl = document.getElementById('ops-key-' + tid);
+    var form = document.getElementById('ops-access-form-' + tid);
+    if (!form) return false;
+    var hFolio = form.querySelector('.ops-access-folio-hidden');
+    var hKey = form.querySelector('.ops-access-key-hidden');
+    if (hFolio) hFolio.value = folioEl ? folioEl.value.trim() : '';
+    if (hKey) hKey.value = keyEl ? keyEl.value.trim() : '';
+    return true;
+  }
+  document.querySelectorAll('.ops-folio, .ops-key').forEach(function (el) {
+    el.addEventListener('input', function () {
+      syncAccessFields(el.getAttribute('data-tid') || '');
+    });
+    el.addEventListener('change', function () {
+      syncAccessFields(el.getAttribute('data-tid') || '');
+    });
+  });
+  document.querySelectorAll('.ops-access-form').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      var tid = form.getAttribute('data-tid') || '';
+      syncAccessFields(tid);
+      var hFolio = form.querySelector('.ops-access-folio-hidden');
+      var hKey = form.querySelector('.ops-access-key-hidden');
+      var folio = hFolio ? hFolio.value.trim() : '';
+      var key = hKey ? hKey.value.trim() : '';
+      if (!folio || !key) {
+        e.preventDefault();
+        alert('Escribe folio y clave antes de guardar o enviar accesos.');
+        var folioEl = document.getElementById('ops-folio-' + tid);
+        if (folioEl) folioEl.focus();
+        return false;
+      }
+    });
+  });
+
   // Lote: inyectar folio/clave de las filas seleccionadas (ya no usan form=ops-bulk-form).
   var bulkForm = document.getElementById('ops-bulk-form');
   if (bulkForm) {
@@ -445,6 +561,7 @@ $q = (string) ($filters['q'] ?? '');
       });
       rowChecks().filter(function (c) { return c.checked; }).forEach(function (c) {
         var tid = c.value;
+        syncAccessFields(tid);
         var folioEl = document.getElementById('ops-folio-' + tid);
         var keyEl = document.getElementById('ops-key-' + tid);
         function inject(name, value) {
