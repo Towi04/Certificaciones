@@ -9,8 +9,9 @@ use App\Repositories\PartnerRepository;
 use PDO;
 
 /**
- * Envía la plantilla de un paso de Operación al destinatario según la plantilla
- * (alumno, partner o proveedor fijo vía ProviderRequestService).
+ * Envía la plantilla de un paso de Operación al destinatario según la audiencia
+ * de la plantilla (alumno, partner o proveedor fijo en Para).
+ * La solicitud inicial UKS (reglamento/pago/workbook) sigue en ProviderRequestService.
  */
 final class StepMailService
 {
@@ -61,15 +62,16 @@ final class StepMailService
         }
 
         $audience = MailTemplateService::audienceForTemplate($tplCode);
-        if ($audience === 'provider') {
+        // Solicitud inicial UKS: usa ProviderRequestService (enlaces reglamento/pago/Excel).
+        if (MailTemplateService::isUksSolicitudCode($tplCode)) {
             throw new \InvalidArgumentException(
-                'Esta plantilla es de proveedor. Usa el botón de solicitud a proveedor.'
+                'La plantilla de solicitud UKS se envía con el botón de solicitud a proveedor.'
             );
         }
 
         $vars = $this->buildVars($tracking);
-        $to = $this->resolveRecipient($tracking, $audience);
         $mail = new MailTemplateService();
+        $to = $this->resolveRecipient($tracking, $audience, $tplCode, $mail);
         if ($mail->render($tplCode, $vars) === null) {
             throw new \RuntimeException('Plantilla no encontrada o desactivada: ' . $tplCode);
         }
@@ -126,9 +128,25 @@ final class StepMailService
     /**
      * @param array<string, mixed> $tracking
      */
-    public function resolveRecipient(array $tracking, string $audience): string
-    {
+    public function resolveRecipient(
+        array $tracking,
+        string $audience,
+        string $templateCode = '',
+        ?MailTemplateService $mail = null
+    ): string {
         $audience = MailTemplateService::normalizeAudience($audience);
+        if ($audience === 'provider') {
+            $mail ??= new MailTemplateService();
+            $to = trim($mail->routing($templateCode)['to'] ?? '');
+            if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+                throw new \RuntimeException(
+                    'Configura el correo del proveedor en Admin → Correos → plantilla «'
+                    . $templateCode . '» (campo Para).'
+                );
+            }
+
+            return $to;
+        }
         if ($audience === 'partner') {
             $partner = $this->partnerRowForTracking($tracking);
             $email = trim((string) ($partner['email'] ?? ''));

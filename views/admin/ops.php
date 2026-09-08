@@ -215,7 +215,11 @@ $q = (string) ($filters['q'] ?? '');
                                         </div>
                                         <button class="<?= e($btnClass) ?>" type="submit"
                                             title="<?= $examMailOn
-                                                ? 'Guardar fecha y enviar plantilla'
+                                                ? ($audience === 'provider'
+                                                    ? 'Guardar fecha y enviar plantilla al proveedor'
+                                                    : ($audience === 'partner'
+                                                        ? 'Guardar fecha y enviar plantilla al partner'
+                                                        : 'Guardar fecha y enviar plantilla al alumno'))
                                                 : 'Guardar fecha de examen' ?><?= $rescheduleCount > 0
                                                 ? ' · Reagendado ' . $rescheduleCount . ' vez' . ($rescheduleCount === 1 ? '' : 'es')
                                                 : '' ?>">
@@ -248,11 +252,16 @@ $q = (string) ($filters['q'] ?? '');
                                     <?php
                                     $audience = (string) ($btn['audience'] ?? ($btn['email']['audience'] ?? 'student'));
                                     $sendTpl = trim((string) ($btn['email']['template_code'] ?? ''));
-                                    // Plantilla de reagendar o no-proveedor → envío del paso (no solicitud UKS).
-                                    $isProviderMail = $audience === 'provider'
-                                        && !\App\Services\MailTemplateService::rescheduleTemplateHeuristic($sendTpl);
+                                    // Solo la solicitud inicial UKS usa ProviderRequestService
+                                    // (reglamento / pago / Excel). Otras plantillas de proveedor
+                                    // (p. ej. reagendar_uks) van por enviar-correo-paso.
+                                    $isHeavyProviderRequest = $audience === 'provider'
+                                        && (
+                                            $sendTpl === ''
+                                            || \App\Services\MailTemplateService::isUksSolicitudCode($sendTpl)
+                                        );
                                     ?>
-                                    <?php if ($isProviderMail): ?>
+                                    <?php if ($isHeavyProviderRequest): ?>
                                     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/solicitud-proveedor')) ?>" class="ops-inline-form">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="return_ops" value="1">
@@ -276,7 +285,11 @@ $q = (string) ($filters['q'] ?? '');
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                         <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
                                         <button class="<?= e($btnClass) ?>" type="submit"
-                                            title="<?= $audience === 'partner' ? 'Enviar al partner del caso' : 'Enviar plantilla al alumno' ?>">
+                                            title="<?= $audience === 'partner'
+                                                ? 'Enviar al partner del caso'
+                                                : ($audience === 'provider'
+                                                    ? 'Enviar plantilla al proveedor'
+                                                    : 'Enviar plantilla al alumno') ?>">
                                             <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
                                         </button>
                                     </form>
