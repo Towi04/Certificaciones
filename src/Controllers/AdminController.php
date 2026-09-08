@@ -1602,13 +1602,17 @@ final class AdminController
         Auth::requireRole(['admin']);
         csrf_verify();
         $supplierId = (int) $id;
+        $tab = trim((string) ($_POST['return_tab'] ?? 'general'));
+        if ($tab === '') {
+            $tab = 'general';
+        }
         try {
-            (new \App\Services\SupplierAdminService())->update($supplierId, $_POST);
-            flash('success', 'Proveedor actualizado.');
+            $applied = (new \App\Services\SupplierAdminService())->saveAll($supplierId, $_POST, $_FILES);
+            flash('success', 'Guardado: ' . implode(' · ', $applied) . '.');
         } catch (\Throwable $e) {
             $this->formError($e->getMessage());
         }
-        redirect('/admin/proveedores/' . $supplierId);
+        redirect('/admin/proveedores/' . $supplierId . '#' . rawurlencode($tab));
     }
 
     public function supplierLogo(string $id): void
@@ -1639,7 +1643,7 @@ final class AdminController
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
-        redirect('/admin/proveedores/' . $supplierId . '#general');
+        redirect('/admin/proveedores/' . $supplierId . '#logos');
     }
 
     public function supplierContactCreate(string $id): void

@@ -17,9 +17,9 @@ $tab = ($tab ?? 'proveedores') === 'certificadoras' ? 'certificadoras' : 'provee
                 Administra logos, sitios y portales de las casas certificadoras
                 (Cambridge, Pearson, etc.) que se asignan a cada producto.
             <?php else: ?>
-                Crea y edita proveedores. En cada ficha puedes guardar contactos, logo,
-                links de plataformas y usuarios/contraseñas cifrados, además de cargar
-                certificaciones en lote (CSV).
+                Crea y edita proveedores. En cada ficha usa las pestañas (Datos, Logos, Contactos, Accesos, Grupos…)
+                y el botón <strong>Guardar todo</strong> para no perder cambios al cambiar de sección.
+                También puedes cargar certificaciones en lote (CSV).
             <?php endif; ?>
         </p>
     </div>
