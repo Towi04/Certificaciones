@@ -118,9 +118,8 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
         <div style="margin:1rem 0;padding:1rem;background:#f8fafc;border-radius:12px;border:1px solid #e6ebf2">
             <h2 style="margin:0 0 .5rem;font-size:1rem;color:var(--doceo-blue)">Etiquetas de la plantilla</h2>
             <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
-                Elige del catálogo solo las que necesites y agrégalas una a una.
-                Luego pulsa <strong>Insertar</strong> para ponerlas en el asunto o el HTML
-                (ej. <code>{{pago_proveedor}}</code> = enlace al comprobante DOCEO → proveedor).
+                Elige del catálogo e inserta en el asunto o el HTML (ej. <code>{{pago_proveedor}}</code>).
+                También puedes escribir la etiqueta a mano; al guardar se reconocen solas.
             </p>
 
             <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.55rem;align-items:end;margin-bottom:.85rem">
