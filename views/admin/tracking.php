@@ -156,6 +156,50 @@ $statusLabels = [
         </label>
         <button class="btn btn-accent" type="submit">Guardar examen / accesos</button>
     </form>
+
+    <?php
+    $examSchedMeta = [];
+    if (!empty($tracking['extra_json']) && is_string($tracking['extra_json'])) {
+        $decodedExtra = json_decode($tracking['extra_json'], true);
+        if (is_array($decodedExtra) && is_array($decodedExtra['exam_schedule'] ?? null)) {
+            $examSchedMeta = $decodedExtra['exam_schedule'];
+        }
+    }
+    $pendingExamAuth = ($examSchedMeta['status'] ?? '') === 'pending_admin';
+    ?>
+    <?php if ($pendingExamAuth): ?>
+        <div class="callout callout-info" style="margin-top:.85rem">
+            <strong>Fecha pendiente de autorización</strong>
+            <div class="muted" style="font-size:.85rem;margin:.35rem 0">
+                Tipo: <?= e((string) ($examSchedMeta['kind'] ?? '—')) ?>
+                <?php if (!empty($examSchedMeta['surcharge_amount'])): ?>
+                    · cargo extra: <?= e(money($examSchedMeta['surcharge_amount'])) ?>
+                <?php endif; ?>
+            </div>
+            <form method="post" action="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/examen/autorizar')) ?>"
+                  style="display:grid;gap:.55rem;max-width:420px">
+                <?= csrf_field() ?>
+                <label class="muted" style="font-size:.85rem;font-weight:600">
+                    Fecha autorizada
+                    <input type="date" name="exam_date" required
+                           value="<?= e((string) ($tracking['exam_date'] ?? '')) ?>"
+                           style="display:block;width:100%;margin-top:.3rem;padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                </label>
+                <label class="muted" style="font-size:.85rem;font-weight:600">
+                    Hora autorizada
+                    <input type="time" name="exam_time" required
+                           value="<?= e(substr((string) ($tracking['exam_time'] ?? '11:00'), 0, 5)) ?>"
+                           style="display:block;width:100%;margin-top:.3rem;padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                </label>
+                <label class="muted" style="font-size:.85rem;font-weight:600">
+                    Nota interna (opcional)
+                    <input type="text" name="note" placeholder="Autorizado por excepción…"
+                           style="display:block;width:100%;margin-top:.3rem;padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                </label>
+                <button class="btn btn-accent" type="submit">Autorizar fecha</button>
+            </form>
+        </div>
+    <?php endif; ?>
 </div>
 
 

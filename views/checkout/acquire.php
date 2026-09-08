@@ -160,25 +160,82 @@ $stepLabels = [
                 <?php endif; ?>
 
                 <?php if ($needsExam): ?>
+                    <?php
+                    $examRules = \App\Services\ExamScheduleService::scheduleRules($product ?? []);
+                    $examMode = (string) ($examRules['mode'] ?? 'window');
+                    $examHelp = trim((string) ($examRules['checkout_help'] ?? ''));
+                    if ($examHelp === '') {
+                        $examHelp = match ($examMode) {
+                            'fixed_slots' => 'Elige un horario regular (p. ej. sábado 11:00 o 13:00). Si necesitas otra fecha, solicita extraordinaria (con costo extra y autorización).',
+                            'dated_list' => 'Elige una convocatoria abierta del proveedor. La inscripción cierra en la fecha límite indicada.',
+                            default => 'Elige fecha y hora disponible según el calendario del examen.',
+                        };
+                    }
+                    $extraCfg = is_array($examRules['extraordinary'] ?? null) ? $examRules['extraordinary'] : [];
+                    ?>
                     <div class="wizard-step" data-step="agenda" hidden>
                         <h2 class="step-title">Agenda tu examen</h2>
-                        <p class="muted" style="font-size:.88rem;margin-top:0">
-                            El examen ELeT es en línea. Elige fecha y hora disponible (bloques de 30 minutos).
-                        </p>
-                        <div class="form-grid" style="max-width:480px">
-                            <label>Fecha del examen *
-                                <input type="date" id="exam_date_select" min="<?= e($examMinDate ?? '') ?>">
-                            </label>
-                            <label>Hora *
-                                <select id="exam_time_select" disabled>
-                                    <option value="">— elige hora —</option>
-                                </select>
-                            </label>
-                        </div>
+                        <p class="muted" style="font-size:.88rem;margin-top:0"><?= e($examHelp) ?></p>
+                        <input type="hidden" name="exam_kind" id="exam_kind" value="regular">
+                        <input type="hidden" name="exam_session_id" id="exam_session_id" value="">
+                        <input type="hidden" name="exam_allow_short_advance" id="exam_allow_short_advance" value="0">
+
+                        <?php if ($examMode === 'dated_list'): ?>
+                            <div class="form-grid" style="max-width:560px">
+                                <label>Convocatoria *
+                                    <select id="exam_session_select">
+                                        <option value="">— elige convocatoria —</option>
+                                    </select>
+                                </label>
+                            </div>
+                        <?php else: ?>
+                            <div class="form-grid" style="max-width:480px">
+                                <label>Fecha del examen *
+                                    <input type="date" id="exam_date_select" min="<?= e($examMinDate ?? '') ?>">
+                                </label>
+                                <label>Hora *
+                                    <select id="exam_time_select" disabled>
+                                        <option value="">— elige hora —</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <?php if ($examMode === 'fixed_slots' && !empty($extraCfg['enabled'])): ?>
+                                <div style="margin-top:.85rem;padding:.75rem;border:1px dashed #c5d0e0;border-radius:12px;max-width:560px">
+                                    <label style="display:flex;gap:.5rem;align-items:flex-start;font-size:.9rem;font-weight:600">
+                                        <input type="checkbox" id="exam_extraordinary_toggle" value="1" style="margin-top:.2rem">
+                                        <span>
+                                            Solicitar fecha extraordinaria
+                                            <span class="muted" style="display:block;font-weight:500;font-size:.8rem;margin-top:.15rem">
+                                                Costo extra: <?= e(money($extraCfg['surcharge_amount'] ?? 0)) ?>
+                                                · <?= e((string) ($extraCfg['surcharge_label'] ?? 'Fecha extraordinaria')) ?>
+                                                <?php if (!empty($extraCfg['requires_admin_approval'])): ?>
+                                                    · requiere autorización del admin
+                                                <?php endif; ?>
+                                            </span>
+                                        </span>
+                                    </label>
+                                    <div id="exam-extraordinary-fields" hidden style="margin-top:.65rem;display:grid;gap:.55rem">
+                                        <label class="muted" style="font-size:.85rem;font-weight:600">
+                                            Fecha extraordinaria *
+                                            <input type="date" id="exam_extraordinary_date" min="<?= e(date('Y-m-d')) ?>"
+                                                   style="display:block;width:100%;margin-top:.3rem;padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                                        </label>
+                                        <label class="muted" style="font-size:.85rem;font-weight:600">
+                                            Hora preferida *
+                                            <input type="time" id="exam_extraordinary_time" value="11:00"
+                                                   style="display:block;width:100%;margin-top:.3rem;padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                                        </label>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+                        <?php endif; ?>
+
                         <p class="muted" id="exam-slot-hint" style="font-size:.82rem;margin-top:.5rem">
                             <?php
                             $examAdvanceDays = (int) ($examAdvanceDays ?? 2);
-                            if ($examAdvanceDays <= 0) {
+                            if ($examMode === 'dated_list') {
+                                echo 'Solo se muestran convocatorias con inscripción abierta.';
+                            } elseif ($examAdvanceDays <= 0) {
                                 echo 'Puedes agendar desde hoy (sin días de antelación).';
                             } elseif ($examAdvanceDays === 1) {
                                 echo 'Agendar con 1 día de antelación';
@@ -188,6 +245,7 @@ $stepLabels = [
                             ?>
                         </p>
                         <p id="exam-date-warn" class="exam-date-warn" hidden role="alert"></p>
+                        <p id="exam-surcharge-note" class="muted" style="font-size:.82rem;color:#9a3412" hidden></p>
                     </div>
                 <?php endif; ?>
 
@@ -586,9 +644,20 @@ $stepLabels = [
   const confirmSummary = document.getElementById('confirm-summary');
   const examDateHidden = document.getElementById('exam_date');
   const examTimeHidden = document.getElementById('exam_time');
+  const examKindHidden = document.getElementById('exam_kind');
+  const examSessionHidden = document.getElementById('exam_session_id');
   const examDateSelect = document.getElementById('exam_date_select');
   const examTimeSelect = document.getElementById('exam_time_select');
+  const examSessionSelect = document.getElementById('exam_session_select');
   const examSlotHint = document.getElementById('exam-slot-hint');
+  const examExtraToggle = document.getElementById('exam_extraordinary_toggle');
+  const examExtraFields = document.getElementById('exam-extraordinary-fields');
+  const examExtraDate = document.getElementById('exam_extraordinary_date');
+  const examExtraTime = document.getElementById('exam_extraordinary_time');
+  const examSurchargeNote = document.getElementById('exam-surcharge-note');
+  let examMode = 'window';
+  let examExtraordinary = null;
+  let examBaseAmount = Number(quoteData.base ?? quoteData.catalog ?? 0);
 
   if (!form || !prevBtn || !nextBtn || !submitBtn) {
     console.error('[checkout] Formulario o botones del wizard no encontrados.');
@@ -1079,15 +1148,71 @@ $stepLabels = [
     return 'Agendar con ' + n + ' días de antelación';
   }
 
+  function setExamSurchargeNote(amount, label) {
+    if (!examSurchargeNote) return;
+    const n = Number(amount || 0);
+    if (n > 0) {
+      examSurchargeNote.hidden = false;
+      examSurchargeNote.textContent = (label || 'Fecha extraordinaria') + ': +' + money(n) + ' (se suma al total).';
+      quoteData.base = examBaseAmount + n;
+      quoteData.charged = examBaseAmount + n;
+      updatePriceSummary();
+    } else {
+      examSurchargeNote.hidden = true;
+      examSurchargeNote.textContent = '';
+      quoteData.base = examBaseAmount;
+      quoteData.charged = examBaseAmount;
+      updatePriceSummary();
+    }
+  }
+
+  function syncExtraordinaryUi() {
+    const on = !!(examExtraToggle && examExtraToggle.checked);
+    if (examExtraFields) examExtraFields.hidden = !on;
+    if (examDateSelect) examDateSelect.disabled = on;
+    if (examTimeSelect) examTimeSelect.disabled = on || !examDateSelect || !examDateSelect.value;
+    if (examKindHidden) examKindHidden.value = on ? 'extraordinary' : 'regular';
+    if (on) {
+      if (examDateHidden) examDateHidden.value = examExtraDate ? examExtraDate.value : '';
+      if (examTimeHidden) examTimeHidden.value = examExtraTime ? examExtraTime.value : '';
+      const amt = examExtraordinary && examExtraordinary.surcharge_amount
+        ? Number(examExtraordinary.surcharge_amount) : 0;
+      const label = examExtraordinary && examExtraordinary.surcharge_label
+        ? examExtraordinary.surcharge_label : 'Fecha extraordinaria';
+      setExamSurchargeNote(amt, label);
+    } else {
+      if (examDateHidden) examDateHidden.value = examDateSelect ? examDateSelect.value : '';
+      if (examTimeHidden) examTimeHidden.value = examTimeSelect ? examTimeSelect.value : '';
+      setExamSurchargeNote(0, '');
+    }
+  }
+
   function loadExamDates() {
-    if (!needsExam || !examDateSelect) return;
+    if (!needsExam) return;
     fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(slug))
       .then(r => r.json())
       .then(data => {
         if (!data.ok) return;
-        if (data.min_date) examDateSelect.min = data.min_date;
-        if (examSlotHint && data.min_advance_days !== undefined) {
+        examMode = data.mode || 'window';
+        examExtraordinary = data.extraordinary || null;
+        examBaseAmount = Number(quoteData.base ?? quoteData.catalog ?? 0);
+        if (examDateSelect && data.min_date) examDateSelect.min = data.min_date;
+        if (examSlotHint && data.min_advance_days !== undefined && examMode !== 'dated_list') {
           examSlotHint.textContent = examAdvanceHint(data.min_advance_days);
+        }
+        if (examSessionSelect && Array.isArray(data.sessions)) {
+          examSessionSelect.innerHTML = '<option value="">— elige convocatoria —</option>';
+          data.sessions.forEach(function (s) {
+            const opt = document.createElement('option');
+            opt.value = s.id || s.value || '';
+            opt.textContent = s.label || ((s.exam_date || '') + ' ' + (s.exam_time || ''));
+            opt.dataset.date = s.exam_date || '';
+            opt.dataset.time = s.exam_time || '';
+            if (s.registration_deadline) {
+              opt.textContent += ' · límite ' + s.registration_deadline;
+            }
+            examSessionSelect.appendChild(opt);
+          });
         }
       });
   }
@@ -1121,7 +1246,7 @@ $stepLabels = [
           examTimeSelect.appendChild(opt);
         });
         const empty = data.slots.length === 0;
-        examTimeSelect.disabled = empty;
+        examTimeSelect.disabled = empty || !!(examExtraToggle && examExtraToggle.checked);
         if (empty) {
           setExamDateWarn(data.unavailable_reason
             || 'Esa fecha no tiene horarios disponibles. Elige otro día.');
@@ -1137,6 +1262,7 @@ $stepLabels = [
       const d = examDateSelect.value;
       if (examDateHidden) examDateHidden.value = d;
       if (examTimeHidden) examTimeHidden.value = '';
+      if (examKindHidden) examKindHidden.value = 'regular';
       loadExamSlots(d);
     });
   }
@@ -1144,6 +1270,26 @@ $stepLabels = [
     examTimeSelect.addEventListener('change', () => {
       if (examTimeHidden) examTimeHidden.value = examTimeSelect.value;
     });
+  }
+  if (examSessionSelect) {
+    examSessionSelect.addEventListener('change', function () {
+      const opt = examSessionSelect.options[examSessionSelect.selectedIndex];
+      if (examSessionHidden) examSessionHidden.value = examSessionSelect.value || '';
+      if (examDateHidden) examDateHidden.value = opt && opt.dataset.date ? opt.dataset.date : '';
+      if (examTimeHidden) examTimeHidden.value = opt && opt.dataset.time ? opt.dataset.time : '';
+      if (examKindHidden) examKindHidden.value = 'provider_session';
+    });
+  }
+  if (examExtraToggle) {
+    examExtraToggle.addEventListener('change', syncExtraordinaryUi);
+  }
+  if (examExtraDate) {
+    examExtraDate.addEventListener('change', syncExtraordinaryUi);
+    examExtraDate.addEventListener('input', syncExtraordinaryUi);
+  }
+  if (examExtraTime) {
+    examExtraTime.addEventListener('change', syncExtraordinaryUi);
+    examExtraTime.addEventListener('input', syncExtraordinaryUi);
   }
 
   renderMsiChips(quoteData.payment_options?.msi || quoteData.msi_plans || []);

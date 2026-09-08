@@ -101,6 +101,7 @@ $router->post('/admin/seguimientos/{id}/avanzar', fn (string $id) => $admin->tra
 $router->post('/admin/seguimientos/{id}/enviar-correo-paso', fn (string $id) => $admin->trackingSendStepMail($id));
 $router->post('/admin/seguimientos/{id}/moodle', fn (string $id) => $admin->trackingSyncMoodle($id));
 $router->post('/admin/seguimientos/{id}/examen', fn (string $id) => $admin->trackingUpdateExam($id));
+$router->post('/admin/seguimientos/{id}/examen/autorizar', fn (string $id) => $admin->trackingAuthorizeExam($id));
 $router->post('/admin/seguimientos/{id}/alumno', fn (string $id) => $admin->trackingUpdateStudent($id));
 $router->post('/admin/seguimientos/{id}/elet-accesos', fn (string $id) => $admin->trackingPublishEletAccess($id));
 $router->post('/admin/seguimientos/{id}/uks-solicitud', fn (string $id) => $admin->trackingResendUksRequest($id));

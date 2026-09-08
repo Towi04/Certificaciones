@@ -40,7 +40,7 @@ final class CheckoutService
      *   phone?:string,curp?:string,birth_date?:string,sex?:string,nationality?:string
      * } $buyer
      * @param array<string, array{tmp_name:string,name:string,error:int,size:int}> $files
-     * @param array{exam_date?:string,exam_time?:string}|null $exam
+     * @param array{exam_date?:string,exam_time?:string,exam_kind?:string,exam_session_id?:string,exam_allow_short_advance?:bool}|null $exam
      * @return array{
      *   purchase: array<string,mixed>,
      *   created_account: bool,
@@ -123,13 +123,18 @@ final class CheckoutService
                 }
             }
         }
+        $examMeta = null;
         if (ExamScheduleService::needsExamAtCheckout($examProduct)) {
             $examDate = trim((string) ($exam['exam_date'] ?? ''));
             $examTime = trim((string) ($exam['exam_time'] ?? ''));
             if ($examDate === '' || $examTime === '') {
                 throw new \InvalidArgumentException('Selecciona fecha y hora para tu examen.');
             }
-            $examSchedule->validateSlot($examProduct, $examDate, $examTime);
+            $examMeta = $examSchedule->validateSelection($examProduct, $examDate, $examTime, [
+                'kind' => (string) ($exam['exam_kind'] ?? ExamScheduleService::KIND_REGULAR),
+                'session_id' => (string) ($exam['exam_session_id'] ?? ''),
+                'allow_short_advance' => !empty($exam['exam_allow_short_advance']),
+            ]);
         }
 
         // Partner logueado: ignora códigos promocionales y siempre cobra su nivel.
@@ -152,6 +157,13 @@ final class CheckoutService
 
         $cardMsiMonths = max(1, $cardMsiMonths);
         $baseAmount = (float) ($quote['base'] ?? $quote['charged']);
+        $examSurcharge = (float) ($examMeta['surcharge'] ?? 0);
+        if ($examSurcharge > 0) {
+            $baseAmount = round($baseAmount + $examSurcharge, 2);
+            $quote['exam_surcharge'] = $examSurcharge;
+            $quote['charged'] = $baseAmount;
+            $quote['base'] = $baseAmount;
+        }
         $pricingProduct = $combo ?? $product;
         $pricing = $this->resolvePaymentAmount($baseAmount, $pricingProduct, $paymentMethod, $cardMsiMonths);
         $chargeAmount = $pricing['gross'];
@@ -297,12 +309,31 @@ final class CheckoutService
             throw new \RuntimeException('No se pudo leer la compra creada.');
         }
 
-        if (ExamScheduleService::needsExamAtCheckout($product) && $exam !== null) {
-            (new TrackingService())->saveExamSchedule($trackingId, [
+        if (ExamScheduleService::needsExamAtCheckout($examProduct) && $exam !== null && $examMeta !== null) {
+            $trackingSvc = new TrackingService();
+            $trackingSvc->saveExamSchedule($trackingId, [
                 'exam_date' => $exam['exam_date'] ?? null,
                 'exam_time' => $exam['exam_time'] ?? null,
                 'notify' => false,
             ], $studentUserId);
+            $trackingSvc->mergeExamScheduleMeta($trackingId, [
+                'kind' => (string) ($examMeta['kind'] ?? ExamScheduleService::KIND_REGULAR),
+                'session_id' => $examMeta['session_id'] ?? null,
+                'surcharge_amount' => (float) ($examMeta['surcharge'] ?? 0),
+                'requires_admin' => !empty($examMeta['requires_admin']),
+                'status' => !empty($examMeta['requires_admin']) ? 'pending_admin' : 'confirmed',
+                'requested_at' => date('c'),
+            ]);
+            if (!empty($examMeta['requires_admin'])) {
+                $this->pdo->prepare('UPDATE trackings SET status = ? WHERE id = ?')
+                    ->execute(['waiting_admin', $trackingId]);
+                $trackingSvc->addLog(
+                    $trackingId,
+                    'examen',
+                    'Fecha extraordinaria/anticipada pendiente de autorización admin',
+                    $studentUserId
+                );
+            }
         }
 
         $loginUrl = rtrim((string) (Env::get('APP_URL', '') ?? ''), '/') . '/login';

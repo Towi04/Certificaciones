@@ -1022,6 +1022,24 @@ final class AdminController
         redirect('/admin/seguimientos/' . $trackingId);
     }
 
+    public function trackingAuthorizeExam(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        try {
+            (new TrackingService())->authorizeExamSchedule($trackingId, (int) Auth::id(), [
+                'exam_date' => $_POST['exam_date'] ?? null,
+                'exam_time' => $_POST['exam_time'] ?? null,
+                'note' => (string) ($_POST['note'] ?? ''),
+            ]);
+            flash('success', 'Fecha de examen autorizada.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/seguimientos/' . $trackingId);
+    }
+
     public function trackingUpdateStudent(string $id): void
     {
         Auth::requireRole(['admin']);

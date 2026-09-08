@@ -294,6 +294,7 @@ final class ProductAdminService
             'exam_slot_minutes' => max(15, (int) ($exam['slot_minutes'] ?? 30)),
             'exam_validity_months' => max(1, (int) ($exam['validity_months'] ?? 6)),
             'exam_capture_zoom' => !empty($exam['capture_zoom']),
+            'schedule_mode' => ExamScheduleService::normalizeMode((string) ($schedule['mode'] ?? ExamScheduleService::MODE_WINDOW)),
             'schedule_min_advance_days' => max(0, (int) ($schedule['min_advance_days'] ?? 2)),
             'schedule_available_365' => (bool) ($schedule['available_365'] ?? false),
             'schedule_days' => $days,
@@ -301,6 +302,15 @@ final class ProductAdminService
             'schedule_weekdays_end' => (string) ($weekdays['end'] ?? '17:30'),
             'schedule_saturday_start' => (string) ($saturday['start'] ?? '08:00'),
             'schedule_saturday_end' => (string) ($saturday['end'] ?? '12:00'),
+            'schedule_checkout_help' => trim((string) ($schedule['checkout_help'] ?? '')),
+            'schedule_fixed_slots_text' => self::fixedSlotsToText($schedule['fixed_slots'] ?? []),
+            'schedule_sessions_text' => self::sessionsToText($schedule['sessions'] ?? []),
+            'extraordinary_enabled' => !empty(($schedule['extraordinary'] ?? [])['enabled']),
+            'extraordinary_surcharge' => (float) (($schedule['extraordinary'] ?? [])['surcharge_amount'] ?? 0),
+            'extraordinary_label' => (string) (($schedule['extraordinary'] ?? [])['surcharge_label'] ?? 'Fecha extraordinaria'),
+            'extraordinary_requires_admin' => array_key_exists('requires_admin_approval', $schedule['extraordinary'] ?? [])
+                ? !empty(($schedule['extraordinary'] ?? [])['requires_admin_approval'])
+                : true,
             'reglamento_enabled' => $reg !== [] && (
                 trim((string) ($reg['template_path'] ?? '')) !== ''
                 || trim((string) ($reg['source_url'] ?? '')) !== ''
@@ -755,6 +765,8 @@ final class ProductAdminService
             'uks-elet-cenni' => ['name' => 'UKS · Trámite CENNI ELeT', 'supplier' => 'uks', 'msi' => false],
             'itep-exams' => ['name' => 'iTEP / Oxford · Exámenes', 'supplier' => 'itep', 'msi' => true],
             'linguafranca-exams' => ['name' => 'Lingua Franca · TOEFL', 'supplier' => 'linguafranca', 'msi' => true],
+            'cambridge-flexible' => ['name' => 'Cambridge · Ventana Lun–Vie 9–18', 'supplier' => 'creative', 'msi' => true],
+            'cambridge-fixed' => ['name' => 'Cambridge · Convocatorias fijas', 'supplier' => 'creative', 'msi' => true],
             'etc-certs' => ['name' => 'ETC · Certificaciones IT', 'supplier' => 'etc', 'msi' => true],
             'doceo-procedures' => ['name' => 'DOCEO · Trámites', 'supplier' => 'doceo', 'msi' => true],
             'doceo-courses' => ['name' => 'DOCEO · Cursos Moodle', 'supplier' => 'doceo', 'msi' => false],
@@ -1108,8 +1120,12 @@ final class ProductAdminService
         }
 
         $schedule = is_array($config['schedule'] ?? null) ? $config['schedule'] : [];
+        $schedule['mode'] = ExamScheduleService::normalizeMode(
+            (string) ($input['schedule_mode'] ?? ($schedule['mode'] ?? ExamScheduleService::MODE_WINDOW))
+        );
         $schedule['min_advance_days'] = max(0, (int) ($input['schedule_min_advance_days'] ?? ($schedule['min_advance_days'] ?? 2)));
         $schedule['available_365'] = !empty($input['schedule_available_365']);
+        $schedule['checkout_help'] = trim((string) ($input['schedule_checkout_help'] ?? ''));
         $daysRaw = $input['schedule_days'] ?? [];
         if (!is_array($daysRaw)) {
             $daysRaw = [];
@@ -1118,7 +1134,7 @@ final class ProductAdminService
         foreach ([0, 1, 2, 3, 4, 5, 6] as $d) {
             $days[(string) $d] = !empty($daysRaw[(string) $d]) || !empty($daysRaw[$d]);
         }
-        if (!in_array(true, $days, true)) {
+        if (!in_array(true, $days, true) && $schedule['mode'] === ExamScheduleService::MODE_WINDOW) {
             throw new \InvalidArgumentException('Marca al menos un día de la semana para aplicar exámenes.');
         }
         $schedule['days'] = $days;
@@ -1131,6 +1147,32 @@ final class ProductAdminService
             'end' => $this->normalizeClock((string) ($input['schedule_saturday_end'] ?? '12:00'), '12:00', true),
         ];
         unset($schedule['blocked_dates']);
+
+        $schedule['fixed_slots'] = self::parseFixedSlotsText((string) ($input['schedule_fixed_slots_text'] ?? ''));
+        $schedule['sessions'] = self::parseSessionsText((string) ($input['schedule_sessions_text'] ?? ''));
+        if (!empty($input['extraordinary_enabled'])) {
+            $schedule['extraordinary'] = [
+                'enabled' => true,
+                'student_may_request' => true,
+                'requires_admin_approval' => !empty($input['extraordinary_requires_admin']),
+                'surcharge_amount' => max(0, (float) ($input['extraordinary_surcharge'] ?? 0)),
+                'surcharge_label' => trim((string) ($input['extraordinary_label'] ?? ''))
+                    ?: 'Fecha extraordinaria',
+            ];
+        } else {
+            unset($schedule['extraordinary']);
+        }
+        if ($schedule['mode'] !== ExamScheduleService::MODE_FIXED_SLOTS) {
+            // Conservar texto vacío limpia slots si el admin cambió de modo.
+            if (trim((string) ($input['schedule_fixed_slots_text'] ?? '')) === '') {
+                unset($schedule['fixed_slots']);
+            }
+        }
+        if ($schedule['mode'] !== ExamScheduleService::MODE_DATED_LIST) {
+            if (trim((string) ($input['schedule_sessions_text'] ?? '')) === '') {
+                unset($schedule['sessions']);
+            }
+        }
         $config['schedule'] = $schedule;
 
         $order = [];
@@ -1691,5 +1733,119 @@ final class ProductAdminService
         $s = trim((string) $value);
 
         return $s === '' ? null : $s;
+    }
+
+    /**
+     * Texto admin: una línea por slot `dow|HH:MM|etiqueta`
+     * dow: 0=Dom … 6=Sáb. Ejemplo TOEFL: `6|11:00|Sábado 11:00`
+     *
+     * @param mixed $raw
+     */
+    public static function fixedSlotsToText(mixed $raw): string
+    {
+        if (!is_array($raw)) {
+            return '';
+        }
+        $lines = [];
+        foreach ($raw as $slot) {
+            if (!is_array($slot)) {
+                continue;
+            }
+            $dow = (int) ($slot['dow'] ?? -1);
+            $time = ExamScheduleService::normalizeClock((string) ($slot['time'] ?? ''));
+            if ($dow < 0 || $dow > 6 || $time === null) {
+                continue;
+            }
+            $label = trim((string) ($slot['label'] ?? ''));
+            $lines[] = $dow . '|' . $time . ($label !== '' ? '|' . $label : '');
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @return list<array{dow:int,time:string,label:string}>
+     */
+    public static function parseFixedSlotsText(string $raw): array
+    {
+        $out = [];
+        foreach (preg_split('/\r\n|\r|\n/', $raw) ?: [] as $line) {
+            $line = trim((string) $line);
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+            $parts = array_map('trim', explode('|', $line));
+            $dow = (int) ($parts[0] ?? -1);
+            $time = ExamScheduleService::normalizeClock((string) ($parts[1] ?? ''));
+            if ($dow < 0 || $dow > 6 || $time === null) {
+                continue;
+            }
+            $out[] = [
+                'dow' => $dow,
+                'time' => $time,
+                'label' => (string) ($parts[2] ?? ''),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Texto admin: `YYYY-MM-DD|HH:MM|YYYY-MM-DD deadline|etiqueta`
+     *
+     * @param mixed $raw
+     */
+    public static function sessionsToText(mixed $raw): string
+    {
+        if (!is_array($raw)) {
+            return '';
+        }
+        $lines = [];
+        foreach ($raw as $session) {
+            if (!is_array($session)) {
+                continue;
+            }
+            $date = ExamScheduleService::normalizeDateStatic((string) ($session['exam_date'] ?? ''));
+            if ($date === null) {
+                continue;
+            }
+            $time = ExamScheduleService::normalizeClock((string) ($session['exam_time'] ?? '00:00')) ?? '00:00';
+            $deadline = ExamScheduleService::normalizeDateStatic((string) ($session['registration_deadline'] ?? '')) ?? '';
+            $label = trim((string) ($session['label'] ?? ''));
+            $lines[] = $date . '|' . $time . '|' . $deadline . ($label !== '' ? '|' . $label : '');
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @return list<array{id:string,exam_date:string,exam_time:string,registration_deadline:?string,label:string}>
+     */
+    public static function parseSessionsText(string $raw): array
+    {
+        $out = [];
+        foreach (preg_split('/\r\n|\r|\n/', $raw) ?: [] as $i => $line) {
+            $line = trim((string) $line);
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+            $parts = array_map('trim', explode('|', $line));
+            $date = ExamScheduleService::normalizeDateStatic((string) ($parts[0] ?? ''));
+            if ($date === null) {
+                continue;
+            }
+            $time = ExamScheduleService::normalizeClock((string) ($parts[1] ?? '00:00')) ?? '00:00';
+            $deadline = ExamScheduleService::normalizeDateStatic((string) ($parts[2] ?? ''));
+            $label = (string) ($parts[3] ?? '');
+            $out[] = [
+                'id' => $date . '_' . str_replace(':', '', $time) . '_' . $i,
+                'exam_date' => $date,
+                'exam_time' => $time,
+                'registration_deadline' => $deadline,
+                'label' => $label,
+            ];
+        }
+
+        return $out;
     }
 }
