@@ -110,13 +110,25 @@ $stepLabels = [
                             $val = $prefill[$code] ?? '';
                             $req = !empty($field['required']);
                             ?>
-                            <?php if ($field['type'] === 'select' && $code === 'sex'): ?>
+                            <?php if (($field['type'] ?? '') === 'select'): ?>
+                                <?php
+                                $options = is_array($field['options'] ?? null) ? $field['options'] : [];
+                                if ($options === [] && $code === 'sex') {
+                                    $options = \App\Services\CheckoutRequirements::SEX_OPTIONS;
+                                }
+                                ?>
                                 <label><?= e($field['label']) ?><?= $req ? ' *' : '' ?>
-                                    <select name="sex" <?= $req ? 'required' : '' ?>>
+                                    <select name="<?= e($code) ?>" <?= $req ? 'required' : '' ?>>
                                         <option value="">—</option>
-                                        <option value="F">Femenino</option>
-                                        <option value="M">Masculino</option>
-                                        <option value="X">Otro / X</option>
+                                        <?php foreach ($options as $opt): ?>
+                                            <?php
+                                            $optVal = (string) ($opt['value'] ?? '');
+                                            $optLabel = (string) ($opt['label'] ?? $optVal);
+                                            ?>
+                                            <option value="<?= e($optVal) ?>" <?= (string) $val === $optVal ? 'selected' : '' ?>>
+                                                <?= e($optLabel) ?>
+                                            </option>
+                                        <?php endforeach; ?>
                                     </select>
                                 </label>
                             <?php else: ?>
