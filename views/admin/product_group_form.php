@@ -468,8 +468,9 @@ $renderMailTemplateField = static function (
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Progreso y acciones</h2>
         <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
             Define los pasos del caso. Cada paso puede ser visible al alumno o solo admin,
-            y puede mostrar un <strong>botón en Operación</strong> (se oculta cuando ya se hizo).
-            Confirmar pago y capturar folio/clave aparecen solos en Operación según el estado del caso.
+            y puede mostrar un <strong>botón en Operación</strong>.
+            En el tablero solo aparecen los pasos con «Mostrar en Operación» (más Confirmar pago
+            si el caso aún no está pagado). El comprobante DOCEO→proveedor se sube en el detalle del caso.
             El destinatario y CC del correo se configuran en la <strong>plantilla de correo</strong>.
         </p>
 

@@ -189,7 +189,8 @@ final class AdminOpsBoardService
         $row['needs_access'] = $needsAccess;
         $row['has_access'] = $hasAccess;
         $row['ops_buttons'] = $opsButtons;
-        $row['show_folio_fields'] = $needsExamAccessBtn || ($isElet && $purchaseStatus === 'paid');
+        // Folio/clave solo si el grupo pidió esa acción (no forzar en todo ELeT).
+        $row['show_folio_fields'] = $needsExamAccessBtn;
         $row['needs_action'] = $pendingOps > 0
             || (string) ($row['tracking_status'] ?? '') === 'waiting_admin';
 

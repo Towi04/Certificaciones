@@ -27,13 +27,15 @@ final class GroupStepConfig
     ];
 
     /**
-     * Acciones configurables en el editor de pasos.
-     * Confirmar pago y capturar folio se resuelven solos en Operación
-     * según el estado del caso (no se eligen aquí).
+     * Acciones configurables en el editor de pasos del grupo.
+     * Lo que marques con «Mostrar en Operación» es lo que aparece en el tablero
+     * (sin botones fantasma de configuraciones viejas).
      */
     public const ACTIONS_EDITABLE = [
         self::ACTION_NONE => 'Solo progreso (sin botón)',
+        self::ACTION_CONFIRM_PAYMENT => 'Confirmar pago',
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
+        self::ACTION_EXAM_ACCESS => 'Capturar folio/clave y notificar',
         self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
     ];
 
@@ -182,10 +184,21 @@ final class GroupStepConfig
             ? self::mergePipelineSteps($pipelineSteps, $defs)
             : array_values($defs);
 
+        // ¿El grupo ya definió botones en Operación? Si sí, no inyectar legacies.
+        $hasConfiguredOps = false;
+        foreach ($merged as $step) {
+            if (!empty($step['ops_button'])
+                && (string) ($step['action'] ?? self::ACTION_NONE) !== self::ACTION_NONE
+            ) {
+                $hasConfiguredOps = true;
+                break;
+            }
+        }
+
         // Orden: primero confirm_payment, luego el resto por sort
         usort($merged, static function (array $a, array $b): int {
             $prio = static function (array $s): int {
-                return match ((string) ($s['action'] ?? '')) {
+                return match (self::effectiveOpsAction($s)) {
                     self::ACTION_CONFIRM_PAYMENT => 0,
                     self::ACTION_SEND_MAIL => 1,
                     self::ACTION_EXAM_ACCESS => 2,
@@ -201,7 +214,7 @@ final class GroupStepConfig
             if (empty($step['ops_button'])) {
                 continue;
             }
-            $action = (string) ($step['action'] ?? self::ACTION_NONE);
+            $action = self::effectiveOpsAction($step);
             if ($action === self::ACTION_NONE) {
                 continue;
             }
@@ -212,100 +225,118 @@ final class GroupStepConfig
             if ($done) {
                 $label = match ($action) {
                     self::ACTION_SEND_MAIL => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
-                    self::ACTION_EXAM_ACCESS => 'Reenviar accesos',
+                    self::ACTION_EXAM_ACCESS => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
                     self::ACTION_ADVANCE => $label . ' (hecho)',
                     default => $label,
                 };
             }
+            $email = is_array($step['email'] ?? null) ? $step['email'] : [];
             $buttons[] = [
                 'code' => (string) $step['code'],
                 'label' => $label,
                 'action' => $action,
-                'email' => is_array($step['email'] ?? null) ? $step['email'] : [],
+                'email' => $email,
+                'audience' => (string) ($email['audience'] ?? 'student'),
                 'admin_only' => !empty($step['admin_only']),
                 'done' => $done,
             ];
         }
 
-        // Fallbacks si el grupo aún no configuró step_defs ricos
         $actions = array_column($buttons, 'action');
         $purchaseStatus = (string) ($row['purchase_status'] ?? '');
         $paymentPending = in_array($purchaseStatus, ['awaiting_payment', 'payment_review', 'draft', 'awaiting_docs'], true);
         $isPaid = $purchaseStatus === 'paid';
 
-        if (!in_array(self::ACTION_CONFIRM_PAYMENT, $actions, true) && $paymentPending) {
+        // Solo fallbacks si el grupo aún no configuró botones de Operación.
+        if (!$hasConfiguredOps) {
+            if (!in_array(self::ACTION_CONFIRM_PAYMENT, $actions, true) && $paymentPending) {
+                array_unshift($buttons, [
+                    'code' => 'confirm_pago',
+                    'label' => 'Confirmar pago',
+                    'action' => self::ACTION_CONFIRM_PAYMENT,
+                    'email' => [],
+                    'audience' => 'student',
+                    'admin_only' => false,
+                    'done' => false,
+                ]);
+            }
+            $pipeline = (string) ($row['pipeline_code'] ?? '');
+            $isElet = $pipeline === 'elet_uks' || (string) ($row['product_code'] ?? '') === 'ELET-UKS';
+            if ($isElet && !in_array(self::ACTION_EXAM_ACCESS, $actions, true) && $isPaid) {
+                $examStep = $defs['codigos'] ?? null;
+                $synthetic = [
+                    'code' => 'codigos',
+                    'label' => 'Enviar folio/clave',
+                    'action' => self::ACTION_EXAM_ACCESS,
+                    'email' => is_array($examStep['email'] ?? null) ? $examStep['email'] : [],
+                    'audience' => 'student',
+                    'admin_only' => true,
+                ];
+                $done = self::isActionDone(self::ACTION_EXAM_ACCESS, $row, $synthetic);
+                $synthetic['done'] = $done;
+                if ($done) {
+                    $synthetic['label'] = 'Reenviar accesos';
+                }
+                $buttons[] = $synthetic;
+            }
+            if (!in_array(self::ACTION_SEND_MAIL, $actions, true) && $isPaid) {
+                $pr = [];
+                if (!empty($row['extra_json']) && is_string($row['extra_json'])) {
+                    $decoded = json_decode($row['extra_json'], true);
+                    $pr = is_array($decoded['provider_request'] ?? null) ? $decoded['provider_request'] : [];
+                } elseif (is_array($row['extra_json'] ?? null)) {
+                    $pr = is_array($row['extra_json']['provider_request'] ?? null)
+                        ? $row['extra_json']['provider_request']
+                        : [];
+                }
+                if (!empty($pr['required']) || !empty($pr['enabled']) || trim((string) ($pr['sent_at'] ?? '')) !== '') {
+                    $sent = trim((string) ($pr['sent_at'] ?? ''));
+                    $done = $sent !== '' && $sent !== 'null';
+                    $buttons[] = [
+                        'code' => (string) ($pr['step_code'] ?? 'solicitud_proveedor'),
+                        'label' => $done ? 'Reenviar solicitud' : 'Enviar solicitud',
+                        'action' => self::ACTION_SEND_MAIL,
+                        'email' => ['audience' => 'provider', 'enabled' => true],
+                        'audience' => 'provider',
+                        'admin_only' => true,
+                        'done' => $done,
+                    ];
+                }
+            }
+            $actions = array_column($buttons, 'action');
+        } elseif ($paymentPending && !in_array(self::ACTION_CONFIRM_PAYMENT, $actions, true)) {
+            // Grupo configurado pero sin «Confirmar pago»: inyectar solo ese fallback mínimo.
             array_unshift($buttons, [
                 'code' => 'confirm_pago',
                 'label' => 'Confirmar pago',
                 'action' => self::ACTION_CONFIRM_PAYMENT,
                 'email' => [],
+                'audience' => 'student',
                 'admin_only' => false,
                 'done' => false,
             ]);
         }
-        $pipeline = (string) ($row['pipeline_code'] ?? '');
-        $isElet = $pipeline === 'elet_uks' || (string) ($row['product_code'] ?? '') === 'ELET-UKS';
-        if ($isElet && !in_array(self::ACTION_EXAM_ACCESS, $actions, true) && $isPaid) {
-            $examStep = $defs['codigos'] ?? null;
-            $synthetic = [
-                'code' => 'codigos',
-                'label' => 'Enviar folio/clave',
-                'action' => self::ACTION_EXAM_ACCESS,
-                'email' => is_array($examStep['email'] ?? null) ? $examStep['email'] : [],
-                'admin_only' => true,
-            ];
-            $done = self::isActionDone(self::ACTION_EXAM_ACCESS, $row, $synthetic);
-            $synthetic['done'] = $done;
-            if ($done) {
-                $synthetic['label'] = 'Reenviar accesos';
-            }
-            $buttons[] = $synthetic;
-        }
-        if (!in_array(self::ACTION_SEND_MAIL, $actions, true) && $isPaid) {
-            $pr = [];
-            if (!empty($row['extra_json']) && is_string($row['extra_json'])) {
-                $decoded = json_decode($row['extra_json'], true);
-                $pr = is_array($decoded['provider_request'] ?? null) ? $decoded['provider_request'] : [];
-            } elseif (is_array($row['extra_json'] ?? null)) {
-                $pr = is_array($row['extra_json']['provider_request'] ?? null)
-                    ? $row['extra_json']['provider_request']
-                    : [];
-            }
-            if (!empty($pr['required']) || !empty($pr['enabled']) || trim((string) ($pr['sent_at'] ?? '')) !== '') {
-                $sent = trim((string) ($pr['sent_at'] ?? ''));
-                $done = $sent !== '' && $sent !== 'null';
-                $buttons[] = [
-                    'code' => (string) ($pr['step_code'] ?? 'solicitud_proveedor'),
-                    'label' => $done ? 'Reenviar solicitud' : 'Enviar solicitud',
-                    'action' => self::ACTION_SEND_MAIL,
-                    'email' => ['audience' => 'provider', 'enabled' => true],
-                    'admin_only' => true,
-                    'done' => $done,
-                ];
-            }
-        }
 
-        // Si el pago no está confirmado, solo mostrar Confirmar pago (no solicitud/accesos/avance).
+        // Si el pago no está confirmado, solo Confirmar pago.
         if ($paymentPending) {
             $buttons = array_values(array_filter(
                 $buttons,
                 static fn (array $b): bool => ($b['action'] ?? '') === self::ACTION_CONFIRM_PAYMENT
             ));
         } else {
-            // Pago confirmado: no mostrar botón de confirmar pago.
+            // Pago confirmado: ocultar confirmar pago.
             $buttons = array_values(array_filter(
                 $buttons,
                 static fn (array $b): bool => ($b['action'] ?? '') !== self::ACTION_CONFIRM_PAYMENT
             ));
         }
 
-        // Una sola acción por tipo (evita "Confirmar pago" duplicado amarillo/azul).
+        // Una sola acción por tipo (excepto varios send_mail por paso).
         $seenActions = [];
         $unique = [];
         foreach ($buttons as $btn) {
             $action = (string) ($btn['action'] ?? '');
             if ($action === self::ACTION_SEND_MAIL) {
-                // Varios envíos de correo por paso distintos sí pueden coexistir.
                 $key = $action . ':' . (string) ($btn['code'] ?? '');
             } else {
                 $key = $action;
@@ -321,6 +352,50 @@ final class GroupStepConfig
         }
 
         return $unique;
+    }
+
+    /**
+     * Interpreta la acción real del botón en Operación.
+     * Compatibilidad: configs viejas usaban «Avanzar» para confirmar pago
+     * o «Enviar correo» al alumno con plantilla de accesos.
+     *
+     * @param array<string, mixed> $step
+     */
+    public static function effectiveOpsAction(array $step): string
+    {
+        $action = (string) ($step['action'] ?? self::ACTION_NONE);
+        if (!isset(self::ACTIONS[$action])) {
+            $action = self::ACTION_NONE;
+        }
+
+        $blob = mb_strtolower(trim(
+            (string) ($step['code'] ?? '') . ' '
+            . (string) ($step['ops_label'] ?? '') . ' '
+            . (string) ($step['label'] ?? '')
+        ));
+
+        if ($action === self::ACTION_ADVANCE
+            && preg_match('/confirm.*pago|pago.*confirm|confirmaci[oó]n\s+de\s+pago/u', $blob) === 1
+        ) {
+            return self::ACTION_CONFIRM_PAYMENT;
+        }
+
+        if ($action === self::ACTION_SEND_MAIL) {
+            $email = is_array($step['email'] ?? null) ? $step['email'] : [];
+            $audience = (string) ($email['audience'] ?? 'student');
+            $tpl = mb_strtolower((string) ($email['template_code'] ?? ''));
+            if ($audience === 'student'
+                && (
+                    str_contains($tpl, 'exam_access')
+                    || str_contains($tpl, 'acceso')
+                    || preg_match('/folio|clave|acceso/u', $blob) === 1
+                )
+            ) {
+                return self::ACTION_EXAM_ACCESS;
+            }
+        }
+
+        return $action;
     }
 
     /**
