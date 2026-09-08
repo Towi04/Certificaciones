@@ -18,14 +18,18 @@
         <table class="data">
             <thead>
             <tr>
-                <th>Nombre</th><th>Código</th><th>Activa</th><th></th>
+                <th>Nombre</th><th>Código</th><th>Destinatario</th><th>Activa</th><th></th>
             </tr>
             </thead>
             <tbody>
             <?php foreach ($templates as $t): ?>
+                <?php
+                $aud = \App\Services\MailTemplateService::audienceForTemplate((string) ($t['code'] ?? ''));
+                ?>
                 <tr>
                     <td><?= e($t['name']) ?></td>
                     <td><code><?= e($t['code']) ?></code></td>
+                    <td><?= $aud === 'provider' ? 'Proveedor' : 'Alumno' ?></td>
                     <td><?= (int) $t['is_active'] ? 'Sí' : 'No' ?></td>
                     <td>
                         <span class="row-actions">

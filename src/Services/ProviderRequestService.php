@@ -238,8 +238,8 @@ final class ProviderRequestService
         $to = $this->resolveRecipient($config);
         if ($to === '') {
             throw new \RuntimeException(
-                'Configura el correo destino en Grupos → Solicitud a proveedor (campo Para), '
-                . 'o en Admin → Correos si usas la plantilla UKS.'
+                'Configura el correo del proveedor en Admin → Correos (Para), '
+                . 'o en el grupo si aún usas el campo legado de solicitud a proveedor.'
             );
         }
 
@@ -261,9 +261,17 @@ final class ProviderRequestService
             );
 
             // Nunca adjuntar archivos: Neubox/hosting bloquea SMTP con attachments.
+            $cc = trim((string) ($config['cc'] ?? ''));
+            if ($cc === '') {
+                $tplCode = trim((string) ($config['mail_template_code'] ?? ''));
+                if ($tplCode !== '') {
+                    $routingCc = (new MailTemplateService())->routing($tplCode)['cc'] ?? '';
+                    $cc = trim((string) $routingCc);
+                }
+            }
             $this->dispatchMail(
                 $to,
-                (string) $config['cc'],
+                $cc,
                 (string) $config['mail_template_code'],
                 $vars,
                 []

@@ -143,6 +143,18 @@ final class MailTemplateService
             throw new \RuntimeException('Plantilla de correo no encontrada o desactivada: ' . $code);
         }
 
+        // Plantillas de proveedor: aplicar Para/CC guardados en la plantilla.
+        if (self::isProviderTemplate($code)) {
+            $routing = $this->routing($code);
+            if (trim($to) === '' && $routing['to'] !== '') {
+                $to = $routing['to'];
+            }
+            $existingCc = trim((string) ($options['cc'] ?? ''));
+            if ($existingCc === '' && $routing['cc'] !== '') {
+                $options['cc'] = $routing['cc'];
+            }
+        }
+
         $this->deliver($to, $rendered, $options);
     }
 
@@ -196,6 +208,18 @@ final class MailTemplateService
         if (in_array($code, [self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY], true)) {
             Settings::set('uks_elet_request_email', $to);
         }
+    }
+
+    /** Destinatario configurado: student | provider. */
+    public function audience(string $code): string
+    {
+        return self::audienceForTemplate($code);
+    }
+
+    public function saveAudience(string $code, string $audience): void
+    {
+        $audience = $audience === 'provider' ? 'provider' : 'student';
+        Settings::set('mail_tpl_' . $code . '_audience', $audience);
     }
 
     /**
@@ -269,18 +293,35 @@ final class MailTemplateService
     /** Plantillas con destinatario fijo (proveedor / UKS), no al alumno. */
     public static function isProviderTemplate(string $code): bool
     {
+        return self::audienceForTemplate($code) === 'provider';
+    }
+
+    /**
+     * audience: preferencia guardada en settings; si no hay, heurística por código.
+     */
+    public static function audienceForTemplate(string $code): string
+    {
+        $code = trim($code);
+        if ($code === '') {
+            return 'student';
+        }
+        $saved = strtolower(trim(Settings::get('mail_tpl_' . $code . '_audience', '') ?? ''));
+        if ($saved === 'provider' || $saved === 'student') {
+            return $saved;
+        }
+
+        return self::providerTemplateHeuristic($code) ? 'provider' : 'student';
+    }
+
+    /** Heurística legacy por código (uks_*, *_provider*, *proveedor*). */
+    public static function providerTemplateHeuristic(string $code): bool
+    {
         $code = trim($code);
 
         return in_array($code, [self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY], true)
             || str_starts_with($code, 'uks_')
             || str_contains($code, '_provider')
             || str_contains($code, 'proveedor');
-    }
-
-    /** audience inferida desde el código de plantilla. */
-    public static function audienceForTemplate(string $code): string
-    {
-        return self::isProviderTemplate($code) ? 'provider' : 'student';
     }
 
     /** @return array<string, array<string, string>> */
