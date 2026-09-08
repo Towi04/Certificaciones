@@ -19,6 +19,11 @@ final class SupplierAdminService
         'Otro',
     ];
 
+    /** Logo sin denominación (solo símbolo). */
+    public const LOGO_MARK = 'mark';
+    /** Logo con denominación (símbolo + nombre). */
+    public const LOGO_WORDMARK = 'wordmark';
+
     private SupplierRepository $suppliers;
     private BrandAssetService $assets;
 
@@ -95,9 +100,6 @@ final class SupplierAdminService
         $this->assets->deletePublicFile($supplier['logo_wordmark_path'] ?? null);
         $this->suppliers->delete($id);
     }
-
-    public const LOGO_MARK = 'mark';
-    public const LOGO_WORDMARK = 'wordmark';
 
     /**
      * Ruta pública del logo según variante.
