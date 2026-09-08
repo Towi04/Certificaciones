@@ -473,7 +473,6 @@ $renderMailTemplateField = static function (
         </p>
 
         <div class="panel" style="margin:0 0 1rem;padding:.85rem 1rem;background:#f8fafc">
-<<<<<<< HEAD
             <strong style="color:var(--doceo-blue);font-size:.92rem">Resumen de correos</strong>
             <p class="muted" style="font-size:.78rem;margin:.25rem 0 .65rem">
                 Solo lectura. Los correos se configuran en <strong>cada paso</strong> más abajo
@@ -481,15 +480,6 @@ $renderMailTemplateField = static function (
                 automáticos o los dispara el admin en Operación.
             </p>
             <div id="step-emails-summary" class="muted" style="font-size:.82rem;margin:0"></div>
-=======
-            <strong style="color:var(--doceo-blue);font-size:.92rem">Correos del ciclo</strong>
-            <p class="muted" style="font-size:.78rem;margin:.25rem 0 .65rem">
-                Todos los correos se configuran en <strong>cada paso</strong> del progreso
-                («Enviar correo» + plantilla + Cuándo auto/admin).
-                No hay envíos hardcodeados de registro o pago.
-            </p>
-            <div id="step-emails-summary" class="muted" style="font-size:.78rem;margin:.35rem 0 0"></div>
->>>>>>> origin/main
         </div>
 
         <?php if ($pipelines === []): ?>
