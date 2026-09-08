@@ -149,10 +149,12 @@ final class AdminController
                 $notify
             );
             flash(
-                'success',
+                $result['notified'] ? 'success' : ($notify ? 'error' : 'success'),
                 $result['notified']
                     ? 'Folio/clave guardados y plantilla enviada al alumno.'
-                    : 'Folio/clave guardados.'
+                    : ($notify
+                        ? 'Folio/clave guardados, pero no se envió el correo. Revisa que el paso de folio/clave tenga «Enviar correo» y la plantilla de accesos.'
+                        : 'Folio/clave guardados.')
             );
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
@@ -1008,14 +1010,24 @@ final class AdminController
         csrf_verify();
         $trackingId = (int) $id;
         try {
-            (new UksEletService())->publishExamAccess(
+            $notify = !empty($_POST['notify']);
+            $notified = (new UksEletService())->publishExamAccess(
                 $trackingId,
                 trim((string) ($_POST['folio'] ?? '')),
                 trim((string) ($_POST['access_key'] ?? '')),
                 (int) Auth::id(),
-                !empty($_POST['notify'])
+                $notify
             );
-            flash('success', 'Accesos publicados y alumno notificado por correo.');
+            if ($notify && $notified) {
+                flash('success', 'Accesos publicados y alumno notificado por correo.');
+            } elseif ($notify && !$notified) {
+                flash(
+                    'error',
+                    'Accesos publicados, pero no se envió el correo. Revisa que el paso de folio/clave tenga «Enviar correo» y la plantilla de accesos.'
+                );
+            } else {
+                flash('success', 'Accesos publicados (sin correo).');
+            }
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }

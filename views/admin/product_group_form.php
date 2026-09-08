@@ -910,6 +910,35 @@ $renderMailTemplateField = static function (
       var v = el ? String(el.value || '').trim() : '';
       return v || fallback;
     }
+    // Correo de accesos: si ya no hay checkbox de ciclo, derivarlo del paso exam_access.
+    var examAccessEmail = (function () {
+      var cycleCb = document.querySelector('[name="email_exam_access_enabled"]');
+      if (cycleCb) {
+        return {
+          enabled: !!cycleCb.checked,
+          template_code: emailTpl('email_exam_access_template', 'student_elet_exam_access'),
+          mode: (function () {
+            var m = document.querySelector('[name="email_exam_access_mode"]');
+            return m && m.value === 'auto' ? 'auto' : 'admin';
+          })()
+        };
+      }
+      var enabled = false;
+      var template = 'student_elet_exam_access';
+      var mode = 'admin';
+      if (typeof currentStepsFromDom === 'function') {
+        currentStepsFromDom().forEach(function (s) {
+          if (enabled) return;
+          if (String(s.action || '') !== 'exam_access') return;
+          if (s.email_enabled && String(s.email_template || '').trim()) {
+            enabled = true;
+            template = String(s.email_template).trim();
+            mode = s.email_trigger === 'auto' ? 'auto' : 'admin';
+          }
+        });
+      }
+      return { enabled: enabled, template_code: template, mode: mode };
+    })();
     base.emails = {
       student_registration: {
         enabled: !!(document.querySelector('[name="email_registration_enabled"]') || {}).checked,
@@ -919,14 +948,7 @@ $renderMailTemplateField = static function (
         enabled: !!(document.querySelector('[name="email_payment_enabled"]') || {}).checked,
         template_code: emailTpl('email_payment_template', 'student_payment_confirmed')
       },
-      student_exam_access: {
-        enabled: !!(document.querySelector('[name="email_exam_access_enabled"]') || {}).checked,
-        template_code: emailTpl('email_exam_access_template', 'student_elet_exam_access'),
-        mode: (function () {
-          var m = document.querySelector('[name="email_exam_access_mode"]');
-          return m && m.value === 'auto' ? 'auto' : 'admin';
-        })()
-      },
+      student_exam_access: examAccessEmail,
       on_steps: onSteps
     };
 

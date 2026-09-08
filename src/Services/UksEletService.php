@@ -221,6 +221,8 @@ final class UksEletService
 
     /**
      * Publica folio + clave del día y avisa al alumno con link del examen.
+     *
+     * @return bool true si se envió el correo al alumno
      */
     public function publishExamAccess(
         int $trackingId,
@@ -228,7 +230,7 @@ final class UksEletService
         string $accessKey,
         int $adminUserId,
         bool $notifyStudent = true
-    ): void {
+    ): bool {
         $tracking = $this->tracking->find($trackingId);
         if ($tracking === null) {
             throw new \InvalidArgumentException('Seguimiento no encontrado.');
@@ -255,28 +257,26 @@ final class UksEletService
             'waiting_student'
         );
 
+        $notified = false;
         if ($notifyStudent) {
-            $product = [
-                'config_json' => $tracking['config_json'] ?? null,
-                'group_config_json' => $tracking['group_config_json'] ?? null,
-                'id' => $tracking['product_id'] ?? 0,
-                'name' => $tracking['product_name'] ?? '',
-                'code' => $tracking['product_code'] ?? '',
-            ];
-            if (GroupEmailAutomation::isEnabled($product, GroupEmailAutomation::KEY_EXAM_ACCESS)) {
-                $this->sendStudentExamAccessEmail($trackingId, $folio, $accessKey);
-            }
+            $notified = $this->sendStudentExamAccessEmail($trackingId, $folio, $accessKey);
         }
 
         $this->tracking->addLog(
             $trackingId,
             'codigos',
-            'Accesos examen publicados · folio ' . $folio,
+            'Accesos examen publicados · folio ' . $folio
+                . ($notifyStudent ? ($notified ? ' · correo enviado' : ' · correo no enviado') : ''),
             $adminUserId
         );
+
+        return $notified;
     }
 
-    public function sendStudentExamAccessEmail(int $trackingId, ?string $folio = null, ?string $accessKey = null): void
+    /**
+     * @return bool true si el correo se envió
+     */
+    public function sendStudentExamAccessEmail(int $trackingId, ?string $folio = null, ?string $accessKey = null): bool
     {
         $tracking = $this->tracking->find($trackingId);
         if ($tracking === null) {
@@ -318,18 +318,18 @@ final class UksEletService
             'name' => $tracking['product_name'] ?? '',
             'code' => $tracking['product_code'] ?? '',
         ];
-        if (!GroupEmailAutomation::isEnabled($product, GroupEmailAutomation::KEY_EXAM_ACCESS)) {
-            return;
+        $resolved = GroupEmailAutomation::resolveExamAccessMail($product);
+        if (!$resolved['send']) {
+            return false;
         }
-        $tplCode = GroupEmailAutomation::templateCode(
-            $product,
-            GroupEmailAutomation::KEY_EXAM_ACCESS,
-            'student_elet_exam_access'
-        );
+        $tplCode = $resolved['template_code'] !== ''
+            ? $resolved['template_code']
+            : 'student_elet_exam_access';
 
         if ($mailTpl->render($tplCode, $vars) !== null) {
             $mailTpl->send($tplCode, $email, $vars);
-            return;
+
+            return true;
         }
 
         $subject = 'Accesos a tu examen ELeT · ' . $matricula;
@@ -353,6 +353,8 @@ final class UksEletService
             . '<p>Matrícula DOCEO: ' . htmlspecialchars($matricula) . '</p>';
 
         (new Mailer())->send($email, $subject, $text, ['html' => true, 'body_html' => $html]);
+
+        return true;
     }
 
     /** Clave del día usada por otro alumno en la misma fecha (si existe). */
