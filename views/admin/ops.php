@@ -186,7 +186,7 @@ $q = (string) ($filters['q'] ?? '');
                                     <?php endif; ?>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_SEND_MAIL): ?>
                                     <?php
-                                    $audience = (string) ($btn['audience'] ?? ($btn['email']['audience'] ?? 'provider'));
+                                    $audience = (string) ($btn['audience'] ?? ($btn['email']['audience'] ?? 'student'));
                                     $isProviderMail = $audience === 'provider';
                                     ?>
                                     <?php if ($isProviderMail): ?>

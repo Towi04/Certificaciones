@@ -199,7 +199,8 @@ $needsAdminProof = $providerCfg && !empty($providerCfg['require_admin_payment_pr
             Comprobante de pago DOCEO → proveedor
         </p>
         <p class="muted" style="margin:0 0 .65rem;font-size:.82rem">
-            Este es el disparador: no se solicita al proveedor hasta que subas este comprobante
+            Súbelo aquí (ya no aparece en la tabla de Operación). No se solicita al proveedor
+            hasta que exista este comprobante
             <?= $needsAdminProof ? '(obligatorio en este grupo)' : '(recomendado)' ?>.
         </p>
         <?php if ($adminProof): ?>
