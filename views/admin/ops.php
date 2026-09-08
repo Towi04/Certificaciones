@@ -13,8 +13,9 @@ $q = (string) ($filters['q'] ?? '');
         <div>
             <h1 style="margin:0;color:var(--doceo-blue)">Operación</h1>
             <p class="muted" style="margin:.35rem 0 0;max-width:48rem">
-                Una sola tabla con los casos. Aquí confirmas pagos, subes el comprobante DOCEO→proveedor,
-                envías solicitud, capturas folio/clave y disparas las plantillas.
+                Una sola tabla con los casos. Los botones salen de la configuración del grupo
+                (confirmar pago, solicitud al proveedor, accesos, etc.). El comprobante DOCEO→proveedor
+                se sube en el <strong>detalle</strong> del caso.
             </p>
         </div>
         <div class="ops-header-actions">
@@ -159,15 +160,10 @@ $q = (string) ($filters['q'] ?? '');
                         <td class="ops-actions">
                             <?php
                             $opsButtons = is_array($r['ops_buttons'] ?? null) ? $r['ops_buttons'] : [];
-                            $hasPending = false;
-                            $renderedAccessForm = false;
                             foreach ($opsButtons as $btn):
                                 $action = (string) ($btn['action'] ?? '');
                                 $label = (string) ($btn['label'] ?? 'Acción');
                                 $done = !empty($btn['done']);
-                                if (!$done) {
-                                    $hasPending = true;
-                                }
                                 $btnClass = $done ? 'btn btn-ops-done btn-sm' : 'btn btn-accent btn-sm';
                                 $statusIcon = $done ? icon('check') : icon('clock');
                                 ?>
@@ -189,23 +185,11 @@ $q = (string) ($filters['q'] ?? '');
                                         </button>
                                     <?php endif; ?>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_SEND_MAIL): ?>
-                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/comprobante-proveedor')) ?>"
-                                          enctype="multipart/form-data" class="ops-inline-form ops-proof-upload">
-                                        <?= csrf_field() ?>
-                                        <input type="hidden" name="return_ops" value="1">
-                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
-                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
-                                        <label class="btn btn-ghost btn-sm ops-file-btn">
-                                            <span class="ops-btn-ico"><?= icon('upload') ?></span>
-                                            <?= !empty($r['admin_proof_uploaded']) ? 'Cambiar comprobante DOCEO' : 'Subir comprobante DOCEO' ?>
-                                            <input type="file" name="provider_payment_proof"
-                                                   accept=".pdf,.jpg,.jpeg,.png,.webp" required
-                                                   onchange="this.form.requestSubmit()">
-                                        </label>
-                                        <?php if (!empty($r['admin_proof_uploaded'])): ?>
-                                            <span class="ops-mini-ok" title="Comprobante DOCEO→proveedor listo"><?= icon('check') ?> comprobante</span>
-                                        <?php endif; ?>
-                                    </form>
+                                    <?php
+                                    $audience = (string) ($btn['audience'] ?? ($btn['email']['audience'] ?? 'provider'));
+                                    $isProviderMail = $audience === 'provider';
+                                    ?>
+                                    <?php if ($isProviderMail): ?>
                                     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/solicitud-proveedor')) ?>" class="ops-inline-form">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="return_ops" value="1">
@@ -213,12 +197,27 @@ $q = (string) ($filters['q'] ?? '');
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                         <input type="hidden" name="include_payment_proof" value="1">
                                         <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
+                                        <button class="<?= e($btnClass) ?>" type="submit"
+                                            <?= empty($r['admin_proof_uploaded']) ? 'title="Sube el comprobante DOCEO en Detalle si el grupo lo exige"' : '' ?>>
+                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
+                                        </button>
+                                    </form>
+                                    <?php if (!empty($r['admin_proof_uploaded'])): ?>
+                                        <span class="ops-mini-ok" title="Comprobante DOCEO→proveedor listo (detalle)"><?= icon('check') ?> comprobante</span>
+                                    <?php endif; ?>
+                                    <?php else: ?>
+                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/avanzar')) ?>" class="ops-inline-form">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="return_ops" value="1">
+                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                        <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
                                         <button class="<?= e($btnClass) ?>" type="submit">
                                             <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
                                         </button>
                                     </form>
+                                    <?php endif; ?>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_EXAM_ACCESS): ?>
-                                    <?php $renderedAccessForm = true; ?>
                                     <form method="post" action="<?= e(url('/admin/operacion/' . $tid . '/accesos')) ?>"
                                           class="ops-inline-form ops-access-form" id="ops-access-form-<?= $tid ?>">
                                         <?= csrf_field() ?>
@@ -241,18 +240,6 @@ $q = (string) ($filters['q'] ?? '');
                                     </form>
                                 <?php endif; ?>
                             <?php endforeach; ?>
-
-                            <?php if (!empty($r['show_folio_fields']) && !$renderedAccessForm): ?>
-                                <form method="post" action="<?= e(url('/admin/operacion/' . $tid . '/accesos')) ?>"
-                                      class="ops-inline-form ops-access-form" id="ops-access-form-<?= $tid ?>">
-                                    <?= csrf_field() ?>
-                                    <input type="hidden" name="return_view" value="<?= e($view) ?>">
-                                    <input type="hidden" name="return_q" value="<?= e($q) ?>">
-                                    <button class="btn btn-accent btn-sm" type="submit" name="notify" value="1">
-                                        <span class="ops-btn-ico"><?= icon('clock') ?></span>Enviar folio/clave
-                                    </button>
-                                </form>
-                            <?php endif; ?>
 
                             <?php if ($opsButtons === []): ?>
                                 <span class="ops-flag ops-flag--ok">Al día</span>
