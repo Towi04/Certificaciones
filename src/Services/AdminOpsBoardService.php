@@ -149,10 +149,28 @@ final class AdminOpsBoardService
 
         $opsButtons = GroupStepConfig::pendingOpsButtons($row, $pipelineSteps);
         $needsExamAccessBtn = false;
+        $pendingOps = 0;
         foreach ($opsButtons as $btn) {
             if (($btn['action'] ?? '') === GroupStepConfig::ACTION_EXAM_ACCESS) {
                 $needsExamAccessBtn = true;
-                break;
+            }
+            if (empty($btn['done'])) {
+                $pendingOps++;
+            }
+        }
+
+        $adminProofPath = trim((string) ($provider['admin_proof_path'] ?? ''));
+        $adminProofId = (int) ($provider['admin_proof_document_id'] ?? 0);
+        if ($adminProofId < 1 && $adminProofPath === '') {
+            // Fallback: buscar documento subido aunque no esté en extra_json
+            try {
+                $proofDoc = (new ProviderRequestService())->findAdminPaymentProof((int) ($row['id'] ?? 0));
+                if (is_array($proofDoc)) {
+                    $adminProofId = (int) ($proofDoc['id'] ?? 0);
+                    $adminProofPath = (string) ($proofDoc['storage_path'] ?? '');
+                }
+            } catch (\Throwable $e) {
+                // ignore
             }
         }
 
@@ -166,11 +184,13 @@ final class AdminOpsBoardService
         $row['provider_pending'] = $providerPending;
         $row['provider_sent_at'] = $providerSentAt !== '' && $providerSentAt !== 'null' ? $providerSentAt : null;
         $row['provider_error'] = trim((string) ($provider['last_error'] ?? ''));
+        $row['admin_proof_uploaded'] = $adminProofId > 0 || $adminProofPath !== '';
+        $row['admin_proof_document_id'] = $adminProofId;
         $row['needs_access'] = $needsAccess;
         $row['has_access'] = $hasAccess;
         $row['ops_buttons'] = $opsButtons;
-        $row['show_folio_fields'] = $needsExamAccessBtn || $isElet;
-        $row['needs_action'] = $opsButtons !== []
+        $row['show_folio_fields'] = $needsExamAccessBtn || ($isElet && $purchaseStatus === 'paid');
+        $row['needs_action'] = $pendingOps > 0
             || (string) ($row['tracking_status'] ?? '') === 'waiting_admin';
 
         return $row;
@@ -189,12 +209,7 @@ final class AdminOpsBoardService
             throw new \InvalidArgumentException('Indica folio y clave.');
         }
 
-        if ($notify) {
-            (new UksEletService())->publishExamAccess($trackingId, $folio, $accessKey, $adminUserId, true);
-
-            return ['saved' => true, 'notified' => true];
-        }
-
+        // Siempre guardar primero; si el correo falla, los datos no se pierden.
         $this->pdo->prepare('UPDATE trackings SET folio = ?, access_key = ? WHERE id = ?')
             ->execute([$folio, $accessKey, $trackingId]);
         (new TrackingService())->addLog(
@@ -204,7 +219,13 @@ final class AdminOpsBoardService
             $adminUserId
         );
 
-        return ['saved' => true, 'notified' => false];
+        if (!$notify) {
+            return ['saved' => true, 'notified' => false];
+        }
+
+        (new UksEletService())->publishExamAccess($trackingId, $folio, $accessKey, $adminUserId, true);
+
+        return ['saved' => true, 'notified' => true];
     }
 
     /**

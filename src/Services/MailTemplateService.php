@@ -48,7 +48,7 @@ final class MailTemplateService
         ],
         'Documentos (enlaces)' => [
             'reglamento_url' => 'URL reglamento firmado',
-            'comprobante_url' => 'URL comprobante de pago (admin/alumno)',
+            'comprobante_url' => 'URL comprobante DOCEO→proveedor (o del alumno)',
             'workbook_url' => 'URL plantilla Excel rellenada',
             'documentos_html' => 'Lista HTML de enlaces a documentos',
             'attachment_note' => 'Nota: documentos por enlace (sin adjuntos)',
