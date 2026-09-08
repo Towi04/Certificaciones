@@ -809,7 +809,14 @@ final class AdminController
         $purchaseId = (int) $id;
         try {
             (new CheckoutService())->confirmPayment($purchaseId, (int) Auth::id(), trim((string) ($_POST['notes'] ?? '')) ?: null);
-            flash('success', 'Pago confirmado.');
+            $trackingCount = (new TrackingRepository())->forPurchase($purchaseId);
+            $n = is_array($trackingCount) ? count($trackingCount) : 0;
+            flash(
+                'success',
+                $n > 1
+                    ? 'Pago del paquete confirmado · aplica a ' . $n . ' productos de la matrícula.'
+                    : 'Pago confirmado.'
+            );
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }

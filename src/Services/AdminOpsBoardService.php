@@ -64,7 +64,7 @@ final class AdminOpsBoardService
                     pg.code AS product_group_code, pg.name AS product_group_name,
                     pg.config_json AS group_config_json,
                     pu.matricula, pu.status AS purchase_status, pu.charged_amount, pu.payment_method,
-                    pu.payment_proof_path, pu.paid_at,
+                    pu.payment_proof_path, pu.paid_at, pu.combo_id,
                     u.first_name, u.last_name_p, u.last_name_m, u.email AS student_email, u.phone AS student_phone,
                     pt.code AS pipeline_code,
                     pa.code AS partner_code, pa.display_name AS partner_name
@@ -104,7 +104,84 @@ final class AdminOpsBoardService
             $out[] = $this->annotate($row);
         }
 
-        return $out;
+        return $this->dedupeConfirmPaymentButtons($out);
+    }
+
+    /**
+     * Un solo «Confirmar pago» por compra/paquete aunque haya N trackings (combo).
+     *
+     * @param list<array<string, mixed>> $rows
+     * @return list<array<string, mixed>>
+     */
+    private function dedupeConfirmPaymentButtons(array $rows): array
+    {
+        $counts = [];
+        foreach ($rows as $row) {
+            $pid = (int) ($row['purchase_id'] ?? 0);
+            if ($pid < 1) {
+                continue;
+            }
+            $counts[$pid] = ($counts[$pid] ?? 0) + 1;
+        }
+
+        $seen = [];
+        foreach ($rows as $i => $row) {
+            $pid = (int) ($row['purchase_id'] ?? 0);
+            $buttons = is_array($row['ops_buttons'] ?? null) ? $row['ops_buttons'] : [];
+            $hasConfirm = false;
+            foreach ($buttons as $btn) {
+                if (($btn['action'] ?? '') === GroupStepConfig::ACTION_CONFIRM_PAYMENT) {
+                    $hasConfirm = true;
+                    break;
+                }
+            }
+
+            $siblingCount = $counts[$pid] ?? 1;
+            $rows[$i]['package_sibling_count'] = $siblingCount;
+            $rows[$i]['is_package'] = $siblingCount > 1 || (int) ($row['combo_id'] ?? 0) > 0;
+            $rows[$i]['payment_confirm_on_sibling'] = false;
+
+            if (!$hasConfirm || $pid < 1) {
+                continue;
+            }
+
+            if (isset($seen[$pid])) {
+                $filtered = [];
+                foreach ($buttons as $btn) {
+                    if (($btn['action'] ?? '') === GroupStepConfig::ACTION_CONFIRM_PAYMENT) {
+                        continue;
+                    }
+                    $filtered[] = $btn;
+                }
+                $rows[$i]['ops_buttons'] = $filtered;
+                $rows[$i]['payment_confirm_on_sibling'] = true;
+
+                $pendingOps = 0;
+                foreach ($filtered as $btn) {
+                    if (empty($btn['done'])) {
+                        $pendingOps++;
+                    }
+                }
+                $rows[$i]['needs_action'] = $pendingOps > 0
+                    || (string) ($row['tracking_status'] ?? '') === 'waiting_admin';
+                continue;
+            }
+
+            $seen[$pid] = true;
+            if ($siblingCount > 1 || (int) ($row['combo_id'] ?? 0) > 0) {
+                foreach ($buttons as $j => $btn) {
+                    if (($btn['action'] ?? '') !== GroupStepConfig::ACTION_CONFIRM_PAYMENT) {
+                        continue;
+                    }
+                    $n = max($siblingCount, 2);
+                    $buttons[$j]['label'] = 'Confirmar pago del paquete (' . $n . ')';
+                    $buttons[$j]['package_items'] = $n;
+                }
+                $rows[$i]['ops_buttons'] = $buttons;
+            }
+        }
+
+        return $rows;
     }
 
     /**
