@@ -1274,20 +1274,15 @@ final class ProductAdminService
 
         $examExisting = is_array($existing['student_exam_access'] ?? null) ? $existing['student_exam_access'] : [];
         $config['emails'] = GroupEmailAutomation::normalize([
+            // Ya no se configuran en el formulario: solo pasos del progreso.
             GroupEmailAutomation::KEY_REGISTRATION => [
-                'enabled' => array_key_exists('email_registration_enabled', $input)
-                    ? !empty($input['email_registration_enabled'])
-                    : !empty($existing['student_registration']['enabled']),
-                'template_code' => trim((string) ($input['email_registration_template']
-                    ?? $existing['student_registration']['template_code']
+                'enabled' => false,
+                'template_code' => trim((string) ($existing['student_registration']['template_code']
                     ?? 'student_registration')),
             ],
             GroupEmailAutomation::KEY_PAYMENT => [
-                'enabled' => array_key_exists('email_payment_enabled', $input)
-                    ? !empty($input['email_payment_enabled'])
-                    : !empty($existing['student_payment_confirmed']['enabled']),
-                'template_code' => trim((string) ($input['email_payment_template']
-                    ?? $existing['student_payment_confirmed']['template_code']
+                'enabled' => false,
+                'template_code' => trim((string) ($existing['student_payment_confirmed']['template_code']
                     ?? 'student_payment_confirmed')),
             ],
             GroupEmailAutomation::KEY_EXAM_ACCESS => [
