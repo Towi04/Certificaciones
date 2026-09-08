@@ -79,7 +79,7 @@ $stepLabels = [
             
 <?php if ($isPartnerCheckout): ?>
 <div class="flash flash-info" style="margin:0 0 1rem">
-    <strong>Registro de alumno (partner<?= $partner ? ' · nivel ' . e(strtoupper((string) ($partner['tier'] ?? ''))) : '' ?>)</strong><br>
+    <strong>Registro de alumno (partner<?= $partner ? ' · ' . e(\App\Services\PartnerAdminService::tierLabel($partner['tier'] ?? null)) : '' ?>)</strong><br>
     Completa el mismo proceso que un alumno: datos requeridos, reglamento, agenda, paquetes/combos y pago.
     Puedes firmar el reglamento en pantalla (pasa el iPad/mouse al alumno) o descargarlo, firmarlo en papel y subir el PDF escaneado.
     Al terminar seguirás en tu portal partner con el caso creado.

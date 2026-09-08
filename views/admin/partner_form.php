@@ -47,6 +47,9 @@ $action = $isEdit
                     </option>
                 <?php endforeach; ?>
             </select>
+            <span class="muted" style="font-size:.78rem;font-weight:500">
+                Bronze (antes A) · Silver (antes B) · Gold (antes C). Gold suele ser el precio partner más preferente.
+            </span>
         </label>
     </div>
     <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-top:.75rem">

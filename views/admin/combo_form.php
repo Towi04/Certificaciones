@@ -19,9 +19,9 @@ $priceFields = [
     'public_price' => 'Público *',
     'catalog_price' => 'Lista',
     'price_cncm' => 'CNCM',
-    'price_partner_a' => 'Partner A',
-    'price_partner_b' => 'Partner B',
-    'price_partner_c' => 'Partner C',
+    'price_partner_a' => 'Partner Bronze',
+    'price_partner_b' => 'Partner Silver',
+    'price_partner_c' => 'Partner Gold',
 ];
 $num = static function (mixed $v): string {
     if ($v === null || $v === '') {

@@ -30,7 +30,7 @@ $youtubeThumb = static function (array $item): ?string {
             <p class="price" style="font-size:1.6rem;margin:.5rem 0">
                 <?= money($shownPrice) ?>
                 <?php if ($isPartnerView && $partnerPrice !== null): ?>
-                    <span class="muted" style="font-size:.85rem;font-weight:600">precio partner (<?= e(strtoupper((string) ($partner['tier'] ?? ''))) ?>)</span>
+                    <span class="muted" style="font-size:.85rem;font-weight:600">precio partner (<?= e(\App\Services\PartnerAdminService::tierLabel($partner['tier'] ?? null)) ?>)</span>
                 <?php endif; ?>
             </p>
 

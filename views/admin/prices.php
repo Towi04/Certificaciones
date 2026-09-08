@@ -8,9 +8,9 @@ $priceFields = [
     'catalog_price' => 'Lista',
     'public_price' => 'Público',
     'price_cncm' => 'CNCM',
-    'price_partner_a' => 'Partner A',
-    'price_partner_b' => 'Partner B',
-    'price_partner_c' => 'Partner C',
+    'price_partner_a' => 'Partner Bronze',
+    'price_partner_b' => 'Partner Silver',
+    'price_partner_c' => 'Partner Gold',
 ];
 ?>
 <div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap">

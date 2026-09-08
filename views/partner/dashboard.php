@@ -17,7 +17,7 @@
         </div>
         <div class="stat">
             <div class="label">Nivel</div>
-            <div class="value" style="font-size:1.2rem;text-transform:uppercase"><?= e($partner['tier']) ?></div>
+            <div class="value" style="font-size:1.2rem"><?= e(\App\Services\PartnerAdminService::tierLabel($partner['tier'] ?? null)) ?></div>
         </div>
         <div class="stat">
             <div class="label">Saldo a favor</div>

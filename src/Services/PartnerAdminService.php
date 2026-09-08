@@ -30,9 +30,31 @@ final class PartnerAdminService
     {
         return [
             'cncm' => 'CNCM',
-            'a' => 'Nivel A',
-            'b' => 'Nivel B',
-            'c' => 'Nivel C',
+            'a' => 'Bronze',
+            'b' => 'Silver',
+            'c' => 'Gold',
+        ];
+    }
+
+    public static function tierLabel(?string $tier): string
+    {
+        $tier = strtolower(trim((string) $tier));
+        $labels = self::tierLabels();
+
+        return $labels[$tier] ?? strtoupper($tier !== '' ? $tier : '—');
+    }
+
+    /**
+     * Etiquetas de columnas de precio partner (códigos internos a/b/c se mantienen).
+     *
+     * @return array<string, string>
+     */
+    public static function priceFieldLabels(): array
+    {
+        return [
+            'price_partner_a' => 'Partner Bronze',
+            'price_partner_b' => 'Partner Silver',
+            'price_partner_c' => 'Partner Gold',
         ];
     }
 

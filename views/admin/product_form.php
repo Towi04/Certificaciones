@@ -70,9 +70,9 @@ $priceFields = [
     'catalog_price' => 'Lista / catálogo',
     'public_price' => 'Público',
     'price_cncm' => 'CNCM',
-    'price_partner_a' => 'Partner A',
-    'price_partner_b' => 'Partner B',
-    'price_partner_c' => 'Partner C',
+    'price_partner_a' => 'Partner Bronze',
+    'price_partner_b' => 'Partner Silver',
+    'price_partner_c' => 'Partner Gold',
 ];
 $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px';
 $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600';
