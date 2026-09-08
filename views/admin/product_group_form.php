@@ -498,6 +498,85 @@ $renderMailTemplateField = static function (
 
         <hr style="border:0;border-top:1px solid #e6edf7;margin:1.25rem 0">
 
+        <h3 style="margin:0 0 .55rem;font-size:.98rem;color:var(--doceo-blue)">Inventario de códigos (folio/clave)</h3>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
+            Para iTEP y similares: compras lotes al proveedor, los subes en
+            <a href="<?= e(url('/admin/inventario')) ?>">Admin → Inventario</a>.
+            Al confirmar pago se <strong>reserva</strong> folio/clave; el correo de acceso sale
+            N días antes (o al momento si el examen es inmediato). Con stock 0 y urgencia,
+            se reasigna un código de un examen lejano y se repone al subir el siguiente lote.
+        </p>
+        <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:.75rem">
+            <input type="checkbox" name="inventory_enabled" value="1" style="margin-top:.2rem"
+                <?= !empty($extras['inventory_enabled']) ? 'checked' : '' ?>>
+            <span>Activar inventario automático en este grupo</span>
+        </label>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem">
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Enviar acceso N días antes
+                <input type="number" min="0" name="inventory_send_days_before"
+                       value="<?= (int) ($extras['inventory_send_days_before'] ?? 3) ?>"
+                       style="<?= e($inputStyle) ?>">
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Urgencia ≤ días (reasignar)
+                <input type="number" min="0" name="inventory_assign_within_days"
+                       value="<?= (int) ($extras['inventory_assign_within_days'] ?? 3) ?>"
+                       title="Solo si el examen urgente es en ≤ N días se puede quitar un código de alguien con fecha lejana"
+                       style="<?= e($inputStyle) ?>">
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Alerta stock ≤
+                <input type="number" min="0" name="inventory_low_stock_threshold"
+                       value="<?= (int) ($extras['inventory_low_stock_threshold'] ?? 5) ?>"
+                       style="<?= e($inputStyle) ?>">
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Validez alumno (meses)
+                <input type="number" min="1" name="inventory_student_months"
+                       value="<?= (int) ($extras['inventory_student_months'] ?? 6) ?>"
+                       style="<?= e($inputStyle) ?>">
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Validez proveedor (meses)
+                <input type="number" min="1" name="inventory_provider_months"
+                       value="<?= (int) ($extras['inventory_provider_months'] ?? 12) ?>"
+                       style="<?= e($inputStyle) ?>">
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Reasignar si faltan ≥ días
+                <input type="number" min="1" name="inventory_reallocate_min_future_days"
+                       value="<?= (int) ($extras['inventory_reallocate_min_future_days'] ?? 14) ?>"
+                       style="<?= e($inputStyle) ?>">
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Plantilla correo acceso
+                <input type="text" name="inventory_access_mail_template"
+                       value="<?= e((string) ($extras['inventory_access_mail_template'] ?? 'student_inventory_exam_access')) ?>"
+                       style="<?= e($inputStyle) ?>">
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Plantilla resultados/CENNI
+                <input type="text" name="inventory_results_mail_template"
+                       value="<?= e((string) ($extras['inventory_results_mail_template'] ?? 'student_results_cenni')) ?>"
+                       style="<?= e($inputStyle) ?>">
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Email alerta stock
+                <input type="email" name="inventory_low_stock_email"
+                       value="<?= e((string) ($extras['inventory_low_stock_email'] ?? '')) ?>"
+                       placeholder="ops@…"
+                       style="<?= e($inputStyle) ?>">
+            </label>
+        </div>
+        <label class="muted" style="display:flex;align-items:center;gap:.45rem;font-size:.88rem;font-weight:600;margin-top:.75rem">
+            <input type="checkbox" name="inventory_reallocate_enabled" value="1"
+                <?= !isset($extras['inventory_reallocate_enabled']) || !empty($extras['inventory_reallocate_enabled']) ? 'checked' : '' ?>>
+            Permitir reasignar códigos de exámenes lejanos si hay urgencia y stock 0
+        </label>
+
+        <hr style="border:0;border-top:1px solid #e6edf7;margin:1.25rem 0">
+
         <h3 style="margin:0 0 .55rem;font-size:.98rem;color:var(--doceo-blue)">Accesos y Zoom</h3>
         <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:1rem">
             <input type="checkbox" name="exam_capture_zoom" value="1" style="margin-top:.2rem"

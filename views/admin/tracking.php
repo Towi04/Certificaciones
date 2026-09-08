@@ -345,6 +345,53 @@ $needsAdminProof = $providerCfg && !empty($providerCfg['require_admin_payment_pr
 </div>
 <?php endif; ?>
 
+<?php if (!empty($inventoryEnabled) && (string) ($tracking['purchase_status'] ?? '') === 'paid'): ?>
+<div class="panel" style="margin-top:1rem;border:2px solid #bbf7d0;background:#f0fdf4">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Resultados + CENNI (inventario)</h2>
+    <p class="muted" style="margin-top:0;font-size:.88rem">
+        Al guardar se avanza al paso <code>resultados</code> y, si está marcado, se envía la plantilla
+        <code>student_results_cenni</code> al alumno (nivel, puntaje, certificado y folio CENNI).
+    </p>
+    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/resultados')) ?>" style="margin-top:.75rem">
+        <?= csrf_field() ?>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;max-width:720px">
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                Nivel
+                <input type="text" name="results_level" value="<?= e((string) ($tracking['results_level'] ?? '')) ?>"
+                       placeholder="B2 / 4.5 …"
+                       style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            </label>
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                Puntaje
+                <input type="text" name="results_score" value="<?= e((string) ($tracking['results_score'] ?? '')) ?>"
+                       style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            </label>
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                Folio CENNI
+                <input type="text" name="cenni_folio" value="<?= e((string) ($tracking['cenni_folio'] ?? '')) ?>"
+                       style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            </label>
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;grid-column:1/-1">
+                URL certificado / resultados
+                <input type="url" name="results_url" value="<?= e((string) ($tracking['results_url'] ?? '')) ?>"
+                       placeholder="https://…"
+                       style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            </label>
+        </div>
+        <label class="muted" style="display:flex;gap:.4rem;align-items:center;margin:.85rem 0;font-size:.88rem">
+            <input type="checkbox" name="notify" value="1" checked> Enviar correo al alumno con resultados y CENNI
+        </label>
+        <button class="btn btn-accent" type="submit">Guardar resultados</button>
+    </form>
+    <?php if (!empty($tracking['folio']) || !empty($tracking['access_key'])): ?>
+        <p class="muted" style="font-size:.82rem;margin:.85rem 0 0">
+            Acceso examen (inventario): folio <code><?= e((string) ($tracking['folio'] ?? '')) ?></code>
+            · clave <code><?= e((string) ($tracking['access_key'] ?? '')) ?></code>
+        </p>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <?php require BASE_PATH . '/views/shared/uks_report.php'; ?>
 
 <?php if (!empty($exportTemplateCode) && in_array((string) ($tracking['purchase_status'] ?? ''), ['paid'], true)): ?>

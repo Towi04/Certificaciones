@@ -369,7 +369,34 @@ HTML;
             'itep-exams' => [
                 'name' => 'iTEP / Oxford · Exámenes',
                 'supplier_id' => $supplierIds['itep'],
-                'config' => $standardCertConfig,
+                'config' => array_merge($standardCertConfig, [
+                    'exam' => [
+                        'choose_at_checkout' => true,
+                        'slot_minutes' => 30,
+                        'validity_months' => 6,
+                    ],
+                    'schedule' => [
+                        'mode' => 'window',
+                        'min_advance_days' => 0,
+                        'days' => ['0' => true, '1' => true, '2' => true, '3' => true, '4' => true, '5' => true, '6' => true],
+                        'weekdays' => ['start' => '09:00', 'end' => '18:00'],
+                        'saturday' => ['start' => '09:00', 'end' => '18:00'],
+                        'checkout_help' => 'Elige la fecha de tu examen iTEP. Si es en los próximos 3 días, recibirás folio y clave de inmediato.',
+                    ],
+                    'inventory' => [
+                        'enabled' => true,
+                        'assign_within_days' => 3,
+                        'send_access_days_before' => 3,
+                        'low_stock_threshold' => 5,
+                        'student_validity_months' => 6,
+                        'provider_validity_months' => 12,
+                        'reallocate_enabled' => true,
+                        'reallocate_min_future_days' => 14,
+                        'access_mail_template' => 'student_inventory_exam_access',
+                        'results_mail_template' => 'student_results_cenni',
+                        'low_stock_notify_email' => '',
+                    ],
+                ]),
             ],
             'linguafranca-exams' => [
                 'name' => 'Lingua Franca · TOEFL',
@@ -472,7 +499,7 @@ HTML;
                 'is_star' => 1,
                 'audience' => 'adult',
                 'platform_type' => 'none',
-                'sort_order' => 2,,
+                'sort_order' => 2,
                 'config_json' => json_encode(new \stdClass()),
             ],
             [
@@ -489,7 +516,7 @@ HTML;
                 'is_star' => 1,
                 'audience' => 'adult',
                 'platform_type' => 'none',
-                'sort_order' => 3,,
+                'sort_order' => 3,
                 'config_json' => json_encode(new \stdClass()),
             ],
             [
@@ -511,7 +538,7 @@ HTML;
                 'is_star' => 0,
                 'audience' => 'adult',
                 'platform_type' => 'none',
-                'sort_order' => 10,,
+                'sort_order' => 10,
                 'config_json' => json_encode(new \stdClass()),
             ],
             [
@@ -533,7 +560,7 @@ HTML;
                 'is_star' => 1,
                 'audience' => 'any',
                 'platform_type' => 'provider',
-                'sort_order' => 4,,
+                'sort_order' => 4,
                 'config_json' => json_encode(new \stdClass()),
             ],
             [
@@ -550,7 +577,7 @@ HTML;
                 'is_star' => 0,
                 'audience' => 'adult',
                 'platform_type' => 'none',
-                'sort_order' => 20,,
+                'sort_order' => 20,
                 'config_json' => json_encode(new \stdClass()),
             ],
             [
@@ -569,7 +596,26 @@ HTML;
                 'platform_type' => 'moodle',
                 'access_months' => 6,
                 'extension_percent' => 50,
-                'sort_order' => 5,,
+                'sort_order' => 5,
+                'config_json' => json_encode(new \stdClass()),
+            ],
+            [
+                'code' => 'PREP-ITEP-MOODLE',
+                'product_group_id' => $groupIds['doceo-courses'],
+                'name' => 'Curso de preparación iTEP (Moodle DOCEO)',
+                'slug' => 'curso-prep-itep',
+                'type' => 'course',
+                'category' => 'english_adult',
+                'supplier_id' => $supplierIds['doceo'],
+                'certifier_id' => $certifierIds['doceo'],
+                'short_description' => 'Preparación iTEP con exámenes de práctica. Acceso 6 meses en campus DOCEO.',
+                'public_price' => 1000,
+                'is_star' => 1,
+                'audience' => 'adult',
+                'platform_type' => 'moodle',
+                'access_months' => 6,
+                'extension_percent' => 50,
+                'sort_order' => 6,
                 'config_json' => json_encode(new \stdClass()),
             ],
             [
@@ -586,7 +632,7 @@ HTML;
                 'is_star' => 0,
                 'audience' => 'kids',
                 'platform_type' => 'none',
-                'sort_order' => 15,,
+                'sort_order' => 15,
                 'config_json' => json_encode(new \stdClass()),
             ],
         ];
@@ -643,6 +689,40 @@ HTML;
         $ins = $pdo->prepare('INSERT INTO combo_items (combo_id, product_id, sort_order) VALUES (?, ?, ?)');
         foreach ($map as $i => $pid) {
             $ins->execute([$comboId, $pid, $i]);
+        }
+
+        $stmt->execute(['ITEP-FULL']);
+        $itepComboId = $stmt->fetchColumn();
+        if (!$itepComboId) {
+            $pdo->prepare(
+                'INSERT INTO combos (code, name, slug, description, is_active, is_star, public_price, catalog_price)
+                 VALUES (?, ?, ?, ?, 1, 1, ?, ?)'
+            )->execute([
+                'ITEP-FULL',
+                'Combo iTEP + CENNI + Preparación',
+                'combo-itep-cenni-prep',
+                'Examen iTEP, curso de preparación y trámite CENNI. Producto estrella.',
+                3200,
+                Settings::catalogPriceFromPublic(3200),
+            ]);
+            $itepComboId = (int) $pdo->lastInsertId();
+            $log[] = 'Combo creado: ITEP-FULL';
+        } else {
+            $itepComboId = (int) $itepComboId;
+            $log[] = 'Combo existente: ITEP-FULL';
+        }
+        $itepMap = [];
+        foreach (['ITEP-CENNI', 'CENNI-TRAMITE', 'PREP-ITEP-MOODLE'] as $code) {
+            $st = $pdo->prepare('SELECT id FROM products WHERE code = ?');
+            $st->execute([$code]);
+            $pid = $st->fetchColumn();
+            if ($pid) {
+                $itepMap[] = (int) $pid;
+            }
+        }
+        $pdo->prepare('DELETE FROM combo_items WHERE combo_id = ?')->execute([$itepComboId]);
+        foreach ($itepMap as $i => $pid) {
+            $ins->execute([$itepComboId, $pid, $i]);
         }
 
         $pipelines = [
