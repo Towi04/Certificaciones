@@ -7,6 +7,10 @@ $action = $isEdit ? url('/admin/proveedores/' . $supplier['id']) : url('/admin/p
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">
     <?= $isEdit ? 'Editar proveedor' : 'Nuevo proveedor' ?>
 </h1>
+<p class="muted" style="max-width:40rem">
+    Solo datos básicos. Los accesos a portales (URL, usuario, contraseña y notas)
+    se agregan después en la pestaña <strong>Accesos / plataformas</strong>.
+</p>
 
 <form method="post" action="<?= e($action) ?>" class="panel" style="margin-top:1rem;max-width:640px">
     <?= csrf_field() ?>
@@ -34,21 +38,10 @@ $action = $isEdit ? url('/admin/proveedores/' . $supplier['id']) : url('/admin/p
             Sitio web
             <input type="url" name="website"
                    value="<?= e((string) ($supplier['website'] ?? '')) ?>"
-                   style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-        </label>
-        <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-            Plataforma / portal
-            <input type="url" name="platform_url"
-                   value="<?= e((string) ($supplier['platform_url'] ?? '')) ?>"
                    placeholder="https://..."
                    style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
         </label>
     </div>
-    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-top:1rem">
-        Notas internas
-        <textarea name="notes" rows="4"
-                  style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px"><?= e((string) ($supplier['notes'] ?? '')) ?></textarea>
-    </label>
     <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;font-weight:600;margin-top:.85rem">
         <input type="checkbox" name="is_active" value="1"
             <?= $isEdit ? (!empty($supplier['is_active']) ? 'checked' : '') : 'checked' ?>>

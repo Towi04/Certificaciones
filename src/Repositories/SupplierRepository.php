@@ -14,6 +14,28 @@ final class SupplierRepository
     public function __construct()
     {
         $this->pdo = Connection::get();
+        $this->ensureWordmarkColumn();
+    }
+
+    /** Columna de logo con denominación (instalaciones ya existentes). */
+    private function ensureWordmarkColumn(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        try {
+            $stmt = $this->pdo->query("SHOW COLUMNS FROM suppliers LIKE 'logo_wordmark_path'");
+            if ($stmt && $stmt->fetch()) {
+                return;
+            }
+            $this->pdo->exec(
+                'ALTER TABLE suppliers ADD COLUMN logo_wordmark_path VARCHAR(255) NULL AFTER logo_path'
+            );
+        } catch (\Throwable $e) {
+            error_log('[Doceo] ensureWordmarkColumn: ' . $e->getMessage());
+        }
     }
 
     public function countAll(): int
@@ -54,14 +76,15 @@ final class SupplierRepository
     public function create(array $data): int
     {
         $stmt = $this->pdo->prepare(
-            'INSERT INTO suppliers (name, code, website, logo_path, platform_url, notes, is_active)
-             VALUES (?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO suppliers (name, code, website, logo_path, logo_wordmark_path, platform_url, notes, is_active)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $data['name'],
             $data['code'],
             $data['website'] ?? null,
             $data['logo_path'] ?? null,
+            $data['logo_wordmark_path'] ?? null,
             $data['platform_url'] ?? null,
             $data['notes'] ?? null,
             $data['is_active'] ?? 1,

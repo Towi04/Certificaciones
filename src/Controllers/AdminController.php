@@ -1402,17 +1402,24 @@ final class AdminController
         csrf_verify();
         $supplierId = (int) $id;
         $svc = new \App\Services\SupplierAdminService();
+        $variant = (string) ($_POST['logo_variant'] ?? \App\Services\SupplierAdminService::LOGO_MARK);
+        if ($variant !== \App\Services\SupplierAdminService::LOGO_WORDMARK) {
+            $variant = \App\Services\SupplierAdminService::LOGO_MARK;
+        }
+        $label = $variant === \App\Services\SupplierAdminService::LOGO_WORDMARK
+            ? 'Logo con denominación'
+            : 'Logo sin denominación';
         try {
             if (!empty($_POST['remove_logo'])) {
-                $svc->clearLogo($supplierId);
-                flash('success', 'Logo eliminado.');
+                $svc->clearLogo($supplierId, $variant);
+                flash('success', $label . ' eliminado.');
             } else {
                 $file = $_FILES['logo'] ?? null;
                 if (!is_array($file)) {
                     throw new \InvalidArgumentException('Selecciona una imagen de logo.');
                 }
-                $svc->uploadLogo($supplierId, $file);
-                flash('success', 'Logo actualizado.');
+                $svc->uploadLogo($supplierId, $file, $variant);
+                flash('success', $label . ' actualizado.');
             }
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
