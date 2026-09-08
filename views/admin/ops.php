@@ -139,8 +139,8 @@ $q = (string) ($filters['q'] ?? '');
                             <?php if (!empty($r['show_folio_fields'])): ?>
                                 <input class="ops-input ops-folio" type="text"
                                        id="ops-folio-<?= $tid ?>"
-                                       form="ops-access-form-<?= $tid ?>"
-                                       name="folio" value="<?= e((string) ($r['folio'] ?? '')) ?>"
+                                       name="folio_display"
+                                       value="<?= e((string) ($r['folio'] ?? '')) ?>"
                                        placeholder="Folio" autocomplete="off" data-tid="<?= $tid ?>">
                             <?php else: ?>
                                 <span class="muted">—</span>
@@ -150,8 +150,8 @@ $q = (string) ($filters['q'] ?? '');
                             <?php if (!empty($r['show_folio_fields'])): ?>
                                 <input class="ops-input ops-key" type="text"
                                        id="ops-key-<?= $tid ?>"
-                                       form="ops-access-form-<?= $tid ?>"
-                                       name="access_key" value="<?= e((string) ($r['access_key'] ?? '')) ?>"
+                                       name="access_key_display"
+                                       value="<?= e((string) ($r['access_key'] ?? '')) ?>"
                                        placeholder="Clave" autocomplete="off" data-tid="<?= $tid ?>">
                             <?php else: ?>
                                 <span class="muted">—</span>
@@ -219,10 +219,16 @@ $q = (string) ($filters['q'] ?? '');
                                     <?php endif; ?>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_EXAM_ACCESS): ?>
                                     <form method="post" action="<?= e(url('/admin/operacion/' . $tid . '/accesos')) ?>"
-                                          class="ops-inline-form ops-access-form" id="ops-access-form-<?= $tid ?>">
+                                          class="ops-inline-form ops-access-form" id="ops-access-form-<?= $tid ?>"
+                                          data-tid="<?= $tid ?>">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                        <input type="hidden" name="folio" class="ops-access-folio-hidden" value="<?= e((string) ($r['folio'] ?? '')) ?>">
+                                        <input type="hidden" name="access_key" class="ops-access-key-hidden" value="<?= e((string) ($r['access_key'] ?? '')) ?>">
+                                        <button class="btn btn-ghost btn-sm" type="submit" name="notify" value="0" title="Guardar folio y clave sin enviar correo">
+                                            Guardar
+                                        </button>
                                         <button class="<?= e($btnClass) ?>" type="submit" name="notify" value="1">
                                             <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
                                         </button>
@@ -240,6 +246,19 @@ $q = (string) ($filters['q'] ?? '');
                                     </form>
                                 <?php endif; ?>
                             <?php endforeach; ?>
+
+                            <?php if (!empty($r['show_folio_fields']) && empty(array_filter($opsButtons, static fn ($b) => ($b['action'] ?? '') === \App\Services\GroupStepConfig::ACTION_EXAM_ACCESS))): ?>
+                                <form method="post" action="<?= e(url('/admin/operacion/' . $tid . '/accesos')) ?>"
+                                      class="ops-inline-form ops-access-form" id="ops-access-form-<?= $tid ?>"
+                                      data-tid="<?= $tid ?>">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                    <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                    <input type="hidden" name="folio" class="ops-access-folio-hidden" value="<?= e((string) ($r['folio'] ?? '')) ?>">
+                                    <input type="hidden" name="access_key" class="ops-access-key-hidden" value="<?= e((string) ($r['access_key'] ?? '')) ?>">
+                                    <button class="btn btn-ghost btn-sm" type="submit" name="notify" value="0">Guardar folio/clave</button>
+                                </form>
+                            <?php endif; ?>
 
                             <?php if ($opsButtons === []): ?>
                                 <span class="ops-flag ops-flag--ok">Al día</span>
@@ -436,6 +455,44 @@ $q = (string) ($filters['q'] ?? '');
     refreshBulk();
   });
 
+  // Sincronizar folio/clave visibles → hidden del form de accesos (el atributo form= fallaba a veces).
+  function syncAccessFields(tid) {
+    var folioEl = document.getElementById('ops-folio-' + tid);
+    var keyEl = document.getElementById('ops-key-' + tid);
+    var form = document.getElementById('ops-access-form-' + tid);
+    if (!form) return false;
+    var hFolio = form.querySelector('.ops-access-folio-hidden');
+    var hKey = form.querySelector('.ops-access-key-hidden');
+    if (hFolio) hFolio.value = folioEl ? folioEl.value.trim() : '';
+    if (hKey) hKey.value = keyEl ? keyEl.value.trim() : '';
+    return true;
+  }
+  document.querySelectorAll('.ops-folio, .ops-key').forEach(function (el) {
+    el.addEventListener('input', function () {
+      syncAccessFields(el.getAttribute('data-tid') || '');
+    });
+    el.addEventListener('change', function () {
+      syncAccessFields(el.getAttribute('data-tid') || '');
+    });
+  });
+  document.querySelectorAll('.ops-access-form').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      var tid = form.getAttribute('data-tid') || '';
+      syncAccessFields(tid);
+      var hFolio = form.querySelector('.ops-access-folio-hidden');
+      var hKey = form.querySelector('.ops-access-key-hidden');
+      var folio = hFolio ? hFolio.value.trim() : '';
+      var key = hKey ? hKey.value.trim() : '';
+      if (!folio || !key) {
+        e.preventDefault();
+        alert('Escribe folio y clave antes de guardar o enviar accesos.');
+        var folioEl = document.getElementById('ops-folio-' + tid);
+        if (folioEl) folioEl.focus();
+        return false;
+      }
+    });
+  });
+
   // Lote: inyectar folio/clave de las filas seleccionadas (ya no usan form=ops-bulk-form).
   var bulkForm = document.getElementById('ops-bulk-form');
   if (bulkForm) {
@@ -445,6 +502,7 @@ $q = (string) ($filters['q'] ?? '');
       });
       rowChecks().filter(function (c) { return c.checked; }).forEach(function (c) {
         var tid = c.value;
+        syncAccessFields(tid);
         var folioEl = document.getElementById('ops-folio-' + tid);
         var keyEl = document.getElementById('ops-key-' + tid);
         function inject(name, value) {

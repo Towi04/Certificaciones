@@ -84,7 +84,7 @@ final class AdminOpsBoardService
                          JSON_EXTRACT(t.extra_json, \'$.provider_request.sent_at\') IS NULL
                          OR JSON_UNQUOTE(JSON_EXTRACT(t.extra_json, \'$.provider_request.sent_at\')) IN (\'\',\'null\')
                        ) THEN 1
-                  WHEN pt.code = \'elet_uks\' AND pu.status = \'paid\'
+                  WHEN (pt.code = \'elet_uks\' OR pr.code = \'ELET-UKS\') AND pu.status = \'paid\'
                        AND (t.folio IS NULL OR t.folio = \'\' OR t.access_key IS NULL OR t.access_key = \'\') THEN 2
                   WHEN t.status = \'waiting_admin\' THEN 3
                   ELSE 9
@@ -189,8 +189,11 @@ final class AdminOpsBoardService
         $row['needs_access'] = $needsAccess;
         $row['has_access'] = $hasAccess;
         $row['ops_buttons'] = $opsButtons;
-        // Folio/clave solo si el grupo pidió esa acción (no forzar en todo ELeT).
-        $row['show_folio_fields'] = $needsExamAccessBtn;
+        // Folio/clave visibles para administrar/editar: botón de accesos, ELeT pagado, o ya hay valor.
+        $row['show_folio_fields'] = $needsExamAccessBtn
+            || ($isElet && $purchaseStatus === 'paid')
+            || $folio !== ''
+            || $accessKey !== '';
         $row['needs_action'] = $pendingOps > 0
             || (string) ($row['tracking_status'] ?? '') === 'waiting_admin';
 
@@ -297,9 +300,9 @@ final class AdminOpsBoardService
                     )";
                 break;
             case 'access':
+                // Todos los ELeT pagados: ver y editar folio/clave (pendientes primero vía ORDER BY).
                 $parts[] = "pu.status = 'paid'
-                    AND (pt.code = 'elet_uks' OR pr.code = 'ELET-UKS')
-                    AND (t.folio IS NULL OR t.folio = '' OR t.access_key IS NULL OR t.access_key = '')";
+                    AND (pt.code = 'elet_uks' OR pr.code = 'ELET-UKS')";
                 break;
             case 'exams':
                 $parts[] = 't.exam_date IS NOT NULL

@@ -471,7 +471,7 @@ $renderMailTemplateField = static function (
             y puede mostrar un <strong>botón en Operación</strong>.
             En el tablero solo aparecen los pasos con «Mostrar en Operación» (más Confirmar pago
             si el caso aún no está pagado). El comprobante DOCEO→proveedor se sube en el detalle del caso.
-            El destinatario y CC del correo se configuran en la <strong>plantilla de correo</strong>.
+            El destinatario del correo lo define la <strong>plantilla</strong> (alumno o proveedor/UKS).
         </p>
 
         <div class="panel" style="margin:0 0 1rem;padding:.85rem 1rem;background:#f8fafc">
@@ -1158,7 +1158,6 @@ $renderMailTemplateField = static function (
       email_enabled: def.email && def.email.enabled ? 1 : 0,
       email_trigger: (def.email && def.email.trigger) || 'admin',
       email_template: (def.email && def.email.template_code) || '',
-      email_audience: (def.email && def.email.audience) || 'student',
       email_to: (def.email && def.email.to) || '',
       email_cc: (def.email && def.email.cc) || ''
     });
@@ -1180,7 +1179,6 @@ $renderMailTemplateField = static function (
       var emailEn = g('email_enabled');
       var emailTr = g('email_trigger');
       var emailTpl = g('email_template');
-      var emailAud = g('email_audience');
       var labelVal = label ? label.value : '';
       var codeVal = code ? code.value : '';
       if (!codeVal && labelVal) codeVal = slugStepCode(labelVal);
@@ -1196,7 +1194,6 @@ $renderMailTemplateField = static function (
         email_enabled: !!(emailEn && emailEn.checked),
         email_trigger: emailTr ? emailTr.value : 'admin',
         email_template: emailTpl ? emailTpl.value : '',
-        email_audience: emailAud ? emailAud.value : 'student',
         email_to: '',
         email_cc: ''
       });
@@ -1287,10 +1284,6 @@ $renderMailTemplateField = static function (
             '<option value="auto"' + (s.email_trigger === 'auto' ? ' selected' : '') + '>Automático al llegar al paso</option>' +
           '</select></label>' +
           '<label class="muted">Plantilla' + mailTplSelect('email_template', idx, s.email_template || '') + '</label>' +
-          '<label class="muted">Para<select data-field="email_audience" name="pipeline_steps[' + idx + '][email_audience]" style="' + inp + '">' +
-            '<option value="student"' + ((s.email_audience || 'student') !== 'provider' ? ' selected' : '') + '>Alumno</option>' +
-            '<option value="provider"' + (s.email_audience === 'provider' ? ' selected' : '') + '>Proveedor</option>' +
-          '</select></label>' +
         '</div>';
       stepsBody.appendChild(card);
       var labelInput = card.querySelector('[data-field="label"]');
