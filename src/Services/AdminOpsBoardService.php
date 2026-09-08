@@ -189,7 +189,7 @@ final class AdminOpsBoardService
         $row['needs_access'] = $needsAccess;
         $row['has_access'] = $hasAccess;
         $row['ops_buttons'] = $opsButtons;
-        $row['show_folio_fields'] = $needsExamAccessBtn || $isElet;
+        $row['show_folio_fields'] = $needsExamAccessBtn || ($isElet && $purchaseStatus === 'paid');
         $row['needs_action'] = $pendingOps > 0
             || (string) ($row['tracking_status'] ?? '') === 'waiting_admin';
 
