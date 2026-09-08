@@ -516,8 +516,9 @@ $renderMailTemplateField = static function (
             <p class="muted" style="font-size:.78rem;margin:0 0 .65rem">
                 Arrastra las tarjetas (☰) para cambiar el orden. Acciones en Operación (solo 3):
                 <em>Solo progreso</em>, <em>Enviar correo (plantilla)</em> o <em>Avanzar / marcar hecho</em>.
-                El correo lo defines en el paso (plantilla); si el paso es de reagendar/fecha, Operación muestra fecha/hora
-                y puedes actualizarlas cuantas veces haga falta.
+                El correo lo defines en el paso (plantilla y su destinatario en Admin → Correos).
+                Si el paso es de reagendar/fecha, Operación muestra fecha/hora y envía esa plantilla
+                (p. ej. al proveedor, sin reglamento/pago de la solicitud inicial).
             </p>
             <div id="pipeline-steps-body" class="progress-steps-list"></div>
             <p id="pipeline-steps-empty" class="muted" style="display:none;margin:.5rem 0 0">

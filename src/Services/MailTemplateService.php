@@ -330,7 +330,7 @@ final class MailTemplateService
 
     /**
      * audience: preferencia guardada en settings; si no hay, heurística por código.
-     * Respeta Proveedor/Alumno/Partner guardados (incl. plantillas de reagendar).
+     * Respeta Proveedor/Alumno/Partner guardados (p. ej. reagendar_uks → proveedor).
      */
     public static function audienceForTemplate(string $code): string
     {
@@ -371,7 +371,8 @@ final class MailTemplateService
 
     /**
      * Heurística legacy por código (uks_*, *_provider*, *proveedor*).
-     * No aplica a reagendar_*: sin audiencia guardada default = alumno.
+     * No aplica a reagendar_*: sin audiencia guardada default = alumno;
+     * si el admin elige Proveedor, audienceForTemplate respeta el setting.
      */
     public static function providerTemplateHeuristic(string $code): bool
     {
@@ -414,6 +415,13 @@ final class MailTemplateService
             'exam_date', 'exam_time', 'reglamento_url', 'pago_proveedor', 'comprobante_url',
             'workbook_url', 'documentos_html', 'attachment_note', 'workbook_note',
         ];
+
+        if (self::rescheduleTemplateHeuristic($code)) {
+            return [
+                'full_name', 'matricula', 'student_email', 'product_name', 'certificacion',
+                'exam_date', 'exam_time', 'folio',
+            ];
+        }
 
         return match ($code) {
             self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY => $uks,
