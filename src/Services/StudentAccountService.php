@@ -94,6 +94,10 @@ final class StudentAccountService
     /** @param array<string, mixed> $data */
     private function ensureStudentProfile(int $userId, array $data): void
     {
+        if (array_key_exists('sex', $data)) {
+            $data['sex'] = CheckoutRequirements::normalizeSexValue((string) ($data['sex'] ?? ''));
+        }
+
         $stmt = $this->pdo->prepare('SELECT id FROM students WHERE user_id = ?');
         $stmt->execute([$userId]);
         if ($stmt->fetchColumn()) {
