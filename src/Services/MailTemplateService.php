@@ -668,8 +668,7 @@ final class MailTemplateService
             throw new \InvalidArgumentException('Ya existe una plantilla con ese código.');
         }
 
-        $placeholders = self::sanitizePlaceholders($placeholders);
-        $this->assertOnlySelectedPlaceholders($subject, $bodyHtml, $placeholders);
+        $placeholders = self::mergeUsedPlaceholders($subject, $bodyHtml, $placeholders);
         $triggerMode = in_array($triggerMode, ['automatic', 'manual'], true) ? $triggerMode : 'manual';
 
         $this->repo->create($code, $name, $subject, $bodyHtml, $triggerMode, $isActive, $placeholders);
@@ -691,48 +690,30 @@ final class MailTemplateService
             throw new \InvalidArgumentException('Indica el contenido HTML de la plantilla.');
         }
         if ($placeholders !== null) {
-            $placeholders = self::sanitizePlaceholders($placeholders);
-            $this->assertOnlySelectedPlaceholders($subject, $bodyHtml, $placeholders);
+            $placeholders = self::mergeUsedPlaceholders($subject, $bodyHtml, $placeholders);
         }
 
         $this->repo->update($code, $subject, $bodyHtml, $isActive, $placeholders);
     }
 
     /**
-     * @param list<string> $allowed
+     * Une la lista del combobox con las etiquetas ya usadas en asunto/HTML.
+     * Ya no se exige «seleccionar» antes de escribir {{etiqueta}}.
+     *
+     * @param list<string> $selected
+     * @return list<string>
      */
-    private function assertOnlySelectedPlaceholders(string $subject, string $bodyHtml, array $allowed): void
+    public static function mergeUsedPlaceholders(string $subject, string $bodyHtml, array $selected): array
     {
-        $used = self::extractPlaceholders($subject . "\n" . $bodyHtml);
-        if ($allowed === []) {
-            if ($used !== []) {
-                throw new \InvalidArgumentException(
-                    'Selecciona estos placeholders antes de usarlos: {{' . implode('}}, {{', $used) . '}}'
-                );
+        $selected = self::sanitizePlaceholders($selected);
+        $used = self::sanitizePlaceholders(self::extractPlaceholders($subject . "\n" . $bodyHtml));
+        foreach ($used as $key) {
+            if (!in_array($key, $selected, true)) {
+                $selected[] = $key;
             }
-            return;
         }
 
-        $expanded = $allowed;
-        if (in_array('pago_proveedor', $allowed, true) && !in_array('comprobante_url', $expanded, true)) {
-            $expanded[] = 'comprobante_url';
-        }
-        if (in_array('comprobante_url', $allowed, true) && !in_array('pago_proveedor', $expanded, true)) {
-            $expanded[] = 'pago_proveedor';
-        }
-        if (in_array('name', $allowed, true) && !in_array('full_name', $expanded, true)) {
-            $expanded[] = 'full_name';
-        }
-        if (in_array('full_name', $allowed, true) && !in_array('name', $expanded, true)) {
-            $expanded[] = 'name';
-        }
-
-        $invalid = array_values(array_diff($used, $expanded));
-        if ($invalid !== []) {
-            throw new \InvalidArgumentException(
-                'Selecciona estos placeholders antes de usarlos: {{' . implode('}}, {{', $invalid) . '}}'
-            );
-        }
+        return $selected;
     }
 
     /** @return list<string> */
