@@ -408,6 +408,7 @@ final class ProviderRequestService
             'exam_time' => $fields['exam_time'],
             'reglamento_url' => $reglamentoUrl,
             'comprobante_url' => $comprobanteUrl,
+            'pago_proveedor' => $comprobanteUrl,
             'workbook_url' => $workbookUrl,
             'documentos_html' => $this->documentosHtml($reglamentoUrl, $comprobanteUrl, $workbookUrl),
             'attachment_note' => 'Documentos por enlace seguro (sin adjuntos en el correo).',
@@ -727,7 +728,7 @@ final class ProviderRequestService
             $html .= '<li><a href="' . htmlspecialchars($reglamentoUrl) . '">Reglamento firmado</a></li>';
         }
         if ($comprobanteUrl !== '') {
-            $html .= '<li><a href="' . htmlspecialchars($comprobanteUrl) . '">Comprobante de pago</a></li>';
+            $html .= '<li><a href="' . htmlspecialchars($comprobanteUrl) . '">Comprobante de pago al proveedor</a></li>';
         }
         if ($workbookUrl !== '') {
             $html .= '<li><a href="' . htmlspecialchars($workbookUrl) . '">Plantilla Excel</a></li>';

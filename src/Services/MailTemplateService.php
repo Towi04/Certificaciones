@@ -48,7 +48,8 @@ final class MailTemplateService
         ],
         'Documentos (enlaces)' => [
             'reglamento_url' => 'URL reglamento firmado',
-            'comprobante_url' => 'URL comprobante DOCEO→proveedor (o del alumno)',
+            'pago_proveedor' => 'URL comprobante DOCEO → proveedor',
+            'comprobante_url' => 'URL comprobante (alias de pago_proveedor)',
             'workbook_url' => 'URL plantilla Excel rellenada',
             'documentos_html' => 'Lista HTML de enlaces a documentos',
             'attachment_note' => 'Nota: documentos por enlace (sin adjuntos)',
@@ -276,7 +277,8 @@ final class MailTemplateService
     {
         $uks = [
             'certificacion', 'product_name', 'full_name', 'matricula', 'student_email',
-            'exam_date', 'exam_time', 'reglamento_url', 'comprobante_url', 'workbook_url', 'documentos_html', 'attachment_note', 'workbook_note',
+            'exam_date', 'exam_time', 'reglamento_url', 'pago_proveedor', 'comprobante_url',
+            'workbook_url', 'documentos_html', 'attachment_note', 'workbook_note',
         ];
 
         return match ($code) {
@@ -544,11 +546,12 @@ final class MailTemplateService
             'exam_date' => date('Y-m-d', strtotime('+7 days')),
             'exam_time' => '10:00',
             'reglamento_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/archivo/ejemplo-prueba',
+            'pago_proveedor' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/archivo/ejemplo-comprobante',
             'comprobante_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/archivo/ejemplo-comprobante',
             'workbook_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/archivo/ejemplo-excel',
             'documentos_html' => '<p><strong>Documentos:</strong></p><ul>'
                 . '<li><a href="#">Reglamento firmado</a></li>'
-                . '<li><a href="#">Comprobante de pago</a></li>'
+                . '<li><a href="#">Comprobante pago al proveedor</a></li>'
                 . '<li><a href="#">Plantilla Excel</a></li>'
                 . '</ul>',
             'attachment_note' => 'Documentos por enlace (sin adjuntos en el correo).',
@@ -568,12 +571,18 @@ final class MailTemplateService
             $lookup[$norm] = (string) $value;
         }
 
-        // Alias comunes: name ↔ full_name
+        // Alias comunes: name ↔ full_name, pago_proveedor ↔ comprobante_url
         if (!isset($lookup['full_name']) && isset($lookup['name'])) {
             $lookup['full_name'] = $lookup['name'];
         }
         if (!isset($lookup['name']) && isset($lookup['full_name'])) {
             $lookup['name'] = $lookup['full_name'];
+        }
+        if (!isset($lookup['pago_proveedor']) && isset($lookup['comprobante_url'])) {
+            $lookup['pago_proveedor'] = $lookup['comprobante_url'];
+        }
+        if (!isset($lookup['comprobante_url']) && isset($lookup['pago_proveedor'])) {
+            $lookup['comprobante_url'] = $lookup['pago_proveedor'];
         }
 
         return (string) preg_replace_callback(
@@ -687,7 +696,21 @@ final class MailTemplateService
             return;
         }
 
-        $invalid = array_values(array_diff($used, $allowed));
+        $expanded = $allowed;
+        if (in_array('pago_proveedor', $allowed, true) && !in_array('comprobante_url', $expanded, true)) {
+            $expanded[] = 'comprobante_url';
+        }
+        if (in_array('comprobante_url', $allowed, true) && !in_array('pago_proveedor', $expanded, true)) {
+            $expanded[] = 'pago_proveedor';
+        }
+        if (in_array('name', $allowed, true) && !in_array('full_name', $expanded, true)) {
+            $expanded[] = 'full_name';
+        }
+        if (in_array('full_name', $allowed, true) && !in_array('name', $expanded, true)) {
+            $expanded[] = 'name';
+        }
+
+        $invalid = array_values(array_diff($used, $expanded));
         if ($invalid !== []) {
             throw new \InvalidArgumentException(
                 'Selecciona estos placeholders antes de usarlos: {{' . implode('}}, {{', $invalid) . '}}'
@@ -751,7 +774,7 @@ final class MailTemplateService
                 . '</ul>'
                 . '{{documentos_html}}'
                 . '<p>Enlaces: <a href="{{reglamento_url}}">Reglamento</a> · '
-                . '<a href="{{comprobante_url}}">Comprobante</a> · '
+                . '<a href="{{pago_proveedor}}">Comprobante pago proveedor</a> · '
                 . '<a href="{{workbook_url}}">Excel</a></p>'
                 . '<p>— Instituto DOCEO</p>',
                 'automatic'
