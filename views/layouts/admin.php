@@ -153,15 +153,17 @@ if (!$configOpen && str_contains($path, '/certificadoras')) {
 (function () {
   var shell = document.getElementById('admin-shell');
   var btn = document.getElementById('admin-nav-toggle');
-  if (!shell || !btn) return;
   var key = 'doceo-admin-nav-collapsed';
 
   function apply(collapsed) {
+    if (!shell) return;
     shell.classList.toggle('app-shell--nav-collapsed', !!collapsed);
     document.documentElement.classList.toggle('admin-nav-collapsed-boot', !!collapsed);
-    btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-    btn.title = collapsed ? 'Mostrar menú' : 'Ocultar menú';
-    btn.setAttribute('aria-label', collapsed ? 'Mostrar el menú lateral' : 'Ocultar el menú lateral');
+    if (btn) {
+      btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      btn.title = collapsed ? 'Mostrar menú' : 'Ocultar menú';
+      btn.setAttribute('aria-label', collapsed ? 'Mostrar el menú lateral' : 'Ocultar el menú lateral');
+    }
     try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e) {}
   }
 
@@ -171,17 +173,25 @@ if (!$configOpen && str_contains($path, '/certificadoras')) {
     apply(false);
   }
 
-  btn.addEventListener('click', function (e) {
-    e.preventDefault();
-    e.stopPropagation();
-    apply(!shell.classList.contains('app-shell--nav-collapsed'));
-  });
+  if (btn && shell) {
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      apply(!shell.classList.contains('app-shell--nav-collapsed'));
+    });
+  }
 
   var cfgBtn = document.getElementById('admin-config-toggle');
   var cfgLinks = document.getElementById('admin-config-links');
   var cfgSection = document.getElementById('admin-config-section');
   if (cfgBtn && cfgLinks && cfgSection) {
-    cfgBtn.addEventListener('click', function () {
+    cfgBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      // Si el rail está colapsado, ábrelo para que se vean las opciones.
+      if (shell && shell.classList.contains('app-shell--nav-collapsed')) {
+        apply(false);
+      }
       var open = cfgLinks.hasAttribute('hidden');
       if (open) {
         cfgLinks.removeAttribute('hidden');
