@@ -81,6 +81,9 @@ final class GroupEmailAutomation
 
     public static function isEnabled(array $product, string $key): bool
     {
+        if ($key === self::KEY_EXAM_ACCESS) {
+            return self::resolveExamAccessMail($product)['send'];
+        }
         $cfg = self::forProduct($product);
 
         return !empty($cfg[$key]['enabled']);
@@ -88,6 +91,12 @@ final class GroupEmailAutomation
 
     public static function templateCode(array $product, string $key, string $fallback): string
     {
+        if ($key === self::KEY_EXAM_ACCESS) {
+            $resolved = self::resolveExamAccessMail($product);
+            $code = trim($resolved['template_code']);
+
+            return $code !== '' ? $code : $fallback;
+        }
         $cfg = self::forProduct($product);
         $code = trim((string) ($cfg[$key]['template_code'] ?? ''));
 
@@ -100,6 +109,64 @@ final class GroupEmailAutomation
         $mode = (string) ($cfg[self::KEY_EXAM_ACCESS]['mode'] ?? 'admin');
 
         return $mode === 'auto' ? 'auto' : 'admin';
+    }
+
+    /**
+     * Resuelve si debe enviarse el correo de accesos y con qué plantilla.
+     * Prioridad: paso exam_access en step_defs → emails.student_exam_access → default.
+     *
+     * @param array<string, mixed> $product
+     * @return array{send:bool,template_code:string,source:string}
+     */
+    public static function resolveExamAccessMail(array $product): array
+    {
+        $full = CheckoutRequirements::config($product);
+        $defs = is_array($full['step_defs'] ?? null) ? $full['step_defs'] : [];
+        $hasExamStep = false;
+        $stepDisabled = false;
+
+        foreach ($defs as $def) {
+            if (!is_array($def)) {
+                continue;
+            }
+            if ((string) ($def['action'] ?? '') !== GroupStepConfig::ACTION_EXAM_ACCESS) {
+                continue;
+            }
+            $hasExamStep = true;
+            $email = is_array($def['email'] ?? null) ? $def['email'] : [];
+            $tpl = trim((string) ($email['template_code'] ?? ''));
+            if (!empty($email['enabled']) && $tpl !== '') {
+                return [
+                    'send' => true,
+                    'template_code' => $tpl,
+                    'source' => 'step',
+                ];
+            }
+            if (array_key_exists('enabled', $email) && empty($email['enabled'])) {
+                $stepDisabled = true;
+            }
+        }
+
+        if ($hasExamStep && $stepDisabled) {
+            return [
+                'send' => false,
+                'template_code' => 'student_elet_exam_access',
+                'source' => 'step',
+            ];
+        }
+
+        $emails = self::normalize($full['emails'] ?? null);
+        $ev = $emails[self::KEY_EXAM_ACCESS];
+        $tpl = trim((string) ($ev['template_code'] ?? 'student_elet_exam_access'));
+        if ($tpl === '') {
+            $tpl = 'student_elet_exam_access';
+        }
+
+        return [
+            'send' => !empty($ev['enabled']),
+            'template_code' => $tpl,
+            'source' => 'emails',
+        ];
     }
 
     /**

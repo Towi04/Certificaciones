@@ -569,6 +569,34 @@ final class GroupStepConfig
         }
         $emails = GroupEmailAutomation::normalize($config['emails'] ?? null);
         $emails['on_steps'] = $onSteps;
+
+        // Sincronizar correo de accesos con el paso exam_access (fuente de verdad en Progreso).
+        $examAccessFromStep = null;
+        $hasExamAccessStep = false;
+        foreach ($defs as $def) {
+            if ((string) ($def['action'] ?? '') !== self::ACTION_EXAM_ACCESS) {
+                continue;
+            }
+            $hasExamAccessStep = true;
+            $email = is_array($def['email'] ?? null) ? $def['email'] : [];
+            $tpl = trim((string) ($email['template_code'] ?? ''));
+            if (!empty($email['enabled']) && $tpl !== '') {
+                $examAccessFromStep = [
+                    'enabled' => true,
+                    'template_code' => $tpl,
+                    'mode' => (($email['trigger'] ?? '') === 'auto') ? 'auto' : 'admin',
+                ];
+                break;
+            }
+        }
+        if ($examAccessFromStep !== null) {
+            $emails[GroupEmailAutomation::KEY_EXAM_ACCESS] = array_merge(
+                $emails[GroupEmailAutomation::KEY_EXAM_ACCESS],
+                $examAccessFromStep
+            );
+        } elseif ($hasExamAccessStep) {
+            $emails[GroupEmailAutomation::KEY_EXAM_ACCESS]['enabled'] = false;
+        }
         $config['emails'] = $emails;
 
         return $config;

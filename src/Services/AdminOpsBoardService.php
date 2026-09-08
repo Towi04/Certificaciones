@@ -227,9 +227,9 @@ final class AdminOpsBoardService
             return ['saved' => true, 'notified' => false];
         }
 
-        (new UksEletService())->publishExamAccess($trackingId, $folio, $accessKey, $adminUserId, true);
+        $notified = (new UksEletService())->publishExamAccess($trackingId, $folio, $accessKey, $adminUserId, true);
 
-        return ['saved' => true, 'notified' => true];
+        return ['saved' => true, 'notified' => $notified];
     }
 
     /**
