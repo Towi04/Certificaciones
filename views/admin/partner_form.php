@@ -105,12 +105,6 @@ $action = $isEdit
                 <?= (!$isEdit || (int) ($partner['must_change_password'] ?? 0) === 1) ? 'checked' : '' ?>>
             Debe cambiar contraseña al entrar
         </label>
-        <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
-            <input type="checkbox" name="send_email" value="1" <?= $isEdit ? '' : 'checked' ?>>
-            <?= $isEdit
-                ? 'Enviar correo con la nueva contraseña (solo si la cambias)'
-                : 'Enviar correo con usuario y contraseña' ?>
-        </label>
     </div>
 
     <?php if ($isEdit): ?>
@@ -121,7 +115,7 @@ $action = $isEdit
     <?php else: ?>
         <p class="muted" style="font-size:.85rem;margin-top:.75rem">
             Si dejas la contraseña vacía se usa la por defecto del sistema.
-            Con el correo activado, el partner recibe enlace de login, usuario y contraseña.
+            Tras guardar verás la contraseña en pantalla para compartirla con el partner (no se envía por correo).
         </p>
     <?php endif; ?>
 
@@ -134,12 +128,12 @@ $action = $isEdit
 <?php if ($isEdit): ?>
 <form method="post" action="<?= e(url('/admin/partners/' . $partner['id'] . '/reenviar-acceso')) ?>"
       class="panel" style="margin-top:1rem;max-width:640px"
-      onsubmit="return confirm('Se generará una nueva contraseña temporal y se enviará al correo del partner. ¿Continuar?');">
+      onsubmit="return confirm('Se generará una nueva contraseña temporal. ¿Continuar?');">
     <?= csrf_field() ?>
-    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Reenviar acceso por correo</h2>
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Restablecer contraseña</h2>
     <p class="muted" style="margin-top:0">
-        Útil si el partner no recibió el correo al crearlo. Genera contraseña temporal
-        (o usa la que indiques), la guarda y la envía a <strong><?= e((string) $partner['email']) ?></strong>.
+        Genera una contraseña temporal (o usa la que indiques) y la muestra en pantalla
+        para compartirla con <strong><?= e((string) $partner['email']) ?></strong>. No se envía por correo.
     </p>
     <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;max-width:280px">
         Contraseña temporal (opcional)
@@ -148,7 +142,7 @@ $action = $isEdit
                style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
     </label>
     <div style="margin-top:1rem">
-        <button class="btn btn-primary" type="submit">Generar y enviar correo</button>
+        <button class="btn btn-primary" type="submit">Generar contraseña</button>
     </div>
 </form>
 <?php endif; ?>

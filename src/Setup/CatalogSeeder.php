@@ -143,16 +143,17 @@ HTML;
             ],
             'card_msi' => ['enabled' => true, 'months' => [1, 3, 6, 9, 12], 'min_amount' => 0],
             'emails' => [
+                // Legacy: desactivado. Configurar correos en pasos del progreso.
                 'student_registration' => [
-                    'enabled' => true,
+                    'enabled' => false,
                     'template_code' => 'student_registration',
                 ],
                 'student_payment_confirmed' => [
-                    'enabled' => true,
+                    'enabled' => false,
                     'template_code' => 'student_payment_confirmed',
                 ],
                 'student_exam_access' => [
-                    'enabled' => true,
+                    'enabled' => false,
                     'template_code' => 'student_elet_exam_access',
                     'mode' => 'admin',
                 ],
@@ -162,7 +163,7 @@ HTML;
             'import_template_code' => 'uks_elet_reporte',
             'provider_request' => [
                 'enabled' => true,
-                'auto_send_on_payment' => true,
+                'auto_send_on_payment' => false,
                 'step_code' => 'solicitud_uks',
                 'to' => '',
                 'cc' => '',

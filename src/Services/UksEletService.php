@@ -6,8 +6,6 @@ namespace App\Services;
 
 use App\Config\Env;
 use App\Database\Connection;
-use App\Integrations\Mailer;
-use App\Repositories\PurchaseRepository;
 use App\Support\Settings;
 use PDO;
 
@@ -17,13 +15,11 @@ use PDO;
 final class UksEletService
 {
     private PDO $pdo;
-    private DocumentService $documents;
     private TrackingService $tracking;
 
     public function __construct()
     {
         $this->pdo = Connection::get();
-        $this->documents = new DocumentService();
         $this->tracking = new TrackingService();
     }
 
@@ -48,7 +44,7 @@ final class UksEletService
     }
 
     /**
-     * Tras confirmar pago: correo a UKS (nombre, fecha/hora, reglamento firmado) y paso solicitud_uks.
+     * Tras confirmar pago: avanza a solicitud_uks (correo auto vía GroupEmailAutomation / ProviderRequestService).
      */
     public function onPaymentConfirmed(int $trackingId, int $purchaseId, int $adminUserId): void
     {
@@ -61,168 +57,16 @@ final class UksEletService
             $trackingId,
             'solicitud_uks',
             $adminUserId,
-            'Pago confirmado · solicitud enviada a UKS',
+            'Pago confirmado · solicitud UKS',
             'waiting_provider'
         );
-
-        $this->sendSolicitudEmail($trackingId, $purchaseId, true);
-    }
-
-    public function sendSolicitudEmail(int $trackingId, int $purchaseId, bool $includePaymentProof = false): void
-    {
-        $tracking = $this->tracking->find($trackingId);
-        if ($tracking === null) {
-            throw new \InvalidArgumentException('Seguimiento no encontrado.');
-        }
-
-        $purchase = (new PurchaseRepository())->find($purchaseId);
-        if ($purchase === null) {
-            throw new \InvalidArgumentException('Compra no encontrada.');
-        }
-
-        $to = $this->uksRequestEmail();
-        if ($to === '') {
-            throw new \RuntimeException(
-                'Configura el correo destino en Admin → Correos → UKS · Solicitud (campo Para).'
-            );
-        }
-
-        $fullName = trim(implode(' ', array_filter([
-            $tracking['first_name'] ?? '',
-            $tracking['last_name_p'] ?? '',
-            $tracking['last_name_m'] ?? '',
-        ])));
-
-        $examDate = (string) ($tracking['exam_date'] ?? '');
-        $examTime = !empty($tracking['exam_time']) ? substr((string) $tracking['exam_time'], 0, 5) : '';
-        $matricula = (string) ($tracking['matricula'] ?? $purchase['matricula']);
-        $certificacion = trim((string) ($tracking['product_name'] ?? 'Certificación UKS'));
-
-        $reglamentoDoc = $this->findSignedReglamentoDocument($trackingId, $purchaseId);
-        if ($reglamentoDoc === null) {
-            throw new \RuntimeException(
-                'No se encontró el reglamento firmado del alumno. No se puede enviar la solicitud a UKS.'
-            );
-        }
-
-        $reglamentoPath = $this->documents->absolutePath((string) $reglamentoDoc['storage_path']);
-        if (!is_file($reglamentoPath)) {
-            throw new \RuntimeException('El archivo del reglamento firmado no está disponible en el servidor.');
-        }
-
-        $fileLinks = new SignedFileLinkService();
-        $reglamentoUrl = $fileLinks->documentLink((int) $reglamentoDoc['id']);
-        $comprobanteUrl = '';
-        if ($includePaymentProof) {
-            $proofPath = (string) ($purchase['payment_proof_path'] ?? '');
-            if ($proofPath !== '') {
-                $abs = $this->documents->absolutePath($proofPath);
-                if (is_file($abs)) {
-                    $comprobanteUrl = $fileLinks->purchaseProofLink($purchaseId);
-                }
-            }
-        }
-
-        $documentosHtml = $this->uksDocumentosHtml($reglamentoUrl, $comprobanteUrl);
-        $attachmentNote = 'Documentos disponibles por enlace (vigencia ~90 días).';
-
-        $mailTpl = new MailTemplateService();
-        $vars = [
-            'certificacion' => $certificacion,
-            'product_name' => $certificacion,
-            'full_name' => $fullName,
-            'matricula' => $matricula,
-            'student_email' => (string) ($tracking['student_email'] ?? ''),
-            'exam_date' => $examDate,
-            'exam_time' => $examTime,
-            'reglamento_url' => $reglamentoUrl,
-            'comprobante_url' => $comprobanteUrl,
-            'documentos_html' => $documentosHtml,
-            'attachment_note' => $attachmentNote,
-        ];
-
-        if ($mailTpl->renderUksSolicitud($vars) !== null) {
-            $mailTpl->sendUksSolicitud($to, $vars);
-        } else {
-            $subject = 'Solicitud ' . $certificacion . ' · ' . $fullName . ' · ' . $matricula;
-            $text = "Solicitud de registro examen {$certificacion} — Instituto DOCEO\n\n"
-                . "Certificación: {$certificacion}\n"
-                . "Alumno: {$fullName}\n"
-                . "Matrícula DOCEO: {$matricula}\n"
-                . "Correo alumno: " . ($tracking['student_email'] ?? '') . "\n"
-                . "Fecha examen: {$examDate}\n"
-                . "Hora examen: {$examTime}\n\n"
-                . "Reglamento firmado: {$reglamentoUrl}\n"
-                . ($comprobanteUrl !== '' ? "Comprobante: {$comprobanteUrl}\n" : '')
-                . "\n— Instituto DOCEO\n";
-            $html = '<p>Solicitud de registro examen <strong>' . htmlspecialchars($certificacion) . '</strong> — Instituto DOCEO</p>'
-                . '<ul>'
-                . '<li><strong>Certificación:</strong> ' . htmlspecialchars($certificacion) . '</li>'
-                . '<li><strong>Alumno:</strong> ' . htmlspecialchars($fullName) . '</li>'
-                . '<li><strong>Matrícula DOCEO:</strong> ' . htmlspecialchars($matricula) . '</li>'
-                . '<li><strong>Correo:</strong> ' . htmlspecialchars((string) ($tracking['student_email'] ?? '')) . '</li>'
-                . '<li><strong>Fecha examen:</strong> ' . htmlspecialchars($examDate) . '</li>'
-                . '<li><strong>Hora examen:</strong> ' . htmlspecialchars($examTime) . '</li>'
-                . '</ul>'
-                . $documentosHtml;
-            (new Mailer())->send($to, $subject, $text, [
-                'html' => true,
-                'body_html' => $html,
-            ]);
-        }
-
-        $logNote = 'Correo a UKS (' . $to . ') · enlaces documentos';
-        if ($comprobanteUrl !== '') {
-            $logNote .= ' + comprobante';
-        }
-        $this->tracking->addLog($trackingId, 'solicitud_uks', $logNote, null);
-    }
-
-    private function uksDocumentosHtml(string $reglamentoUrl, string $comprobanteUrl): string
-    {
-        $html = '<p><strong>Documentos:</strong></p><ul>'
-            . '<li><a href="' . htmlspecialchars($reglamentoUrl) . '">Reglamento firmado</a></li>';
-        if ($comprobanteUrl !== '') {
-            $html .= '<li><a href="' . htmlspecialchars($comprobanteUrl) . '">Comprobante de pago</a></li>';
-        }
-        $html .= '</ul>'
-            . '<p class="muted" style="font-size:.85rem">Enlaces seguros del sistema DOCEO (sin adjuntos en el correo).</p>';
-
-        return $html;
-    }
-
-    /** @return array<string, mixed>|null */
-    private function findSignedReglamentoDocument(int $trackingId, int $purchaseId): ?array
-    {
-        foreach (['reglamento_firmado', 'reglamento'] as $docType) {
-            $stmt = $this->pdo->prepare(
-                'SELECT * FROM documents WHERE tracking_id = ? AND doc_type = ? ORDER BY id DESC LIMIT 1'
-            );
-            $stmt->execute([$trackingId, $docType]);
-            $row = $stmt->fetch();
-            if ($row) {
-                return $row;
-            }
-        }
-
-        foreach (['reglamento_firmado', 'reglamento'] as $docType) {
-            $stmt = $this->pdo->prepare(
-                'SELECT * FROM documents WHERE purchase_id = ? AND doc_type = ? ORDER BY id DESC LIMIT 1'
-            );
-            $stmt->execute([$purchaseId, $docType]);
-            $row = $stmt->fetch();
-            if ($row) {
-                return $row;
-            }
-        }
-
-        return null;
     }
 
     /**
-     * Publica folio + clave del día y avisa al alumno con link del examen.
+     * Publica folio + clave del día. Si $notifyStudent, envía plantilla del paso exam_access/codigos
+     * vía StepMailService (salvo trigger=auto, ya disparado por setStep).
      *
-     * @return bool true si se envió el correo al alumno
+     * @return bool true si se envió (o ya se envió en auto) el correo al alumno
      */
     public function publishExamAccess(
         int $trackingId,
@@ -259,7 +103,7 @@ final class UksEletService
 
         $notified = false;
         if ($notifyStudent) {
-            $notified = $this->sendStudentExamAccessEmail($trackingId, $folio, $accessKey);
+            $notified = $this->trySendExamAccessStepMail($trackingId, $adminUserId);
         }
 
         $this->tracking->addLog(
@@ -274,42 +118,15 @@ final class UksEletService
     }
 
     /**
-     * @return bool true si el correo se envió
+     * Envía plantilla del paso exam_access (o codigos) si está configurada con trigger=admin.
+     * Si trigger=auto, setStep ya envió — no reenviar.
      */
-    public function sendStudentExamAccessEmail(int $trackingId, ?string $folio = null, ?string $accessKey = null): bool
+    private function trySendExamAccessStepMail(int $trackingId, int $adminUserId): bool
     {
         $tracking = $this->tracking->find($trackingId);
         if ($tracking === null) {
-            throw new \InvalidArgumentException('Seguimiento no encontrado.');
+            return false;
         }
-
-        $folio = trim($folio ?? (string) ($tracking['folio'] ?? ''));
-        $accessKey = trim($accessKey ?? (string) ($tracking['access_key'] ?? ''));
-        if ($folio === '' || $accessKey === '') {
-            throw new \InvalidArgumentException('Faltan folio o clave del día.');
-        }
-
-        $email = (string) ($tracking['student_email'] ?? '');
-        if ($email === '') {
-            throw new \InvalidArgumentException('El alumno no tiene correo.');
-        }
-
-        $name = trim(($tracking['first_name'] ?? '') . ' ' . ($tracking['last_name_p'] ?? ''));
-        $matricula = (string) ($tracking['matricula'] ?? '');
-        $examUrl = $this->examUrl();
-        $examDate = (string) ($tracking['exam_date'] ?? '');
-        $examTime = !empty($tracking['exam_time']) ? substr((string) $tracking['exam_time'], 0, 5) : '';
-
-        $mailTpl = new MailTemplateService();
-        $vars = [
-            'name' => $name,
-            'matricula' => $matricula,
-            'exam_url' => $examUrl,
-            'exam_date' => $examDate,
-            'exam_time' => $examTime,
-            'folio' => $folio,
-            'access_key' => $accessKey,
-        ];
 
         $product = [
             'config_json' => $tracking['config_json'] ?? null,
@@ -318,43 +135,52 @@ final class UksEletService
             'name' => $tracking['product_name'] ?? '',
             'code' => $tracking['product_code'] ?? '',
         ];
-        $resolved = GroupEmailAutomation::resolveExamAccessMail($product);
-        if (!$resolved['send']) {
+        $defs = GroupStepConfig::defsFromConfig(CheckoutRequirements::config($product));
+
+        $stepCode = null;
+        $emailCfg = null;
+
+        foreach ($defs as $code => $def) {
+            if (!is_array($def)) {
+                continue;
+            }
+            if ((string) ($def['action'] ?? '') !== GroupStepConfig::ACTION_EXAM_ACCESS) {
+                continue;
+            }
+            $email = is_array($def['email'] ?? null) ? $def['email'] : [];
+            if (!empty($email['enabled']) && trim((string) ($email['template_code'] ?? '')) !== '') {
+                $stepCode = (string) ($def['code'] ?? $code);
+                $emailCfg = $email;
+                break;
+            }
+        }
+
+        if ($stepCode === null && isset($defs['codigos']) && is_array($defs['codigos'])) {
+            $email = is_array($defs['codigos']['email'] ?? null) ? $defs['codigos']['email'] : [];
+            if (!empty($email['enabled']) && trim((string) ($email['template_code'] ?? '')) !== '') {
+                $stepCode = 'codigos';
+                $emailCfg = $email;
+            }
+        }
+
+        if ($stepCode === null || $emailCfg === null) {
             return false;
         }
-        $tplCode = $resolved['template_code'] !== ''
-            ? $resolved['template_code']
-            : 'student_elet_exam_access';
 
-        if ($mailTpl->render($tplCode, $vars) !== null) {
-            $mailTpl->send($tplCode, $email, $vars);
-
+        // Evitar doble envío: trigger=auto ya disparó en setStep.
+        if (($emailCfg['trigger'] ?? '') === 'auto') {
             return true;
         }
 
-        $subject = 'Accesos a tu examen ELeT · ' . $matricula;
-        $text = "Hola {$name},\n\n"
-            . "Tu examen ELeT está programado para {$examDate} {$examTime}.\n\n"
-            . "Entra al examen en: {$examUrl}\n"
-            . "Folio (único): {$folio}\n"
-            . "Clave del día: {$accessKey}\n\n"
-            . "Matrícula DOCEO: {$matricula}\n\n"
-            . "— Instituto DOCEO\n";
+        try {
+            (new StepMailService())->sendForStep($trackingId, $stepCode, $adminUserId);
 
-        $html = '<p>Hola ' . htmlspecialchars($name) . ',</p>'
-            . '<p>Tu examen <strong>ELeT</strong> está programado para '
-            . htmlspecialchars($examDate) . ' ' . htmlspecialchars($examTime) . '.</p>'
-            . '<p><strong>Acceso al examen:</strong><br>'
-            . '<a href="' . htmlspecialchars($examUrl) . '">' . htmlspecialchars($examUrl) . '</a></p>'
-            . '<ul>'
-            . '<li><strong>Folio (único):</strong> ' . htmlspecialchars($folio) . '</li>'
-            . '<li><strong>Clave del día:</strong> ' . htmlspecialchars($accessKey) . '</li>'
-            . '</ul>'
-            . '<p>Matrícula DOCEO: ' . htmlspecialchars($matricula) . '</p>';
+            return true;
+        } catch (\Throwable $e) {
+            error_log('[Doceo] Exam access step mail: ' . $e->getMessage());
 
-        (new Mailer())->send($email, $subject, $text, ['html' => true, 'body_html' => $html]);
-
-        return true;
+            return false;
+        }
     }
 
     /** Clave del día usada por otro alumno en la misma fecha (si existe). */
@@ -413,20 +239,5 @@ final class UksEletService
         }
 
         return ['step' => $step, 'status' => $status];
-    }
-
-    private function uksRequestEmail(): string
-    {
-        $fromTemplate = (new MailTemplateService())->uksSolicitudRecipient();
-        if ($fromTemplate !== '') {
-            return $fromTemplate;
-        }
-
-        $fromEnv = trim((string) (Env::get('UKS_ELET_REQUEST_EMAIL', '') ?? ''));
-        if ($fromEnv !== '') {
-            return $fromEnv;
-        }
-
-        return '';
     }
 }

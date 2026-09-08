@@ -38,6 +38,7 @@ final class MailTemplateService
         'Pago y cuenta' => [
             'pay_instructions_html' => 'Instrucciones de pago (HTML)',
             'password_block_html' => 'Bloque usuario/contraseña (HTML)',
+            'temp_password' => 'Contraseña temporal (registro)',
         ],
         'Examen ELeT' => [
             'exam_url' => 'URL del examen',
@@ -54,6 +55,13 @@ final class MailTemplateService
             'documentos_html' => 'Lista HTML de enlaces a documentos',
             'attachment_note' => 'Nota: documentos por enlace (sin adjuntos)',
             'workbook_note' => 'Nota breve del Excel por enlace',
+        ],
+        'Campus Moodle' => [
+            'moodle_url' => 'URL Campus / Moodle',
+            'moodle_username' => 'Usuario Moodle',
+            'moodle_password' => 'Contraseña Moodle',
+            'moodle_access_starts_at' => 'Inicio acceso Moodle',
+            'moodle_access_ends_at' => 'Fin acceso Moodle',
         ],
         'Resultados / CENNI' => [
             'results_level' => 'Nivel alcanzado',
@@ -322,16 +330,12 @@ final class MailTemplateService
 
     /**
      * audience: preferencia guardada en settings; si no hay, heurística por código.
-     * Plantillas de reagendar/reagenda siempre van al alumno (nunca solicitud a proveedor).
+     * Respeta Proveedor/Alumno/Partner guardados (incl. plantillas de reagendar).
      */
     public static function audienceForTemplate(string $code): string
     {
         $code = trim($code);
         if ($code === '') {
-            return 'student';
-        }
-        // Reagendar → alumno, aunque en settings se haya marcado Proveedor por error.
-        if (self::rescheduleTemplateHeuristic($code)) {
             return 'student';
         }
         $saved = strtolower(trim(Settings::get('mail_tpl_' . $code . '_audience', '') ?? ''));
@@ -345,7 +349,13 @@ final class MailTemplateService
         return self::providerTemplateHeuristic($code) ? 'provider' : 'student';
     }
 
-    /** Códigos de plantilla de reagendar / reprogramar examen (alumno). */
+    /** ¿Plantilla de solicitud inicial UKS (reglamento / pago / workbook)? */
+    public static function isUksSolicitudCode(string $code): bool
+    {
+        return in_array(trim($code), [self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY], true);
+    }
+
+    /** Códigos que sugieren reagendar / reprogramar examen (por nombre). */
     public static function rescheduleTemplateHeuristic(string $code): bool
     {
         $code = mb_strtolower(trim($code));
@@ -359,7 +369,10 @@ final class MailTemplateService
             || str_contains($code, 're-agend');
     }
 
-    /** Heurística legacy por código (uks_*, *_provider*, *proveedor*). */
+    /**
+     * Heurística legacy por código (uks_*, *_provider*, *proveedor*).
+     * No aplica a reagendar_*: sin audiencia guardada default = alumno.
+     */
     public static function providerTemplateHeuristic(string $code): bool
     {
         $code = trim($code);
@@ -367,7 +380,7 @@ final class MailTemplateService
             return false;
         }
 
-        return in_array($code, [self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY], true)
+        return self::isUksSolicitudCode($code)
             || str_starts_with($code, 'uks_')
             || str_contains($code, '_provider')
             || str_contains($code, 'proveedor');
