@@ -575,7 +575,8 @@ final class AdminController
             $label = trim((string) ($_POST['label'] ?? ''));
             $type = (string) ($_POST['type'] ?? 'text');
             $required = !empty($_POST['required']);
-            $field = CheckoutRequirements::addCustomField($label, $type, $required);
+            $options = $_POST['options_text'] ?? ($_POST['options'] ?? null);
+            $field = CheckoutRequirements::addCustomField($label, $type, $required, null, $options);
             echo json_encode(['ok' => true, 'field' => $field], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             http_response_code(422);
@@ -608,7 +609,8 @@ final class AdminController
             $label = trim((string) ($_POST['label'] ?? ''));
             $type = (string) ($_POST['type'] ?? 'text');
             $required = !empty($_POST['required']);
-            $field = CheckoutRequirements::updateCustomField($code, $label, $type, $required);
+            $options = $_POST['options_text'] ?? ($_POST['options'] ?? null);
+            $field = CheckoutRequirements::updateCustomField($code, $label, $type, $required, $options);
             echo json_encode(['ok' => true, 'field' => $field], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             http_response_code(422);

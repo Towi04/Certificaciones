@@ -140,9 +140,22 @@ final class CheckoutController
                     throw new \InvalidArgumentException('Completa el campo: ' . $field['label']);
                 }
             }
-            if (in_array('sex', $fieldCodes, true) && ($buyer['sex'] ?? '') !== '') {
-                if (!in_array((string) $buyer['sex'], CheckoutRequirements::allowedSexValues(), true)) {
-                    throw new \InvalidArgumentException('Elige Sexo: Femenino o Masculino.');
+            foreach (CheckoutRequirements::fieldsForProduct($product) as $field) {
+                if (($field['type'] ?? '') !== 'select') {
+                    continue;
+                }
+                $code = (string) ($field['code'] ?? '');
+                $value = (string) ($buyer[$code] ?? '');
+                if ($value === '') {
+                    continue;
+                }
+                $allowed = CheckoutRequirements::allowedSelectValues($field);
+                if ($allowed !== [] && !in_array($value, $allowed, true)) {
+                    throw new \InvalidArgumentException(
+                        $code === 'sex'
+                            ? 'Elige Sexo: Femenino o Masculino.'
+                            : ('Elige una opción válida para: ' . $field['label'])
+                    );
                 }
             }
 

@@ -159,7 +159,7 @@ $renderMailTemplateField = static function (
         <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
             Marca qué información debe capturar el alumno y, para cada campo, si es
             <strong>obligatorio</strong> u <strong>opcional</strong> cuando se pide.
-            Los campos personalizados se pueden editar (nombre, tipo y default) y quedan disponibles en todos los grupos.
+            Los campos personalizados se pueden editar (nombre, tipo, opciones si es lista) y quedan disponibles en todos los grupos.
         </p>
         <div class="field-check-grid" id="checkout-field-grid">
             <?php foreach ($fieldMeta as $code => $meta): ?>
@@ -209,10 +209,20 @@ $renderMailTemplateField = static function (
                             </select>
                         </label>
                         <?php if ($isCustom): ?>
+                            <?php
+                            $optLines = '';
+                            if (($meta['type'] ?? '') === 'select' && is_array($meta['options'] ?? null)) {
+                                $optLines = implode("\n", array_map(
+                                    static fn ($o) => (string) ($o['label'] ?? $o['value'] ?? ''),
+                                    $meta['options']
+                                ));
+                            }
+                            ?>
                             <button type="button" class="btn-link field-edit-btn" data-code="<?= e($code) ?>"
                                     data-label="<?= e((string) $meta['label']) ?>"
                                     data-type="<?= e((string) ($meta['type'] ?? 'text')) ?>"
-                                    data-required="<?= $defaultRequired ? '1' : '0' ?>">
+                                    data-required="<?= $defaultRequired ? '1' : '0' ?>"
+                                    data-options="<?= e($optLines) ?>">
                                 Editar campo
                             </button>
                         <?php endif; ?>
@@ -243,6 +253,7 @@ $renderMailTemplateField = static function (
                         <option value="tel">Teléfono</option>
                         <option value="date">Fecha</option>
                         <option value="number">Número</option>
+                        <option value="select">Opción múltiple (lista)</option>
                     </select>
                 </label>
                 <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
@@ -256,6 +267,15 @@ $renderMailTemplateField = static function (
                 <div style="padding-bottom:.15rem">
                     <button type="button" class="btn btn-ghost" id="add-checkout-field-btn">Agregar a la lista</button>
                 </div>
+            </div>
+            <div id="new-checkout-field-options-wrap" hidden style="margin-top:.75rem">
+                <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
+                    Opciones (una por línea) *
+                    <textarea name="new_checkout_field_options" id="new_checkout_field_options" rows="4"
+                              placeholder="Matutino&#10;Vespertino&#10;Sábado"
+                              style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px;resize:vertical"></textarea>
+                    <span style="font-size:.75rem;font-weight:500">El alumno solo podrá elegir una de estas opciones.</span>
+                </label>
             </div>
             <p class="muted" id="add-checkout-field-msg" style="margin:.55rem 0 0;font-size:.78rem;display:none"></p>
         </div>
@@ -281,6 +301,7 @@ $renderMailTemplateField = static function (
                         <option value="tel">Teléfono</option>
                         <option value="date">Fecha</option>
                         <option value="number">Número</option>
+                        <option value="select">Opción múltiple (lista)</option>
                     </select>
                 </label>
                 <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
@@ -295,6 +316,14 @@ $renderMailTemplateField = static function (
                     <button type="button" class="btn btn-accent" id="save-checkout-field-btn">Guardar cambios</button>
                     <button type="button" class="btn btn-ghost" id="cancel-edit-checkout-field-btn">Cancelar</button>
                 </div>
+            </div>
+            <div id="edit-checkout-field-options-wrap" hidden style="margin-top:.75rem">
+                <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
+                    Opciones (una por línea) *
+                    <textarea id="edit_checkout_field_options" rows="4"
+                              placeholder="Opción A&#10;Opción B"
+                              style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px;resize:vertical"></textarea>
+                </label>
             </div>
             <p class="muted" id="edit-checkout-field-msg" style="margin:.55rem 0 0;font-size:.78rem;display:none"></p>
         </div>
@@ -974,6 +1003,30 @@ $renderMailTemplateField = static function (
   var fieldGrid = document.getElementById('checkout-field-grid');
   var editPanel = document.getElementById('edit-checkout-field-panel');
   var editMsg = document.getElementById('edit-checkout-field-msg');
+  var newTypeEl = document.getElementById('new_checkout_field_type');
+  var newOptionsWrap = document.getElementById('new-checkout-field-options-wrap');
+  var newOptionsEl = document.getElementById('new_checkout_field_options');
+  var editTypeEl = document.getElementById('edit_checkout_field_type');
+  var editOptionsWrap = document.getElementById('edit-checkout-field-options-wrap');
+  var editOptionsEl = document.getElementById('edit_checkout_field_options');
+
+  function toggleOptionsWrap(typeEl, wrapEl) {
+    if (!wrapEl) return;
+    wrapEl.hidden = !(typeEl && typeEl.value === 'select');
+  }
+  function optionsToText(options) {
+    if (!Array.isArray(options)) return '';
+    return options.map(function (o) {
+      return String((o && (o.label || o.value)) || '').trim();
+    }).filter(Boolean).join('\n');
+  }
+  if (newTypeEl) {
+    newTypeEl.addEventListener('change', function () { toggleOptionsWrap(newTypeEl, newOptionsWrap); });
+    toggleOptionsWrap(newTypeEl, newOptionsWrap);
+  }
+  if (editTypeEl) {
+    editTypeEl.addEventListener('change', function () { toggleOptionsWrap(editTypeEl, editOptionsWrap); });
+  }
 
   function showAddFieldMsg(text, isError) {
     if (!addFieldMsg) return;
@@ -1023,6 +1076,7 @@ $renderMailTemplateField = static function (
     editBtn.setAttribute('data-label', field.label || field.code);
     editBtn.setAttribute('data-type', field.type || 'text');
     editBtn.setAttribute('data-required', field.required ? '1' : '0');
+    editBtn.setAttribute('data-options', optionsToText(field.options || []));
     fieldGrid.appendChild(card);
   }
   if (addFieldBtn) {
@@ -1031,17 +1085,25 @@ $renderMailTemplateField = static function (
       var typeEl = document.getElementById('new_checkout_field_type');
       var reqEl = document.getElementById('new_checkout_field_required');
       var label = labelEl ? String(labelEl.value || '').trim() : '';
+      var type = typeEl ? typeEl.value : 'text';
+      var optionsText = newOptionsEl ? String(newOptionsEl.value || '') : '';
       if (!label) {
         showAddFieldMsg('Escribe el nombre del campo.', true);
         if (labelEl) labelEl.focus();
+        return;
+      }
+      if (type === 'select' && !optionsText.trim()) {
+        showAddFieldMsg('Indica al menos una opción (una por línea).', true);
+        if (newOptionsEl) newOptionsEl.focus();
         return;
       }
       addFieldBtn.disabled = true;
       var body = new FormData();
       body.append('_csrf', csrfToken());
       body.append('label', label);
-      body.append('type', typeEl ? typeEl.value : 'text');
+      body.append('type', type);
       if (reqEl && String(reqEl.value) === '1') body.append('required', '1');
+      if (type === 'select') body.append('options_text', optionsText);
       fetch(<?= json_encode(url('/admin/campos-checkout')) ?>, {
         method: 'POST',
         body: body,
@@ -1055,6 +1117,9 @@ $renderMailTemplateField = static function (
           appendFieldCard(res.data.field);
           if (labelEl) labelEl.value = '';
           if (reqEl) reqEl.value = '1';
+          if (newOptionsEl) newOptionsEl.value = '';
+          if (typeEl) typeEl.value = 'text';
+          toggleOptionsWrap(typeEl, newOptionsWrap);
           showAddFieldMsg('Campo agregado al catálogo global y marcado en este grupo.', false);
           if (typeof syncJsonFromTabs === 'function') syncJsonFromTabs();
         })
@@ -1071,6 +1136,8 @@ $renderMailTemplateField = static function (
     document.getElementById('edit_checkout_field_label').value = btn.getAttribute('data-label') || '';
     document.getElementById('edit_checkout_field_type').value = btn.getAttribute('data-type') || 'text';
     document.getElementById('edit_checkout_field_required').value = btn.getAttribute('data-required') === '1' ? '1' : '0';
+    if (editOptionsEl) editOptionsEl.value = btn.getAttribute('data-options') || '';
+    toggleOptionsWrap(editTypeEl, editOptionsWrap);
     editPanel.hidden = false;
     if (editMsg) editMsg.style.display = 'none';
     editPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1096,8 +1163,13 @@ $renderMailTemplateField = static function (
       var label = String(document.getElementById('edit_checkout_field_label').value || '').trim();
       var type = document.getElementById('edit_checkout_field_type').value || 'text';
       var required = document.getElementById('edit_checkout_field_required').value === '1';
+      var optionsText = editOptionsEl ? String(editOptionsEl.value || '') : '';
       if (!code || !label) {
         showEditFieldMsg('Indica el nombre del campo.', true);
+        return;
+      }
+      if (type === 'select' && !optionsText.trim()) {
+        showEditFieldMsg('Indica al menos una opción (una por línea).', true);
         return;
       }
       saveEditBtn.disabled = true;
@@ -1107,6 +1179,7 @@ $renderMailTemplateField = static function (
       body.append('label', label);
       body.append('type', type);
       if (required) body.append('required', '1');
+      if (type === 'select') body.append('options_text', optionsText);
       fetch(<?= json_encode(url('/admin/campos-checkout/editar')) ?>, {
         method: 'POST',
         body: body,
@@ -1129,6 +1202,7 @@ $renderMailTemplateField = static function (
               editBtn.setAttribute('data-label', field.label);
               editBtn.setAttribute('data-type', field.type);
               editBtn.setAttribute('data-required', field.required ? '1' : '0');
+              editBtn.setAttribute('data-options', optionsToText(field.options || []));
             }
           }
           showEditFieldMsg('Campo actualizado en el catálogo global.', false);
