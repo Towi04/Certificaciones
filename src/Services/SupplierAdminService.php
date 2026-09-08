@@ -92,19 +92,54 @@ final class SupplierAdminService
             );
         }
         $this->assets->deletePublicFile($supplier['logo_path'] ?? null);
+        $this->assets->deletePublicFile($supplier['logo_wordmark_path'] ?? null);
         $this->suppliers->delete($id);
     }
 
-    /** @param array{tmp_name?:string,name?:string,error?:int,size?:int,type?:string} $file */
-    public function uploadLogo(int $id, array $file): string
+    public const LOGO_MARK = 'mark';
+    public const LOGO_WORDMARK = 'wordmark';
+
+    /**
+     * Ruta pública del logo según variante.
+     * mark = sin denominación; wordmark = con denominación.
+     * Si falta la pedida, hace fallback a la otra.
+     *
+     * @param array<string, mixed>|null $supplier
+     */
+    public static function logoPath(?array $supplier, string $variant = self::LOGO_MARK): ?string
+    {
+        if ($supplier === null) {
+            return null;
+        }
+        $mark = trim((string) ($supplier['logo_path'] ?? ''));
+        $word = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
+        if ($variant === self::LOGO_WORDMARK) {
+            if ($word !== '') {
+                return $word;
+            }
+
+            return $mark !== '' ? $mark : null;
+        }
+        if ($mark !== '') {
+            return $mark;
+        }
+
+        return $word !== '' ? $word : null;
+    }
+
+    /**
+     * @param array{tmp_name?:string,name?:string,error?:int,size?:int,type?:string} $file
+     */
+    public function uploadLogo(int $id, array $file, string $variant = self::LOGO_MARK): string
     {
         $supplier = $this->suppliers->find($id);
         if ($supplier === null) {
             throw new \InvalidArgumentException('Proveedor no encontrado.');
         }
+        $column = $variant === self::LOGO_WORDMARK ? 'logo_wordmark_path' : 'logo_path';
         $path = $this->assets->storeLogo('suppliers', $id, $file);
-        $old = $supplier['logo_path'] ?? null;
-        $this->suppliers->update($id, ['logo_path' => $path]);
+        $old = $supplier[$column] ?? null;
+        $this->suppliers->update($id, [$column => $path]);
         if (is_string($old) && $old !== $path) {
             $this->assets->deletePublicFile($old);
         }
@@ -112,14 +147,15 @@ final class SupplierAdminService
         return $path;
     }
 
-    public function clearLogo(int $id): void
+    public function clearLogo(int $id, string $variant = self::LOGO_MARK): void
     {
         $supplier = $this->suppliers->find($id);
         if ($supplier === null) {
             throw new \InvalidArgumentException('Proveedor no encontrado.');
         }
-        $old = $supplier['logo_path'] ?? null;
-        $this->suppliers->update($id, ['logo_path' => null]);
+        $column = $variant === self::LOGO_WORDMARK ? 'logo_wordmark_path' : 'logo_path';
+        $old = $supplier[$column] ?? null;
+        $this->suppliers->update($id, [$column => null]);
         $this->assets->deletePublicFile(is_string($old) ? $old : null);
     }
 
@@ -201,7 +237,7 @@ final class SupplierAdminService
 
     /**
      * @param array<string, mixed> $input
-     * @return array{name:string,code:string,website:?string,platform_url:?string,notes:?string,is_active:int}
+     * @return array{name:string,code:string,website:?string,is_active:int}
      */
     private function buildPayload(array $input, bool $requireCode): array
     {
@@ -220,15 +256,12 @@ final class SupplierAdminService
         }
 
         $website = trim((string) ($input['website'] ?? ''));
-        $platform = trim((string) ($input['platform_url'] ?? ''));
-        $notes = trim((string) ($input['notes'] ?? ''));
 
+        // Portal y notas viven en Accesos / plataformas (supplier_accounts), no aquí.
         return [
             'name' => $name,
             'code' => $code,
             'website' => $website !== '' ? $website : null,
-            'platform_url' => $platform !== '' ? $platform : null,
-            'notes' => $notes !== '' ? $notes : null,
             'is_active' => !empty($input['is_active']) ? 1 : 0,
         ];
     }

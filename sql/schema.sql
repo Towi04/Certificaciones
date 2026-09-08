@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
   code VARCHAR(40) NOT NULL,
   website VARCHAR(255) NULL,
   logo_path VARCHAR(255) NULL,
+  logo_wordmark_path VARCHAR(255) NULL,
   platform_url VARCHAR(255) NULL,
   notes TEXT NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,

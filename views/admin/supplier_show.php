@@ -18,9 +18,13 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
 <p class="meta"><a href="<?= e(url('/admin/proveedores')) ?>">← Proveedores</a></p>
 <div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap">
     <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
+        <?php
+        $headerLogo = \App\Services\SupplierAdminService::logoPath($supplier, \App\Services\SupplierAdminService::LOGO_MARK)
+            ?? \App\Services\SupplierAdminService::logoPath($supplier, \App\Services\SupplierAdminService::LOGO_WORDMARK);
+        ?>
         <div style="width:88px;height:88px;border:1px solid #e6ebf2;border-radius:16px;background:#f8fafc;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:.5rem">
-            <?php if (!empty($supplier['logo_path'])): ?>
-                <img src="<?= e(asset((string) $supplier['logo_path'])) ?>" alt="" style="max-width:100%;max-height:100%;object-fit:contain">
+            <?php if ($headerLogo): ?>
+                <img src="<?= e(asset($headerLogo)) ?>" alt="" style="max-width:100%;max-height:100%;object-fit:contain">
             <?php else: ?>
                 <span class="muted" style="font-size:.75rem;text-align:center">Sin logo</span>
             <?php endif; ?>
@@ -50,6 +54,10 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
     <form method="post" action="<?= e(url('/admin/proveedores/' . $sid)) ?>" class="panel" style="margin-top:.75rem;max-width:860px">
         <?= csrf_field() ?>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Datos del proveedor</h2>
+        <p class="muted" style="font-size:.82rem;margin-top:0">
+            Los enlaces a portales, usuarios y notas van en <strong>Accesos / plataformas</strong>
+            (solo si el proveedor te da acceso).
+        </p>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem">
             <label class="muted" style="<?= e($labelStyle) ?>">
                 Nombre *
@@ -65,16 +73,7 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                 <input type="url" name="website" value="<?= e((string) ($supplier['website'] ?? '')) ?>"
                        placeholder="https://..." style="<?= e($inputStyle) ?>">
             </label>
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Plataforma / portal de administración
-                <input type="url" name="platform_url" value="<?= e((string) ($supplier['platform_url'] ?? '')) ?>"
-                       placeholder="https://admin.proveedor.com/..." style="<?= e($inputStyle) ?>">
-            </label>
         </div>
-        <label class="muted" style="<?= e($labelStyle) ?>;margin-top:1rem">
-            Notas internas
-            <textarea name="notes" rows="3" style="<?= e($inputStyle) ?>"><?= e((string) ($supplier['notes'] ?? '')) ?></textarea>
-        </label>
         <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;font-weight:600;margin-top:.85rem">
             <input type="checkbox" name="is_active" value="1" <?= !empty($supplier['is_active']) ? 'checked' : '' ?>>
             Proveedor activo
@@ -84,22 +83,69 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
         </div>
     </form>
 
-    <form method="post" action="<?= e(url('/admin/proveedores/' . $sid . '/logo')) ?>" enctype="multipart/form-data"
-          class="panel" style="margin-top:1rem;max-width:860px">
-        <?= csrf_field() ?>
-        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Logo del proveedor</h2>
-        <label class="muted" style="<?= e($labelStyle) ?>;max-width:360px">
-            Imagen (JPG, PNG, WEBP, SVG · máx. 5 MB)
-            <input type="file" name="logo" accept=".jpg,.jpeg,.png,.webp,.gif,.svg,image/*">
-        </label>
-        <?php if (!empty($supplier['logo_path'])): ?>
-            <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;font-weight:600;margin-top:.75rem">
-                <input type="checkbox" name="remove_logo" value="1">
-                Quitar logo actual
-            </label>
-        <?php endif; ?>
-        <button class="btn btn-ghost" type="submit" style="margin-top:.75rem">Actualizar logo</button>
-    </form>
+    <?php
+    $logoMark = trim((string) ($supplier['logo_path'] ?? ''));
+    $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
+    ?>
+    <div class="panel" style="margin-top:1rem;max-width:860px">
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Logos del proveedor</h2>
+        <p class="muted" style="font-size:.82rem;margin-top:0">
+            Sube dos variantes para usarlas según el contexto:
+            <strong>sin denominación</strong> (solo símbolo) y
+            <strong>con denominación</strong> (símbolo + nombre).
+        </p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem">
+            <form method="post" action="<?= e(url('/admin/proveedores/' . $sid . '/logo')) ?>" enctype="multipart/form-data"
+                  style="border:1px solid #e6ebf2;border-radius:14px;padding:.9rem 1rem;background:#f8fafc">
+                <?= csrf_field() ?>
+                <input type="hidden" name="logo_variant" value="mark">
+                <h3 style="margin:0 0 .5rem;font-size:.92rem;color:var(--doceo-blue)">Sin denominación</h3>
+                <div style="width:100%;height:96px;border:1px dashed #cfd8e6;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:.5rem;margin-bottom:.65rem">
+                    <?php if ($logoMark !== ''): ?>
+                        <img src="<?= e(asset($logoMark)) ?>" alt="" style="max-width:100%;max-height:100%;object-fit:contain">
+                    <?php else: ?>
+                        <span class="muted" style="font-size:.78rem">Sin archivo</span>
+                    <?php endif; ?>
+                </div>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Imagen (JPG, PNG, WEBP, SVG · máx. 5 MB)
+                    <input type="file" name="logo" accept=".jpg,.jpeg,.png,.webp,.gif,.svg,image/*">
+                </label>
+                <?php if ($logoMark !== ''): ?>
+                    <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.85rem;font-weight:600;margin-top:.65rem">
+                        <input type="checkbox" name="remove_logo" value="1">
+                        Quitar este logo
+                    </label>
+                <?php endif; ?>
+                <button class="btn btn-ghost" type="submit" style="margin-top:.75rem">Guardar</button>
+            </form>
+
+            <form method="post" action="<?= e(url('/admin/proveedores/' . $sid . '/logo')) ?>" enctype="multipart/form-data"
+                  style="border:1px solid #e6ebf2;border-radius:14px;padding:.9rem 1rem;background:#f8fafc">
+                <?= csrf_field() ?>
+                <input type="hidden" name="logo_variant" value="wordmark">
+                <h3 style="margin:0 0 .5rem;font-size:.92rem;color:var(--doceo-blue)">Con denominación</h3>
+                <div style="width:100%;height:96px;border:1px dashed #cfd8e6;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:.5rem;margin-bottom:.65rem">
+                    <?php if ($logoWord !== ''): ?>
+                        <img src="<?= e(asset($logoWord)) ?>" alt="" style="max-width:100%;max-height:100%;object-fit:contain">
+                    <?php else: ?>
+                        <span class="muted" style="font-size:.78rem">Sin archivo</span>
+                    <?php endif; ?>
+                </div>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Imagen (JPG, PNG, WEBP, SVG · máx. 5 MB)
+                    <input type="file" name="logo" accept=".jpg,.jpeg,.png,.webp,.gif,.svg,image/*">
+                </label>
+                <?php if ($logoWord !== ''): ?>
+                    <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.85rem;font-weight:600;margin-top:.65rem">
+                        <input type="checkbox" name="remove_logo" value="1">
+                        Quitar este logo
+                    </label>
+                <?php endif; ?>
+                <button class="btn btn-ghost" type="submit" style="margin-top:.75rem">Guardar</button>
+            </form>
+        </div>
+    </div>
 </div>
 
 <div class="supplier-panel" data-panel="contacts" hidden>
@@ -183,8 +229,9 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
     <div class="panel" style="margin-top:.75rem;max-width:960px">
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Accesos a plataformas</h2>
         <p class="muted" style="font-size:.85rem;margin-top:0">
-            Guarda links, usuarios y contraseñas de portales donde administran exámenes.
+            Opcional: solo si el proveedor te da acceso a un portal. Guarda URL, usuario, contraseña y notas.
             Las contraseñas se cifran con <code>APP_KEY</code>.
+            Si no hay portal, deja esta sección vacía.
         </p>
 
         <?php if ($accounts !== []): ?>
