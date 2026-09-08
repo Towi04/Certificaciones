@@ -242,6 +242,19 @@ HTML;
         $toeflCertConfig = $standardCertConfig;
         $toeflCertConfig['pipeline_code'] = 'toefl_lf';
         $toeflCertConfig['initial_step_code'] = 'registro';
+        $toeflCertConfig['exam'] = [
+            'choose_at_checkout' => true,
+            'capture_zoom' => true,
+            'slot_minutes' => 30,
+            'validity_months' => 6,
+        ];
+        $toeflCertConfig['exam_instructions'] = [
+            'pdf_path' => '',
+            'pdf_url' => '',
+            'pdf_label' => 'Guía de acceso TOEFL',
+            'video_url' => '',
+            'video_label' => 'Video de instrucciones TOEFL',
+        ];
         $toeflCertConfig['provider_request'] = [
             'enabled' => true,
             'auto_send_on_payment' => false,

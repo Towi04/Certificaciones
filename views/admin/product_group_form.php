@@ -417,6 +417,94 @@ $renderMailTemplateField = static function (
         <p class="muted" style="font-size:.78rem;margin:.75rem 0 0">
             Vacaciones DOCEO: <a href="<?= e(url('/admin/vacaciones')) ?>">Administrar fechas globales</a>
         </p>
+
+        <hr style="border:0;border-top:1px solid #e6edf7;margin:1.25rem 0">
+
+        <h3 style="margin:0 0 .55rem;font-size:.98rem;color:var(--doceo-blue)">Accesos y Zoom</h3>
+        <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:1rem">
+            <input type="checkbox" name="exam_capture_zoom" value="1" style="margin-top:.2rem"
+                <?= !empty($extras['exam_capture_zoom']) ? 'checked' : '' ?>>
+            <span>
+                Mostrar columna <strong>Zoom</strong> en Operación (junto a folio/clave)
+                <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin-top:.15rem">
+                    Pensado para TOEFL / Lingua Franca. El enlace queda disponible como
+                    <code>{{zoom_url}}</code> en plantillas de correo.
+                </span>
+            </span>
+        </label>
+
+        <h3 style="margin:0 0 .55rem;font-size:.98rem;color:var(--doceo-blue)">Instrucciones para el alumno</h3>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
+            PDF o video (YouTube) que sueles mandar con cómo acceder al examen.
+            Al guardar aparecen como placeholders en Admin → Correos:
+            <code>{{instruction_pdf_url}}</code>,
+            <code>{{instruction_video_url}}</code>,
+            <code>{{instructions_html}}</code>.
+        </p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem">
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Etiqueta del PDF
+                <input type="text" name="instruction_pdf_label"
+                       value="<?= e((string) ($extras['instruction_pdf_label'] ?? '')) ?>"
+                       placeholder="Guía de acceso TOEFL"
+                       style="<?= e($inputStyle) ?>">
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                URL externa del PDF (Drive, etc.)
+                <input type="url" name="instruction_pdf_url"
+                       value="<?= e((string) ($extras['instruction_pdf_url'] ?? '')) ?>"
+                       placeholder="https://drive.google.com/…"
+                       style="<?= e($inputStyle) ?>">
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Subir PDF
+                <input type="hidden" name="instruction_pdf_path"
+                       value="<?= e((string) ($extras['instruction_pdf_path'] ?? '')) ?>">
+                <input type="file" name="instruction_pdf_file" accept=".pdf,application/pdf"
+                       style="<?= e($inputStyle) ?>">
+                <?php if (trim((string) ($extras['instruction_pdf_path'] ?? '')) !== ''): ?>
+                    <span style="font-weight:500;font-size:.75rem">
+                        Actual:
+                        <a href="<?= e(\App\Services\ExamInstructionAssets::absoluteUrl((string) $extras['instruction_pdf_path'])) ?>"
+                           target="_blank" rel="noopener">ver archivo</a>
+                    </span>
+                    <label style="display:flex;align-items:center;gap:.35rem;font-weight:500;font-size:.78rem;margin-top:.35rem">
+                        <input type="checkbox" name="instruction_clear_pdf" value="1"> Quitar PDF subido
+                    </label>
+                <?php endif; ?>
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Etiqueta del video
+                <input type="text" name="instruction_video_label"
+                       value="<?= e((string) ($extras['instruction_video_label'] ?? '')) ?>"
+                       placeholder="Video de instrucciones"
+                       style="<?= e($inputStyle) ?>">
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                URL del video (YouTube u otro)
+                <input type="url" name="instruction_video_url"
+                       value="<?= e((string) ($extras['instruction_video_url'] ?? '')) ?>"
+                       placeholder="https://www.youtube.com/watch?v=…"
+                       style="<?= e($inputStyle) ?>">
+            </label>
+        </div>
+        <?php
+        $instrPreview = \App\Services\ExamInstructionAssets::mailVars([
+            'exam_instructions' => [
+                'pdf_path' => (string) ($extras['instruction_pdf_path'] ?? ''),
+                'pdf_url' => (string) ($extras['instruction_pdf_url'] ?? ''),
+                'pdf_label' => (string) ($extras['instruction_pdf_label'] ?? ''),
+                'video_url' => (string) ($extras['instruction_video_url'] ?? ''),
+                'video_label' => (string) ($extras['instruction_video_label'] ?? ''),
+            ],
+        ]);
+        ?>
+        <?php if (trim((string) ($instrPreview['instructions_html'] ?? '')) !== ''): ?>
+            <div class="callout callout-info" style="margin-top:.9rem;font-size:.85rem">
+                <strong>Vista previa de {{instructions_html}}:</strong>
+                <?= $instrPreview['instructions_html'] ?>
+            </div>
+        <?php endif; ?>
     </div>
 
     <div class="group-panel" data-panel="rules" hidden>
@@ -828,8 +916,23 @@ $renderMailTemplateField = static function (
     base.exam = Object.assign({}, base.exam || {}, {
       choose_at_checkout: checked('exam_choose_at_checkout'),
       slot_minutes: Math.max(15, intVal('exam_slot_minutes', 30)),
-      validity_months: Math.max(1, Math.min(36, intVal('exam_validity_months', 6)))
+      validity_months: Math.max(1, Math.min(36, intVal('exam_validity_months', 6))),
+      capture_zoom: checked('exam_capture_zoom')
     });
+    var instrPdfPath = <?= json_encode((string) ($extras['instruction_pdf_path'] ?? ''), JSON_UNESCAPED_UNICODE) ?>;
+    if (checked('instruction_clear_pdf')) instrPdfPath = '';
+    var instr = {
+      pdf_path: instrPdfPath,
+      pdf_url: val('instruction_pdf_url', ''),
+      pdf_label: val('instruction_pdf_label', '') || 'Guía / PDF de instrucciones',
+      video_url: val('instruction_video_url', ''),
+      video_label: val('instruction_video_label', '') || 'Video de instrucciones'
+    };
+    if (instr.pdf_path || instr.pdf_url || instr.video_url || val('instruction_pdf_label', '') || val('instruction_video_label', '')) {
+      base.exam_instructions = instr;
+    } else {
+      delete base.exam_instructions;
+    }
     base.schedule = Object.assign({}, base.schedule || {}, {
       min_advance_days: Math.max(0, intVal('schedule_min_advance_days', 2)),
       available_365: checked('schedule_available_365'),

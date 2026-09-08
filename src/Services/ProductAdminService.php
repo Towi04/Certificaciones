@@ -162,11 +162,21 @@ final class ProductAdminService
     public function createGroup(array $input): int
     {
         $input = $this->storeProviderWorkbookFromInput($input, null);
+        $pdfFile = is_array($input['_instruction_pdf_file'] ?? null) ? $input['_instruction_pdf_file'] : null;
+        unset($input['_instruction_pdf_file']);
         $parsed = $this->buildGroupPayload($input, true);
         if ($this->groups->findByCode($parsed['code']) !== null) {
             throw new \InvalidArgumentException('Ya existe un grupo con el código ' . $parsed['code']);
         }
         $id = $this->groups->create($parsed);
+        if ($pdfFile !== null) {
+            $input['_instruction_pdf_file'] = $pdfFile;
+            $input['_group_id'] = $id;
+            $input = $this->storeInstructionPdfFromInput($input, $id);
+            $parsedAgain = $this->buildGroupPayload($input, false);
+            unset($parsedAgain['code']);
+            $this->groups->update($id, $parsedAgain);
+        }
         $this->savePipelineStepsFromInput($input);
 
         return $id;
@@ -179,6 +189,7 @@ final class ProductAdminService
             throw new \InvalidArgumentException('Grupo no encontrado.');
         }
         $input = $this->storeProviderWorkbookFromInput($input, $id);
+        $input = $this->storeInstructionPdfFromInput($input, $id);
         $parsed = $this->buildGroupPayload($input, false);
         unset($parsed['code']);
         $this->groups->update($id, $parsed);
@@ -233,6 +244,7 @@ final class ProductAdminService
         $reg = is_array($cfg['reglamento'] ?? null) ? $cfg['reglamento'] : [];
         $payments = is_array($cfg['payments'] ?? null) ? $cfg['payments'] : [];
         $msi = is_array($cfg['card_msi'] ?? null) ? $cfg['card_msi'] : [];
+        $instr = is_array($cfg['exam_instructions'] ?? null) ? $cfg['exam_instructions'] : [];
 
         $daysCfg = is_array($schedule['days'] ?? null) ? $schedule['days'] : null;
         if ($daysCfg === null) {
@@ -281,6 +293,7 @@ final class ProductAdminService
             'exam_choose_at_checkout' => (bool) ($exam['choose_at_checkout'] ?? true),
             'exam_slot_minutes' => max(15, (int) ($exam['slot_minutes'] ?? 30)),
             'exam_validity_months' => max(1, (int) ($exam['validity_months'] ?? 6)),
+            'exam_capture_zoom' => !empty($exam['capture_zoom']),
             'schedule_min_advance_days' => max(0, (int) ($schedule['min_advance_days'] ?? 2)),
             'schedule_available_365' => (bool) ($schedule['available_365'] ?? false),
             'schedule_days' => $days,
@@ -295,6 +308,11 @@ final class ProductAdminService
             'reglamento_template_path' => (string) ($reg['template_path'] ?? ''),
             'reglamento_source_url' => (string) ($reg['source_url'] ?? ''),
             'reglamento_doc_code' => (string) ($reg['doc_code'] ?? ''),
+            'instruction_pdf_path' => trim((string) ($instr['pdf_path'] ?? '')),
+            'instruction_pdf_url' => trim((string) ($instr['pdf_url'] ?? '')),
+            'instruction_pdf_label' => trim((string) ($instr['pdf_label'] ?? '')),
+            'instruction_video_url' => trim((string) ($instr['video_url'] ?? '')),
+            'instruction_video_label' => trim((string) ($instr['video_label'] ?? '')),
             'checkout_fields' => $checkoutFields,
             'checkout_field_required' => $checkoutFieldRequired,
             'pay_transfer' => in_array('transfer_proof', $order, true),
@@ -1062,7 +1080,32 @@ final class ProductAdminService
         $exam['slot_minutes'] = max(15, $slot);
         $validity = (int) ($input['exam_validity_months'] ?? ($exam['validity_months'] ?? 6));
         $exam['validity_months'] = max(1, min(36, $validity));
+        $exam['capture_zoom'] = !empty($input['exam_capture_zoom']);
         $config['exam'] = $exam;
+
+        $existingInstr = is_array($config['exam_instructions'] ?? null) ? $config['exam_instructions'] : [];
+        $pdfPath = trim((string) ($existingInstr['pdf_path'] ?? ''));
+        if (!empty($input['instruction_clear_pdf'])) {
+            $pdfPath = '';
+        }
+        if (!empty($input['instruction_pdf_path'])) {
+            $pdfPath = trim((string) $input['instruction_pdf_path']);
+        }
+        $pdfUrl = trim((string) ($input['instruction_pdf_url'] ?? ''));
+        $videoUrl = trim((string) ($input['instruction_video_url'] ?? ''));
+        $pdfLabel = trim((string) ($input['instruction_pdf_label'] ?? ''));
+        $videoLabel = trim((string) ($input['instruction_video_label'] ?? ''));
+        if ($pdfPath !== '' || $pdfUrl !== '' || $videoUrl !== '' || $pdfLabel !== '' || $videoLabel !== '') {
+            $config['exam_instructions'] = [
+                'pdf_path' => $pdfPath,
+                'pdf_url' => $pdfUrl,
+                'pdf_label' => $pdfLabel !== '' ? mb_substr($pdfLabel, 0, 120) : 'Guía / PDF de instrucciones',
+                'video_url' => $videoUrl,
+                'video_label' => $videoLabel !== '' ? mb_substr($videoLabel, 0, 120) : 'Video de instrucciones',
+            ];
+        } else {
+            unset($config['exam_instructions']);
+        }
 
         $schedule = is_array($config['schedule'] ?? null) ? $config['schedule'] : [];
         $schedule['min_advance_days'] = max(0, (int) ($input['schedule_min_advance_days'] ?? ($schedule['min_advance_days'] ?? 2)));
@@ -1434,6 +1477,24 @@ final class ProductAdminService
         $input['provider_request_workbook_path'] = $stored['path'];
         $input['provider_request_workbook_enabled'] = '1';
         $input['provider_request_enabled'] = '1';
+
+        return $input;
+    }
+
+    /**
+     * Guarda PDF público de instrucciones de examen y deja la ruta en el input.
+     *
+     * @param array<string, mixed> $input
+     * @return array<string, mixed>
+     */
+    private function storeInstructionPdfFromInput(array $input, int $groupId): array
+    {
+        $file = $input['_instruction_pdf_file'] ?? null;
+        if (!is_array($file) || (int) ($file['error'] ?? \UPLOAD_ERR_NO_FILE) === \UPLOAD_ERR_NO_FILE) {
+            return $input;
+        }
+
+        $input['instruction_pdf_path'] = ExamInstructionAssets::storePdfUpload($groupId, $file);
 
         return $input;
     }
