@@ -251,7 +251,12 @@ final class AdminController
     public function productCreateForm(): void
     {
         Auth::requireRole(['admin']);
-        view('admin/product_form', $this->productFormData(null));
+        $product = $this->mergeOldIntoProduct(null);
+        $data = $this->productFormData($product);
+        if (has_old_input() && is_array(old('catalog_filter_ids'))) {
+            $data['selectedFilterIds'] = array_map('intval', (array) old('catalog_filter_ids'));
+        }
+        view('admin/product_form', $data);
     }
 
     public function productCreate(): void
@@ -264,7 +269,7 @@ final class AdminController
             flash('success', 'Producto creado. Ya puedes subir logo/galería y asignarlo al catálogo.');
             redirect('/admin/productos/' . $id);
         } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
+            $this->formError($e->getMessage());
             redirect('/admin/productos/nuevo');
         }
     }
@@ -286,9 +291,13 @@ final class AdminController
             error_log('[Doceo] Product media admin: ' . $e->getMessage());
         }
 
+        $product = $this->mergeOldIntoProduct($product);
         $data = $this->productFormData($product);
+        if (has_old_input() && is_array(old('catalog_filter_ids'))) {
+            $data['selectedFilterIds'] = array_map('intval', (array) old('catalog_filter_ids'));
+        }
         $data['media'] = $media;
-        $data['title'] = 'Editar · ' . $product['name'];
+        $data['title'] = 'Editar · ' . ($product['name'] ?? '');
         view('admin/product_form', $data);
     }
 
@@ -307,7 +316,7 @@ final class AdminController
             (new CatalogFilterService())->syncProductFilters($productId, $_POST['catalog_filter_ids'] ?? []);
             flash('success', 'Producto actualizado.');
         } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
+            $this->formError($e->getMessage());
         }
         redirect('/admin/productos/' . $productId);
     }
@@ -439,8 +448,8 @@ final class AdminController
             ProductGroupRepository::defaultCheckoutConfig(true),
             JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
         );
-        view('admin/product_group_form', [
-            'title' => 'Nuevo grupo de proceso',
+        $view = [
+            'title' => 'Nuevo grupo de producto',
             'group' => null,
             'suppliers' => (new SupplierRepository())->all(),
             'defaultConfig' => $defaultConfig,
@@ -453,7 +462,8 @@ final class AdminController
                 static fn (array $t): bool => !array_key_exists('is_active', $t) || !empty($t['is_active'])
             )),
             'layout' => 'admin',
-        ]);
+        ];
+        view('admin/product_group_form', $this->mergeOldIntoGroupForm($view));
     }
 
     public function productGroupCreate(): void
@@ -469,7 +479,7 @@ final class AdminController
             flash('success', 'Grupo creado. Ya puedes asignarlo a productos.');
             redirect('/admin/grupos/' . $id);
         } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
+            $this->formError($e->getMessage());
             redirect('/admin/grupos/nuevo');
         }
     }
@@ -496,7 +506,7 @@ final class AdminController
             JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
         );
         $pipelineRepo = new \App\Repositories\PipelineRepository();
-        view('admin/product_group_form', [
+        $view = [
             'usedDocCodes' => (new ProductAdminService())->usedReglamentoDocCodes((int) $id),
             'title' => 'Editar grupo · ' . $group['name'],
             'group' => $group,
@@ -510,7 +520,12 @@ final class AdminController
                 static fn (array $t): bool => !array_key_exists('is_active', $t) || !empty($t['is_active'])
             )),
             'layout' => 'admin',
-        ]);
+        ];
+        $view = $this->mergeOldIntoGroupForm($view);
+        if (has_old_input() && trim((string) (($view['group']['name'] ?? ''))) !== '') {
+            $view['title'] = 'Editar grupo · ' . $view['group']['name'];
+        }
+        view('admin/product_group_form', $view);
     }
 
     public function productGroupUpdate(string $id): void
@@ -526,7 +541,7 @@ final class AdminController
             (new ProductAdminService())->updateGroup($groupId, $post);
             flash('success', 'Grupo actualizado. Los productos del grupo heredan estos cambios.');
         } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
+            $this->formError($e->getMessage());
         }
         redirect('/admin/grupos/' . $groupId);
     }
@@ -1372,9 +1387,19 @@ final class AdminController
     public function supplierCreateForm(): void
     {
         Auth::requireRole(['admin']);
+        $supplier = null;
+        $old = old_input();
+        if ($old !== []) {
+            $supplier = [
+                'name' => (string) ($old['name'] ?? ''),
+                'code' => (string) ($old['code'] ?? ''),
+                'website' => (string) ($old['website'] ?? ''),
+                'is_active' => !empty($old['is_active']) ? 1 : 0,
+            ];
+        }
         view('admin/supplier_form', [
             'title' => 'Nuevo proveedor',
-            'supplier' => null,
+            'supplier' => $supplier,
             'layout' => 'admin',
         ]);
     }
@@ -1388,7 +1413,7 @@ final class AdminController
             flash('success', 'Proveedor creado.');
             redirect('/admin/proveedores/' . $id);
         } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
+            $this->formError($e->getMessage());
             redirect('/admin/proveedores/nuevo');
         }
     }
@@ -1420,6 +1445,17 @@ final class AdminController
         if (is_array($revealed) && isset($revealed['id'])) {
             $revealedPasswords[(int) $revealed['id']] = (string) ($revealed['password'] ?? '');
         }
+        $old = old_input();
+        if ($old !== []) {
+            foreach (['name', 'code', 'website'] as $k) {
+                if (array_key_exists($k, $old)) {
+                    $supplier[$k] = $old[$k];
+                }
+            }
+            if (array_key_exists('is_active', $old) || has_old_input()) {
+                $supplier['is_active'] = !empty($old['is_active']) ? 1 : 0;
+            }
+        }
         view('admin/supplier_show', [
             'title' => 'Proveedor · ' . $supplier['name'],
             'supplier' => $supplier,
@@ -1443,7 +1479,7 @@ final class AdminController
             (new \App\Services\SupplierAdminService())->update($supplierId, $_POST);
             flash('success', 'Proveedor actualizado.');
         } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
+            $this->formError($e->getMessage());
         }
         redirect('/admin/proveedores/' . $supplierId);
     }
@@ -1588,9 +1624,19 @@ final class AdminController
     public function certifierCreateForm(): void
     {
         Auth::requireRole(['admin']);
+        $certifier = null;
+        $old = old_input();
+        if ($old !== []) {
+            $certifier = [
+                'name' => (string) ($old['name'] ?? ''),
+                'code' => (string) ($old['code'] ?? ''),
+                'website' => (string) ($old['website'] ?? ''),
+                'is_active' => !empty($old['is_active']) ? 1 : 0,
+            ];
+        }
         view('admin/certifier_form', [
             'title' => 'Nueva certificadora',
-            'certifier' => null,
+            'certifier' => $certifier,
             'layout' => 'admin',
         ]);
     }
@@ -1604,7 +1650,7 @@ final class AdminController
             flash('success', 'Certificadora creada.');
             redirect('/admin/certificadoras/' . $id);
         } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
+            $this->formError($e->getMessage());
             redirect('/admin/certificadoras/nueva');
         }
     }
@@ -1626,6 +1672,15 @@ final class AdminController
             static fn (array $p): bool => (int) ($p['certifier_id'] ?? 0) === $cid
         ));
         $products = array_slice($products, 0, 40);
+        $old = old_input();
+        if ($old !== []) {
+            foreach (['name', 'code', 'website'] as $k) {
+                if (array_key_exists($k, $old)) {
+                    $certifier[$k] = $old[$k];
+                }
+            }
+            $certifier['is_active'] = !empty($old['is_active']) ? 1 : 0;
+        }
         view('admin/certifier_show', [
             'title' => 'Certificadora · ' . $certifier['name'],
             'certifier' => $certifier,
@@ -1644,7 +1699,7 @@ final class AdminController
             (new \App\Services\CertifierAdminService())->update($certifierId, $_POST);
             flash('success', 'Certificadora actualizada.');
         } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
+            $this->formError($e->getMessage());
         }
         redirect('/admin/certificadoras/' . $certifierId);
     }
@@ -2062,9 +2117,19 @@ public function promoCode(): void
     public function catalogFilterCreateForm(): void
     {
         Auth::requireRole(['admin']);
+        $filter = null;
+        $old = old_input();
+        if ($old !== []) {
+            $filter = [
+                'label' => (string) ($old['label'] ?? ''),
+                'slug' => (string) ($old['slug'] ?? ''),
+                'sort_order' => (int) ($old['sort_order'] ?? 100),
+                'is_active' => !empty($old['is_active']) ? 1 : 0,
+            ];
+        }
         view('admin/catalog_filter_form', [
             'title' => 'Nuevo filtro',
-            'filter' => null,
+            'filter' => $filter,
             'layout' => 'admin',
         ]);
     }
@@ -2078,7 +2143,7 @@ public function promoCode(): void
             flash('success', 'Filtro creado.');
             redirect('/admin/filtros-catalogo/' . $id);
         } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
+            $this->formError($e->getMessage());
             redirect('/admin/filtros-catalogo/nuevo');
         }
     }
@@ -2092,6 +2157,15 @@ public function promoCode(): void
             view('errors/404', ['title' => 'Filtro no encontrado', 'layout' => 'admin']);
 
             return;
+        }
+        $old = old_input();
+        if ($old !== []) {
+            foreach (['label', 'slug', 'sort_order'] as $k) {
+                if (array_key_exists($k, $old)) {
+                    $filter[$k] = $old[$k];
+                }
+            }
+            $filter['is_active'] = !empty($old['is_active']) ? 1 : 0;
         }
         view('admin/catalog_filter_form', [
             'title' => 'Editar filtro · ' . $filter['label'],
@@ -2109,7 +2183,7 @@ public function promoCode(): void
             (new CatalogFilterService())->update($filterId, $_POST);
             flash('success', 'Filtro actualizado.');
         } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
+            $this->formError($e->getMessage());
         }
         redirect('/admin/filtros-catalogo/' . $filterId);
     }
@@ -2139,17 +2213,19 @@ public function promoCode(): void
             'trigger_mode' => 'manual',
             'required_fields_json' => null,
         ];
+        $routing = ['to' => '', 'cc' => ''];
+        [$template, $selectedPlaceholders, $routing] = $this->mergeOldIntoMailTemplate($template, $routing);
 
         view('admin/mail_template_edit', [
             'title' => 'Nueva plantilla de correo',
             'template' => $template,
-            'placeholders' => [],
-            'selectedPlaceholders' => [],
+            'placeholders' => $selectedPlaceholders,
+            'selectedPlaceholders' => $selectedPlaceholders,
             'availablePlaceholders' => MailTemplateService::availablePlaceholderOptions(),
-            'routing' => ['to' => '', 'cc' => ''],
+            'routing' => $routing,
             'requiresFixedRecipient' => false,
             'testEmailDefault' => trim((string) (Auth::user()['email'] ?? '')),
-            'previewVars' => [],
+            'previewVars' => MailTemplateService::sampleVarsForPlaceholders($selectedPlaceholders),
             'isUksSolicitud' => false,
             'isNew' => true,
             'layout' => 'admin',
@@ -2177,7 +2253,7 @@ public function promoCode(): void
             flash('success', 'Plantilla creada. Ya puedes editarla o probarla cuando el envío quede corregido.');
             redirect('/admin/correos/' . $code);
         } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
+            $this->formError($e->getMessage());
             redirect('/admin/correos/nueva');
         }
     }
@@ -2206,7 +2282,8 @@ public function promoCode(): void
         if ($code === MailTemplateService::UKS_SOLICITUD_LEGACY && $svc->find(MailTemplateService::UKS_SOLICITUD) !== null) {
             $effectiveCode = MailTemplateService::UKS_SOLICITUD;
         }
-        $selectedPlaceholders = MailTemplateService::placeholdersForTemplate($template);
+        $routing = $svc->routing($effectiveCode);
+        [$template, $selectedPlaceholders, $routing] = $this->mergeOldIntoMailTemplate($template, $routing);
         $previewVars = array_merge(
             MailTemplateService::sampleVarsForCode($code),
             MailTemplateService::sampleVarsForPlaceholders($selectedPlaceholders)
@@ -2218,9 +2295,9 @@ public function promoCode(): void
             'placeholders' => $selectedPlaceholders,
             'selectedPlaceholders' => $selectedPlaceholders,
             'availablePlaceholders' => MailTemplateService::availablePlaceholderOptions(),
-            'routing' => $svc->routing($effectiveCode),
+            'routing' => $routing,
             'requiresFixedRecipient' => $svc->requiresFixedRecipient($code),
-            'testEmailDefault' => trim((string) ($adminUser['email'] ?? '')),
+            'testEmailDefault' => old('test_email', trim((string) ($adminUser['email'] ?? ''))),
             'previewVars' => $previewVars,
             'isUksSolicitud' => $this->isUksSolicitudTemplate($code),
             'isNew' => false,
@@ -2324,7 +2401,7 @@ public function promoCode(): void
 
             flash('success', implode(' ', $messages));
         } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
+            $this->formError($e->getMessage());
         }
 
         redirect('/admin/correos/' . $effectiveCode);
@@ -2357,5 +2434,225 @@ public function promoCode(): void
         }
 
         return MailTemplateService::sanitizePlaceholders(array_values($raw));
+    }
+
+    /** Conserva POST y muestra el error al volver al formulario. */
+    private function formError(string $message, ?array $input = null): void
+    {
+        flash_form_error($message, $input);
+    }
+
+    /**
+     * @param array<string, mixed> $template
+     * @return array{0: array<string, mixed>, 1: list<string>, 2: array{to:string,cc:string}}
+     */
+    private function mergeOldIntoMailTemplate(array $template, array $routing = ['to' => '', 'cc' => '']): array
+    {
+        $old = old_input();
+        if ($old === []) {
+            $selected = MailTemplateService::placeholdersForTemplate($template);
+
+            return [$template, $selected, $routing];
+        }
+        foreach (['name', 'code', 'subject', 'body_html', 'trigger_mode'] as $key) {
+            if (array_key_exists($key, $old)) {
+                $template[$key] = $old[$key];
+            }
+        }
+        if (array_key_exists('is_active', $old) || $old !== []) {
+            $template['is_active'] = !empty($old['is_active']) ? 1 : 0;
+        }
+        $placeholders = [];
+        if (isset($old['placeholders']) && is_array($old['placeholders'])) {
+            $placeholders = MailTemplateService::sanitizePlaceholders(array_values($old['placeholders']));
+        } else {
+            $placeholders = MailTemplateService::placeholdersForTemplate($template);
+        }
+        if (array_key_exists('to_email', $old)) {
+            $routing['to'] = (string) $old['to_email'];
+        }
+        if (array_key_exists('cc_email', $old)) {
+            $routing['cc'] = (string) $old['cc_email'];
+        }
+
+        return [$template, $placeholders, $routing];
+    }
+
+    /**
+     * @param array<string, mixed>|null $product
+     * @return array<string, mixed>|null
+     */
+    private function mergeOldIntoProduct(?array $product): ?array
+    {
+        $old = old_input();
+        if ($old === []) {
+            return $product;
+        }
+        $product = is_array($product) ? $product : [];
+        $keys = [
+            'code', 'name', 'slug', 'type', 'category', 'audience', 'product_group_id',
+            'supplier_id', 'certifier_id', 'platform_type', 'moodle_course_id',
+            'access_months', 'sort_order', 'short_description', 'description',
+            'benefits_html', 'level_label', 'list_price', 'sale_price', 'partner_price',
+            'config_json',
+        ];
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $old)) {
+                $product[$key] = $old[$key];
+            }
+        }
+        $product['is_active'] = !empty($old['is_active']) ? 1 : 0;
+        $product['is_public'] = !empty($old['is_public']) ? 1 : 0;
+        $product['is_star'] = !empty($old['is_star']) ? 1 : 0;
+        $product['is_level_exam'] = !empty($old['is_level_exam']) ? 1 : 0;
+        $product['level_uses_cenni'] = !empty($old['level_uses_cenni']) ? 1 : 0;
+
+        return $product;
+    }
+
+    /**
+     * @param array<string, mixed> $view
+     * @return array<string, mixed>
+     */
+    private function mergeOldIntoGroupForm(array $view): array
+    {
+        $old = old_input();
+        if ($old === []) {
+            return $view;
+        }
+        $group = is_array($view['group'] ?? null) ? $view['group'] : [];
+        foreach (['name', 'code', 'supplier_id'] as $key) {
+            if (array_key_exists($key, $old)) {
+                $group[$key] = $old[$key];
+            }
+        }
+        $view['group'] = $group;
+
+        if (!empty($old['config_json']) && is_string($old['config_json'])) {
+            $pretty = $old['config_json'];
+            $decoded = json_decode($pretty, true);
+            if (is_array($decoded)) {
+                $pretty = (string) json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+            }
+            $view['defaultConfig'] = $pretty;
+            $view['extras'] = ProductAdminService::groupFormExtrasFromConfig($pretty);
+        }
+
+        $extras = is_array($view['extras'] ?? null) ? $view['extras'] : [];
+        $scalarExtras = [
+            'exam_slot_minutes', 'exam_validity_months', 'schedule_min_advance_days',
+            'schedule_weekdays_start', 'schedule_weekdays_end', 'schedule_saturday_start',
+            'schedule_saturday_end', 'reglamento_template_path', 'reglamento_source_url',
+            'reglamento_doc_code', 'pipeline_code', 'initial_step_code',
+        ];
+        foreach ($scalarExtras as $key) {
+            if (array_key_exists($key, $old)) {
+                $extras[$key] = $old[$key];
+            }
+        }
+        foreach ([
+            'exam_choose_at_checkout', 'schedule_available_365', 'reglamento_enabled',
+            'pay_transfer', 'pay_oxxo', 'pay_card', 'msi_enabled',
+            'email_registration_enabled', 'email_payment_enabled',
+        ] as $flag) {
+            if ($old !== []) {
+                // Si el POST no trae el checkbox, queda apagado.
+                if (str_starts_with($flag, 'email_') || str_starts_with($flag, 'pay_') || $flag === 'msi_enabled'
+                    || $flag === 'exam_choose_at_checkout' || $flag === 'schedule_available_365'
+                    || $flag === 'reglamento_enabled'
+                ) {
+                    // Solo override flags that exist as form fields when we have old input
+                    if (array_key_exists($flag, $old) || in_array($flag, [
+                        'exam_choose_at_checkout', 'schedule_available_365', 'reglamento_enabled',
+                        'pay_transfer', 'pay_oxxo', 'pay_card', 'msi_enabled',
+                        'email_registration_enabled', 'email_payment_enabled',
+                    ], true)) {
+                        $extras[$flag] = !empty($old[$flag]);
+                    }
+                }
+            }
+        }
+        if (isset($old['checkout_fields']) && is_array($old['checkout_fields'])) {
+            $extras['checkout_fields'] = array_values(array_map('strval', $old['checkout_fields']));
+        }
+        if (isset($old['msi_months']) && is_array($old['msi_months'])) {
+            $extras['msi_months'] = array_map('intval', $old['msi_months']);
+        }
+        if (isset($old['schedule_days']) && is_array($old['schedule_days'])) {
+            $days = [0 => false, 1 => false, 2 => false, 3 => false, 4 => false, 5 => false, 6 => false];
+            foreach ($old['schedule_days'] as $d => $on) {
+                $days[(int) $d] = !empty($on);
+            }
+            $extras['schedule_days'] = $days;
+        }
+        if (array_key_exists('email_registration_template', $old) || array_key_exists('email_payment_template', $old)) {
+            $emails = is_array($extras['emails'] ?? null) ? $extras['emails'] : [];
+            $reg = is_array($emails['student_registration'] ?? null) ? $emails['student_registration'] : [];
+            $pay = is_array($emails['student_payment_confirmed'] ?? null) ? $emails['student_payment_confirmed'] : [];
+            $reg['enabled'] = !empty($old['email_registration_enabled']);
+            $pay['enabled'] = !empty($old['email_payment_enabled']);
+            if (array_key_exists('email_registration_template', $old)) {
+                $reg['template_code'] = (string) $old['email_registration_template'];
+            }
+            if (array_key_exists('email_payment_template', $old)) {
+                $pay['template_code'] = (string) $old['email_payment_template'];
+            }
+            $emails['student_registration'] = $reg;
+            $emails['student_payment_confirmed'] = $pay;
+            $extras['emails'] = $emails;
+        }
+
+        if (isset($old['pipeline_steps']) && is_array($old['pipeline_steps'])) {
+            $steps = [];
+            $defs = [];
+            foreach ($old['pipeline_steps'] as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $code = \App\Services\GroupStepConfig::normalizeCode((string) ($row['code'] ?? ''));
+                if ($code === '') {
+                    $code = \App\Services\GroupStepConfig::normalizeCode((string) ($row['label'] ?? ''));
+                }
+                if ($code === '') {
+                    continue;
+                }
+                $steps[] = [
+                    'code' => $code,
+                    'label' => (string) ($row['label'] ?? $code),
+                    'actor' => (string) ($row['actor'] ?? 'admin'),
+                    'is_terminal' => !empty($row['is_terminal']),
+                ];
+                $defs[$code] = \App\Services\GroupStepConfig::normalizeDef($code, [
+                    'code' => $code,
+                    'label' => (string) ($row['label'] ?? $code),
+                    'actor' => (string) ($row['actor'] ?? 'admin'),
+                    'admin_only' => !empty($row['admin_only']),
+                    'ops_button' => !empty($row['ops_button']),
+                    'ops_label' => (string) ($row['ops_label'] ?? ''),
+                    'action' => (string) ($row['action'] ?? 'none'),
+                    'email' => [
+                        'enabled' => !empty($row['email_enabled']),
+                        'trigger' => (string) ($row['email_trigger'] ?? 'admin'),
+                        'template_code' => (string) ($row['email_template'] ?? ''),
+                        'audience' => '',
+                    ],
+                ]);
+            }
+            $extras['step_defs'] = $defs;
+            $pipelineCode = trim((string) ($old['pipeline_code'] ?? ($extras['pipeline_code'] ?? '')));
+            if ($pipelineCode !== '') {
+                $byCode = is_array($view['pipelineStepsByCode'] ?? null) ? $view['pipelineStepsByCode'] : [];
+                $byCode[$pipelineCode] = $steps;
+                $view['pipelineStepsByCode'] = $byCode;
+                $extras['pipeline_code'] = $pipelineCode;
+            }
+            if (array_key_exists('initial_step_code', $old)) {
+                $extras['initial_step_code'] = (string) $old['initial_step_code'];
+            }
+        }
+
+        $view['extras'] = $extras;
+
+        return $view;
     }
 }
