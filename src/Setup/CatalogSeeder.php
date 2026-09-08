@@ -247,6 +247,24 @@ HTML;
             'capture_zoom' => true,
             'slot_minutes' => 30,
             'validity_months' => 6,
+            'mode' => 'online',
+        ];
+        $toeflCertConfig['schedule'] = [
+            'mode' => 'fixed_slots',
+            'min_advance_days' => 7,
+            'days' => ['0' => false, '1' => false, '2' => false, '3' => false, '4' => false, '5' => false, '6' => true],
+            'checkout_help' => 'TOEFL se aplica los sábados a las 11:00 o 13:00. También puedes solicitar una fecha extraordinaria con costo extra.',
+            'fixed_slots' => [
+                ['dow' => 6, 'time' => '11:00', 'label' => 'Sábado 11:00'],
+                ['dow' => 6, 'time' => '13:00', 'label' => 'Sábado 13:00'],
+            ],
+            'extraordinary' => [
+                'enabled' => true,
+                'student_may_request' => true,
+                'requires_admin_approval' => true,
+                'surcharge_amount' => 500,
+                'surcharge_label' => 'Fecha extraordinaria TOEFL',
+            ],
         ];
         $toeflCertConfig['exam_instructions'] = [
             'pdf_path' => '',
@@ -293,6 +311,49 @@ HTML;
             'card_msi' => ['enabled' => false, 'months' => [1], 'min_amount' => 0],
         ];
 
+        $cambridgeFlexibleConfig = $standardCertConfig;
+        $cambridgeFlexibleConfig['pipeline_code'] = 'toefl_lf';
+        $cambridgeFlexibleConfig['initial_step_code'] = 'registro';
+        $cambridgeFlexibleConfig['exam'] = [
+            'choose_at_checkout' => true,
+            'slot_minutes' => 60,
+            'validity_months' => 6,
+            'mode' => 'online',
+        ];
+        $cambridgeFlexibleConfig['schedule'] = [
+            'mode' => 'window',
+            'min_advance_days' => 15,
+            'days' => ['0' => false, '1' => true, '2' => true, '3' => true, '4' => true, '5' => true, '6' => false],
+            'weekdays' => ['start' => '09:00', 'end' => '18:00'],
+            'saturday' => ['start' => '09:00', 'end' => '18:00'],
+            'checkout_help' => 'Cambridge (ventana): puedes presentar de lunes a viernes entre 9:00 y 18:00. Agenda con al menos 15 días de anticipación.',
+        ];
+
+        $cambridgeFixedConfig = $standardCertConfig;
+        $cambridgeFixedConfig['pipeline_code'] = 'toefl_lf';
+        $cambridgeFixedConfig['initial_step_code'] = 'registro';
+        $cambridgeFixedConfig['exam'] = [
+            'choose_at_checkout' => true,
+            'slot_minutes' => 30,
+            'validity_months' => 6,
+            'mode' => 'online',
+        ];
+        $cambridgeFixedConfig['schedule'] = [
+            'mode' => 'dated_list',
+            'min_advance_days' => 0,
+            'checkout_help' => 'Elige una convocatoria abierta. El proveedor fija fecha/hora y la fecha límite de inscripción.',
+            'sessions' => [
+                // El admin reemplaza estas fechas cada ~6 meses desde el grupo.
+                [
+                    'id' => 'demo_nov',
+                    'exam_date' => date('Y-m-d', strtotime('first saturday of November')),
+                    'exam_time' => '10:00',
+                    'registration_deadline' => date('Y-m-d', strtotime('first saturday of November -25 days')),
+                    'label' => 'Convocatoria ejemplo (editar)',
+                ],
+            ],
+        ];
+
         $gRepo = new ProductGroupRepository();
         $groupDefs = [
             'uks-elet' => [
@@ -314,6 +375,16 @@ HTML;
                 'name' => 'Lingua Franca · TOEFL',
                 'supplier_id' => $supplierIds['linguafranca'],
                 'config' => $toeflCertConfig,
+            ],
+            'cambridge-flexible' => [
+                'name' => 'Cambridge · Ventana Lun–Vie 9–18',
+                'supplier_id' => $supplierIds['creative'] ?? null,
+                'config' => $cambridgeFlexibleConfig,
+            ],
+            'cambridge-fixed' => [
+                'name' => 'Cambridge · Convocatorias fijas',
+                'supplier_id' => $supplierIds['creative'] ?? null,
+                'config' => $cambridgeFixedConfig,
             ],
             'etc-certs' => [
                 'name' => 'ETC · Certificaciones IT',

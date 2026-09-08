@@ -342,6 +342,36 @@ $renderMailTemplateField = static function (
             Pedir fecha y hora de aplicación en el checkout
         </label>
 
+        <label class="muted" style="<?= e($labelStyle) ?>;margin-bottom:.85rem">
+            Modo de agenda
+            <select name="schedule_mode" id="schedule_mode" style="<?= e($inputStyle) ?>">
+                <?php
+                $scheduleMode = (string) ($extras['schedule_mode'] ?? 'window');
+                $modeOptions = [
+                    'window' => 'Ventana continua (ELeT / Cambridge flexible Lun–Vie)',
+                    'fixed_slots' => 'Horarios fijos por día (TOEFL sábados 11:00 / 13:00)',
+                    'dated_list' => 'Lista de fechas del proveedor (Cambridge convocatorias)',
+                ];
+                foreach ($modeOptions as $modeVal => $modeLabel):
+                ?>
+                    <option value="<?= e($modeVal) ?>" <?= $scheduleMode === $modeVal ? 'selected' : '' ?>>
+                        <?= e($modeLabel) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <span style="font-weight:500;font-size:.75rem">
+                Todas guardan en <code>exam_date</code> / <code>exam_time</code> para los placeholders de correo.
+            </span>
+        </label>
+
+        <label class="muted" style="<?= e($labelStyle) ?>;margin-bottom:.85rem">
+            Texto de ayuda en checkout (opcional)
+            <input type="text" name="schedule_checkout_help"
+                   value="<?= e((string) ($extras['schedule_checkout_help'] ?? '')) ?>"
+                   placeholder="Ej. Elige un sábado a las 11:00 o 13:00…"
+                   style="<?= e($inputStyle) ?>">
+        </label>
+
         <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:1rem">
             <input type="checkbox" name="schedule_available_365" value="1" style="margin-top:.2rem"
                 <?= !empty($extras['schedule_available_365']) ? 'checked' : '' ?>>
@@ -417,6 +447,54 @@ $renderMailTemplateField = static function (
         <p class="muted" style="font-size:.78rem;margin:.75rem 0 0">
             Vacaciones DOCEO: <a href="<?= e(url('/admin/vacaciones')) ?>">Administrar fechas globales</a>
         </p>
+
+        <div id="schedule-mode-fixed" style="margin-top:1.1rem" <?= $scheduleMode === 'fixed_slots' ? '' : 'hidden' ?>>
+            <h3 style="margin:0 0 .45rem;font-size:.98rem;color:var(--doceo-blue)">Horarios fijos (TOEFL)</h3>
+            <p class="muted" style="font-size:.8rem;margin:0 0 .55rem">
+                Una línea por horario: <code>día|HH:MM|etiqueta</code>.
+                Día: 0=Dom … 6=Sáb. Ejemplo: <code>6|11:00|Sábado 11:00</code>
+            </p>
+            <textarea name="schedule_fixed_slots_text" rows="4"
+                      style="<?= e($inputStyle) ?>;font-family:ui-monospace,monospace;font-size:.82rem;width:100%;resize:vertical"
+                      placeholder="6|11:00|Sábado 11:00&#10;6|13:00|Sábado 13:00"><?= e((string) ($extras['schedule_fixed_slots_text'] ?? '')) ?></textarea>
+            <div style="margin-top:.75rem;padding:.75rem;border:1px solid #dbe3ef;border-radius:12px;background:#f8fafc">
+                <label class="muted" style="display:flex;align-items:center;gap:.45rem;font-size:.88rem;font-weight:600">
+                    <input type="checkbox" name="extraordinary_enabled" value="1"
+                        <?= !empty($extras['extraordinary_enabled']) ? 'checked' : '' ?>>
+                    Permitir fecha extraordinaria (con costo extra)
+                </label>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.65rem;margin-top:.65rem">
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Costo extra ($)
+                        <input type="number" step="0.01" min="0" name="extraordinary_surcharge"
+                               value="<?= e((string) ($extras['extraordinary_surcharge'] ?? '0')) ?>"
+                               style="<?= e($inputStyle) ?>">
+                    </label>
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Etiqueta del cargo
+                        <input type="text" name="extraordinary_label"
+                               value="<?= e((string) ($extras['extraordinary_label'] ?? 'Fecha extraordinaria')) ?>"
+                               style="<?= e($inputStyle) ?>">
+                    </label>
+                    <label class="muted" style="display:flex;align-items:flex-start;gap:.4rem;font-size:.85rem;font-weight:600;margin-top:1.4rem">
+                        <input type="checkbox" name="extraordinary_requires_admin" value="1" style="margin-top:.2rem"
+                            <?= !empty($extras['extraordinary_requires_admin']) ? 'checked' : '' ?>>
+                        Requiere autorización del admin
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div id="schedule-mode-dated" style="margin-top:1.1rem" <?= $scheduleMode === 'dated_list' ? '' : 'hidden' ?>>
+            <h3 style="margin:0 0 .45rem;font-size:.98rem;color:var(--doceo-blue)">Convocatorias del proveedor (Cambridge)</h3>
+            <p class="muted" style="font-size:.8rem;margin:0 0 .55rem">
+                Una línea por fecha: <code>fecha examen|hora|fecha límite inscripción|etiqueta</code>.
+                Ejemplo: <code>2026-11-15|10:00|2026-10-20|Noviembre</code>
+            </p>
+            <textarea name="schedule_sessions_text" rows="6"
+                      style="<?= e($inputStyle) ?>;font-family:ui-monospace,monospace;font-size:.82rem;width:100%;resize:vertical"
+                      placeholder="2026-11-15|10:00|2026-10-20|Noviembre&#10;2027-03-12|10:00|2027-02-15|Marzo"><?= e((string) ($extras['schedule_sessions_text'] ?? '')) ?></textarea>
+        </div>
 
         <hr style="border:0;border-top:1px solid #e6edf7;margin:1.25rem 0">
 
@@ -784,6 +862,20 @@ $renderMailTemplateField = static function (
   var hash = (location.hash || '').replace(/^#/, '');
   if (hash && document.querySelector('.group-panel[data-panel="' + hash + '"]')) activate(hash);
 
+  function syncScheduleModePanels() {
+    var modeEl = document.getElementById('schedule_mode');
+    var mode = modeEl ? String(modeEl.value || 'window') : 'window';
+    var fixed = document.getElementById('schedule-mode-fixed');
+    var dated = document.getElementById('schedule-mode-dated');
+    if (fixed) fixed.hidden = mode !== 'fixed_slots';
+    if (dated) dated.hidden = mode !== 'dated_list';
+  }
+  var scheduleModeSelect = document.getElementById('schedule_mode');
+  if (scheduleModeSelect) {
+    scheduleModeSelect.addEventListener('change', syncScheduleModePanels);
+    syncScheduleModePanels();
+  }
+
   var usedDocCodes = <?= json_encode($usedDocCodes, JSON_UNESCAPED_UNICODE) ?>;
   var currentGroupCode = <?= json_encode($groupCode, JSON_UNESCAPED_UNICODE) ?>;
   var docInput = document.getElementById('reglamento_doc_code');
@@ -933,9 +1025,13 @@ $renderMailTemplateField = static function (
     } else {
       delete base.exam_instructions;
     }
+    var scheduleModeEl = document.querySelector('[name="schedule_mode"]');
+    var scheduleMode = scheduleModeEl ? String(scheduleModeEl.value || 'window') : 'window';
     base.schedule = Object.assign({}, base.schedule || {}, {
+      mode: scheduleMode,
       min_advance_days: Math.max(0, intVal('schedule_min_advance_days', 2)),
       available_365: checked('schedule_available_365'),
+      checkout_help: val('schedule_checkout_help', ''),
       days: selectedDays(),
       weekdays: {
         start: val('schedule_weekdays_start', '10:00'),

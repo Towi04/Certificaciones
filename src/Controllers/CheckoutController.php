@@ -170,6 +170,9 @@ final class CheckoutController
                     ? [
                         'exam_date' => trim((string) ($_POST['exam_date'] ?? '')),
                         'exam_time' => trim((string) ($_POST['exam_time'] ?? '')),
+                        'exam_kind' => trim((string) ($_POST['exam_kind'] ?? 'regular')),
+                        'exam_session_id' => trim((string) ($_POST['exam_session_id'] ?? '')),
+                        'exam_allow_short_advance' => !empty($_POST['exam_allow_short_advance']),
                     ]
                     : null,
                 !empty($_POST['combo_id']) ? (int) $_POST['combo_id'] : null
@@ -362,27 +365,8 @@ final class CheckoutController
         }
 
         $service = new ExamScheduleService();
-        $rules = ExamScheduleService::scheduleRules($product);
         $date = isset($_GET['date']) && is_string($_GET['date']) ? trim($_GET['date']) : '';
-
-        if ($date === '') {
-            echo json_encode([
-                'ok' => true,
-                'min_date' => $service->minSelectableDate($product),
-                'min_advance_days' => (int) ($rules['min_advance_days'] ?? 0),
-                'dates' => $service->selectableDates($product),
-            ], JSON_UNESCAPED_UNICODE);
-
-            return;
-        }
-
-        $slots = $service->slotsForDate($product, $date);
-        echo json_encode([
-            'ok' => true,
-            'min_advance_days' => (int) ($rules['min_advance_days'] ?? 0),
-            'slots' => $slots,
-            'unavailable_reason' => $slots === [] ? $service->unavailabilityReason($product, $date) : null,
-        ], JSON_UNESCAPED_UNICODE);
+        echo json_encode($service->checkoutPayload($product, $date), JSON_UNESCAPED_UNICODE);
     }
 
     public function success(string $matricula): void

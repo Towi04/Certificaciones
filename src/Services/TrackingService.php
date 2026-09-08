@@ -860,6 +860,65 @@ final class TrackingService
         return $next;
     }
 
+    /**
+     * Metadatos de agenda (TOEFL extraordinaria, Cambridge sesión, etc.).
+     *
+     * @param array<string, mixed> $meta
+     */
+    public function mergeExamScheduleMeta(int $trackingId, array $meta): void
+    {
+        $tracking = $this->find($trackingId);
+        if ($tracking === null) {
+            throw new \InvalidArgumentException('Seguimiento no encontrado.');
+        }
+        $extra = [];
+        if (!empty($tracking['extra_json']) && is_string($tracking['extra_json'])) {
+            $decoded = json_decode($tracking['extra_json'], true);
+            $extra = is_array($decoded) ? $decoded : [];
+        } elseif (is_array($tracking['extra_json'] ?? null)) {
+            $extra = $tracking['extra_json'];
+        }
+        $current = is_array($extra['exam_schedule'] ?? null) ? $extra['exam_schedule'] : [];
+        $extra['exam_schedule'] = array_merge($current, $meta);
+        $this->pdo->prepare('UPDATE trackings SET extra_json = ? WHERE id = ?')
+            ->execute([json_encode($extra, JSON_UNESCAPED_UNICODE), $trackingId]);
+    }
+
+    /**
+     * Admin confirma o ajusta una fecha extraordinaria / anticipada.
+     *
+     * @param array{exam_date?:string,exam_time?:string,note?:string} $data
+     */
+    public function authorizeExamSchedule(int $trackingId, int $adminUserId, array $data = []): void
+    {
+        $tracking = $this->find($trackingId);
+        if ($tracking === null) {
+            throw new \InvalidArgumentException('Seguimiento no encontrado.');
+        }
+        if (array_key_exists('exam_date', $data) || array_key_exists('exam_time', $data)) {
+            $this->saveExamSchedule($trackingId, [
+                'exam_date' => $data['exam_date'] ?? ($tracking['exam_date'] ?? null),
+                'exam_time' => $data['exam_time'] ?? ($tracking['exam_time'] ?? null),
+            ], $adminUserId);
+        }
+        $this->mergeExamScheduleMeta($trackingId, [
+            'status' => 'confirmed',
+            'requires_admin' => false,
+            'authorized_by' => $adminUserId,
+            'authorized_at' => date('c'),
+            'admin_note' => trim((string) ($data['note'] ?? '')),
+        ]);
+        $this->pdo->prepare('UPDATE trackings SET status = ? WHERE id = ?')
+            ->execute(['waiting_student', $trackingId]);
+        $this->log(
+            $trackingId,
+            'examen',
+            'Fecha de examen autorizada por admin'
+                . (!empty($data['note']) ? (': ' . trim((string) $data['note'])) : ''),
+            $adminUserId
+        );
+    }
+
     private function normalizeDate(mixed $value): ?string
     {
         $value = trim((string) ($value ?? ''));
