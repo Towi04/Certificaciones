@@ -26,8 +26,9 @@ $configGroups = [
         'label' => 'Operadores',
         'items' => [
             ['href' => '/admin/partners', 'label' => 'Partners', 'icon' => 'partners', 'match' => '/partners'],
+            // Certificadoras: pestaña dentro de Proveedores (/admin/proveedores?tab=certificadoras)
             ['href' => '/admin/proveedores', 'label' => 'Proveedores', 'icon' => 'suppliers', 'match' => '/proveedores'],
-            // Certificadoras vive como pestaña dentro de Proveedores (/admin/proveedores?tab=certificadoras)        ],
+        ],
     ],
     [
         'label' => 'Automatización',
