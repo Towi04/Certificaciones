@@ -2226,7 +2226,12 @@ public function promoCode(): void
             'required_fields_json' => null,
         ];
         $routing = ['to' => '', 'cc' => ''];
-        [$template, $selectedPlaceholders, $routing] = $this->mergeOldIntoMailTemplate($template, $routing);
+        $audience = 'student';
+        [$template, $selectedPlaceholders, $routing, $audience] = $this->mergeOldIntoMailTemplate(
+            $template,
+            $routing,
+            $audience
+        );
 
         view('admin/mail_template_edit', [
             'title' => 'Nueva plantilla de correo',
@@ -2235,7 +2240,8 @@ public function promoCode(): void
             'selectedPlaceholders' => $selectedPlaceholders,
             'availablePlaceholders' => MailTemplateService::availablePlaceholderOptions(),
             'routing' => $routing,
-            'requiresFixedRecipient' => false,
+            'audience' => $audience,
+            'requiresFixedRecipient' => $audience === 'provider',
             'testEmailDefault' => trim((string) (Auth::user()['email'] ?? '')),
             'previewVars' => MailTemplateService::sampleVarsForPlaceholders($selectedPlaceholders),
             'isUksSolicitud' => false,
@@ -2251,8 +2257,23 @@ public function promoCode(): void
         $svc = new MailTemplateService();
         $placeholders = $this->mailTemplatePlaceholdersFromPost();
         $code = trim((string) ($_POST['code'] ?? ''));
+        $audience = ((string) ($_POST['audience'] ?? 'student')) === 'provider' ? 'provider' : 'student';
 
         try {
+            if ($audience === 'provider') {
+                $toEmail = trim((string) ($_POST['to_email'] ?? ''));
+                if ($toEmail === '' || !filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+                    throw new \InvalidArgumentException('Indica un correo válido en Para (proveedor).');
+                }
+                $ccEmail = trim((string) ($_POST['cc_email'] ?? ''));
+                if ($ccEmail !== '' && !preg_match('/^[^@\s]+@[^@\s]+\.[^@\s]+(\s*,\s*[^@\s]+@[^@\s]+\.[^@\s]+)*$/', $ccEmail)) {
+                    throw new \InvalidArgumentException('CC inválido. Usa uno o más correos separados por coma.');
+                }
+            } else {
+                $toEmail = '';
+                $ccEmail = '';
+            }
+
             $svc->create(
                 $code,
                 trim((string) ($_POST['name'] ?? '')),
@@ -2262,7 +2283,11 @@ public function promoCode(): void
                 $placeholders,
                 (string) ($_POST['trigger_mode'] ?? 'manual')
             );
-            flash('success', 'Plantilla creada. Ya puedes editarla o probarla cuando el envío quede corregido.');
+            $svc->saveAudience($code, $audience);
+            if ($audience === 'provider') {
+                $svc->saveRouting($code, $toEmail, $ccEmail);
+            }
+            flash('success', 'Plantilla creada. Ya puedes editarla o probarla.');
             redirect('/admin/correos/' . $code);
         } catch (\Throwable $e) {
             $this->formError($e->getMessage());
@@ -2295,7 +2320,12 @@ public function promoCode(): void
             $effectiveCode = MailTemplateService::UKS_SOLICITUD;
         }
         $routing = $svc->routing($effectiveCode);
-        [$template, $selectedPlaceholders, $routing] = $this->mergeOldIntoMailTemplate($template, $routing);
+        $audience = $svc->audience($effectiveCode);
+        [$template, $selectedPlaceholders, $routing, $audience] = $this->mergeOldIntoMailTemplate(
+            $template,
+            $routing,
+            $audience
+        );
         $previewVars = array_merge(
             MailTemplateService::sampleVarsForCode($code),
             MailTemplateService::sampleVarsForPlaceholders($selectedPlaceholders)
@@ -2308,7 +2338,8 @@ public function promoCode(): void
             'selectedPlaceholders' => $selectedPlaceholders,
             'availablePlaceholders' => MailTemplateService::availablePlaceholderOptions(),
             'routing' => $routing,
-            'requiresFixedRecipient' => $svc->requiresFixedRecipient($code),
+            'audience' => $audience,
+            'requiresFixedRecipient' => $audience === 'provider',
             'testEmailDefault' => old('test_email', trim((string) ($adminUser['email'] ?? ''))),
             'previewVars' => $previewVars,
             'isUksSolicitud' => $this->isUksSolicitudTemplate($code),
@@ -2325,7 +2356,8 @@ public function promoCode(): void
         $svc = new MailTemplateService();
         $svc->ensureDefaults();
         $svc->migrateUksSolicitudTemplate();
-        $requiresFixed = $svc->requiresFixedRecipient($code);
+        $audience = ((string) ($_POST['audience'] ?? '')) === 'provider' ? 'provider' : 'student';
+        $requiresFixed = $audience === 'provider';
         $effectiveCode = $code;
         if ($code === MailTemplateService::UKS_SOLICITUD_LEGACY && $svc->find(MailTemplateService::UKS_SOLICITUD) !== null) {
             $effectiveCode = MailTemplateService::UKS_SOLICITUD;
@@ -2340,11 +2372,12 @@ public function promoCode(): void
                 !empty($_POST['is_active']),
                 $placeholders
             );
+            $svc->saveAudience($effectiveCode, $audience);
 
             if ($requiresFixed) {
                 $toEmail = trim((string) ($_POST['to_email'] ?? ''));
                 if ($toEmail === '' || !filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
-                    throw new \InvalidArgumentException('Indica un correo válido en Para (destino UKS).');
+                    throw new \InvalidArgumentException('Indica un correo válido en Para (proveedor).');
                 }
                 $ccEmail = trim((string) ($_POST['cc_email'] ?? ''));
                 if ($ccEmail !== '' && !preg_match('/^[^@\s]+@[^@\s]+\.[^@\s]+(\s*,\s*[^@\s]+@[^@\s]+\.[^@\s]+)*$/', $ccEmail)) {
@@ -2456,15 +2489,20 @@ public function promoCode(): void
 
     /**
      * @param array<string, mixed> $template
-     * @return array{0: array<string, mixed>, 1: list<string>, 2: array{to:string,cc:string}}
+     * @param array{to:string,cc:string} $routing
+     * @return array{0: array<string, mixed>, 1: list<string>, 2: array{to:string,cc:string}, 3: string}
      */
-    private function mergeOldIntoMailTemplate(array $template, array $routing = ['to' => '', 'cc' => '']): array
-    {
+    private function mergeOldIntoMailTemplate(
+        array $template,
+        array $routing = ['to' => '', 'cc' => ''],
+        string $audience = 'student'
+    ): array {
+        $audience = $audience === 'provider' ? 'provider' : 'student';
         $old = old_input();
         if ($old === []) {
             $selected = MailTemplateService::placeholdersForTemplate($template);
 
-            return [$template, $selected, $routing];
+            return [$template, $selected, $routing, $audience];
         }
         foreach (['name', 'code', 'subject', 'body_html', 'trigger_mode'] as $key) {
             if (array_key_exists($key, $old)) {
@@ -2486,8 +2524,11 @@ public function promoCode(): void
         if (array_key_exists('cc_email', $old)) {
             $routing['cc'] = (string) $old['cc_email'];
         }
+        if (array_key_exists('audience', $old)) {
+            $audience = ((string) $old['audience']) === 'provider' ? 'provider' : 'student';
+        }
 
-        return [$template, $placeholders, $routing];
+        return [$template, $placeholders, $routing, $audience];
     }
 
     /**
