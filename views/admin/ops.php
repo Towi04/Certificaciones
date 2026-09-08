@@ -237,7 +237,10 @@ $q = (string) ($filters['q'] ?? '');
                                         <input type="hidden" name="return_ops" value="1">
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
-                                        <button class="<?= e($btnClass) ?>" type="submit">
+                                        <button class="<?= e($btnClass) ?>" type="submit"
+                                            title="<?= !empty($r['is_package'])
+                                                ? 'Confirma el pago único del paquete; aplica a todos los productos de la matrícula'
+                                                : 'Confirmar pago' ?>">
                                             <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
                                         </button>
                                     </form>
@@ -349,6 +352,19 @@ $q = (string) ($filters['q'] ?? '');
                                     </form>
                                 <?php endif; ?>
                             <?php endforeach; ?>
+
+                            <?php if (!empty($r['payment_confirm_on_sibling']) && !empty($r['needs_payment'])): ?>
+                                <span class="ops-mini-ok muted" title="El pago se confirma una sola vez en otra fila del mismo paquete">
+                                    Mismo pago · matrícula <?= e((string) ($r['matricula'] ?? '')) ?>
+                                </span>
+                                <?php if (!empty($r['payment_proof_path'])): ?>
+                                    <button type="button" class="btn btn-ghost btn-sm ops-proof-btn"
+                                            data-proof-url="<?= e(url('/admin/compras/' . $pid . '/comprobante')) ?>"
+                                            data-proof-title="Comprobante alumno · <?= e((string) ($r['matricula'] ?? '')) ?>">
+                                        Ver comprobante alumno
+                                    </button>
+                                <?php endif; ?>
+                            <?php endif; ?>
 
                             <?php if (!empty($r['show_folio_fields']) && empty(array_filter($opsButtons, static fn ($b) => ($b['action'] ?? '') === \App\Services\GroupStepConfig::ACTION_EXAM_ACCESS))): ?>
                                 <form method="post" action="<?= e(url('/admin/operacion/' . $tid . '/accesos')) ?>"
