@@ -34,6 +34,7 @@ $configGroups = [
         'label' => 'Automatización',
         'items' => [
             ['href' => '/admin/correos', 'label' => 'Plantillas correo', 'icon' => 'mail', 'match' => '/correos'],
+            ['href' => '/admin/inventario', 'label' => 'Inventario códigos', 'icon' => 'export', 'match' => '/inventario'],
             ['href' => '/admin/vacaciones', 'label' => 'Vacaciones', 'icon' => 'calendar', 'match' => '/vacaciones'],
             ['href' => '/admin/promo', 'label' => 'Promo DOCEO', 'icon' => 'promo', 'match' => '/promo'],
             ['href' => '/admin/exportaciones', 'label' => 'UKS import/export', 'icon' => 'export', 'match' => '/exportaciones'],

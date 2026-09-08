@@ -311,6 +311,19 @@ final class ProductAdminService
             'extraordinary_requires_admin' => array_key_exists('requires_admin_approval', $schedule['extraordinary'] ?? [])
                 ? !empty(($schedule['extraordinary'] ?? [])['requires_admin_approval'])
                 : true,
+            'inventory_enabled' => !empty(($cfg['inventory'] ?? [])['enabled']),
+            'inventory_send_days_before' => max(0, (int) (($cfg['inventory'] ?? [])['send_access_days_before'] ?? 3)),
+            'inventory_assign_within_days' => max(0, (int) (($cfg['inventory'] ?? [])['assign_within_days'] ?? 3)),
+            'inventory_low_stock_threshold' => max(0, (int) (($cfg['inventory'] ?? [])['low_stock_threshold'] ?? 5)),
+            'inventory_student_months' => max(1, (int) (($cfg['inventory'] ?? [])['student_validity_months'] ?? 6)),
+            'inventory_provider_months' => max(1, (int) (($cfg['inventory'] ?? [])['provider_validity_months'] ?? 12)),
+            'inventory_reallocate_enabled' => array_key_exists('reallocate_enabled', $cfg['inventory'] ?? [])
+                ? !empty(($cfg['inventory'] ?? [])['reallocate_enabled'])
+                : true,
+            'inventory_reallocate_min_future_days' => max(1, (int) (($cfg['inventory'] ?? [])['reallocate_min_future_days'] ?? 14)),
+            'inventory_access_mail_template' => (string) (($cfg['inventory'] ?? [])['access_mail_template'] ?? 'student_inventory_exam_access'),
+            'inventory_results_mail_template' => (string) (($cfg['inventory'] ?? [])['results_mail_template'] ?? 'student_results_cenni'),
+            'inventory_low_stock_email' => (string) (($cfg['inventory'] ?? [])['low_stock_notify_email'] ?? ''),
             'reglamento_enabled' => $reg !== [] && (
                 trim((string) ($reg['template_path'] ?? '')) !== ''
                 || trim((string) ($reg['source_url'] ?? '')) !== ''
@@ -1174,6 +1187,26 @@ final class ProductAdminService
             }
         }
         $config['schedule'] = $schedule;
+
+        if (!empty($input['inventory_enabled'])) {
+            $config['inventory'] = [
+                'enabled' => true,
+                'send_access_days_before' => max(0, (int) ($input['inventory_send_days_before'] ?? 3)),
+                'assign_within_days' => max(0, (int) ($input['inventory_assign_within_days'] ?? 3)),
+                'low_stock_threshold' => max(0, (int) ($input['inventory_low_stock_threshold'] ?? 5)),
+                'student_validity_months' => max(1, (int) ($input['inventory_student_months'] ?? 6)),
+                'provider_validity_months' => max(1, (int) ($input['inventory_provider_months'] ?? 12)),
+                'reallocate_enabled' => !empty($input['inventory_reallocate_enabled']),
+                'reallocate_min_future_days' => max(1, (int) ($input['inventory_reallocate_min_future_days'] ?? 14)),
+                'access_mail_template' => trim((string) ($input['inventory_access_mail_template'] ?? ''))
+                    ?: 'student_inventory_exam_access',
+                'results_mail_template' => trim((string) ($input['inventory_results_mail_template'] ?? ''))
+                    ?: 'student_results_cenni',
+                'low_stock_notify_email' => trim((string) ($input['inventory_low_stock_email'] ?? '')),
+            ];
+        } else {
+            unset($config['inventory']);
+        }
 
         $order = [];
         if (!empty($input['pay_transfer'])) {

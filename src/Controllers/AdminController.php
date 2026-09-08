@@ -23,6 +23,7 @@ use App\Services\ExportService;
 use App\Services\GroupStepConfig;
 use App\Services\ImportService;
 use App\Integrations\Mailer;
+use App\Services\InventoryService;
 use App\Services\MailTemplateService;
 use App\Services\ProductAdminService;
 use App\Services\ExamScheduleService;
@@ -897,6 +898,7 @@ final class AdminController
             'isEletUks' => $isEletUks,
             'eletExamUrl' => $uksElet->examUrl(),
             'accessKeyHint' => $accessKeyHint,
+            'inventoryEnabled' => InventoryService::isEnabledForProduct($tracking),
             'layout' => 'admin',
         ]);
     }
@@ -1097,6 +1099,29 @@ final class AdminController
         }
         if (!empty($_POST['return_ops'])) {
             redirect('/admin' . $this->opsReturnQuery());
+        }
+        redirect('/admin/seguimientos/' . $trackingId);
+    }
+
+    public function trackingSaveResults(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        try {
+            $notify = !empty($_POST['notify']);
+            (new TrackingService())->saveResults($trackingId, [
+                'results_level' => trim((string) ($_POST['results_level'] ?? '')),
+                'results_score' => $_POST['results_score'] ?? '',
+                'results_url' => trim((string) ($_POST['results_url'] ?? '')),
+                'cenni_folio' => trim((string) ($_POST['cenni_folio'] ?? '')),
+                'notify' => $notify,
+            ], (int) Auth::id());
+            flash('success', $notify
+                ? 'Resultados guardados y correo enviado al alumno.'
+                : 'Resultados guardados (sin correo).');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
         }
         redirect('/admin/seguimientos/' . $trackingId);
     }
@@ -2168,6 +2193,96 @@ public function promoCode(): void
         }
 
         redirect('/admin/promo');
+    }
+
+    public function inventoryIndex(): void
+    {
+        Auth::requireRole(['admin']);
+        $products = (new \App\Repositories\ProductRepository())->adminList(null, 500, 0);
+        $invRepo = new \App\Repositories\InventoryRepository();
+        $rows = [];
+        foreach ($products as $p) {
+            $cfg = InventoryService::configForProduct($p);
+            if (empty($cfg['enabled'])) {
+                // También mostrar si ya tiene códigos aunque el flag se apagara.
+                $stock = $invRepo->stockCounts((int) $p['id']);
+                if ($stock['total'] < 1) {
+                    continue;
+                }
+            } else {
+                $stock = $invRepo->stockCounts((int) $p['id']);
+            }
+            $rows[] = $p + [
+                'stock' => $stock,
+                'low_stock_threshold' => (int) $cfg['low_stock_threshold'],
+            ];
+        }
+        view('admin/inventory', [
+            'title' => 'Inventario de códigos',
+            'products' => $rows,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function inventoryProduct(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $productId = (int) $id;
+        $product = (new \App\Repositories\ProductRepository())->find($productId);
+        if ($product === null) {
+            http_response_code(404);
+            view('errors/404', ['title' => 'Producto no encontrado', 'layout' => 'admin']);
+
+            return;
+        }
+        $invRepo = new \App\Repositories\InventoryRepository();
+        view('admin/inventory_product', [
+            'title' => 'Inventario · ' . (string) ($product['name'] ?? ''),
+            'product' => $product,
+            'stock' => $invRepo->stockCounts($productId),
+            'lots' => $invRepo->lotsForProduct($productId),
+            'codes' => $invRepo->codesForProduct($productId, null, 150),
+            'pendingRestock' => $invRepo->pendingRestockTrackings($productId),
+            'inventoryConfig' => InventoryService::configForProduct($product),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function inventoryImportLot(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $productId = (int) $id;
+        try {
+            $rows = InventoryService::parseCodesText((string) ($_POST['codes_text'] ?? ''));
+            if ($rows === []) {
+                throw new \InvalidArgumentException('Pega al menos un folio,clave por línea.');
+            }
+            $result = (new InventoryService())->importLot(
+                $productId,
+                $rows,
+                trim((string) ($_POST['label'] ?? '')),
+                trim((string) ($_POST['purchased_at'] ?? '')) ?: null,
+                isset($_POST['cost_total']) && $_POST['cost_total'] !== ''
+                    ? (float) $_POST['cost_total']
+                    : null,
+                max(0, (int) ($_POST['low_stock_threshold'] ?? 5)),
+                (int) Auth::id()
+            );
+            $msg = 'Importados ' . $result['imported'] . ' códigos';
+            if ($result['skipped'] > 0) {
+                $msg .= ', omitidos ' . $result['skipped'];
+            }
+            if ($result['errors'] !== []) {
+                $msg .= ' · ' . $result['errors'][0];
+                flash('error', $msg);
+            } else {
+                flash('success', $msg . '.');
+            }
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/inventario/' . $productId);
     }
 
     private function isUksSolicitudTemplate(string $code): bool

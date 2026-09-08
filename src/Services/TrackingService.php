@@ -717,6 +717,28 @@ final class TrackingService
                     );
                 }
             }
+
+            // Inventario (iTEP, etc.): asignar folio/clave o programar envío N días antes.
+            if ($productRow !== null && InventoryService::isEnabledForProduct($productRow)) {
+                try {
+                    $invResult = (new InventoryService())->processTracking($trackingId, $adminUserId);
+                    $this->log(
+                        $trackingId,
+                        'codigos',
+                        'Inventario tras pago: ' . ($invResult['action'] ?? 'ok')
+                            . (!empty($invResult['detail']) ? (' · ' . $invResult['detail']) : ''),
+                        $adminUserId
+                    );
+                } catch (\Throwable $e) {
+                    error_log('[Doceo] Inventario tras pago: ' . $e->getMessage());
+                    $this->log(
+                        $trackingId,
+                        'codigos',
+                        'Inventario falló tras pago: ' . $e->getMessage(),
+                        $adminUserId
+                    );
+                }
+            }
         }
     }
 
@@ -810,6 +832,29 @@ final class TrackingService
                 // Pipelines sin paso examen (cursos): solo guarda fechas
             }
         }
+
+        if ($scheduleChanged) {
+            $fresh = $this->find($trackingId);
+            if ($fresh !== null) {
+                $product = [
+                    'id' => $fresh['product_id'] ?? 0,
+                    'config_json' => $fresh['config_json'] ?? null,
+                    'group_config_json' => $fresh['group_config_json'] ?? null,
+                    'type' => $fresh['product_type'] ?? '',
+                    'code' => $fresh['product_code'] ?? '',
+                    'name' => $fresh['product_name'] ?? '',
+                ];
+                if (InventoryService::isEnabledForProduct($product)
+                    && (string) ($fresh['purchase_status'] ?? '') === 'paid'
+                ) {
+                    try {
+                        (new InventoryService())->processTracking($trackingId, $actorUserId);
+                    } catch (\Throwable $e) {
+                        error_log('[Doceo] Inventario tras cambio de fecha: ' . $e->getMessage());
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -858,6 +903,98 @@ final class TrackingService
             ->execute([json_encode($extra, JSON_UNESCAPED_UNICODE), $trackingId]);
 
         return $next;
+    }
+
+    /**
+     * Publica resultados (y opcional CENNI) y dispara correo al alumno.
+     *
+     * @param array{
+     *   results_level?:string,
+     *   results_score?:string|float|int|null,
+     *   results_url?:string,
+     *   cenni_folio?:string,
+     *   notify?:bool
+     * } $data
+     */
+    public function saveResults(int $trackingId, array $data, ?int $actorUserId = null): void
+    {
+        $tracking = $this->find($trackingId);
+        if ($tracking === null) {
+            throw new \InvalidArgumentException('Seguimiento no encontrado.');
+        }
+
+        $level = trim((string) ($data['results_level'] ?? $tracking['results_level'] ?? ''));
+        $scoreRaw = $data['results_score'] ?? $tracking['results_score'] ?? null;
+        $score = null;
+        if ($scoreRaw !== null && $scoreRaw !== '') {
+            if (!is_numeric($scoreRaw)) {
+                throw new \InvalidArgumentException('El puntaje debe ser numérico.');
+            }
+            $score = (float) $scoreRaw;
+        }
+        $url = trim((string) ($data['results_url'] ?? $tracking['results_url'] ?? ''));
+        if ($url !== '' && !filter_var($url, FILTER_VALIDATE_URL)) {
+            throw new \InvalidArgumentException('La URL de resultados no es válida.');
+        }
+        $cenni = trim((string) ($data['cenni_folio'] ?? $tracking['cenni_folio'] ?? ''));
+
+        if ($level === '' && $score === null && $url === '' && $cenni === '') {
+            throw new \InvalidArgumentException('Indica al menos un dato de resultados o folio CENNI.');
+        }
+
+        $this->pdo->prepare(
+            'UPDATE trackings
+             SET results_level = ?, results_score = ?, results_url = ?, cenni_folio = ?
+             WHERE id = ?'
+        )->execute([
+            $level !== '' ? $level : null,
+            $score,
+            $url !== '' ? $url : null,
+            $cenni !== '' ? $cenni : null,
+            $trackingId,
+        ]);
+
+        $parts = [];
+        if ($level !== '') {
+            $parts[] = 'nivel ' . $level;
+        }
+        if ($score !== null) {
+            $parts[] = 'puntaje ' . $score;
+        }
+        if ($url !== '') {
+            $parts[] = 'url';
+        }
+        if ($cenni !== '') {
+            $parts[] = 'CENNI ' . $cenni;
+        }
+        $this->log($trackingId, 'resultados', 'Resultados publicados: ' . implode(' · ', $parts), $actorUserId);
+
+        try {
+            $this->setStep($trackingId, 'resultados', $actorUserId, 'Resultados cargados', 'waiting_student');
+        } catch (\Throwable) {
+            // Pipelines sin paso resultados.
+        }
+
+        $notify = array_key_exists('notify', $data) ? !empty($data['notify']) : true;
+        if (!$notify) {
+            return;
+        }
+
+        $fresh = $this->find($trackingId);
+        if ($fresh === null) {
+            return;
+        }
+        $product = [
+            'id' => $fresh['product_id'] ?? 0,
+            'config_json' => $fresh['config_json'] ?? null,
+            'group_config_json' => $fresh['group_config_json'] ?? null,
+            'type' => $fresh['product_type'] ?? '',
+            'code' => $fresh['product_code'] ?? '',
+            'name' => $fresh['product_name'] ?? '',
+        ];
+        if (InventoryService::isEnabledForProduct($product)) {
+            (new InventoryService())->sendResultsMail($trackingId, $actorUserId);
+        }
     }
 
     /**

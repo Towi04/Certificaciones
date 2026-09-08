@@ -988,6 +988,36 @@ final class MailTemplateService
                     . '<p>— Instituto DOCEO</p>',
             ],
             [
+                'code' => 'student_inventory_exam_access',
+                'name' => 'Alumno · Accesos examen (inventario)',
+                'subject' => 'Accesos a tu examen · {{matricula}}',
+                'body' => '<p>Hola {{name}},</p>'
+                    . '<p>Tu examen <strong>{{product_name}}</strong> está programado para '
+                    . '<strong>{{exam_date}}</strong> {{exam_time}}.</p>'
+                    . '<p>Estos son tus accesos:</p>'
+                    . '<ul>'
+                    . '<li><strong>Folio:</strong> {{folio}}</li>'
+                    . '<li><strong>Clave:</strong> {{access_key}}</li>'
+                    . '</ul>'
+                    . '<p>Matrícula DOCEO: {{matricula}}</p>'
+                    . '<p>— Instituto DOCEO</p>',
+            ],
+            [
+                'code' => 'student_results_cenni',
+                'name' => 'Alumno · Resultados + trámite CENNI',
+                'subject' => 'Resultados de tu examen · {{matricula}}',
+                'body' => '<p>Hola {{name}},</p>'
+                    . '<p>Ya tenemos los resultados de <strong>{{product_name}}</strong>.</p>'
+                    . '<ul>'
+                    . '<li><strong>Nivel:</strong> {{results_level}}</li>'
+                    . '<li><strong>Puntaje:</strong> {{results_score}}</li>'
+                    . '<li><strong>Certificado:</strong> <a href="{{results_url}}">{{results_url}}</a></li>'
+                    . '<li><strong>Folio CENNI:</strong> {{cenni_folio}}</li>'
+                    . '</ul>'
+                    . '<p>Matrícula: {{matricula}}</p>'
+                    . '<p>— Instituto DOCEO</p>',
+            ],
+            [
                 'code' => 'student_registration',
                 'name' => 'Alumno · Registro / bienvenida',
                 'subject' => 'Tu caso {{matricula}} — Instituto DOCEO',
