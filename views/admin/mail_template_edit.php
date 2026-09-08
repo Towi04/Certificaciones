@@ -116,36 +116,67 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
         </label>
 
         <div style="margin:1rem 0;padding:1rem;background:#f8fafc;border-radius:12px;border:1px solid #e6ebf2">
-            <h2 style="margin:0 0 .5rem;font-size:1rem;color:var(--doceo-blue)">Placeholders habilitados</h2>
+            <h2 style="margin:0 0 .5rem;font-size:1rem;color:var(--doceo-blue)">Etiquetas de la plantilla</h2>
             <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
-                Selecciona las variables que esta plantilla puede usar. Luego insértalas en asunto o HTML con doble llave:
-                <code>{{full_name}}</code>, <code>{{matricula}}</code>.
-                También aceptamos variantes con espacio (<code>{{full name}}</code>).
+                Elige del catálogo solo las que necesites y agrégalas una a una.
+                Luego pulsa <strong>Insertar</strong> para ponerlas en el asunto o el HTML
+                (ej. <code>{{pago_proveedor}}</code> = enlace al comprobante DOCEO → proveedor).
             </p>
-            <?php foreach ($availablePlaceholders as $group => $items): ?>
-                <div style="margin:.85rem 0 0">
-                    <strong style="font-size:.85rem;color:var(--doceo-blue)"><?= e($group) ?></strong>
-                    <div class="placeholder-grid">
-                        <?php foreach ($items as $key => $label): ?>
-                            <?php $checked = in_array((string) $key, $selectedPlaceholders, true); ?>
-                            <label class="placeholder-option">
-                                <input type="checkbox" name="placeholders[]" value="<?= e((string) $key) ?>" <?= $checked ? 'checked' : '' ?>>
-                                <span>
-                                    <code>{{<?= e((string) $key) ?>}}</code>
-                                    <small><?= e((string) $label) ?></small>
-                                </span>
-                            </label>
+
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.55rem;align-items:end;margin-bottom:.85rem">
+                <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.85rem;font-weight:600">
+                    Agregar etiqueta
+                    <select id="placeholder-picker" style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                        <option value="">— Elige un dato —</option>
+                        <?php foreach ($availablePlaceholders as $group => $items): ?>
+                            <optgroup label="<?= e($group) ?>">
+                                <?php foreach ($items as $key => $label): ?>
+                                    <option value="<?= e((string) $key) ?>"
+                                            data-label="<?= e((string) $label) ?>">
+                                        <?= e((string) $label) ?> · {{<?= e((string) $key) ?>}}
+                                    </option>
+                                <?php endforeach; ?>
+                            </optgroup>
                         <?php endforeach; ?>
-                    </div>
-                </div>
-            <?php endforeach; ?>
+                    </select>
+                </label>
+                <button type="button" class="btn btn-ghost" id="placeholder-add-btn">Agregar</button>
+            </div>
+
+            <div id="placeholder-selected-empty" class="muted" style="font-size:.82rem;<?= $selectedPlaceholders === [] ? '' : 'display:none' ?>">
+                Aún no hay etiquetas. Agrega las que quieras usar en este correo.
+            </div>
+            <ul id="placeholder-selected-list" class="placeholder-selected-list"<?= $selectedPlaceholders === [] ? ' hidden' : '' ?>>
+                <?php
+                $flatLabels = [];
+                foreach ($availablePlaceholders as $items) {
+                    foreach ($items as $k => $lbl) {
+                        $flatLabels[(string) $k] = (string) $lbl;
+                    }
+                }
+                foreach ($selectedPlaceholders as $key):
+                    $label = $flatLabels[$key] ?? $key;
+                    ?>
+                    <li class="placeholder-selected-item" data-key="<?= e($key) ?>">
+                        <input type="hidden" name="placeholders[]" value="<?= e($key) ?>">
+                        <div class="placeholder-selected-meta">
+                            <code>{{<?= e($key) ?>}}</code>
+                            <small><?= e($label) ?></small>
+                        </div>
+                        <div class="placeholder-selected-actions">
+                            <button type="button" class="btn btn-ghost btn-sm placeholder-insert" data-target="subject" title="Insertar en asunto">Asunto</button>
+                            <button type="button" class="btn btn-ghost btn-sm placeholder-insert" data-target="body" title="Insertar en HTML">HTML</button>
+                            <button type="button" class="btn btn-ghost btn-sm placeholder-remove" title="Quitar">✕</button>
+                        </div>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+
             <?php if ($isUksSolicitud): ?>
                 <p class="muted" style="font-size:.82rem;margin:.85rem 0 0">
-                    <strong>{{certificacion}}</strong> = producto comprado.
-                    Documentos <strong>solo por enlace</strong> (Neubox bloquea adjuntos):
-                    <code>{{reglamento_url}}</code>,
-                    <code>{{comprobante_url}}</code>,
-                    <code>{{workbook_url}}</code>
+                    Para la solicitud al proveedor, usa
+                    <code>{{pago_proveedor}}</code> (comprobante DOCEO→proveedor),
+                    <code>{{reglamento_url}}</code> y/o <code>{{workbook_url}}</code>,
                     o el bloque <code>{{documentos_html}}</code>.
                 </p>
             <?php endif; ?>
@@ -268,26 +299,38 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
     color: #1a2b42;
 }
 .mail-preview-content a { color: var(--doceo-blue); }
-.placeholder-grid {
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-    gap:.45rem .75rem;
-    margin-top:.45rem;
-}
-.placeholder-option {
+.placeholder-selected-list {
+    list-style:none;
+    margin:0;
+    padding:0;
     display:flex;
-    align-items:flex-start;
+    flex-direction:column;
     gap:.45rem;
-    padding:.45rem .55rem;
+}
+.placeholder-selected-item {
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    justify-content:space-between;
+    gap:.55rem;
+    padding:.55rem .7rem;
     border:1px solid #e6ebf2;
     border-radius:10px;
     background:#fff;
-    font-size:.82rem;
 }
-.placeholder-option small {
+.placeholder-selected-meta code {
+    font-size:.86rem;
+}
+.placeholder-selected-meta small {
     display:block;
     color:var(--doceo-muted);
     margin-top:.12rem;
+    font-size:.78rem;
+}
+.placeholder-selected-actions {
+    display:flex;
+    flex-wrap:wrap;
+    gap:.3rem;
 }
 </style>
 
@@ -381,6 +424,106 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
   subjectInput.addEventListener('input', function () {
     if (toggleBtn.getAttribute('aria-pressed') === 'true') updatePreview();
   });
+})();
+
+(function () {
+  var picker = document.getElementById('placeholder-picker');
+  var addBtn = document.getElementById('placeholder-add-btn');
+  var list = document.getElementById('placeholder-selected-list');
+  var empty = document.getElementById('placeholder-selected-empty');
+  var subjectInput = document.getElementById('mail-subject');
+  var bodyInput = document.getElementById('mail-body-html');
+  if (!picker || !addBtn || !list) return;
+
+  function selectedKeys() {
+    return Array.prototype.map.call(list.querySelectorAll('.placeholder-selected-item'), function (li) {
+      return li.getAttribute('data-key') || '';
+    }).filter(Boolean);
+  }
+
+  function refreshEmpty() {
+    var has = list.querySelector('.placeholder-selected-item');
+    list.hidden = !has;
+    if (empty) empty.style.display = has ? 'none' : '';
+  }
+
+  function insertAtCursor(el, text) {
+    if (!el) return;
+    var start = el.selectionStart != null ? el.selectionStart : el.value.length;
+    var end = el.selectionEnd != null ? el.selectionEnd : el.value.length;
+    var before = el.value.slice(0, start);
+    var after = el.value.slice(end);
+    el.value = before + text + after;
+    var pos = start + text.length;
+    el.focus();
+    if (el.setSelectionRange) el.setSelectionRange(pos, pos);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function addKey(key, label) {
+    if (!key || selectedKeys().indexOf(key) !== -1) return;
+    var li = document.createElement('li');
+    li.className = 'placeholder-selected-item';
+    li.setAttribute('data-key', key);
+    li.innerHTML =
+      '<input type="hidden" name="placeholders[]" value="">' +
+      '<div class="placeholder-selected-meta">' +
+        '<code></code><small></small>' +
+      '</div>' +
+      '<div class="placeholder-selected-actions">' +
+        '<button type="button" class="btn btn-ghost btn-sm placeholder-insert" data-target="subject" title="Insertar en asunto">Asunto</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm placeholder-insert" data-target="body" title="Insertar en HTML">HTML</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm placeholder-remove" title="Quitar">✕</button>' +
+      '</div>';
+    li.querySelector('input').value = key;
+    li.querySelector('code').textContent = '{{' + key + '}}';
+    li.querySelector('small').textContent = label || key;
+    list.appendChild(li);
+    refreshEmpty();
+  }
+
+  function syncPickerOptions() {
+    var keys = selectedKeys();
+    Array.prototype.forEach.call(picker.options, function (opt) {
+      if (!opt.value) return;
+      opt.disabled = keys.indexOf(opt.value) !== -1;
+      opt.hidden = opt.disabled;
+    });
+  }
+
+  addBtn.addEventListener('click', function () {
+    var opt = picker.options[picker.selectedIndex];
+    if (!opt || !opt.value || opt.disabled) return;
+    addKey(opt.value, opt.getAttribute('data-label') || opt.textContent || opt.value);
+    picker.value = '';
+    syncPickerOptions();
+  });
+
+  list.addEventListener('click', function (e) {
+    var removeBtn = e.target.closest('.placeholder-remove');
+    if (removeBtn) {
+      var row = removeBtn.closest('.placeholder-selected-item');
+      if (row) row.remove();
+      refreshEmpty();
+      syncPickerOptions();
+      return;
+    }
+    var insertBtn = e.target.closest('.placeholder-insert');
+    if (!insertBtn) return;
+    var item = insertBtn.closest('.placeholder-selected-item');
+    if (!item) return;
+    var key = item.getAttribute('data-key') || '';
+    if (!key) return;
+    var tag = '{{' + key + '}}';
+    if (insertBtn.getAttribute('data-target') === 'subject') {
+      insertAtCursor(subjectInput, tag);
+    } else {
+      insertAtCursor(bodyInput, tag);
+    }
+  });
+
+  refreshEmpty();
+  syncPickerOptions();
 })();
 
 (function () {
