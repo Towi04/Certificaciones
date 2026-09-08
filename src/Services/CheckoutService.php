@@ -7,12 +7,10 @@ namespace App\Services;
 use App\Auth\Auth;
 use App\Config\Env;
 use App\Database\Connection;
-use App\Integrations\Mailer;
 use App\Integrations\OpenPayClient;
 use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\TrackingRepository;
-use App\Services\MailTemplateService;
 use PDO;
 
 final class CheckoutService
@@ -163,6 +161,7 @@ final class CheckoutService
         $purchaseId = 0;
         $studentUserId = 0;
         $trackingId = 0;
+        $createdTrackingIds = [];
         $openpay = null;
         $redirectUrl = null;
         $cardPaymentUrl = null;
@@ -235,6 +234,7 @@ final class CheckoutService
                     'current_step_code' => $stepCode,
                     'status' => $trackStatus,
                 ]);
+                $createdTrackingIds[] = $tid;
                 if ($firstTrackingId === 0) {
                     $firstTrackingId = $tid;
                     $trackingId = $tid;
@@ -305,15 +305,46 @@ final class CheckoutService
             ], $studentUserId);
         }
 
-        $this->sendWelcomeEmail(
-            $account['user'],
-            $purchase,
-            (string) $product['name'],
-            $account['created'] ? $account['plain_password'] : null,
-            $paymentMethod,
-            $paymentMethod === 'openpay_card' ? $cardPaymentUrl : null,
-            $product
-        );
+        $loginUrl = rtrim((string) (Env::get('APP_URL', '') ?? ''), '/') . '/login';
+        $fullName = trim(($account['user']['first_name'] ?? '') . ' ' . ($account['user']['last_name_p'] ?? ''));
+        $plainPassword = $account['created'] ? $account['plain_password'] : null;
+        $payInstructionsHtml = match ($paymentMethod) {
+            'transfer_proof' => 'Recibimos tu comprobante. Validaremos el pago y te avisaremos.',
+            'openpay_card' => $cardPaymentUrl !== null && $cardPaymentUrl !== ''
+                ? 'Te enviamos el link de pago para proceder de manera segura desde el portal OpenPay de BBVA: <a href="'
+                    . htmlspecialchars($cardPaymentUrl) . '">abrir link de pago</a>.'
+                : 'Te enviaremos por correo el link de pago para proceder de manera segura desde el portal OpenPay de BBVA.',
+            'openpay_store' => 'Recibimos tu comprobante de depósito OXXO. Validaremos el pago y te avisaremos.',
+            default => 'Tu solicitud quedó registrada. Completa el pago SPEI con los datos de tu caso.',
+        };
+        $passwordBlockHtml = $plainPassword !== null
+            ? '<p><strong>Usuario:</strong> ' . htmlspecialchars((string) $account['user']['email'])
+              . '<br><strong>Contraseña temporal:</strong> ' . htmlspecialchars((string) $plainPassword) . '</p>'
+            : '<p>Usa tu cuenta existente para seguir el caso.</p>';
+        $registrationVars = [
+            'full_name' => $fullName,
+            'name' => $fullName,
+            'matricula' => (string) $purchase['matricula'],
+            'amount' => money($purchase['charged_amount']),
+            'pay_instructions_html' => $payInstructionsHtml,
+            'password_block_html' => $passwordBlockHtml,
+            'login_url' => $loginUrl,
+            'temp_password' => (string) ($plainPassword ?? ''),
+        ];
+        $trackSvc = new TrackingService();
+        foreach ($createdTrackingIds as $tid) {
+            $fresh = $trackSvc->find((int) $tid);
+            if ($fresh === null) {
+                continue;
+            }
+            $stepCode = (string) ($fresh['current_step_code'] ?? '');
+            if ($stepCode === '') {
+                continue;
+            }
+            GroupEmailAutomation::sendAutoEmailsForStep($fresh, $stepCode, array_merge($registrationVars, [
+                'product_name' => (string) ($fresh['product_name'] ?? $product['name'] ?? ''),
+            ]));
+        }
 
         // Partner/admin deben conservar su sesión; el alumno inicia la suya solo en compra directa.
         $actorRole = Auth::role();
@@ -449,11 +480,6 @@ final class CheckoutService
         }
 
         (new TrackingService())->onPaymentConfirmed($purchaseId, $adminUserId, $notes);
-
-        $fresh = $this->purchases->find($purchaseId);
-        if ($fresh) {
-            $this->sendPaymentConfirmedEmail($fresh);
-        }
     }
 
     /**
@@ -842,178 +868,5 @@ final class CheckoutService
         $id = $stmt->fetchColumn();
 
         return $id !== false ? (int) $id : null;
-    }
-
-    /** @param array<string, mixed> $user @param array<string, mixed> $purchase */
-    /**
-     * @param array<string, mixed>|null $product
-     */
-    private function sendWelcomeEmail(
-        array $user,
-        array $purchase,
-        string $productName,
-        ?string $plainPassword,
-        string $paymentMethod,
-        ?string $paymentUrl = null,
-        ?array $product = null
-    ): void {
-        try {
-            if ($product !== null && !GroupEmailAutomation::isEnabled($product, GroupEmailAutomation::KEY_REGISTRATION)) {
-                return;
-            }
-
-            $mailer = new Mailer();
-            $loginUrl = rtrim((string) (Env::get('APP_URL', '') ?? ''), '/') . '/login';
-            $fullName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name_p'] ?? ''));
-            $matricula = (string) $purchase['matricula'];
-            $amount = money($purchase['charged_amount']);
-
-            $payInstructionsHtml = match ($paymentMethod) {
-                'transfer_proof' => 'Recibimos tu comprobante. Validaremos el pago y te avisaremos.',
-                'openpay_card' => $paymentUrl !== null && $paymentUrl !== ''
-                    ? 'Te enviamos el link de pago para proceder de manera segura desde el portal OpenPay de BBVA: <a href="' . htmlspecialchars($paymentUrl) . '">abrir link de pago</a>.'
-                    : 'Te enviaremos por correo el link de pago para proceder de manera segura desde el portal OpenPay de BBVA.',
-                'openpay_store' => 'Recibimos tu comprobante de depósito OXXO. Validaremos el pago y te avisaremos.',
-                default => 'Tu solicitud quedó registrada. Completa el pago SPEI con los datos de tu caso.',
-            };
-
-            $passwordBlockHtml = $plainPassword !== null
-                ? '<p><strong>Usuario:</strong> ' . htmlspecialchars((string) $user['email'])
-                  . '<br><strong>Contraseña temporal:</strong> ' . htmlspecialchars($plainPassword) . '</p>'
-                : '<p>Usa tu cuenta existente para seguir el caso.</p>';
-
-            $mailTpl = new MailTemplateService();
-            $vars = [
-                'full_name' => $fullName,
-                'matricula' => $matricula,
-                'product_name' => $productName,
-                'amount' => $amount,
-                'pay_instructions_html' => $payInstructionsHtml,
-                'password_block_html' => $passwordBlockHtml,
-                'login_url' => $loginUrl,
-            ];
-
-            $tplCode = $product !== null
-                ? GroupEmailAutomation::templateCode($product, GroupEmailAutomation::KEY_REGISTRATION, 'student_registration')
-                : 'student_registration';
-            if ($mailTpl->render($tplCode, $vars) !== null) {
-                $mailTpl->send($tplCode, (string) $user['email'], $vars);
-                return;
-            }
-
-            $payText = match ($paymentMethod) {
-                'transfer_proof' => "Recibimos tu comprobante. Validaremos el pago y te avisaremos.\n",
-                'openpay_card' => $paymentUrl !== null && $paymentUrl !== ''
-                    ? "Te enviamos el link de pago para proceder de manera segura desde el portal OpenPay de BBVA:\n{$paymentUrl}\n"
-                    : "Te enviaremos por correo el link de pago para proceder de manera segura desde el portal OpenPay de BBVA.\n",
-                'openpay_store' => "Recibimos tu comprobante de depósito OXXO. Validaremos el pago y te avisaremos.\n",
-                default => "Tu solicitud quedó registrada. Completa el pago SPEI con los datos de tu caso.\n",
-            };
-
-            $passText = $plainPassword !== null
-                ? "Usuario: {$user['email']}\nContraseña temporal: {$plainPassword}\nCámbiala después de iniciar sesión.\n"
-                : "Usa tu cuenta existente para seguir el caso.\n";
-
-            $text = "Hola {$fullName},\n\n"
-                . "Registramos tu adquisición de {$productName}.\n"
-                . "Matrícula / caso: {$matricula}\n"
-                . "Monto: {$amount} MXN\n\n"
-                . $payText
-                . $passText
-                . "\nInicia sesión: {$loginUrl}\n\n— Instituto DOCEO\n";
-
-            $html = '<p>Hola ' . htmlspecialchars($fullName) . ',</p>'
-                . '<p>Registramos tu adquisición de <strong>' . htmlspecialchars($productName) . '</strong>.</p>'
-                . '<p><strong>Matrícula:</strong> ' . htmlspecialchars($matricula) . '<br>'
-                . '<strong>Monto:</strong> ' . htmlspecialchars($amount) . ' MXN</p>'
-                . '<p>' . nl2br(htmlspecialchars(trim($payText))) . '</p>'
-                . ($plainPassword !== null
-                    ? '<p><strong>Usuario:</strong> ' . htmlspecialchars((string) $user['email'])
-                      . '<br><strong>Contraseña temporal:</strong> ' . htmlspecialchars($plainPassword) . '</p>'
-                    : '<p>Usa tu cuenta existente para seguir el caso.</p>')
-                . '<p><a href="' . htmlspecialchars($loginUrl) . '">Iniciar sesión</a></p>'
-                . '<p>— Instituto DOCEO</p>';
-
-            $mailer->send(
-                (string) $user['email'],
-                'Tu caso ' . $matricula . ' — Instituto DOCEO',
-                $text,
-                ['html' => true, 'body_html' => $html]
-            );
-        } catch (\Throwable $e) {
-            error_log('[Doceo] Welcome email: ' . $e->getMessage());
-        }
-    }
-
-    /** @param array<string, mixed> $purchase */
-    private function sendPaymentConfirmedEmail(array $purchase): void
-    {
-        try {
-            $stmt = $this->pdo->prepare(
-                'SELECT u.email, u.first_name, u.last_name_p,
-                        pr.id AS product_id, pr.name AS product_name, pr.code AS product_code,
-                        pr.config_json, pg.config_json AS group_config_json
-                 FROM purchases pu
-                 JOIN users u ON u.id = pu.student_user_id
-                 LEFT JOIN purchase_items pi ON pi.purchase_id = pu.id
-                 LEFT JOIN products pr ON pr.id = pi.product_id
-                 LEFT JOIN product_groups pg ON pg.id = pr.product_group_id
-                 WHERE pu.id = ?
-                 LIMIT 1'
-            );
-            $stmt->execute([(int) $purchase['id']]);
-            $row = $stmt->fetch();
-            if (!$row) {
-                return;
-            }
-
-            $product = [
-                'id' => $row['product_id'] ?? 0,
-                'name' => $row['product_name'] ?? '',
-                'code' => $row['product_code'] ?? '',
-                'config_json' => $row['config_json'] ?? null,
-                'group_config_json' => $row['group_config_json'] ?? null,
-            ];
-            if (!GroupEmailAutomation::isEnabled($product, GroupEmailAutomation::KEY_PAYMENT)) {
-                return;
-            }
-
-            $name = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name_p'] ?? ''));
-            $matricula = (string) $purchase['matricula'];
-            $productName = (string) ($row['product_name'] ?? '');
-
-            $mailTpl = new MailTemplateService();
-            $vars = [
-                'name' => $name,
-                'matricula' => $matricula,
-                'product_name' => $productName,
-            ];
-
-            $tplCode = GroupEmailAutomation::templateCode(
-                $product,
-                GroupEmailAutomation::KEY_PAYMENT,
-                'student_payment_confirmed'
-            );
-            if ($mailTpl->render($tplCode, $vars) !== null) {
-                $mailTpl->send($tplCode, (string) $row['email'], $vars);
-                return;
-            }
-
-            $text = "Hola {$name},\n\nConfirmamos el pago de tu caso {$matricula} "
-                . "({$row['product_name']}).\nYa puedes dar seguimiento desde tu portal.\n\n— Instituto DOCEO\n";
-            $html = '<p>Hola ' . htmlspecialchars($name) . ',</p>'
-                . '<p>Confirmamos el pago de tu caso <strong>' . htmlspecialchars((string) $purchase['matricula']) . '</strong>'
-                . ' (' . htmlspecialchars((string) $row['product_name']) . ').</p>'
-                . '<p>Ya puedes dar seguimiento desde tu portal.</p><p>— Instituto DOCEO</p>';
-
-            (new Mailer())->send(
-                (string) $row['email'],
-                'Pago confirmado — caso ' . $purchase['matricula'],
-                $text,
-                ['html' => true, 'body_html' => $html]
-            );
-        } catch (\Throwable $e) {
-            error_log('[Doceo] Payment confirm email: ' . $e->getMessage());
-        }
     }
 }

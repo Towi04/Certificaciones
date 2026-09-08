@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Integrations\Mailer;
 use App\Repositories\ImportTemplateRepository;
 use App\Database\Connection;
 use PDO;
@@ -211,6 +210,7 @@ final class ImportService
             }
             if ($cenniTracking !== null) {
                 try {
+                    // setStep relee el tracking (ya con cenni_folio) y dispara auto-email si el paso lo tiene.
                     $this->tracking->setStep((int) $cenniTracking['id'], 'folio', $adminUserId, 'Folio CENNI importado desde UKS', 'waiting_student');
                 } catch (\Throwable) {
                     // pipeline step may not exist yet
@@ -582,32 +582,9 @@ final class ImportService
     /** @param array<string, mixed> $tracking */
     private function notifyCenniFolio(array $tracking, string $folio): ?string
     {
-        $email = (string) ($tracking['student_email'] ?? '');
-        if ($email === '') {
-            return null;
-        }
-
-        $name = trim(($tracking['first_name'] ?? '') . ' ' . ($tracking['last_name_p'] ?? ''));
         $matricula = (string) ($tracking['matricula'] ?? '');
-        $sepUrl = 'https://cennisistema.sep.gob.mx/cenni/consulta/consultaEstatus.jsp';
-
-        try {
-            $mailer = new Mailer();
-            $text = "Hola {$name},\n\n"
-                . "Ya está disponible tu folio CENNI para el caso {$matricula}.\n"
-                . "Folio CENNI: {$folio}\n\n"
-                . "Puedes consultar el estatus de tu trámite en:\n{$sepUrl}\n";
-            $html = '<p>Hola ' . htmlspecialchars($name) . ',</p>'
-                . '<p>Ya está disponible tu <strong>folio CENNI</strong> para el caso '
-                . htmlspecialchars($matricula) . '.</p>'
-                . '<p><strong>Folio CENNI:</strong> ' . htmlspecialchars($folio) . '</p>'
-                . '<p><a href="' . htmlspecialchars($sepUrl) . '">Consultar estatus en SEP</a></p>';
-            $mailer->send($email, 'Folio CENNI disponible — caso ' . $matricula, $text, [
-                'html' => true,
-                'body_html' => $html,
-            ]);
-        } catch (\Throwable) {
-            return 'Folio CENNI ' . $folio . ' para ' . $matricula . ' (correo no enviado)';
+        if ($matricula === '') {
+            return 'Folio CENNI ' . $folio . ' publicado';
         }
 
         return 'Folio CENNI ' . $folio . ' publicado para ' . $matricula;
@@ -652,31 +629,7 @@ final class ImportService
             return [];
         }
 
-        $email = (string) ($tracking['student_email'] ?? '');
-        $name = trim(($tracking['first_name'] ?? '') . ' ' . ($tracking['last_name_p'] ?? ''));
         $matricula = (string) ($tracking['matricula'] ?? '');
-        $bodyLines = implode("\n", $lines);
-
-        if ($email !== '') {
-            try {
-                $mailer = new Mailer();
-                $text = "Hola {$name},\n\nActualizamos el estatus de tus documentos CENNI (caso {$matricula}):\n{$bodyLines}\n\nRevisa los detalles en tu panel de alumno.\n";
-                $html = '<p>Hola ' . htmlspecialchars($name) . ',</p>'
-                    . '<p>Actualizamos el estatus de tus documentos CENNI (caso '
-                    . htmlspecialchars($matricula) . '):</p><ul>';
-                foreach ($lines as $line) {
-                    $html .= '<li>' . htmlspecialchars($line) . '</li>';
-                }
-                $html .= '</ul><p>Revisa los detalles en tu panel de alumno.</p>';
-                $mailer->send($email, 'Estatus documentos CENNI — caso ' . $matricula, $text, [
-                    'html' => true,
-                    'body_html' => $html,
-                ]);
-            } catch (\Throwable) {
-                // panel still shows update
-            }
-        }
-
         $this->tracking->addLog((int) $tracking['id'], 'resultados', 'CENNI docs: ' . implode(' · ', $lines), null);
         $notifications[] = 'Docs CENNI actualizados para ' . $matricula;
 

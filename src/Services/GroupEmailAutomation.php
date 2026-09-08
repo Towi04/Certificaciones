@@ -5,19 +5,16 @@ declare(strict_types=1);
 namespace App\Services;
 
 /**
- * Automatización de correos por grupo de producto.
+ * Automatización de correos por paso de progreso (product_groups.config_json).
  *
- * Config en product_groups.config_json → emails:
- * {
- *   "student_registration": {"enabled": true, "template_code": "student_registration"},
- *   "student_payment_confirmed": {"enabled": true, "template_code": "student_payment_confirmed"},
- *   "student_exam_access": {"enabled": true, "template_code": "student_elet_exam_access", "mode": "admin"},
- *   "on_steps": [
- *     {"step_code": "resultados", "template_code": "mi_plantilla", "mode": "auto", "audience": "student"}
- *   ]
- * }
+ * Fuente de verdad: step_defs[].email (enabled + trigger + template_code).
+ * Al guardar el grupo se sincroniza emails.on_steps (mode=auto).
  *
- * Compatibilidad: flags booleanos legacy (payment_confirmed, exam_scheduled, payment_rejected).
+ * - trigger=auto → GroupEmailAutomation al llegar al paso (TrackingService::setStep)
+ * - trigger=admin → botón en Operación (StepMailService / ProviderRequestService)
+ *
+ * Los envíos hardcodeados de ciclo (registro/pago/Moodle/etc.) están desactivados:
+ * configúralos como pasos del progreso con la plantilla deseada.
  */
 final class GroupEmailAutomation
 {
@@ -54,24 +51,21 @@ final class GroupEmailAutomation
     {
         $raw = is_array($raw) ? $raw : [];
 
-        $legacyPayment = array_key_exists('payment_confirmed', $raw)
-            ? (bool) $raw['payment_confirmed']
-            : true;
-
         return [
+            // Legacy keys: desactivados por defecto (usar pasos del progreso).
             self::KEY_REGISTRATION => self::normalizeEvent(
                 $raw[self::KEY_REGISTRATION] ?? null,
-                true,
+                false,
                 'student_registration'
             ),
             self::KEY_PAYMENT => self::normalizeEvent(
-                $raw[self::KEY_PAYMENT] ?? ($legacyPayment ? ['enabled' => true] : ['enabled' => false]),
-                $legacyPayment,
+                $raw[self::KEY_PAYMENT] ?? null,
+                false,
                 'student_payment_confirmed'
             ),
             self::KEY_EXAM_ACCESS => self::normalizeEvent(
                 $raw[self::KEY_EXAM_ACCESS] ?? null,
-                true,
+                false,
                 'student_elet_exam_access',
                 'admin'
             ),
@@ -81,9 +75,6 @@ final class GroupEmailAutomation
 
     public static function isEnabled(array $product, string $key): bool
     {
-        if ($key === self::KEY_EXAM_ACCESS) {
-            return self::resolveExamAccessMail($product)['send'];
-        }
         $cfg = self::forProduct($product);
 
         return !empty($cfg[$key]['enabled']);
@@ -91,82 +82,10 @@ final class GroupEmailAutomation
 
     public static function templateCode(array $product, string $key, string $fallback): string
     {
-        if ($key === self::KEY_EXAM_ACCESS) {
-            $resolved = self::resolveExamAccessMail($product);
-            $code = trim($resolved['template_code']);
-
-            return $code !== '' ? $code : $fallback;
-        }
         $cfg = self::forProduct($product);
         $code = trim((string) ($cfg[$key]['template_code'] ?? ''));
 
         return $code !== '' ? $code : $fallback;
-    }
-
-    public static function examAccessMode(array $product): string
-    {
-        $cfg = self::forProduct($product);
-        $mode = (string) ($cfg[self::KEY_EXAM_ACCESS]['mode'] ?? 'admin');
-
-        return $mode === 'auto' ? 'auto' : 'admin';
-    }
-
-    /**
-     * Resuelve si debe enviarse el correo de accesos y con qué plantilla.
-     * Prioridad: paso exam_access en step_defs → emails.student_exam_access → default.
-     *
-     * @param array<string, mixed> $product
-     * @return array{send:bool,template_code:string,source:string}
-     */
-    public static function resolveExamAccessMail(array $product): array
-    {
-        $full = CheckoutRequirements::config($product);
-        $defs = is_array($full['step_defs'] ?? null) ? $full['step_defs'] : [];
-        $hasExamStep = false;
-        $stepDisabled = false;
-
-        foreach ($defs as $def) {
-            if (!is_array($def)) {
-                continue;
-            }
-            if ((string) ($def['action'] ?? '') !== GroupStepConfig::ACTION_EXAM_ACCESS) {
-                continue;
-            }
-            $hasExamStep = true;
-            $email = is_array($def['email'] ?? null) ? $def['email'] : [];
-            $tpl = trim((string) ($email['template_code'] ?? ''));
-            if (!empty($email['enabled']) && $tpl !== '') {
-                return [
-                    'send' => true,
-                    'template_code' => $tpl,
-                    'source' => 'step',
-                ];
-            }
-            if (array_key_exists('enabled', $email) && empty($email['enabled'])) {
-                $stepDisabled = true;
-            }
-        }
-
-        if ($hasExamStep && $stepDisabled) {
-            return [
-                'send' => false,
-                'template_code' => 'student_elet_exam_access',
-                'source' => 'step',
-            ];
-        }
-
-        $emails = self::normalize($full['emails'] ?? null);
-        $ev = $emails[self::KEY_EXAM_ACCESS];
-        $tpl = trim((string) ($ev['template_code'] ?? 'student_elet_exam_access'));
-        if ($tpl === '') {
-            $tpl = 'student_elet_exam_access';
-        }
-
-        return [
-            'send' => !empty($ev['enabled']),
-            'template_code' => $tpl,
-            'source' => 'emails',
-        ];
     }
 
     /**
@@ -190,7 +109,7 @@ final class GroupEmailAutomation
     }
 
     /**
-     * Envía plantillas mode=auto al entrar a un paso (alumno).
+     * Envía plantillas mode=auto al entrar a un paso.
      *
      * @param array<string, mixed> $tracking
      * @param array<string, string> $vars
@@ -207,17 +126,23 @@ final class GroupEmailAutomation
 
         $mail = new MailTemplateService();
         $stepMail = new StepMailService();
+        $trackingId = (int) ($tracking['id'] ?? 0);
+        $purchaseId = (int) ($tracking['purchase_id'] ?? 0);
+
         foreach (self::rulesForStep($product, $stepCode) as $rule) {
             if ($rule['mode'] !== 'auto') {
                 continue;
             }
             $code = $rule['template_code'];
-            $audience = MailTemplateService::audienceForTemplate($code);
-            if ($audience === 'provider') {
-                continue;
-            }
             try {
-                $to = $stepMail->resolveRecipient($tracking, $audience);
+                // Solicitud UKS inicial: enlaces reglamento/pago/Excel.
+                if (MailTemplateService::isUksSolicitudCode($code) && $trackingId > 0 && $purchaseId > 0) {
+                    (new ProviderRequestService())->send($trackingId, $purchaseId, null, true);
+                    continue;
+                }
+
+                $audience = MailTemplateService::audienceForTemplate($code);
+                $to = $stepMail->resolveRecipient($tracking, $audience, $code, $mail);
                 $mergedVars = array_merge($stepMail->buildVars($tracking), $vars);
                 if ($mail->render($code, $mergedVars) !== null) {
                     $mail->send($code, $to, $mergedVars);
@@ -251,7 +176,7 @@ final class GroupEmailAutomation
                 $template = $defaultTemplate;
             }
             $mode = $defaultMode !== null
-                ? (((string) ($value['mode'] ?? $defaultMode)) === 'auto' ? 'auto' : 'admin')
+                ? (string) ($value['mode'] ?? $defaultMode)
                 : null;
         } else {
             $enabled = $defaultEnabled;
@@ -263,8 +188,8 @@ final class GroupEmailAutomation
             'enabled' => $enabled,
             'template_code' => $template,
         ];
-        if ($defaultMode !== null) {
-            $out['mode'] = $mode ?? $defaultMode;
+        if ($mode !== null) {
+            $out['mode'] = $mode === 'auto' ? 'auto' : 'admin';
         }
 
         return $out;
@@ -284,18 +209,16 @@ final class GroupEmailAutomation
             if (!is_array($row)) {
                 continue;
             }
-            $step = strtolower(trim((string) ($row['step_code'] ?? '')));
-            $step = preg_replace('/[^a-z0-9_]+/', '_', $step) ?? '';
-            $step = trim($step, '_');
-            $template = trim((string) ($row['template_code'] ?? ''));
-            if ($step === '' || $template === '') {
+            $step = trim((string) ($row['step_code'] ?? ''));
+            $tpl = trim((string) ($row['template_code'] ?? ''));
+            if ($step === '' || $tpl === '') {
                 continue;
             }
             $mode = ((string) ($row['mode'] ?? 'admin')) === 'auto' ? 'auto' : 'admin';
-            $audience = MailTemplateService::audienceForTemplate($template);
+            $audience = MailTemplateService::normalizeAudience((string) ($row['audience'] ?? 'student'));
             $out[] = [
                 'step_code' => $step,
-                'template_code' => $template,
+                'template_code' => $tpl,
                 'mode' => $mode,
                 'audience' => $audience,
             ];

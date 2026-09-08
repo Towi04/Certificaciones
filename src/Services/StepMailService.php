@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Config\Env;
 use App\Database\Connection;
 use App\Repositories\PartnerRepository;
 use PDO;
 
 /**
- * Envía la plantilla de un paso de Operación al destinatario según la audiencia
- * de la plantilla (alumno, partner o proveedor fijo en Para).
- * La solicitud inicial UKS (reglamento/pago/workbook) sigue en ProviderRequestService.
+ * Envía la plantilla configurada en un paso de Operación / progreso.
+ * Destinatario según audiencia de la plantilla (alumno, partner o proveedor fijo).
+ * La solicitud inicial UKS (reglamento/pago/workbook) usa ProviderRequestService.
  */
 final class StepMailService
 {
@@ -61,14 +62,13 @@ final class StepMailService
             throw new \InvalidArgumentException('El paso no tiene «Enviar correo» activado.');
         }
 
-        $audience = MailTemplateService::audienceForTemplate($tplCode);
-        // Solicitud inicial UKS: usa ProviderRequestService (enlaces reglamento/pago/Excel).
         if (MailTemplateService::isUksSolicitudCode($tplCode)) {
             throw new \InvalidArgumentException(
                 'La plantilla de solicitud UKS se envía con el botón de solicitud a proveedor.'
             );
         }
 
+        $audience = MailTemplateService::audienceForTemplate($tplCode);
         $vars = $this->buildVars($tracking);
         $mail = new MailTemplateService();
         $to = $this->resolveRecipient($tracking, $audience, $tplCode, $mail);
@@ -101,6 +101,9 @@ final class StepMailService
         $name = trim((string) (($tracking['first_name'] ?? '') . ' ' . ($tracking['last_name_p'] ?? '')));
         $fullName = trim($name . ' ' . (string) ($tracking['last_name_m'] ?? ''));
         $partner = $this->partnerRowForTracking($tracking);
+        $loginUrl = rtrim((string) (Env::get('APP_URL', '') ?? ''), '/') . '/login';
+        $moodleUrl = trim((string) (Env::get('MOODLE_URL', '') ?? ''));
+        $examUrl = trim((string) (Env::get('ELET_EXAM_URL', '') ?? ''));
 
         return [
             'name' => $name,
@@ -119,9 +122,21 @@ final class StepMailService
                 : '',
             'folio' => (string) ($tracking['folio'] ?? ''),
             'access_key' => (string) ($tracking['access_key'] ?? ''),
+            'exam_url' => $examUrl,
+            'login_url' => $loginUrl,
+            'moodle_url' => $moodleUrl,
+            'moodle_username' => (string) ($tracking['moodle_username'] ?? ''),
+            'moodle_password' => (string) ($tracking['moodle_password'] ?? ''),
+            'moodle_access_starts_at' => (string) ($tracking['moodle_access_starts_at'] ?? ''),
+            'moodle_access_ends_at' => (string) ($tracking['moodle_access_ends_at'] ?? ''),
+            'cenni_folio' => (string) ($tracking['cenni_folio'] ?? ''),
             'partner_email' => (string) ($partner['email'] ?? ''),
             'partner_name' => (string) ($partner['display_name'] ?? ''),
             'partner_code' => (string) ($partner['code'] ?? ''),
+            'amount' => '',
+            'pay_instructions_html' => '',
+            'password_block_html' => '',
+            'temp_password' => '',
         ];
     }
 

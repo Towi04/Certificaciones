@@ -261,8 +261,7 @@ $q = (string) ($filters['q'] ?? '');
                                             || \App\Services\MailTemplateService::isUksSolicitudCode($sendTpl)
                                         );
                                     ?>
-                                    <?php if ($isHeavyProviderRequest): ?>
-                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/solicitud-proveedor')) ?>" class="ops-inline-form">
+                                    <?php if ($isHeavyProviderRequest): ?>                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/solicitud-proveedor')) ?>" class="ops-inline-form">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="return_ops" value="1">
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">

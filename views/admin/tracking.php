@@ -342,9 +342,6 @@ $needsAdminProof = $providerCfg && !empty($providerCfg['require_admin_payment_pr
     <?php endif; ?>
     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/moodle')) ?>" style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-top:.75rem">
         <?= csrf_field() ?>
-        <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
-            <input type="checkbox" name="send_email" value="1" checked> Enviar correo al alumno
-        </label>
         <button class="btn btn-primary" type="submit">Sincronizar Moodle</button>
     </form>
 </div>
