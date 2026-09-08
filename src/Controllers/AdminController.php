@@ -1452,7 +1452,9 @@ final class AdminController
                     $supplier[$k] = $old[$k];
                 }
             }
-            $supplier['is_active'] = !empty($old['is_active']) ? 1 : 0;
+            if (array_key_exists('is_active', $old) || has_old_input()) {
+                $supplier['is_active'] = !empty($old['is_active']) ? 1 : 0;
+            }
         }
         view('admin/supplier_show', [
             'title' => 'Proveedor · ' . $supplier['name'],
@@ -1670,6 +1672,15 @@ final class AdminController
             static fn (array $p): bool => (int) ($p['certifier_id'] ?? 0) === $cid
         ));
         $products = array_slice($products, 0, 40);
+        $old = old_input();
+        if ($old !== []) {
+            foreach (['name', 'code', 'website'] as $k) {
+                if (array_key_exists($k, $old)) {
+                    $certifier[$k] = $old[$k];
+                }
+            }
+            $certifier['is_active'] = !empty($old['is_active']) ? 1 : 0;
+        }
         view('admin/certifier_show', [
             'title' => 'Certificadora · ' . $certifier['name'],
             'certifier' => $certifier,
@@ -1688,7 +1699,7 @@ final class AdminController
             (new \App\Services\CertifierAdminService())->update($certifierId, $_POST);
             flash('success', 'Certificadora actualizada.');
         } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
+            $this->formError($e->getMessage());
         }
         redirect('/admin/certificadoras/' . $certifierId);
     }
