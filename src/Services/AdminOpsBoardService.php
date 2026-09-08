@@ -209,8 +209,23 @@ final class AdminOpsBoardService
 
         $folio = trim((string) ($row['folio'] ?? ''));
         $accessKey = trim((string) ($row['access_key'] ?? ''));
+        $zoomUrl = trim((string) ($row['zoom_url'] ?? ''));
         $needsAccess = $isElet && $purchaseStatus === 'paid' && ($folio === '' || $accessKey === '');
         $hasAccess = $folio !== '' && $accessKey !== '';
+
+        $groupCfg = [];
+        $rawGroupCfg = $row['group_config_json'] ?? null;
+        if (is_string($rawGroupCfg) && $rawGroupCfg !== '') {
+            $decodedGroup = json_decode($rawGroupCfg, true);
+            $groupCfg = is_array($decodedGroup) ? $decodedGroup : [];
+        } elseif (is_array($rawGroupCfg)) {
+            $groupCfg = $rawGroupCfg;
+        }
+        $examCfg = is_array($groupCfg['exam'] ?? null) ? $groupCfg['exam'] : [];
+        $groupCode = strtolower(trim((string) ($row['product_group_code'] ?? '')));
+        $captureZoom = !empty($examCfg['capture_zoom'])
+            || str_contains($groupCode, 'linguafranca')
+            || str_contains($groupCode, 'toefl');
 
         $needsPayment = in_array($purchaseStatus, ['awaiting_payment', 'payment_review'], true);
 
@@ -271,6 +286,8 @@ final class AdminOpsBoardService
             || ($isElet && $purchaseStatus === 'paid')
             || $folio !== ''
             || $accessKey !== '';
+        // Zoom (p. ej. TOEFL): por config del grupo, proveedor Lingua Franca, o ya hay enlace.
+        $row['show_zoom_fields'] = $captureZoom || $zoomUrl !== '';
         $row['needs_action'] = $pendingOps > 0
             || (string) ($row['tracking_status'] ?? '') === 'waiting_admin';
 
@@ -278,25 +295,49 @@ final class AdminOpsBoardService
     }
 
     /**
-     * Guarda folio/clave y, si $notify, publica accesos (plantilla alumno).
+     * Guarda folio/clave/Zoom y, si $notify, publica accesos (plantilla alumno).
      *
      * @return array{saved:bool,notified:bool}
      */
-    public function saveAccess(int $trackingId, string $folio, string $accessKey, int $adminUserId, bool $notify): array
-    {
+    public function saveAccess(
+        int $trackingId,
+        string $folio,
+        string $accessKey,
+        int $adminUserId,
+        bool $notify,
+        string $zoomUrl = ''
+    ): array {
         $folio = trim($folio);
         $accessKey = trim($accessKey);
-        if ($folio === '' || $accessKey === '') {
-            throw new \InvalidArgumentException('Indica folio y clave.');
+        $zoomUrl = self::normalizeZoomUrl($zoomUrl);
+
+        if (($folio !== '' || $accessKey !== '') && ($folio === '' || $accessKey === '')) {
+            throw new \InvalidArgumentException('Indica folio y clave juntos.');
+        }
+        if ($folio === '' && $accessKey === '' && $zoomUrl === '') {
+            throw new \InvalidArgumentException('Indica folio/clave o enlace Zoom.');
         }
 
         // Siempre guardar primero; si el correo falla, los datos no se pierden.
-        $this->pdo->prepare('UPDATE trackings SET folio = ?, access_key = ? WHERE id = ?')
-            ->execute([$folio, $accessKey, $trackingId]);
+        // Zoom-only (TOEFL): no tocar folio/clave existentes.
+        if ($folio !== '' || $accessKey !== '') {
+            $this->pdo->prepare('UPDATE trackings SET folio = ?, access_key = ?, zoom_url = ? WHERE id = ?')
+                ->execute([$folio, $accessKey, $zoomUrl !== '' ? $zoomUrl : null, $trackingId]);
+        } else {
+            $this->pdo->prepare('UPDATE trackings SET zoom_url = ? WHERE id = ?')
+                ->execute([$zoomUrl !== '' ? $zoomUrl : null, $trackingId]);
+        }
+        $logParts = [];
+        if ($folio !== '' || $accessKey !== '') {
+            $logParts[] = 'folio/clave';
+        }
+        if ($zoomUrl !== '') {
+            $logParts[] = 'Zoom';
+        }
         (new TrackingService())->addLog(
             $trackingId,
             'codigos',
-            'Folio/clave guardados desde tablero operativo',
+            implode('/', $logParts) . ' guardados desde tablero operativo',
             $adminUserId
         );
 
@@ -304,13 +345,38 @@ final class AdminOpsBoardService
             return ['saved' => true, 'notified' => false];
         }
 
+        if ($folio === '' || $accessKey === '') {
+            throw new \InvalidArgumentException(
+                'Para enviar la plantilla de accesos indica folio y clave (el Zoom ya quedó guardado si lo escribiste).'
+            );
+        }
+
         $notified = (new UksEletService())->publishExamAccess($trackingId, $folio, $accessKey, $adminUserId, true);
 
         return ['saved' => true, 'notified' => $notified];
     }
 
+    public static function normalizeZoomUrl(string $raw): string
+    {
+        $url = trim($raw);
+        if ($url === '') {
+            return '';
+        }
+        if (!preg_match('#^https?://#i', $url)) {
+            $url = 'https://' . ltrim($url, '/');
+        }
+        if (filter_var($url, FILTER_VALIDATE_URL) === false) {
+            throw new \InvalidArgumentException('El enlace Zoom no es una URL válida.');
+        }
+        if (strlen($url) > 255) {
+            throw new \InvalidArgumentException('El enlace Zoom es demasiado largo (máx. 255).');
+        }
+
+        return $url;
+    }
+
     /**
-     * @param list<array{tracking_id:int,folio:string,access_key:string}> $items
+     * @param list<array{tracking_id:int,folio:string,access_key:string,zoom_url?:string}> $items
      * @return array{ok:int,fail:int,errors:list<string>}
      */
     public function bulkPublishAccess(array $items, int $adminUserId, bool $notify): array
@@ -329,7 +395,8 @@ final class AdminOpsBoardService
                     (string) ($item['folio'] ?? ''),
                     (string) ($item['access_key'] ?? ''),
                     $adminUserId,
-                    $notify
+                    $notify,
+                    (string) ($item['zoom_url'] ?? '')
                 );
                 $ok++;
             } catch (\Throwable $e) {

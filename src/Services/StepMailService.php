@@ -104,8 +104,21 @@ final class StepMailService
         $loginUrl = rtrim((string) (Env::get('APP_URL', '') ?? ''), '/') . '/login';
         $moodleUrl = trim((string) (Env::get('MOODLE_URL', '') ?? ''));
         $examUrl = trim((string) (Env::get('ELET_EXAM_URL', '') ?? ''));
+        $product = [
+            'config_json' => $tracking['config_json'] ?? null,
+            'group_config_json' => $tracking['group_config_json'] ?? null,
+            'id' => $tracking['product_id'] ?? 0,
+            'name' => $tracking['product_name'] ?? '',
+            'code' => $tracking['product_code'] ?? '',
+        ];
+        $cfg = CheckoutRequirements::config($product);
+        $examCfg = is_array($cfg['exam'] ?? null) ? $cfg['exam'] : [];
+        $cfgExamUrl = trim((string) ($examCfg['url'] ?? ''));
+        if ($cfgExamUrl !== '') {
+            $examUrl = $cfgExamUrl;
+        }
 
-        return [
+        $vars = [
             'name' => $name,
             'full_name' => $fullName !== '' ? $fullName : $name,
             'first_name' => (string) ($tracking['first_name'] ?? ''),
@@ -122,6 +135,7 @@ final class StepMailService
                 : '',
             'folio' => (string) ($tracking['folio'] ?? ''),
             'access_key' => (string) ($tracking['access_key'] ?? ''),
+            'zoom_url' => (string) ($tracking['zoom_url'] ?? ''),
             'exam_url' => $examUrl,
             'login_url' => $loginUrl,
             'moodle_url' => $moodleUrl,
@@ -138,6 +152,8 @@ final class StepMailService
             'password_block_html' => '',
             'temp_password' => '',
         ];
+
+        return array_merge($vars, ExamInstructionAssets::mailVars($cfg));
     }
 
     /**

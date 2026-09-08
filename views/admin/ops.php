@@ -62,7 +62,7 @@ $q = (string) ($filters['q'] ?? '');
         <input type="hidden" name="notify" value="1">
         <div class="ops-bulk-bar" id="ops-bulk-bar" hidden>
             <span id="ops-bulk-count">0</span> seleccionados
-            <button class="btn btn-accent btn-sm" type="submit">Guardar folio/clave y enviar plantillas</button>
+            <button class="btn btn-accent btn-sm" type="submit">Guardar folio/clave/Zoom y enviar plantillas</button>
             <button class="btn btn-ghost btn-sm" type="button" id="ops-bulk-clear">Quitar selección</button>
         </div>
     </form>
@@ -81,6 +81,7 @@ $q = (string) ($filters['q'] ?? '');
                     <th>Examen</th>
                     <th>Folio</th>
                     <th>Clave</th>
+                    <th>Zoom</th>
                     <th>Triggers</th>
                 </tr>
                 </thead>
@@ -104,7 +105,7 @@ $q = (string) ($filters['q'] ?? '');
                     ?>
                     <tr class="<?= e($rowClass) ?>" data-tracking-id="<?= $tid ?>">
                         <td class="ops-check">
-                            <?php if (!empty($r['show_folio_fields'])): ?>
+                            <?php if (!empty($r['show_folio_fields']) || !empty($r['show_zoom_fields'])): ?>
                                 <input type="checkbox" class="ops-row-check" form="ops-bulk-form" name="tracking_ids[]" value="<?= $tid ?>">
                             <?php endif; ?>
                         </td>
@@ -154,6 +155,18 @@ $q = (string) ($filters['q'] ?? '');
                                        name="access_key_display"
                                        value="<?= e((string) ($r['access_key'] ?? '')) ?>"
                                        placeholder="Clave" autocomplete="off" data-tid="<?= $tid ?>">
+                            <?php else: ?>
+                                <span class="muted">—</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if (!empty($r['show_zoom_fields'])): ?>
+                                <input class="ops-input ops-zoom" type="url"
+                                       id="ops-zoom-<?= $tid ?>"
+                                       name="zoom_url_display"
+                                       value="<?= e((string) ($r['zoom_url'] ?? '')) ?>"
+                                       placeholder="https://zoom.us/…" autocomplete="off" data-tid="<?= $tid ?>"
+                                       style="min-width:9.5rem;max-width:14rem">
                             <?php else: ?>
                                 <span class="muted">—</span>
                             <?php endif; ?>
@@ -305,7 +318,8 @@ $q = (string) ($filters['q'] ?? '');
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                         <input type="hidden" name="folio" class="ops-access-folio-hidden" value="<?= e((string) ($r['folio'] ?? '')) ?>">
                                         <input type="hidden" name="access_key" class="ops-access-key-hidden" value="<?= e((string) ($r['access_key'] ?? '')) ?>">
-                                        <button class="btn btn-ghost btn-sm" type="submit" name="notify" value="0" title="Guardar folio y clave sin enviar correo">
+                                        <input type="hidden" name="zoom_url" class="ops-access-zoom-hidden" value="<?= e((string) ($r['zoom_url'] ?? '')) ?>">
+                                        <button class="btn btn-ghost btn-sm" type="submit" name="notify" value="0" title="Guardar folio, clave y Zoom sin enviar correo">
                                             Guardar
                                         </button>
                                         <button class="<?= e($btnClass) ?>" type="submit" name="notify" value="1">
@@ -366,7 +380,15 @@ $q = (string) ($filters['q'] ?? '');
                                 <?php endif; ?>
                             <?php endif; ?>
 
-                            <?php if (!empty($r['show_folio_fields']) && empty(array_filter($opsButtons, static fn ($b) => ($b['action'] ?? '') === \App\Services\GroupStepConfig::ACTION_EXAM_ACCESS))): ?>
+                            <?php
+                            $hasExamAccessBtn = !empty(array_filter(
+                                $opsButtons,
+                                static fn ($b) => ($b['action'] ?? '') === \App\Services\GroupStepConfig::ACTION_EXAM_ACCESS
+                            ));
+                            $needsAccessSaveForm = (!$hasExamAccessBtn)
+                                && (!empty($r['show_folio_fields']) || !empty($r['show_zoom_fields']));
+                            ?>
+                            <?php if ($needsAccessSaveForm): ?>
                                 <form method="post" action="<?= e(url('/admin/operacion/' . $tid . '/accesos')) ?>"
                                       class="ops-inline-form ops-access-form" id="ops-access-form-<?= $tid ?>"
                                       data-tid="<?= $tid ?>">
@@ -375,7 +397,12 @@ $q = (string) ($filters['q'] ?? '');
                                     <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                     <input type="hidden" name="folio" class="ops-access-folio-hidden" value="<?= e((string) ($r['folio'] ?? '')) ?>">
                                     <input type="hidden" name="access_key" class="ops-access-key-hidden" value="<?= e((string) ($r['access_key'] ?? '')) ?>">
-                                    <button class="btn btn-ghost btn-sm" type="submit" name="notify" value="0">Guardar folio/clave</button>
+                                    <input type="hidden" name="zoom_url" class="ops-access-zoom-hidden" value="<?= e((string) ($r['zoom_url'] ?? '')) ?>">
+                                    <button class="btn btn-ghost btn-sm" type="submit" name="notify" value="0">
+                                        <?= !empty($r['show_folio_fields']) && !empty($r['show_zoom_fields'])
+                                            ? 'Guardar folio/clave/Zoom'
+                                            : (!empty($r['show_zoom_fields']) ? 'Guardar Zoom' : 'Guardar folio/clave') ?>
+                                    </button>
                                 </form>
                             <?php endif; ?>
 
@@ -593,19 +620,22 @@ $q = (string) ($filters['q'] ?? '');
     refreshBulk();
   });
 
-  // Sincronizar folio/clave visibles → hidden del form de accesos (el atributo form= fallaba a veces).
+  // Sincronizar folio/clave/Zoom visibles → hidden del form de accesos.
   function syncAccessFields(tid) {
     var folioEl = document.getElementById('ops-folio-' + tid);
     var keyEl = document.getElementById('ops-key-' + tid);
+    var zoomEl = document.getElementById('ops-zoom-' + tid);
     var form = document.getElementById('ops-access-form-' + tid);
     if (!form) return false;
     var hFolio = form.querySelector('.ops-access-folio-hidden');
     var hKey = form.querySelector('.ops-access-key-hidden');
+    var hZoom = form.querySelector('.ops-access-zoom-hidden');
     if (hFolio) hFolio.value = folioEl ? folioEl.value.trim() : '';
     if (hKey) hKey.value = keyEl ? keyEl.value.trim() : '';
+    if (hZoom) hZoom.value = zoomEl ? zoomEl.value.trim() : '';
     return true;
   }
-  document.querySelectorAll('.ops-folio, .ops-key').forEach(function (el) {
+  document.querySelectorAll('.ops-folio, .ops-key, .ops-zoom').forEach(function (el) {
     el.addEventListener('input', function () {
       syncAccessFields(el.getAttribute('data-tid') || '');
     });
@@ -619,19 +649,41 @@ $q = (string) ($filters['q'] ?? '');
       syncAccessFields(tid);
       var hFolio = form.querySelector('.ops-access-folio-hidden');
       var hKey = form.querySelector('.ops-access-key-hidden');
+      var hZoom = form.querySelector('.ops-access-zoom-hidden');
       var folio = hFolio ? hFolio.value.trim() : '';
       var key = hKey ? hKey.value.trim() : '';
-      if (!folio || !key) {
+      var zoom = hZoom ? hZoom.value.trim() : '';
+      var notifyBtn = e.submitter && String(e.submitter.name || '') === 'notify'
+        ? String(e.submitter.value || '')
+        : '';
+      if (notifyBtn === '1') {
+        if (!folio || !key) {
+          e.preventDefault();
+          alert('Escribe folio y clave antes de enviar la plantilla de accesos.');
+          var folioEl = document.getElementById('ops-folio-' + tid);
+          if (folioEl) folioEl.focus();
+          return false;
+        }
+        return true;
+      }
+      if (!folio && !key && !zoom) {
         e.preventDefault();
-        alert('Escribe folio y clave antes de guardar o enviar accesos.');
-        var folioEl = document.getElementById('ops-folio-' + tid);
-        if (folioEl) folioEl.focus();
+        alert('Escribe folio/clave o enlace Zoom antes de guardar.');
+        var zoomEl = document.getElementById('ops-zoom-' + tid);
+        var folioEl2 = document.getElementById('ops-folio-' + tid);
+        if (folioEl2) folioEl2.focus();
+        else if (zoomEl) zoomEl.focus();
+        return false;
+      }
+      if ((folio && !key) || (!folio && key)) {
+        e.preventDefault();
+        alert('Indica folio y clave juntos.');
         return false;
       }
     });
   });
 
-  // Lote: inyectar folio/clave de las filas seleccionadas (ya no usan form=ops-bulk-form).
+  // Lote: inyectar folio/clave/Zoom de las filas seleccionadas.
   var bulkForm = document.getElementById('ops-bulk-form');
   if (bulkForm) {
     bulkForm.addEventListener('submit', function () {
@@ -643,6 +695,7 @@ $q = (string) ($filters['q'] ?? '');
         syncAccessFields(tid);
         var folioEl = document.getElementById('ops-folio-' + tid);
         var keyEl = document.getElementById('ops-key-' + tid);
+        var zoomEl = document.getElementById('ops-zoom-' + tid);
         function inject(name, value) {
           var input = document.createElement('input');
           input.type = 'hidden';
@@ -653,6 +706,7 @@ $q = (string) ($filters['q'] ?? '');
         }
         inject('folio[' + tid + ']', folioEl ? folioEl.value : '');
         inject('access_key[' + tid + ']', keyEl ? keyEl.value : '');
+        inject('zoom_url[' + tid + ']', zoomEl ? zoomEl.value : '');
       });
     });
   }

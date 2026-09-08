@@ -105,7 +105,7 @@ final class AdminController
         }
         fputcsv($out, [
             'Matrícula', 'Alumno', 'Email', 'Teléfono', 'Partner', 'Producto', 'Código producto',
-            'Pago', 'Paso', 'Estado caso', 'Examen', 'Folio', 'Clave', 'Proveedor', 'CENNI', 'Actualizado',
+            'Pago', 'Paso', 'Estado caso', 'Examen', 'Folio', 'Clave', 'Zoom', 'Proveedor', 'CENNI', 'Actualizado',
         ]);
         foreach ($rows as $r) {
             $exam = trim((string) ($r['exam_date'] ?? '') . ' ' . (string) ($r['exam_time'] ?? ''));
@@ -126,6 +126,7 @@ final class AdminController
                 $exam,
                 $r['folio'] ?? '',
                 $r['access_key'] ?? '',
+                $r['zoom_url'] ?? '',
                 $provider,
                 $r['cenni_folio'] ?? '',
                 $r['updated_at'] ?? '',
@@ -148,15 +149,16 @@ final class AdminController
                 (string) ($_POST['folio'] ?? ''),
                 (string) ($_POST['access_key'] ?? ''),
                 (int) Auth::id(),
-                $notify
+                $notify,
+                (string) ($_POST['zoom_url'] ?? '')
             );
             flash(
                 $result['notified'] ? 'success' : ($notify ? 'error' : 'success'),
                 $result['notified']
-                    ? 'Folio/clave guardados y plantilla enviada al alumno.'
+                    ? 'Folio/clave/Zoom guardados y plantilla enviada al alumno.'
                     : ($notify
-                        ? 'Folio/clave guardados, pero no se envió el correo. Revisa que el paso de folio/clave tenga «Enviar correo» y la plantilla de accesos.'
-                        : 'Folio/clave guardados.')
+                        ? 'Datos guardados, pero no se envió el correo. Revisa que el paso de accesos tenga «Enviar correo» y la plantilla.'
+                        : 'Folio/clave/Zoom guardados.')
             );
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
@@ -175,6 +177,7 @@ final class AdminController
         }
         $folios = is_array($_POST['folio'] ?? null) ? $_POST['folio'] : [];
         $keys = is_array($_POST['access_key'] ?? null) ? $_POST['access_key'] : [];
+        $zooms = is_array($_POST['zoom_url'] ?? null) ? $_POST['zoom_url'] : [];
         $items = [];
         foreach ($ids as $rawId) {
             $tid = (int) $rawId;
@@ -185,10 +188,11 @@ final class AdminController
                 'tracking_id' => $tid,
                 'folio' => (string) ($folios[(string) $tid] ?? $folios[$tid] ?? ''),
                 'access_key' => (string) ($keys[(string) $tid] ?? $keys[$tid] ?? ''),
+                'zoom_url' => (string) ($zooms[(string) $tid] ?? $zooms[$tid] ?? ''),
             ];
         }
         if ($items === []) {
-            flash('error', 'Selecciona al menos un caso con folio y clave.');
+            flash('error', 'Selecciona al menos un caso.');
             redirect('/admin' . $return);
         }
         try {
@@ -479,6 +483,9 @@ final class AdminController
             if (isset($_FILES['provider_request_workbook']) && is_array($_FILES['provider_request_workbook'])) {
                 $post['_provider_workbook_file'] = $_FILES['provider_request_workbook'];
             }
+            if (isset($_FILES['instruction_pdf_file']) && is_array($_FILES['instruction_pdf_file'])) {
+                $post['_instruction_pdf_file'] = $_FILES['instruction_pdf_file'];
+            }
             $id = (new ProductAdminService())->createGroup($post);
             flash('success', 'Grupo creado. Ya puedes asignarlo a productos.');
             redirect('/admin/grupos/' . $id);
@@ -541,6 +548,9 @@ final class AdminController
             $post = $_POST;
             if (isset($_FILES['provider_request_workbook']) && is_array($_FILES['provider_request_workbook'])) {
                 $post['_provider_workbook_file'] = $_FILES['provider_request_workbook'];
+            }
+            if (isset($_FILES['instruction_pdf_file']) && is_array($_FILES['instruction_pdf_file'])) {
+                $post['_instruction_pdf_file'] = $_FILES['instruction_pdf_file'];
             }
             (new ProductAdminService())->updateGroup($groupId, $post);
             flash('success', 'Grupo actualizado. Los productos del grupo heredan estos cambios.');

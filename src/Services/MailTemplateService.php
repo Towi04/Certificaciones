@@ -46,6 +46,14 @@ final class MailTemplateService
             'exam_time' => 'Hora de examen',
             'folio' => 'Folio UKS / examen',
             'access_key' => 'Clave del día',
+            'zoom_url' => 'Enlace Zoom / reunión',
+        ],
+        'Instrucciones de examen' => [
+            'instruction_pdf_url' => 'URL del PDF de instrucciones',
+            'instruction_pdf_label' => 'Etiqueta del PDF de instrucciones',
+            'instruction_video_url' => 'URL del video (YouTube u otro)',
+            'instruction_video_label' => 'Etiqueta del video de instrucciones',
+            'instructions_html' => 'Bloque HTML con PDF + video',
         ],
         'Documentos (enlaces)' => [
             'reglamento_url' => 'URL reglamento firmado',
@@ -426,7 +434,7 @@ final class MailTemplateService
         return match ($code) {
             self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY => $uks,
             'student_elet_exam_access' => [
-                'name', 'matricula', 'exam_url', 'exam_date', 'exam_time', 'folio', 'access_key',
+                'name', 'matricula', 'exam_url', 'exam_date', 'exam_time', 'folio', 'access_key', 'zoom_url',
             ],
             'student_registration' => [
                 'full_name', 'matricula', 'product_name', 'amount', 'pay_instructions_html',
@@ -623,6 +631,7 @@ final class MailTemplateService
                 'exam_time' => '10:00',
                 'folio' => 'FOLIO-12345',
                 'access_key' => 'CLAVE-DIA',
+                'zoom_url' => 'https://zoom.us/j/123456789',
             ],
             'student_registration' => [
                 'full_name' => 'María Ejemplo',
@@ -661,6 +670,12 @@ final class MailTemplateService
             'exam_url' => 'https://exam.elet.com.mx/',
             'folio' => 'FOLIO-12345',
             'access_key' => 'CLAVE-DIA',
+            'zoom_url' => 'https://zoom.us/j/123456789',
+            'instruction_pdf_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/uploads/groups/1/instructions/guia.pdf',
+            'instruction_pdf_label' => 'Guía de acceso al examen',
+            'instruction_video_url' => 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            'instruction_video_label' => 'Video de instrucciones',
+            'instructions_html' => '<p><a href="#">Guía de acceso al examen</a> · <a href="#">Video de instrucciones</a></p>',
             'results_level' => 'B2',
             'results_score' => '82',
             'results_url' => 'https://certificados.example/elet/9999',
