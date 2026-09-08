@@ -1274,7 +1274,7 @@ final class ProductAdminService
 
         $examExisting = is_array($existing['student_exam_access'] ?? null) ? $existing['student_exam_access'] : [];
         $config['emails'] = GroupEmailAutomation::normalize([
-            // Legacy keys: se conservan en JSON pero quedan inertes (solo pasos del progreso envían).
+            // Legacy: se conservan en JSON pero inertes; solo pasos del progreso envían.
             GroupEmailAutomation::KEY_REGISTRATION => [
                 'enabled' => false,
                 'template_code' => trim((string) ($existing['student_registration']['template_code']

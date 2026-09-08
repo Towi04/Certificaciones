@@ -473,13 +473,13 @@ $renderMailTemplateField = static function (
         </p>
 
         <div class="panel" style="margin:0 0 1rem;padding:.85rem 1rem;background:#f8fafc">
-            <strong style="color:var(--doceo-blue);font-size:.92rem">Correos del ciclo</strong>
+            <strong style="color:var(--doceo-blue);font-size:.92rem">Resumen de correos</strong>
             <p class="muted" style="font-size:.78rem;margin:.25rem 0 .65rem">
-                Todos los correos se configuran en <strong>cada paso</strong> del progreso
-                («Enviar correo» + plantilla + Cuándo auto/admin).
-                No hay envíos hardcodeados de registro o pago.
+                Solo lectura. Los correos se configuran en <strong>cada paso</strong> más abajo
+                («Enviar correo» + plantilla + Cuándo). Aquí ves el total y si son
+                automáticos o los dispara el admin en Operación.
             </p>
-            <div id="step-emails-summary" class="muted" style="font-size:.78rem;margin:.35rem 0 0"></div>
+            <div id="step-emails-summary" class="muted" style="font-size:.82rem;margin:0"></div>
         </div>
 
         <?php if ($pipelines === []): ?>
@@ -930,6 +930,7 @@ $renderMailTemplateField = static function (
       return { enabled: enabled, template_code: template, mode: mode };
     })();
     base.emails = {
+      // Legacy: ya no se configuran aquí; usar pasos del progreso.
       student_registration: {
         enabled: false,
         template_code: 'student_registration'
@@ -1328,7 +1329,7 @@ $renderMailTemplateField = static function (
       } else if (codeHidden && codeHidden.value) {
         codeHidden.dataset.locked = '1';
       }
-      card.querySelectorAll('[data-field="email_enabled"], [data-field="email_template"], [data-field="label"], [data-field="ops_label"]').forEach(function (el) {
+      card.querySelectorAll('[data-field="email_enabled"], [data-field="email_template"], [data-field="email_trigger"], [data-field="label"], [data-field="ops_label"]').forEach(function (el) {
         el.addEventListener('change', refreshStepEmailsSummary);
         el.addEventListener('input', refreshStepEmailsSummary);
       });
@@ -1342,22 +1343,50 @@ $renderMailTemplateField = static function (
     var box = document.getElementById('step-emails-summary');
     if (!box) return;
     var steps = currentStepsFromDom();
-    var lines = [];
+    var rows = [];
+    var autoCount = 0;
+    var adminCount = 0;
     steps.forEach(function (s, i) {
-      if (!s.email_enabled || !s.email_template) return;
-      var tplLabel = s.email_template;
+      if (!s.email_enabled || !String(s.email_template || '').trim()) return;
+      var tplLabel = String(s.email_template).trim();
       var sel = document.querySelector('[name="pipeline_steps[' + i + '][email_template]"]');
       if (sel && sel.selectedOptions && sel.selectedOptions[0]) {
         tplLabel = sel.selectedOptions[0].textContent.trim();
       }
-      lines.push('#' + (i + 1) + ' · ' + (s.label || s.code || 'Paso') + ' → ' + tplLabel);
+      var isAuto = String(s.email_trigger || 'admin') === 'auto';
+      if (isAuto) autoCount++;
+      else adminCount++;
+      rows.push({
+        step: s.label || s.code || ('Paso ' + (i + 1)),
+        template: tplLabel,
+        when: isAuto ? 'Automático al llegar al paso' : 'Admin en Operación',
+        auto: isAuto
+      });
     });
-    if (!lines.length) {
-      box.innerHTML = '<strong style="color:var(--doceo-blue)">Correos en pasos:</strong> ninguno con «Enviar correo» + plantilla todavía.';
+
+    if (!rows.length) {
+      box.innerHTML = '<p style="margin:0">Ningún paso tiene «Enviar correo» + plantilla todavía. '
+        + 'Configúralos en las tarjetas de abajo.</p>';
       return;
     }
-    box.innerHTML = '<strong style="color:var(--doceo-blue)">Correos en pasos (' + lines.length + '):</strong><br>'
-      + lines.map(function (l) { return '· ' + escapeHtml(l); }).join('<br>');
+
+    var html = ''
+      + '<div style="display:flex;flex-wrap:wrap;gap:.55rem .85rem;margin:0 0 .65rem">'
+      + '<span style="display:inline-flex;align-items:center;gap:.35rem;padding:.25rem .55rem;border-radius:999px;background:#e8f0fe;color:#1e3a5f;font-weight:600">'
+      + 'Total: ' + rows.length + '</span>'
+      + '<span style="display:inline-flex;align-items:center;gap:.35rem;padding:.25rem .55rem;border-radius:999px;background:#e6f6ed;color:#176b3a;font-weight:600">'
+      + 'Automáticos: ' + autoCount + '</span>'
+      + '<span style="display:inline-flex;align-items:center;gap:.35rem;padding:.25rem .55rem;border-radius:999px;background:#fff4e5;color:#9a5b00;font-weight:600">'
+      + 'Admin (Operación): ' + adminCount + '</span>'
+      + '</div>'
+      + '<ul style="margin:0;padding-left:1.1rem;line-height:1.45">';
+    rows.forEach(function (r) {
+      html += '<li><strong>' + escapeHtml(r.step) + '</strong> → '
+        + escapeHtml(r.template)
+        + ' <span style="opacity:.85">(' + escapeHtml(r.when) + ')</span></li>';
+    });
+    html += '</ul>';
+    box.innerHTML = html;
   }
 
   var dragSrc = null;
