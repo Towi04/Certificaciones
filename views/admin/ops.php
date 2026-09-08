@@ -174,10 +174,20 @@ $q = (string) ($filters['q'] ?? '');
                                 $audience = (string) ($btn['audience'] ?? ($btn['email']['audience'] ?? 'student'));
                                 $examMailOn = !empty($btn['email']['enabled'])
                                     && trim((string) ($btn['email']['template_code'] ?? '')) !== '';
+                                $stepTplCode = trim((string) ($btn['email']['template_code'] ?? ''));
+                                // Reagendar / plantilla de reagenda: nunca usar flujo de solicitud a proveedor.
+                                if (
+                                    !$collectExam
+                                    && (
+                                        \App\Services\MailTemplateService::rescheduleTemplateHeuristic($stepTplCode)
+                                        || preg_match('/reagend|re-?agend|reschedule/ui', (string) ($btn['label'] ?? '')) === 1
+                                    )
+                                ) {
+                                    $collectExam = true;
+                                }
                                 ?>
                                 <?php if (
                                     $collectExam
-                                    && $audience !== 'provider'
                                     && in_array($action, [
                                         \App\Services\GroupStepConfig::ACTION_EDIT_EXAM,
                                         \App\Services\GroupStepConfig::ACTION_ADVANCE,
@@ -237,7 +247,10 @@ $q = (string) ($filters['q'] ?? '');
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_SEND_MAIL): ?>
                                     <?php
                                     $audience = (string) ($btn['audience'] ?? ($btn['email']['audience'] ?? 'student'));
-                                    $isProviderMail = $audience === 'provider';
+                                    $sendTpl = trim((string) ($btn['email']['template_code'] ?? ''));
+                                    // Plantilla de reagendar o no-proveedor → envío del paso (no solicitud UKS).
+                                    $isProviderMail = $audience === 'provider'
+                                        && !\App\Services\MailTemplateService::rescheduleTemplateHeuristic($sendTpl);
                                     ?>
                                     <?php if ($isProviderMail): ?>
                                     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/solicitud-proveedor')) ?>" class="ops-inline-form">

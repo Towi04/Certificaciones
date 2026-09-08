@@ -322,11 +322,16 @@ final class MailTemplateService
 
     /**
      * audience: preferencia guardada en settings; si no hay, heurística por código.
+     * Plantillas de reagendar/reagenda siempre van al alumno (nunca solicitud a proveedor).
      */
     public static function audienceForTemplate(string $code): string
     {
         $code = trim($code);
         if ($code === '') {
+            return 'student';
+        }
+        // Reagendar → alumno, aunque en settings se haya marcado Proveedor por error.
+        if (self::rescheduleTemplateHeuristic($code)) {
             return 'student';
         }
         $saved = strtolower(trim(Settings::get('mail_tpl_' . $code . '_audience', '') ?? ''));
@@ -340,10 +345,27 @@ final class MailTemplateService
         return self::providerTemplateHeuristic($code) ? 'provider' : 'student';
     }
 
+    /** Códigos de plantilla de reagendar / reprogramar examen (alumno). */
+    public static function rescheduleTemplateHeuristic(string $code): bool
+    {
+        $code = mb_strtolower(trim($code));
+        if ($code === '') {
+            return false;
+        }
+
+        return str_contains($code, 'reagend')
+            || str_contains($code, 'reschedule')
+            || str_contains($code, 're_agend')
+            || str_contains($code, 're-agend');
+    }
+
     /** Heurística legacy por código (uks_*, *_provider*, *proveedor*). */
     public static function providerTemplateHeuristic(string $code): bool
     {
         $code = trim($code);
+        if (self::rescheduleTemplateHeuristic($code)) {
+            return false;
+        }
 
         return in_array($code, [self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY], true)
             || str_starts_with($code, 'uks_')
