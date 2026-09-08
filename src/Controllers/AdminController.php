@@ -974,19 +974,23 @@ final class AdminController
                 $examData['zoom_url'] = $_POST['zoom_url'];
             }
             (new TrackingService())->saveExamSchedule($trackingId, $examData, (int) Auth::id());
-            if ($stepCode !== '') {
-                (new TrackingService())->markStepDone(
-                    $trackingId,
-                    $stepCode,
-                    (int) Auth::id(),
-                    'Fecha/hora de examen actualizada'
-                );
-            }
+            // No usar step_done para bloquear reagendas: la fecha se puede cambiar N veces.
 
             $mailMsg = '';
             if ($useStepMail) {
-                $result = (new StepMailService())->sendForStep($trackingId, $stepCode, (int) Auth::id());
-                $mailMsg = ' Correo «' . $result['template'] . '» enviado a ' . $result['to'] . '.';
+                try {
+                    $result = (new StepMailService())->sendForStep($trackingId, $stepCode, (int) Auth::id());
+                    $mailMsg = ' Correo «' . $result['template'] . '» enviado a ' . $result['to'] . '.';
+                } catch (\Throwable $mailError) {
+                    flash(
+                        'error',
+                        'Fecha de examen guardada, pero no se envió el correo: ' . $mailError->getMessage()
+                    );
+                    if (!empty($_POST['return_ops'])) {
+                        redirect('/admin' . $this->opsReturnQuery());
+                    }
+                    redirect('/admin/seguimientos/' . $trackingId);
+                }
             } elseif ($wantNotify) {
                 $mailMsg = ' Aviso enviado al alumno.';
             }

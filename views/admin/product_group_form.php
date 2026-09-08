@@ -526,9 +526,10 @@ $renderMailTemplateField = static function (
                 <button type="button" class="btn btn-ghost btn-sm" id="pipeline-add-step">+ Agregar paso</button>
             </div>
             <p class="muted" style="font-size:.78rem;margin:0 0 .65rem">
-                Arrastra las tarjetas (☰) para cambiar el orden. Al guardar se actualiza la plantilla seleccionada
-                (compartida si otros grupos la usan). Acciones útiles: <em>Avanzar / marcar hecho</em> (presentado),
-                <em>Editar / reagendar examen</em>, <em>Editar datos del alumno</em>, enviar correo, folio/clave.
+                Arrastra las tarjetas (☰) para cambiar el orden. Acciones en Operación (solo 3):
+                <em>Solo progreso</em>, <em>Enviar correo (plantilla)</em> o <em>Avanzar / marcar hecho</em>.
+                El correo lo defines en el paso (plantilla); si el paso es de reagendar/fecha, Operación muestra fecha/hora
+                y puedes actualizarlas cuantas veces haga falta.
             </p>
             <div id="pipeline-steps-body" class="progress-steps-list"></div>
             <p id="pipeline-steps-empty" class="muted" style="display:none;margin:.5rem 0 0">
@@ -1262,13 +1263,18 @@ $renderMailTemplateField = static function (
   }
 
   function actionSelectHtml(idx, current) {
+    var legacyMap = <?= json_encode(\App\Services\GroupStepConfig::LEGACY_ACTION_MAP, JSON_UNESCAPED_UNICODE) ?>;
+    var selected = current || 'none';
+    if (!actionOptions[selected] && legacyMap[selected]) {
+      selected = legacyMap[selected];
+    }
     var opts = Object.assign({}, actionOptions);
-    if (current && !opts[current] && allActionLabels[current]) {
-      opts[current] = allActionLabels[current] + ' (heredado)';
+    if (current && !actionOptions[current] && allActionLabels[current]) {
+      opts[current] = allActionLabels[current];
     }
     var html = '<select data-field="action" name="pipeline_steps[' + idx + '][action]" style="' + inp + '">';
     Object.keys(opts).forEach(function (k) {
-      html += '<option value="' + escapeHtml(k) + '"' + ((current || 'none') === k ? ' selected' : '') + '>'
+      html += '<option value="' + escapeHtml(k) + '"' + (selected === k ? ' selected' : '') + '>'
         + escapeHtml(opts[k]) + '</option>';
     });
     html += '</select>';
