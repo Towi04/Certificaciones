@@ -874,9 +874,11 @@ final class AdminController
             $svc = new TrackingService();
             if ($to !== '') {
                 $svc->setStep($trackingId, $to, (int) Auth::id(), $note);
+                $svc->markStepDone($trackingId, $to, (int) Auth::id(), $note ?? 'Marcado hecho desde Operación');
                 flash('success', 'Paso actualizado a ' . $to);
             } else {
                 $code = $svc->advance($trackingId, (int) Auth::id(), $note);
+                $svc->markStepDone($trackingId, $code, (int) Auth::id(), $note);
                 flash('success', 'Avanzó a ' . $code);
             }
         } catch (\Throwable $e) {
@@ -931,9 +933,49 @@ final class AdminController
                 'zoom_url' => $_POST['zoom_url'] ?? null,
                 'notify' => !empty($_POST['notify']),
             ], (int) Auth::id());
+            $stepCode = trim((string) ($_POST['step_code'] ?? ''));
+            if ($stepCode !== '') {
+                (new TrackingService())->markStepDone(
+                    $trackingId,
+                    $stepCode,
+                    (int) Auth::id(),
+                    'Fecha/hora de examen actualizada'
+                );
+            }
             flash('success', 'Fecha de examen guardada.');
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
+        }
+        if (!empty($_POST['return_ops'])) {
+            redirect('/admin' . $this->opsReturnQuery());
+        }
+        redirect('/admin/seguimientos/' . $trackingId);
+    }
+
+    public function trackingUpdateStudent(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        try {
+            $svc = new TrackingService();
+            $svc->updateStudentProfile($trackingId, [
+                'first_name' => (string) ($_POST['first_name'] ?? ''),
+                'last_name_p' => (string) ($_POST['last_name_p'] ?? ''),
+                'last_name_m' => (string) ($_POST['last_name_m'] ?? ''),
+                'phone' => (string) ($_POST['phone'] ?? ''),
+                'email' => (string) ($_POST['email'] ?? ''),
+            ], (int) Auth::id());
+            $stepCode = trim((string) ($_POST['step_code'] ?? ''));
+            if ($stepCode !== '') {
+                $svc->markStepDone($trackingId, $stepCode, (int) Auth::id(), 'Datos del alumno corregidos');
+            }
+            flash('success', 'Datos del alumno actualizados.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        if (!empty($_POST['return_ops'])) {
+            redirect('/admin' . $this->opsReturnQuery());
         }
         redirect('/admin/seguimientos/' . $trackingId);
     }

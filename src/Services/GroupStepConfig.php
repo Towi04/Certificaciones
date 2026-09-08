@@ -17,13 +17,17 @@ final class GroupStepConfig
     public const ACTION_SEND_MAIL = 'send_mail';
     public const ACTION_EXAM_ACCESS = 'exam_access';
     public const ACTION_ADVANCE = 'advance';
+    public const ACTION_EDIT_EXAM = 'edit_exam';
+    public const ACTION_EDIT_STUDENT = 'edit_student';
 
     public const ACTIONS = [
         self::ACTION_NONE => 'Solo progreso (sin botón)',
         self::ACTION_CONFIRM_PAYMENT => 'Confirmar pago',
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
         self::ACTION_EXAM_ACCESS => 'Capturar folio/clave y notificar',
-        self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
+        self::ACTION_EDIT_EXAM => 'Editar / reagendar fecha y hora de examen',
+        self::ACTION_EDIT_STUDENT => 'Editar datos del alumno',
+        self::ACTION_ADVANCE => 'Avanzar / marcar hecho (ej. presentado)',
     ];
 
     /**
@@ -36,7 +40,9 @@ final class GroupStepConfig
         self::ACTION_CONFIRM_PAYMENT => 'Confirmar pago',
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
         self::ACTION_EXAM_ACCESS => 'Capturar folio/clave y notificar',
-        self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
+        self::ACTION_EDIT_EXAM => 'Editar / reagendar fecha y hora de examen',
+        self::ACTION_EDIT_STUDENT => 'Editar datos del alumno',
+        self::ACTION_ADVANCE => 'Avanzar / marcar hecho (ej. presentado)',
     ];
 
     /**
@@ -202,7 +208,10 @@ final class GroupStepConfig
                     self::ACTION_CONFIRM_PAYMENT => 0,
                     self::ACTION_SEND_MAIL => 1,
                     self::ACTION_EXAM_ACCESS => 2,
-                    default => 5,
+                    self::ACTION_EDIT_EXAM => 3,
+                    self::ACTION_EDIT_STUDENT => 4,
+                    self::ACTION_ADVANCE => 5,
+                    default => 9,
                 };
             };
 
@@ -226,6 +235,8 @@ final class GroupStepConfig
                 $label = match ($action) {
                     self::ACTION_SEND_MAIL => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
                     self::ACTION_EXAM_ACCESS => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
+                    self::ACTION_EDIT_EXAM => $label . ' (actualizado)',
+                    self::ACTION_EDIT_STUDENT => $label . ' (actualizado)',
                     self::ACTION_ADVANCE => $label . ' (hecho)',
                     default => $label,
                 };
@@ -333,15 +344,14 @@ final class GroupStepConfig
             ));
         }
 
-        // Una sola acción por tipo (excepto varios send_mail por paso).
+        // Varias acciones del mismo tipo pueden coexistir (un botón por paso).
         $seenActions = [];
         $unique = [];
         foreach ($buttons as $btn) {
             $action = (string) ($btn['action'] ?? '');
-            if ($action === self::ACTION_SEND_MAIL) {
-                $key = $action . ':' . (string) ($btn['code'] ?? '');
-            } else {
-                $key = $action;
+            $key = $action . ':' . (string) ($btn['code'] ?? '');
+            if ($action === self::ACTION_CONFIRM_PAYMENT) {
+                $key = $action; // solo un confirmar pago
             }
             if (isset($seenActions[$key])) {
                 continue;
@@ -431,6 +441,8 @@ final class GroupStepConfig
             self::ACTION_SEND_MAIL => self::isMailStepDone($row, $step),
             self::ACTION_EXAM_ACCESS => trim((string) ($row['folio'] ?? '')) !== ''
                 && trim((string) ($row['access_key'] ?? '')) !== '',
+            self::ACTION_EDIT_EXAM => self::isAdvanceDone($row, $step),
+            self::ACTION_EDIT_STUDENT => self::isAdvanceDone($row, $step),
             self::ACTION_ADVANCE => self::isAdvanceDone($row, $step),
             default => false,
         };

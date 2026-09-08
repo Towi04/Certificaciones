@@ -100,6 +100,7 @@ $router->get('/admin/seguimientos/{id}', fn (string $id) => $admin->trackingShow
 $router->post('/admin/seguimientos/{id}/avanzar', fn (string $id) => $admin->trackingAdvance($id));
 $router->post('/admin/seguimientos/{id}/moodle', fn (string $id) => $admin->trackingSyncMoodle($id));
 $router->post('/admin/seguimientos/{id}/examen', fn (string $id) => $admin->trackingUpdateExam($id));
+$router->post('/admin/seguimientos/{id}/alumno', fn (string $id) => $admin->trackingUpdateStudent($id));
 $router->post('/admin/seguimientos/{id}/elet-accesos', fn (string $id) => $admin->trackingPublishEletAccess($id));
 $router->post('/admin/seguimientos/{id}/uks-solicitud', fn (string $id) => $admin->trackingResendUksRequest($id));
 $router->post('/admin/seguimientos/{id}/comprobante-proveedor', fn (string $id) => $admin->trackingUploadProviderProof($id));

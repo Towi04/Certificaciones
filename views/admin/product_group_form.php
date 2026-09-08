@@ -475,9 +475,11 @@ $renderMailTemplateField = static function (
         </p>
 
         <div class="panel" style="margin:0 0 1rem;padding:.85rem 1rem;background:#f8fafc">
-            <strong style="color:var(--doceo-blue);font-size:.92rem">Correos del ciclo (alumno)</strong>
+            <strong style="color:var(--doceo-blue);font-size:.92rem">Correos automáticos del ciclo</strong>
             <p class="muted" style="font-size:.78rem;margin:.25rem 0 .65rem">
-                Estos no son pasos del progreso: se envían al registrarse o al confirmar el pago.
+                Solo estos dos se disparan solos (registro / pago).
+                Los correos de UKS, accesos, etc. se configuran en <strong>cada paso</strong> más abajo
+                (casilla «Enviar correo» + plantilla) — no aparecen aquí.
             </p>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.65rem">
                 <label class="muted" style="font-size:.82rem;display:flex;flex-direction:column;gap:.3rem">
@@ -489,6 +491,7 @@ $renderMailTemplateField = static function (
                     <?php $renderMailTemplateField('email_payment_template', (string) ($emailPay['template_code'] ?? 'student_payment_confirmed'), $mailTemplates, $inputStyle); ?>
                 </label>
             </div>
+            <div id="step-emails-summary" class="muted" style="font-size:.78rem;margin:.75rem 0 0;padding-top:.65rem;border-top:1px dashed #d5deea"></div>
         </div>
 
         <?php if ($pipelines === []): ?>
@@ -523,10 +526,9 @@ $renderMailTemplateField = static function (
                 <button type="button" class="btn btn-ghost btn-sm" id="pipeline-add-step">+ Agregar paso</button>
             </div>
             <p class="muted" style="font-size:.78rem;margin:0 0 .65rem">
-                Al guardar se actualiza la plantilla seleccionada (compartida si otros grupos la usan).
-                Los botones de Operación salen de los pasos con “Mostrar en Operación” activos.
-                La plantilla Excel del correo se configura en
-                <a href="<?= e(url('/admin/correos')) ?>">Correos</a>.
+                Arrastra las tarjetas (☰) para cambiar el orden. Al guardar se actualiza la plantilla seleccionada
+                (compartida si otros grupos la usan). Acciones útiles: <em>Avanzar / marcar hecho</em> (presentado),
+                <em>Editar / reagendar examen</em>, <em>Editar datos del alumno</em>, enviar correo, folio/clave.
             </p>
             <div id="pipeline-steps-body" class="progress-steps-list"></div>
             <p id="pipeline-steps-empty" class="muted" style="display:none;margin:.5rem 0 0">
@@ -587,7 +589,15 @@ $renderMailTemplateField = static function (
 .progress-step-card {
   border:1px solid #dbe3ef; border-radius:12px; padding:.75rem .85rem; background:#fff;
 }
-.progress-step-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:.55rem; }
+.progress-step-card.is-dragging { opacity:.55; border-style:dashed; }
+.progress-step-card.drag-over { border-color:var(--doceo-blue); box-shadow:0 0 0 2px rgba(26,74,140,.15); }
+.progress-step-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:.55rem; gap:.5rem; }
+.progress-step-drag {
+  cursor:grab; user-select:none; color:var(--doceo-muted); font-size:1rem; padding:.15rem .35rem;
+  border:1px solid transparent; border-radius:8px; background:transparent;
+}
+.progress-step-drag:active { cursor:grabbing; }
+.progress-step-head-left { display:flex; align-items:center; gap:.45rem; }
 .progress-step-grid {
   display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:.55rem;
 }
@@ -1262,7 +1272,10 @@ $renderMailTemplateField = static function (
       }).join('');
       card.innerHTML =
         '<div class="progress-step-head">' +
-          '<strong class="muted">#' + (idx + 1) + '</strong>' +
+          '<div class="progress-step-head-left">' +
+            '<button type="button" class="progress-step-drag" title="Arrastrar para reordenar" aria-label="Arrastrar">☰</button>' +
+            '<strong class="muted">#' + (idx + 1) + '</strong>' +
+          '</div>' +
           '<button type="button" class="btn btn-ghost btn-sm pipeline-remove-step" title="Quitar">✕</button>' +
         '</div>' +
         '<div class="progress-step-grid">' +
@@ -1293,12 +1306,93 @@ $renderMailTemplateField = static function (
           if (!codeHidden.dataset.locked) {
             codeHidden.value = slugStepCode(labelInput.value);
           }
+          refreshStepEmailsSummary();
         });
       } else if (codeHidden && codeHidden.value) {
         codeHidden.dataset.locked = '1';
       }
+      card.querySelectorAll('[data-field="email_enabled"], [data-field="email_template"], [data-field="label"], [data-field="ops_label"]').forEach(function (el) {
+        el.addEventListener('change', refreshStepEmailsSummary);
+        el.addEventListener('input', refreshStepEmailsSummary);
+      });
     });
     renderInitialOptions(steps, initialSelectedStep || (initialSelect && initialSelect.value) || '');
+    refreshStepEmailsSummary();
+    bindStepDrag();
+  }
+
+  function refreshStepEmailsSummary() {
+    var box = document.getElementById('step-emails-summary');
+    if (!box) return;
+    var steps = currentStepsFromDom();
+    var lines = [];
+    steps.forEach(function (s, i) {
+      if (!s.email_enabled || !s.email_template) return;
+      var tplLabel = s.email_template;
+      var sel = document.querySelector('[name="pipeline_steps[' + i + '][email_template]"]');
+      if (sel && sel.selectedOptions && sel.selectedOptions[0]) {
+        tplLabel = sel.selectedOptions[0].textContent.trim();
+      }
+      lines.push('#' + (i + 1) + ' · ' + (s.label || s.code || 'Paso') + ' → ' + tplLabel);
+    });
+    if (!lines.length) {
+      box.innerHTML = '<strong style="color:var(--doceo-blue)">Correos en pasos:</strong> ninguno con «Enviar correo» + plantilla todavía.';
+      return;
+    }
+    box.innerHTML = '<strong style="color:var(--doceo-blue)">Correos en pasos (' + lines.length + '):</strong><br>'
+      + lines.map(function (l) { return '· ' + escapeHtml(l); }).join('<br>');
+  }
+
+  var dragSrc = null;
+  function bindStepDrag() {
+    if (!stepsBody) return;
+    stepsBody.querySelectorAll('.progress-step-card').forEach(function (card) {
+      card.setAttribute('draggable', 'false');
+      var handle = card.querySelector('.progress-step-drag');
+      if (handle) {
+        handle.addEventListener('mousedown', function () { card.setAttribute('draggable', 'true'); });
+        handle.addEventListener('mouseup', function () { card.setAttribute('draggable', 'false'); });
+      }
+      card.addEventListener('dragstart', function (e) {
+        if (card.getAttribute('draggable') !== 'true') {
+          e.preventDefault();
+          return;
+        }
+        dragSrc = card;
+        card.classList.add('is-dragging');
+        try { e.dataTransfer.setData('text/plain', 'step'); e.dataTransfer.effectAllowed = 'move'; } catch (err) {}
+      });
+      card.addEventListener('dragend', function () {
+        card.classList.remove('is-dragging');
+        card.setAttribute('draggable', 'false');
+        stepsBody.querySelectorAll('.progress-step-card').forEach(function (c) { c.classList.remove('drag-over'); });
+        dragSrc = null;
+      });
+      card.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        if (!dragSrc || dragSrc === card) return;
+        card.classList.add('drag-over');
+        try { e.dataTransfer.dropEffect = 'move'; } catch (err) {}
+      });
+      card.addEventListener('dragleave', function () {
+        card.classList.remove('drag-over');
+      });
+      card.addEventListener('drop', function (e) {
+        e.preventDefault();
+        card.classList.remove('drag-over');
+        if (!dragSrc || dragSrc === card) return;
+        var cards = Array.prototype.slice.call(stepsBody.querySelectorAll('.progress-step-card'));
+        var from = cards.indexOf(dragSrc);
+        var to = cards.indexOf(card);
+        if (from < 0 || to < 0) return;
+        if (from < to) {
+          card.parentNode.insertBefore(dragSrc, card.nextSibling);
+        } else {
+          card.parentNode.insertBefore(dragSrc, card);
+        }
+        renderSteps(currentStepsFromDom());
+      });
+    });
   }
 
   function loadPipeline(code) {
