@@ -509,8 +509,8 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                             <?= csrf_field() ?>
                             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem">
                                 <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-                                    Archivo de imagen
-                                    <input type="file" name="media_file" accept=".jpg,.jpeg,.png,.webp,.gif,.svg">
+                                    Archivo (imagen o documento)
+                                    <input type="file" name="media_file" accept=".jpg,.jpeg,.png,.webp,.gif,.svg,.pdf,.doc,.docx">
                                 </label>
                                 <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
                                     Video YouTube
@@ -518,7 +518,7 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                                 </label>
                                 <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
                                     Título
-                                    <input type="text" name="title" placeholder="Ej. Ejemplo de certificado" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                                    <input type="text" name="title" placeholder="Ej. Temario del curso" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
                                 </label>
                                 <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
                                     Orden
@@ -533,7 +533,8 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                                 <input type="checkbox" name="is_active" value="1" checked> Mostrar en catálogo
                             </label>
                             <p class="muted" style="font-size:.82rem;margin:.5rem 0 .85rem">
-                                Sube una imagen o pega un link de YouTube. Si llenas ambos, se usará el video de YouTube.
+                                Sube una imagen, un documento (PDF/DOC, p. ej. temario) o pega un link de YouTube.
+                                Si llenas YouTube y archivo, se usará el video de YouTube.
                             </p>
                             <button class="btn btn-accent btn-sm" type="submit">Agregar multimedia</button>
                         </form>
@@ -550,6 +551,11 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                                                     <iframe src="<?= e((string) $item['external_url']) ?>" title="<?= e((string) ($item['title'] ?? 'Video')) ?>" allowfullscreen loading="lazy"></iframe>
                                                 <?php elseif (($item['media_type'] ?? '') === 'video'): ?>
                                                     <video src="<?= e(asset((string) $item['storage_path'])) ?>" controls preload="metadata"></video>
+                                                <?php elseif (($item['media_type'] ?? '') === 'document'): ?>
+                                                    <div class="product-media-doc-preview" aria-hidden="true">
+                                                        <span>DOC</span>
+                                                        <a href="<?= e(asset((string) $item['storage_path'])) ?>" target="_blank" rel="noopener">Abrir</a>
+                                                    </div>
                                                 <?php else: ?>
                                                     <img src="<?= e(asset((string) $item['storage_path'])) ?>" alt="">
                                                 <?php endif; ?>
@@ -580,6 +586,10 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                                                             <?php if (($item['media_type'] ?? '') === 'image'): ?>
                                                                 <label class="product-media-edit-file">Reemplazar imagen
                                                                     <input type="file" name="media_file" accept=".jpg,.jpeg,.png,.webp,.gif,.svg">
+                                                                </label>
+                                                            <?php elseif (($item['media_type'] ?? '') === 'document'): ?>
+                                                                <label class="product-media-edit-file">Reemplazar documento
+                                                                    <input type="file" name="media_file" accept=".pdf,.doc,.docx">
                                                                 </label>
                                                             <?php endif; ?>
                                                             <label class="product-media-check">
@@ -739,6 +749,20 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
     height: 100%;
     object-fit: contain;
     border: 0;
+}
+.product-media-doc-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .35rem;
+    color: var(--doceo-blue);
+    font-weight: 700;
+    font-size: .95rem;
+}
+.product-media-doc-preview a {
+    font-size: .78rem;
+    font-weight: 600;
 }
 .product-media-actions {
     display: flex;

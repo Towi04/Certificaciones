@@ -87,8 +87,8 @@ $renderMailTemplateField = static function (
 </h1>
 <p class="muted">
     Configura lo compartido por varias certificaciones del mismo proveedor:
-    datos del alumno, días/horarios, reglamento, pagos y la tarjeta de
-    <strong>Progreso</strong> del caso.
+    datos del alumno, fechas/horarios, inventario, Zoom, docs para correos,
+    reglamento, pagos y la tarjeta de <strong>Progreso</strong> del caso.
     Las <a href="<?= e(url('/admin/vacaciones')) ?>"><strong>vacaciones globales</strong></a>
     se publican una sola vez (excepto grupos marcados como 365 días).
 </p>
@@ -97,6 +97,9 @@ $renderMailTemplateField = static function (
     <button type="button" class="group-tab active" data-tab="general" role="tab" aria-selected="true">General</button>
     <button type="button" class="group-tab" data-tab="fields" role="tab" aria-selected="false">Datos del alumno</button>
     <button type="button" class="group-tab" data-tab="schedule" role="tab" aria-selected="false">Fechas y horarios</button>
+    <button type="button" class="group-tab" data-tab="inventory" role="tab" aria-selected="false">Inventario</button>
+    <button type="button" class="group-tab" data-tab="zoom" role="tab" aria-selected="false">Zoom</button>
+    <button type="button" class="group-tab" data-tab="docs" role="tab" aria-selected="false">Docs</button>
     <button type="button" class="group-tab" data-tab="rules" role="tab" aria-selected="false">Reglamento</button>
     <button type="button" class="group-tab" data-tab="payments" role="tab" aria-selected="false">Pagos</button>
     <button type="button" class="group-tab" data-tab="progress" role="tab" aria-selected="false">Progreso y acciones</button>
@@ -495,10 +498,10 @@ $renderMailTemplateField = static function (
                       style="<?= e($inputStyle) ?>;font-family:ui-monospace,monospace;font-size:.82rem;width:100%;resize:vertical"
                       placeholder="2026-11-15|10:00|2026-10-20|Noviembre&#10;2027-03-12|10:00|2027-02-15|Marzo"><?= e((string) ($extras['schedule_sessions_text'] ?? '')) ?></textarea>
         </div>
+    </div>
 
-        <hr style="border:0;border-top:1px solid #e6edf7;margin:1.25rem 0">
-
-        <h3 style="margin:0 0 .55rem;font-size:.98rem;color:var(--doceo-blue)">Inventario de códigos (folio/clave)</h3>
+    <div class="group-panel" data-panel="inventory" hidden>
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Inventario de códigos (folio/clave)</h2>
         <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
             Para iTEP y similares: compras lotes al proveedor, los subes en
             <a href="<?= e(url('/admin/inventario')) ?>">Admin → Inventario</a>.
@@ -574,10 +577,10 @@ $renderMailTemplateField = static function (
                 <?= !isset($extras['inventory_reallocate_enabled']) || !empty($extras['inventory_reallocate_enabled']) ? 'checked' : '' ?>>
             Permitir reasignar códigos de exámenes lejanos si hay urgencia y stock 0
         </label>
+    </div>
 
-        <hr style="border:0;border-top:1px solid #e6edf7;margin:1.25rem 0">
-
-        <h3 style="margin:0 0 .55rem;font-size:.98rem;color:var(--doceo-blue)">Accesos y Zoom</h3>
+    <div class="group-panel" data-panel="zoom" hidden>
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Accesos y Zoom</h2>
         <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:1rem">
             <input type="checkbox" name="exam_capture_zoom" value="1" style="margin-top:.2rem"
                 <?= !empty($extras['exam_capture_zoom']) ? 'checked' : '' ?>>
@@ -589,79 +592,143 @@ $renderMailTemplateField = static function (
                 </span>
             </span>
         </label>
+    </div>
 
-        <h3 style="margin:0 0 .55rem;font-size:.98rem;color:var(--doceo-blue)">Instrucciones para el alumno</h3>
+    <div class="group-panel" data-panel="docs" hidden>
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Docs para correos</h2>
         <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
-            PDF o video (YouTube) que sueles mandar con cómo acceder al examen.
-            Al guardar aparecen como placeholders en Admin → Correos:
-            <code>{{instruction_pdf_url}}</code>,
-            <code>{{instruction_video_url}}</code>,
-            <code>{{instructions_html}}</code>.
+            Sube varios archivos (PDF/DOC) o enlaces a videos/documentos que necesites en las plantillas.
+            Cada fila tiene un <strong>código</strong> para placeholders:
+            <code>{{doc_<em>codigo</em>_url}}</code>,
+            <code>{{doc_<em>codigo</em>_label}}</code>.
+            También puedes usar
+            <code>{{instruction_docs_html}}</code> (lista de todos),
+            <code>{{instructions_html}}</code>,
+            <code>{{instruction_pdf_url}}</code> y
+            <code>{{instruction_video_url}}</code> (primer archivo/enlace y primer video).
         </p>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem">
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Etiqueta del PDF
-                <input type="text" name="instruction_pdf_label"
-                       value="<?= e((string) ($extras['instruction_pdf_label'] ?? '')) ?>"
-                       placeholder="Guía de acceso TOEFL"
-                       style="<?= e($inputStyle) ?>">
-            </label>
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                URL externa del PDF (Drive, etc.)
-                <input type="url" name="instruction_pdf_url"
-                       value="<?= e((string) ($extras['instruction_pdf_url'] ?? '')) ?>"
-                       placeholder="https://drive.google.com/…"
-                       style="<?= e($inputStyle) ?>">
-            </label>
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Subir PDF
-                <input type="hidden" name="instruction_pdf_path"
-                       value="<?= e((string) ($extras['instruction_pdf_path'] ?? '')) ?>">
-                <input type="file" name="instruction_pdf_file" accept=".pdf,application/pdf"
-                       style="<?= e($inputStyle) ?>">
-                <?php if (trim((string) ($extras['instruction_pdf_path'] ?? '')) !== ''): ?>
-                    <span style="font-weight:500;font-size:.75rem">
-                        Actual:
-                        <a href="<?= e(\App\Services\ExamInstructionAssets::absoluteUrl((string) $extras['instruction_pdf_path'])) ?>"
-                           target="_blank" rel="noopener">ver archivo</a>
-                    </span>
-                    <label style="display:flex;align-items:center;gap:.35rem;font-weight:500;font-size:.78rem;margin-top:.35rem">
-                        <input type="checkbox" name="instruction_clear_pdf" value="1"> Quitar PDF subido
-                    </label>
-                <?php endif; ?>
-            </label>
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Etiqueta del video
-                <input type="text" name="instruction_video_label"
-                       value="<?= e((string) ($extras['instruction_video_label'] ?? '')) ?>"
-                       placeholder="Video de instrucciones"
-                       style="<?= e($inputStyle) ?>">
-            </label>
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                URL del video (YouTube u otro)
-                <input type="url" name="instruction_video_url"
-                       value="<?= e((string) ($extras['instruction_video_url'] ?? '')) ?>"
-                       placeholder="https://www.youtube.com/watch?v=…"
-                       style="<?= e($inputStyle) ?>">
-            </label>
+        <?php
+        $instructionDocs = is_array($extras['instruction_docs'] ?? null) ? $extras['instruction_docs'] : [];
+        if ($instructionDocs === []) {
+            $instructionDocs = [[
+                'code' => '',
+                'label' => '',
+                'kind' => 'file',
+                'path' => '',
+                'url' => '',
+            ]];
+        }
+        ?>
+        <div id="instruction-docs-list" style="display:grid;gap:.85rem">
+            <?php foreach ($instructionDocs as $docIdx => $docRow): ?>
+                <?php
+                $docKind = (string) ($docRow['kind'] ?? 'file');
+                if (!in_array($docKind, ['file', 'link', 'video'], true)) {
+                    $docKind = 'file';
+                }
+                $docPath = trim((string) ($docRow['path'] ?? ''));
+                $docUrl = trim((string) ($docRow['url'] ?? ''));
+                ?>
+                <div class="instruction-doc-row panel" style="margin:0;padding:.85rem;border:1px solid #e6edf7;border-radius:12px;background:#fafcff">
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.65rem">
+                        <label class="muted" style="<?= e($labelStyle) ?>">
+                            Código (placeholder)
+                            <input type="text" name="instruction_doc_code[]"
+                                   value="<?= e((string) ($docRow['code'] ?? '')) ?>"
+                                   placeholder="temario"
+                                   pattern="[a-z0-9_\-]*"
+                                   style="<?= e($inputStyle) ?>">
+                        </label>
+                        <label class="muted" style="<?= e($labelStyle) ?>">
+                            Etiqueta
+                            <input type="text" name="instruction_doc_label[]"
+                                   value="<?= e((string) ($docRow['label'] ?? '')) ?>"
+                                   placeholder="Temario del curso"
+                                   style="<?= e($inputStyle) ?>">
+                        </label>
+                        <label class="muted" style="<?= e($labelStyle) ?>">
+                            Tipo
+                            <select name="instruction_doc_kind[]" class="instruction-doc-kind" style="<?= e($inputStyle) ?>">
+                                <option value="file" <?= $docKind === 'file' ? 'selected' : '' ?>>Archivo (PDF/DOC)</option>
+                                <option value="link" <?= $docKind === 'link' ? 'selected' : '' ?>>Enlace externo</option>
+                                <option value="video" <?= $docKind === 'video' ? 'selected' : '' ?>>Video (YouTube u otro)</option>
+                            </select>
+                        </label>
+                        <label class="muted instruction-doc-url-wrap" style="<?= e($labelStyle) ?><?= $docKind === 'file' && $docUrl === '' ? ';opacity:.65' : '' ?>">
+                            URL (enlace / video)
+                            <input type="url" name="instruction_doc_url[]"
+                                   value="<?= e($docUrl) ?>"
+                                   placeholder="https://…"
+                                   style="<?= e($inputStyle) ?>">
+                        </label>
+                        <label class="muted" style="<?= e($labelStyle) ?>">
+                            Subir archivo
+                            <input type="hidden" name="instruction_doc_path[]" value="<?= e($docPath) ?>">
+                            <input type="file" name="instruction_doc_file[<?= (int) $docIdx ?>]"
+                                   accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                   style="<?= e($inputStyle) ?>">
+                            <?php if ($docPath !== ''): ?>
+                                <span style="font-weight:500;font-size:.75rem">
+                                    Actual:
+                                    <a href="<?= e(\App\Services\ExamInstructionAssets::absoluteUrl($docPath)) ?>"
+                                       target="_blank" rel="noopener">ver archivo</a>
+                                </span>
+                                <label style="display:flex;align-items:center;gap:.35rem;font-weight:500;font-size:.78rem;margin-top:.35rem">
+                                    <input type="checkbox" name="instruction_doc_clear[<?= (int) $docIdx ?>]" value="1"> Quitar archivo subido
+                                </label>
+                            <?php endif; ?>
+                        </label>
+                    </div>
+                    <button type="button" class="btn btn-ghost btn-sm instruction-doc-remove" style="margin-top:.65rem">Quitar fila</button>
+                </div>
+            <?php endforeach; ?>
         </div>
+        <button type="button" class="btn btn-primary btn-sm" id="instruction-doc-add" style="margin-top:.85rem">+ Agregar documento / enlace</button>
         <?php
         $instrPreview = \App\Services\ExamInstructionAssets::mailVars([
             'exam_instructions' => [
-                'pdf_path' => (string) ($extras['instruction_pdf_path'] ?? ''),
-                'pdf_url' => (string) ($extras['instruction_pdf_url'] ?? ''),
-                'pdf_label' => (string) ($extras['instruction_pdf_label'] ?? ''),
-                'video_url' => (string) ($extras['instruction_video_url'] ?? ''),
-                'video_label' => (string) ($extras['instruction_video_label'] ?? ''),
+                'documents' => $instructionDocs,
             ],
         ]);
         ?>
-        <?php if (trim((string) ($instrPreview['instructions_html'] ?? '')) !== ''): ?>
+        <?php if (trim((string) ($instrPreview['instruction_docs_html'] ?? '')) !== ''): ?>
             <div class="callout callout-info" style="margin-top:.9rem;font-size:.85rem">
-                <strong>Vista previa de {{instructions_html}}:</strong>
-                <?= $instrPreview['instructions_html'] ?>
+                <strong>Vista previa de {{instruction_docs_html}}:</strong>
+                <?= $instrPreview['instruction_docs_html'] ?>
             </div>
         <?php endif; ?>
+        <template id="instruction-doc-row-template">
+            <div class="instruction-doc-row panel" style="margin:0;padding:.85rem;border:1px solid #e6edf7;border-radius:12px;background:#fafcff">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.65rem">
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Código (placeholder)
+                        <input type="text" name="instruction_doc_code[]" value="" placeholder="temario" style="<?= e($inputStyle) ?>">
+                    </label>
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Etiqueta
+                        <input type="text" name="instruction_doc_label[]" value="" placeholder="Temario del curso" style="<?= e($inputStyle) ?>">
+                    </label>
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Tipo
+                        <select name="instruction_doc_kind[]" class="instruction-doc-kind" style="<?= e($inputStyle) ?>">
+                            <option value="file" selected>Archivo (PDF/DOC)</option>
+                            <option value="link">Enlace externo</option>
+                            <option value="video">Video (YouTube u otro)</option>
+                        </select>
+                    </label>
+                    <label class="muted instruction-doc-url-wrap" style="<?= e($labelStyle) ?>">
+                        URL (enlace / video)
+                        <input type="url" name="instruction_doc_url[]" value="" placeholder="https://…" style="<?= e($inputStyle) ?>">
+                    </label>
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Subir archivo
+                        <input type="hidden" name="instruction_doc_path[]" value="">
+                        <input type="file" data-instruction-doc-file accept=".pdf,.doc,.docx,application/pdf">
+                    </label>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm instruction-doc-remove" style="margin-top:.65rem">Quitar fila</button>
+            </div>
+        </template>
     </div>
 
     <div class="group-panel" data-panel="rules" hidden>
@@ -955,6 +1022,50 @@ $renderMailTemplateField = static function (
     syncScheduleModePanels();
   }
 
+  (function setupInstructionDocs() {
+    var list = document.getElementById('instruction-docs-list');
+    var tpl = document.getElementById('instruction-doc-row-template');
+    var addBtn = document.getElementById('instruction-doc-add');
+    if (!list || !tpl || !addBtn) return;
+
+    function reindexDocFiles() {
+      var rows = list.querySelectorAll('.instruction-doc-row');
+      rows.forEach(function (row, idx) {
+        var file = row.querySelector('input[type="file"]');
+        if (file) file.setAttribute('name', 'instruction_doc_file[' + idx + ']');
+        var clear = row.querySelector('[name^="instruction_doc_clear"]');
+        if (clear) clear.setAttribute('name', 'instruction_doc_clear[' + idx + ']');
+      });
+    }
+
+    addBtn.addEventListener('click', function () {
+      var node = tpl.content.cloneNode(true);
+      list.appendChild(node);
+      reindexDocFiles();
+    });
+
+    list.addEventListener('click', function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest('.instruction-doc-remove') : null;
+      if (!btn) return;
+      var row = btn.closest('.instruction-doc-row');
+      if (!row) return;
+      if (list.querySelectorAll('.instruction-doc-row').length <= 1) {
+        row.querySelectorAll('input[type="text"], input[type="url"], input[type="hidden"]').forEach(function (el) {
+          el.value = '';
+        });
+        var kind = row.querySelector('select');
+        if (kind) kind.value = 'file';
+        var file = row.querySelector('input[type="file"]');
+        if (file) file.value = '';
+        return;
+      }
+      row.remove();
+      reindexDocFiles();
+    });
+
+    reindexDocFiles();
+  })();
+
   var usedDocCodes = <?= json_encode($usedDocCodes, JSON_UNESCAPED_UNICODE) ?>;
   var currentGroupCode = <?= json_encode($groupCode, JSON_UNESCAPED_UNICODE) ?>;
   var docInput = document.getElementById('reglamento_doc_code');
@@ -1090,17 +1201,51 @@ $renderMailTemplateField = static function (
       validity_months: Math.max(1, Math.min(36, intVal('exam_validity_months', 6))),
       capture_zoom: checked('exam_capture_zoom')
     });
-    var instrPdfPath = <?= json_encode((string) ($extras['instruction_pdf_path'] ?? ''), JSON_UNESCAPED_UNICODE) ?>;
-    if (checked('instruction_clear_pdf')) instrPdfPath = '';
-    var instr = {
-      pdf_path: instrPdfPath,
-      pdf_url: val('instruction_pdf_url', ''),
-      pdf_label: val('instruction_pdf_label', '') || 'Guía / PDF de instrucciones',
-      video_url: val('instruction_video_url', ''),
-      video_label: val('instruction_video_label', '') || 'Video de instrucciones'
-    };
-    if (instr.pdf_path || instr.pdf_url || instr.video_url || val('instruction_pdf_label', '') || val('instruction_video_label', '')) {
-      base.exam_instructions = instr;
+    var instrDocs = [];
+    var docRows = document.querySelectorAll('#instruction-docs-list .instruction-doc-row');
+    docRows.forEach(function (row) {
+      var codeEl = row.querySelector('[name="instruction_doc_code[]"]');
+      var labelEl = row.querySelector('[name="instruction_doc_label[]"]');
+      var kindEl = row.querySelector('[name="instruction_doc_kind[]"]');
+      var urlEl = row.querySelector('[name="instruction_doc_url[]"]');
+      var pathEl = row.querySelector('[name="instruction_doc_path[]"]');
+      var clearEl = row.querySelector('[name^="instruction_doc_clear"]');
+      var code = codeEl ? String(codeEl.value || '').trim() : '';
+      var label = labelEl ? String(labelEl.value || '').trim() : '';
+      var kind = kindEl ? String(kindEl.value || 'file') : 'file';
+      var url = urlEl ? String(urlEl.value || '').trim() : '';
+      var path = pathEl ? String(pathEl.value || '').trim() : '';
+      if (clearEl && clearEl.checked) path = '';
+      if (!code && !label && !url && !path) return;
+      if (!code) {
+        code = (label || (kind === 'video' ? 'video' : 'doc')).toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_|_$/g, '');
+      }
+      if (!code) return;
+      if (kind === 'file' && !path && !url) return;
+      if ((kind === 'link' || kind === 'video') && !url) return;
+      instrDocs.push({
+        code: code,
+        label: label || code,
+        kind: kind,
+        path: path || null,
+        url: url || null
+      });
+    });
+    if (instrDocs.length) {
+      var firstFile = null;
+      var firstVideo = null;
+      instrDocs.forEach(function (d) {
+        if (!firstFile && (d.kind === 'file' || d.kind === 'link')) firstFile = d;
+        if (!firstVideo && d.kind === 'video') firstVideo = d;
+      });
+      base.exam_instructions = {
+        pdf_path: firstFile && firstFile.path ? firstFile.path : null,
+        pdf_url: firstFile && firstFile.url ? firstFile.url : null,
+        pdf_label: firstFile ? (firstFile.label || 'Guía / PDF de instrucciones') : 'Guía / PDF de instrucciones',
+        video_url: firstVideo && firstVideo.url ? firstVideo.url : null,
+        video_label: firstVideo ? (firstVideo.label || 'Video de instrucciones') : 'Video de instrucciones',
+        documents: instrDocs
+      };
     } else {
       delete base.exam_instructions;
     }

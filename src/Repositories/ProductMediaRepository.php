@@ -102,7 +102,7 @@ final class ProductMediaRepository
             "CREATE TABLE IF NOT EXISTS product_media (
                 id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                 product_id BIGINT UNSIGNED NOT NULL,
-                media_type ENUM('image','video') NOT NULL,
+                media_type ENUM('image','video','document') NOT NULL,
                 title VARCHAR(190) NOT NULL DEFAULT '',
                 caption VARCHAR(255) NULL,
                 storage_path VARCHAR(255) NOT NULL DEFAULT '',
@@ -119,6 +119,21 @@ final class ProductMediaRepository
 
         if (!$this->columnExists('product_media', 'external_url')) {
             $this->pdo->exec('ALTER TABLE product_media ADD COLUMN external_url VARCHAR(512) NULL AFTER storage_path');
+        }
+
+        // Ampliar ENUM para documentos (temario PDF, etc.) si la tabla ya existía.
+        try {
+            $col = $this->pdo->query(
+                "SHOW COLUMNS FROM product_media LIKE 'media_type'"
+            )->fetch();
+            $type = strtolower((string) ($col['Type'] ?? ''));
+            if ($type !== '' && !str_contains($type, 'document')) {
+                $this->pdo->exec(
+                    "ALTER TABLE product_media MODIFY COLUMN media_type ENUM('image','video','document') NOT NULL"
+                );
+            }
+        } catch (\Throwable) {
+            // Si no hay permisos ALTER, createTable ya incluye document en instalaciones nuevas.
         }
 
         self::$schemaEnsured = true;
