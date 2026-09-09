@@ -47,7 +47,8 @@ final class StepMailService
             'name' => $tracking['product_name'] ?? '',
             'code' => $tracking['product_code'] ?? '',
         ];
-        $defs = GroupStepConfig::defsFromConfig(CheckoutRequirements::config($product));
+        $cfg = CheckoutRequirements::config($product);
+        $defs = GroupStepConfig::defsFromConfig($cfg);
         $def = is_array($defs[$stepCode] ?? null) ? $defs[$stepCode] : null;
         if ($def === null) {
             throw new \InvalidArgumentException('El paso «' . $stepCode . '» no está en el grupo.');
@@ -55,46 +56,29 @@ final class StepMailService
 
         $emailCfg = is_array($def['email'] ?? null) ? $def['email'] : [];
         $tplCode = trim((string) ($emailCfg['template_code'] ?? ''));
-        $isResultsStep = (string) ($def['action'] ?? '') === GroupStepConfig::ACTION_SEND_RESULTS;
-        $cfg = CheckoutRequirements::config($product);
         $delivery = ResultsDeliveryService::fromConfig($cfg);
+        $state = ResultsDeliveryService::stateFromTracking($tracking);
+        $requiresResults = ResultsDeliveryService::stepRequiresResults($def, $delivery, $tplCode);
         $attachments = [];
 
-        if ($isResultsStep) {
-            if (!$delivery['enabled']) {
-                throw new \InvalidArgumentException('Este grupo no envía resultados desde DOCEO.');
-            }
-            if (!ResultsDeliveryService::isReady($tracking, $delivery)) {
-                throw new \InvalidArgumentException(ResultsDeliveryService::blockedReason($tracking, $delivery));
-            }
-            $state = ResultsDeliveryService::stateFromTracking($tracking);
+        if ($requiresResults) {
             if ($state['cancelled']) {
-                $tplCode = $delivery['cancel_template'];
+                $tplCode = trim((string) ($delivery['cancel_template'] ?? ''));
                 if ($tplCode === '') {
                     throw new \InvalidArgumentException(
                         'Configura la plantilla de cancelación en el grupo (pestaña Resultados).'
                     );
                 }
-            } elseif ($tplCode === '') {
-                throw new \InvalidArgumentException('El paso de resultados no tiene plantilla de correo configurada.');
+            } elseif (!ResultsDeliveryService::isReady($tracking, $delivery)) {
+                throw new \InvalidArgumentException(ResultsDeliveryService::blockedReason($tracking, $delivery));
             }
-            if (!$state['cancelled'] && $delivery['mode'] === ResultsDeliveryService::MODE_PDF && $state['pdf_path'] !== '') {
-                $abs = (new DocumentService())->absolutePath($state['pdf_path']);
-                if (is_file($abs)) {
-                    $attachments[] = [
-                        'path' => $abs,
-                        'name' => $state['pdf_name'] !== '' ? $state['pdf_name'] : basename($state['pdf_path']),
-                        'mime' => 'application/pdf',
-                    ];
-                }
-            }
-        } else {
-            if ($tplCode === '') {
-                throw new \InvalidArgumentException('El paso no tiene plantilla de correo configurada.');
-            }
-            if (empty($emailCfg['enabled'])) {
-                throw new \InvalidArgumentException('El paso no tiene «Enviar correo» activado.');
-            }
+        }
+
+        if ($tplCode === '') {
+            throw new \InvalidArgumentException('El paso no tiene plantilla de correo configurada.');
+        }
+        if (empty($emailCfg['enabled']) && !$requiresResults) {
+            throw new \InvalidArgumentException('El paso no tiene «Enviar correo» activado.');
         }
 
         if (MailTemplateService::isUksSolicitudCode($tplCode)) {
@@ -103,8 +87,13 @@ final class StepMailService
             );
         }
 
+        $attachments = ResultsDeliveryService::pdfAttachments($tracking, $delivery);
+
         $audience = MailTemplateService::audienceForTemplate($tplCode);
-        $vars = $this->buildVars($tracking);
+        $vars = array_merge(
+            $this->buildVars($tracking),
+            ResultsDeliveryService::mailVars($tracking, $delivery)
+        );
         $mail = new MailTemplateService();
         $to = $this->resolveRecipient($tracking, $audience, $tplCode, $mail);
         if ($mail->render($tplCode, $vars) === null) {
@@ -157,6 +146,9 @@ final class StepMailService
             $examUrl = $cfgExamUrl;
         }
 
+        $delivery = ResultsDeliveryService::fromConfig($cfg);
+        $mailResultVars = ResultsDeliveryService::mailVars($tracking, $delivery);
+
         $vars = [
             'name' => $name,
             'full_name' => $fullName !== '' ? $fullName : $name,
@@ -206,14 +198,7 @@ final class StepMailService
             'temp_password' => '',
         ];
 
-        $resultsState = ResultsDeliveryService::stateFromTracking($tracking);
-        $vars['score_report_url'] = $resultsState['score_report_url'];
-        $vars['cancel_reason'] = $resultsState['cancel_reason'];
-        if ($resultsState['pdf_path'] !== '') {
-            // Enlace interno admin; el PDF también se adjunta al correo cuando aplica.
-            $vars['results_pdf_url'] = rtrim((string) (Env::get('APP_URL', '') ?? ''), '/')
-                . '/admin/seguimientos/' . (int) ($tracking['id'] ?? 0) . '/resultados-pdf';
-        }
+        $vars = array_merge($vars, $mailResultVars);
 
         return array_merge($vars, ExamInstructionAssets::mailVars($cfg));
     }

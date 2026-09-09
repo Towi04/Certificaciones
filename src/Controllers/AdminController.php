@@ -930,8 +930,15 @@ final class AdminController
             'resultsDelivery' => ResultsDeliveryService::fromConfig($productCfg),
             'resultsState' => ResultsDeliveryService::stateFromTracking($tracking),
             'resultsStepCode' => (static function () use ($productCfg): string {
+                $delivery = ResultsDeliveryService::fromConfig($productCfg);
                 foreach (GroupStepConfig::defsFromConfig($productCfg) as $code => $def) {
-                    if ((string) ($def['action'] ?? '') === GroupStepConfig::ACTION_SEND_RESULTS) {
+                    if ((string) ($def['action'] ?? '') !== GroupStepConfig::ACTION_SEND_MAIL) {
+                        continue;
+                    }
+                    $tpl = trim((string) (($def['email']['template_code'] ?? '')));
+                    if (!empty($def['requires_results'])
+                        || ResultsDeliveryService::stepRequiresResults($def, $delivery, $tpl)
+                    ) {
                         return (string) $code;
                     }
                 }
@@ -1153,12 +1160,12 @@ final class AdminController
             (new TrackingService())->saveResults($trackingId, [
                 'cancelled' => $cancelled,
                 'cancel_reason' => trim((string) ($_POST['cancel_reason'] ?? '')),
+                'results_value' => is_array($_POST['results_value'] ?? null) ? $_POST['results_value'] : [],
+                'results_file' => $_FILES['results_file'] ?? null,
                 'results_level' => trim((string) ($_POST['results_level'] ?? '')),
                 'results_score' => $_POST['results_score'] ?? '',
                 'results_url' => trim((string) ($_POST['results_url'] ?? '')),
-                'score_report_url' => trim((string) ($_POST['score_report_url'] ?? '')),
                 'cenni_folio' => trim((string) ($_POST['cenni_folio'] ?? '')),
-                'results_pdf' => $_FILES['results_pdf'] ?? null,
                 'results_step_code' => trim((string) ($_POST['results_step_code'] ?? '')),
                 'notify' => $notify,
             ], (int) Auth::id());
@@ -1186,17 +1193,44 @@ final class AdminController
             exit('Seguimiento no encontrado');
         }
         $state = ResultsDeliveryService::stateFromTracking($tracking);
-        if ($state['pdf_path'] === '') {
+        $fieldCode = ResultsDeliveryService::normalizeCode((string) ($_GET['field'] ?? ''));
+        $pathRel = '';
+        $name = 'resultados.pdf';
+        $values = is_array($state['values'] ?? null) ? $state['values'] : [];
+
+        if ($fieldCode !== '') {
+            $raw = $values[$fieldCode] ?? null;
+            if (is_array($raw)) {
+                $pathRel = trim((string) ($raw['path'] ?? ''));
+                $name = trim((string) ($raw['name'] ?? '')) ?: $name;
+            } elseif (is_string($raw)) {
+                $pathRel = trim($raw);
+            }
+        } else {
+            // Compat: primer PDF en values, o legado pdf_path.
+            foreach ($values as $raw) {
+                if (is_array($raw) && trim((string) ($raw['path'] ?? '')) !== '') {
+                    $pathRel = trim((string) $raw['path']);
+                    $name = trim((string) ($raw['name'] ?? '')) ?: $name;
+                    break;
+                }
+            }
+            if ($pathRel === '' && !empty($state['pdf_path'])) {
+                $pathRel = trim((string) $state['pdf_path']);
+                $name = trim((string) ($state['pdf_name'] ?? '')) ?: $name;
+            }
+        }
+
+        if ($pathRel === '') {
             http_response_code(404);
             exit('PDF de resultados no encontrado');
         }
         $docs = new DocumentService();
-        $path = $docs->absolutePath($state['pdf_path']);
+        $path = $docs->absolutePath($pathRel);
         if (!is_file($path)) {
             http_response_code(404);
             exit('Archivo no disponible en disco');
         }
-        $name = $state['pdf_name'] !== '' ? $state['pdf_name'] : basename($state['pdf_path']);
         $mime = mime_content_type($path) ?: 'application/pdf';
         header('Content-Type: ' . $mime);
         header('Content-Disposition: inline; filename="' . basename($name) . '"');

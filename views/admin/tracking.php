@@ -370,15 +370,16 @@ $needsAdminProof = $providerCfg && !empty($providerCfg['require_admin_payment_pr
     && (string) ($tracking['purchase_status'] ?? '') === 'paid'
 ): ?>
 <?php
-$resultsDelivery = is_array($resultsDelivery ?? null) ? $resultsDelivery : ['mode' => 'none', 'enabled' => false];
+$resultsDelivery = is_array($resultsDelivery ?? null)
+    ? $resultsDelivery
+    : ['fields' => [], 'enabled' => false, 'cancel_template' => ''];
 $resultsState = is_array($resultsState ?? null) ? $resultsState : [
-    'score_report_url' => '',
-    'pdf_path' => '',
-    'pdf_name' => '',
+    'values' => [],
     'cancelled' => false,
     'cancel_reason' => '',
 ];
-$resultsMode = (string) ($resultsDelivery['mode'] ?? 'none');
+$resultsFields = is_array($resultsDelivery['fields'] ?? null) ? $resultsDelivery['fields'] : [];
+$resultsValues = is_array($resultsState['values'] ?? null) ? $resultsState['values'] : [];
 $resultsStepCode = (string) ($resultsStepCode ?? '');
 $deliveryEnabled = !empty($resultsDelivery['enabled']);
 $isCancelled = $deliveryEnabled && !empty($resultsState['cancelled']);
@@ -389,10 +390,10 @@ $isCancelled = $deliveryEnabled && !empty($resultsState['cancelled']);
     </h2>
     <p class="muted" style="margin-top:0;font-size:.88rem">
         <?php if ($deliveryEnabled): ?>
-            Modo: <code><?= e($resultsMode) ?></code>.
+            Campos configurados en el grupo.
             Al guardar se avanza al paso <code>resultados</code>.
             <?php if ($resultsStepCode !== ''): ?>
-                El envío usa el paso <code><?= e($resultsStepCode) ?></code> (acción Enviar resultados / cancelación).
+                El envío usa el paso <code><?= e($resultsStepCode) ?></code> (Enviar correo + resultados).
             <?php endif; ?>
         <?php else: ?>
             Al guardar se avanza al paso <code>resultados</code> y, si está marcado, se envía la plantilla
@@ -422,10 +423,66 @@ $isCancelled = $deliveryEnabled && !empty($resultsState['cancelled']);
         <?php endif; ?>
         <div id="results-data-fields" style="<?= $isCancelled ? 'display:none' : '' ?>">
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;max-width:720px">
-                <?php if (
-                    !empty($inventoryEnabled)
-                    || in_array($resultsMode, ['certificate_score', 'certificate_link'], true)
-                ): ?>
+                <?php if ($deliveryEnabled): ?>
+                    <?php foreach ($resultsFields as $field):
+                        if (!is_array($field)) {
+                            continue;
+                        }
+                        $fCode = (string) ($field['code'] ?? '');
+                        if ($fCode === '') {
+                            continue;
+                        }
+                        $fType = (string) ($field['type'] ?? 'text');
+                        $fLabel = (string) ($field['label'] ?? $fCode);
+                        $fReq = !empty($field['required']);
+                        $rawVal = $resultsValues[$fCode] ?? null;
+                        ?>
+                        <?php if ($fType === 'pdf'): ?>
+                            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;grid-column:1/-1">
+                                <?= e($fLabel) ?><?= $fReq ? ' *' : '' ?>
+                                <input type="file" name="results_file[<?= e($fCode) ?>]" accept=".pdf,application/pdf"
+                                       style="padding:.35rem 0" <?= $fReq && !(is_array($rawVal) && !empty($rawVal['path'])) ? 'required' : '' ?>>
+                                <?php if (is_array($rawVal) && !empty($rawVal['path'])): ?>
+                                    <span class="muted" style="font-weight:500;font-size:.8rem">
+                                        Actual:
+                                        <a href="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/resultados-pdf?field=' . rawurlencode($fCode))) ?>"
+                                           target="_blank" rel="noopener">
+                                            <?= e((string) ($rawVal['name'] ?: 'Ver PDF')) ?>
+                                        </a>
+                                    </span>
+                                <?php endif; ?>
+                            </label>
+                        <?php elseif ($fType === 'url'): ?>
+                            <?php
+                            $urlVal = is_string($rawVal) || is_numeric($rawVal)
+                                ? (string) $rawVal
+                                : \App\Services\ResultsDeliveryService::displayValue($field, $resultsValues, $tracking);
+                            ?>
+                            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;grid-column:1/-1">
+                                <?= e($fLabel) ?><?= $fReq ? ' *' : '' ?>
+                                <input type="url" name="results_value[<?= e($fCode) ?>]"
+                                       value="<?= e($urlVal) ?>"
+                                       placeholder="https://…"
+                                       <?= $fReq ? 'required' : '' ?>
+                                       style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                            </label>
+                        <?php else: ?>
+                            <?php
+                            $textVal = is_string($rawVal) || is_numeric($rawVal)
+                                ? (string) $rawVal
+                                : \App\Services\ResultsDeliveryService::displayValue($field, $resultsValues, $tracking);
+                            ?>
+                            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                                <?= e($fLabel) ?><?= $fReq ? ' *' : '' ?>
+                                <input type="text" name="results_value[<?= e($fCode) ?>]"
+                                       value="<?= e($textVal) ?>"
+                                       <?= $fReq ? 'required' : '' ?>
+                                       style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                            </label>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+                <?php if (!empty($inventoryEnabled) && !$deliveryEnabled): ?>
                     <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
                         Nivel
                         <input type="text" name="results_level" value="<?= e((string) ($tracking['results_level'] ?? '')) ?>"
@@ -437,47 +494,22 @@ $isCancelled = $deliveryEnabled && !empty($resultsState['cancelled']);
                         <input type="text" name="results_score" value="<?= e((string) ($tracking['results_score'] ?? '')) ?>"
                                style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
                     </label>
-                <?php endif; ?>
-                <?php if (!empty($inventoryEnabled)): ?>
                     <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
                         Folio CENNI
                         <input type="text" name="cenni_folio" value="<?= e((string) ($tracking['cenni_folio'] ?? '')) ?>"
                                style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
                     </label>
-                <?php endif; ?>
-                <?php if (
-                    !empty($inventoryEnabled)
-                    || in_array($resultsMode, ['certificate_link', 'certificate_score'], true)
-                ): ?>
                     <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;grid-column:1/-1">
                         URL certificado / resultados
                         <input type="url" name="results_url" value="<?= e((string) ($tracking['results_url'] ?? '')) ?>"
                                placeholder="https://…"
                                style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
                     </label>
-                <?php endif; ?>
-                <?php if ($resultsMode === 'certificate_score'): ?>
-                    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;grid-column:1/-1">
-                        URL score report
-                        <input type="url" name="score_report_url"
-                               value="<?= e((string) ($resultsState['score_report_url'] ?? '')) ?>"
-                               placeholder="https://…"
+                <?php elseif (!empty($inventoryEnabled)): ?>
+                    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                        Folio CENNI
+                        <input type="text" name="cenni_folio" value="<?= e((string) ($tracking['cenni_folio'] ?? '')) ?>"
                                style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-                    </label>
-                <?php endif; ?>
-                <?php if ($resultsMode === 'pdf'): ?>
-                    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;grid-column:1/-1">
-                        PDF de resultados
-                        <input type="file" name="results_pdf" accept=".pdf,application/pdf"
-                               style="padding:.35rem 0">
-                        <?php if (!empty($resultsState['pdf_path'])): ?>
-                            <span class="muted" style="font-weight:500;font-size:.8rem">
-                                Actual:
-                                <a href="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/resultados-pdf')) ?>" target="_blank" rel="noopener">
-                                    <?= e((string) ($resultsState['pdf_name'] ?: 'Ver PDF')) ?>
-                                </a>
-                            </span>
-                        <?php endif; ?>
                     </label>
                 <?php endif; ?>
             </div>
@@ -511,6 +543,9 @@ $isCancelled = $deliveryEnabled && !empty($resultsState['cancelled']);
       var on = !!cb.checked;
       cancelBox.style.display = on ? '' : 'none';
       dataBox.style.display = on ? 'none' : '';
+      dataBox.querySelectorAll('[required]').forEach(function (el) {
+        el.disabled = on;
+      });
     }
     cb.addEventListener('change', sync);
     sync();

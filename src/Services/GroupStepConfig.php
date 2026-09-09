@@ -14,21 +14,24 @@ final class GroupStepConfig
 {
     public const ACTION_NONE = 'none';
     public const ACTION_CONFIRM_PAYMENT = 'confirm_payment';
+    public const ACTION_CONFIRM_PAYMENT_POPUP = 'confirm_payment_popup';
     public const ACTION_SEND_MAIL = 'send_mail';
     public const ACTION_EXAM_ACCESS = 'exam_access';
     public const ACTION_ADVANCE = 'advance';
     public const ACTION_EDIT_EXAM = 'edit_exam';
     public const ACTION_EDIT_STUDENT = 'edit_student';
     public const ACTION_DOWNLOAD_CSV = 'download_csv';
+    /** @deprecated Migración lazy → send_mail + requires_results */
     public const ACTION_SEND_RESULTS = 'send_results';
 
     public const ACTIONS = [
         self::ACTION_NONE => 'Solo progreso (sin botón)',
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
-        self::ACTION_SEND_RESULTS => 'Enviar resultados / cancelación',
         self::ACTION_DOWNLOAD_CSV => 'Descargar CSV (plantilla)',
         self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
+        self::ACTION_CONFIRM_PAYMENT_POPUP => 'Confirmar pago (ver comprobante)',
         // Legado (ya no se eligen en el editor; se siguen ejecutando si existen).
+        self::ACTION_SEND_RESULTS => 'Enviar resultados / cancelación',
         self::ACTION_CONFIRM_PAYMENT => 'Confirmar pago (legado)',
         self::ACTION_EXAM_ACCESS => 'Capturar folio/clave (legado)',
         self::ACTION_EDIT_EXAM => 'Editar / reagendar examen (legado)',
@@ -42,9 +45,9 @@ final class GroupStepConfig
     public const ACTIONS_EDITABLE = [
         self::ACTION_NONE => 'Solo progreso (sin botón)',
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
-        self::ACTION_SEND_RESULTS => 'Enviar resultados / cancelación',
         self::ACTION_DOWNLOAD_CSV => 'Descargar CSV (plantilla)',
         self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
+        self::ACTION_CONFIRM_PAYMENT_POPUP => 'Confirmar pago (ver comprobante)',
     ];
 
     /** Iconos disponibles para botones de Operación (clave = icon()). */
@@ -69,7 +72,8 @@ final class GroupStepConfig
 
     /** Mapeo de acciones legadas → acción editable al re-guardar el grupo. */
     public const LEGACY_ACTION_MAP = [
-        self::ACTION_CONFIRM_PAYMENT => self::ACTION_ADVANCE,
+        self::ACTION_SEND_RESULTS => self::ACTION_SEND_MAIL,
+        self::ACTION_CONFIRM_PAYMENT => self::ACTION_CONFIRM_PAYMENT_POPUP,
         self::ACTION_EXAM_ACCESS => self::ACTION_SEND_MAIL,
         self::ACTION_EDIT_EXAM => self::ACTION_ADVANCE,
         self::ACTION_EDIT_STUDENT => self::ACTION_ADVANCE,
@@ -235,14 +239,13 @@ final class GroupStepConfig
         usort($merged, static function (array $a, array $b): int {
             $prio = static function (array $s): int {
                 return match (self::effectiveOpsAction($s)) {
-                    self::ACTION_CONFIRM_PAYMENT => 0,
+                    self::ACTION_CONFIRM_PAYMENT, self::ACTION_CONFIRM_PAYMENT_POPUP => 0,
                     self::ACTION_SEND_MAIL => 1,
-                    self::ACTION_SEND_RESULTS => 2,
-                    self::ACTION_DOWNLOAD_CSV => 3,
-                    self::ACTION_EXAM_ACCESS => 4,
-                    self::ACTION_EDIT_EXAM => 5,
-                    self::ACTION_EDIT_STUDENT => 6,
-                    self::ACTION_ADVANCE => 7,
+                    self::ACTION_DOWNLOAD_CSV => 2,
+                    self::ACTION_EXAM_ACCESS => 3,
+                    self::ACTION_EDIT_EXAM => 4,
+                    self::ACTION_EDIT_STUDENT => 5,
+                    self::ACTION_ADVANCE => 6,
                     default => 9,
                 };
             };
@@ -271,7 +274,6 @@ final class GroupStepConfig
             if ($done && !$collectExam && $action !== self::ACTION_DOWNLOAD_CSV) {
                 $label = match ($action) {
                     self::ACTION_SEND_MAIL => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
-                    self::ACTION_SEND_RESULTS => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
                     self::ACTION_EXAM_ACCESS => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
                     self::ACTION_EDIT_STUDENT => $label . ' (actualizado)',
                     self::ACTION_ADVANCE => $label . ' (hecho)',
@@ -284,10 +286,13 @@ final class GroupStepConfig
             $opsIcon = self::resolveOpsIcon($step, $action);
             $resultsReady = true;
             $resultsBlocked = '';
-            if ($action === self::ACTION_SEND_RESULTS) {
+            if ($action === self::ACTION_SEND_MAIL) {
                 $delivery = ResultsDeliveryService::fromConfig($config);
-                $resultsReady = ResultsDeliveryService::isReady($row, $delivery);
-                $resultsBlocked = $resultsReady ? '' : ResultsDeliveryService::blockedReason($row, $delivery);
+                $tpl = trim((string) ($email['template_code'] ?? ''));
+                if (ResultsDeliveryService::stepRequiresResults($step, $delivery, $tpl)) {
+                    $resultsReady = ResultsDeliveryService::isReady($row, $delivery);
+                    $resultsBlocked = $resultsReady ? '' : ResultsDeliveryService::blockedReason($row, $delivery);
+                }
             }
             $buttons[] = [
                 'code' => (string) $step['code'],
@@ -303,6 +308,7 @@ final class GroupStepConfig
                 'reschedule_count' => $rescheduleCount,
                 'results_ready' => $resultsReady,
                 'results_blocked' => $resultsBlocked,
+                'requires_results' => !empty($step['requires_results']),
             ];
         }
 
@@ -311,15 +317,18 @@ final class GroupStepConfig
         $paymentPending = in_array($purchaseStatus, ['awaiting_payment', 'payment_review', 'draft', 'awaiting_docs'], true);
         $isPaid = $purchaseStatus === 'paid';
 
+        $hasConfirmPayment = in_array(self::ACTION_CONFIRM_PAYMENT, $actions, true)
+            || in_array(self::ACTION_CONFIRM_PAYMENT_POPUP, $actions, true);
+
         // Solo fallbacks si el grupo aún no configuró botones de Operación.
         if (!$hasConfiguredOps) {
-            if (!in_array(self::ACTION_CONFIRM_PAYMENT, $actions, true) && $paymentPending) {
+            if (!$hasConfirmPayment && $paymentPending) {
                 array_unshift($buttons, [
                     'code' => 'confirm_pago',
                     'label' => 'Confirmar pago',
-                    'action' => self::ACTION_CONFIRM_PAYMENT,
+                    'action' => self::ACTION_CONFIRM_PAYMENT_POPUP,
                     'email' => [],
-                    'ops_icon' => self::defaultOpsIcon(self::ACTION_CONFIRM_PAYMENT),
+                    'ops_icon' => self::defaultOpsIcon(self::ACTION_CONFIRM_PAYMENT_POPUP),
                     'audience' => 'student',
                     'admin_only' => false,
                     'done' => false,
@@ -373,31 +382,38 @@ final class GroupStepConfig
                 }
             }
             $actions = array_column($buttons, 'action');
-        } elseif ($paymentPending && !in_array(self::ACTION_CONFIRM_PAYMENT, $actions, true)) {
+            $hasConfirmPayment = in_array(self::ACTION_CONFIRM_PAYMENT, $actions, true)
+                || in_array(self::ACTION_CONFIRM_PAYMENT_POPUP, $actions, true);
+        } elseif ($paymentPending && !$hasConfirmPayment) {
             // Grupo configurado pero sin «Confirmar pago»: inyectar solo ese fallback mínimo.
             array_unshift($buttons, [
                 'code' => 'confirm_pago',
                 'label' => 'Confirmar pago',
-                'action' => self::ACTION_CONFIRM_PAYMENT,
+                'action' => self::ACTION_CONFIRM_PAYMENT_POPUP,
                 'email' => [],
-                'ops_icon' => self::defaultOpsIcon(self::ACTION_CONFIRM_PAYMENT),
+                'ops_icon' => self::defaultOpsIcon(self::ACTION_CONFIRM_PAYMENT_POPUP),
                 'audience' => 'student',
                 'admin_only' => false,
                 'done' => false,
             ]);
         }
 
+        $isConfirmPaymentAction = static fn (string $a): bool => in_array($a, [
+            self::ACTION_CONFIRM_PAYMENT,
+            self::ACTION_CONFIRM_PAYMENT_POPUP,
+        ], true);
+
         // Si el pago no está confirmado, solo Confirmar pago.
         if ($paymentPending) {
             $buttons = array_values(array_filter(
                 $buttons,
-                static fn (array $b): bool => ($b['action'] ?? '') === self::ACTION_CONFIRM_PAYMENT
+                static fn (array $b): bool => $isConfirmPaymentAction((string) ($b['action'] ?? ''))
             ));
         } else {
             // Pago confirmado: ocultar confirmar pago.
             $buttons = array_values(array_filter(
                 $buttons,
-                static fn (array $b): bool => ($b['action'] ?? '') !== self::ACTION_CONFIRM_PAYMENT
+                static fn (array $b): bool => !$isConfirmPaymentAction((string) ($b['action'] ?? ''))
             ));
         }
 
@@ -407,8 +423,8 @@ final class GroupStepConfig
         foreach ($buttons as $btn) {
             $action = (string) ($btn['action'] ?? '');
             $key = $action . ':' . (string) ($btn['code'] ?? '');
-            if ($action === self::ACTION_CONFIRM_PAYMENT) {
-                $key = $action; // solo un confirmar pago
+            if ($isConfirmPaymentAction($action)) {
+                $key = 'confirm_payment'; // solo un confirmar pago
             }
             if (isset($seenActions[$key])) {
                 continue;
@@ -433,6 +449,13 @@ final class GroupStepConfig
     public static function effectiveOpsAction(array $step): string
     {
         $action = (string) ($step['action'] ?? self::ACTION_NONE);
+        if ($action === self::ACTION_SEND_RESULTS) {
+            $action = self::ACTION_SEND_MAIL;
+        }
+        if ($action === self::ACTION_CONFIRM_PAYMENT_POPUP) {
+            // Misma semántica operativa que confirmar pago; el UI abre el popup.
+            return self::ACTION_CONFIRM_PAYMENT_POPUP;
+        }
         if (!isset(self::ACTIONS[$action])) {
             $action = self::ACTION_NONE;
         }
@@ -446,7 +469,7 @@ final class GroupStepConfig
         if ($action === self::ACTION_ADVANCE
             && preg_match('/confirm.*pago|pago.*confirm|confirmaci[oó]n\s+de\s+pago/u', $blob) === 1
         ) {
-            return self::ACTION_CONFIRM_PAYMENT;
+            return self::ACTION_CONFIRM_PAYMENT_POPUP;
         }
 
         if ($action === self::ACTION_SEND_MAIL) {
@@ -543,12 +566,13 @@ final class GroupStepConfig
         }
 
         return match ($action) {
-            self::ACTION_CONFIRM_PAYMENT => !in_array(
+            self::ACTION_CONFIRM_PAYMENT,
+            self::ACTION_CONFIRM_PAYMENT_POPUP => !in_array(
                 (string) ($row['purchase_status'] ?? ''),
                 ['awaiting_payment', 'payment_review', 'draft', 'awaiting_docs'],
                 true
             ),
-            self::ACTION_SEND_MAIL => self::isMailStepDone($row, $step),
+            self::ACTION_SEND_MAIL,
             self::ACTION_SEND_RESULTS => self::isMailStepDone($row, $step),
             self::ACTION_DOWNLOAD_CSV => false,
             self::ACTION_EXAM_ACCESS => trim((string) ($row['folio'] ?? '')) !== ''
@@ -608,6 +632,7 @@ final class GroupStepConfig
                 $code = $base . '_' . $n;
                 $n++;
             }
+            $rawAction = (string) ($row['action'] ?? self::ACTION_NONE);
             $defs[$code] = self::normalizeDef($code, [
                 'code' => $code,
                 'label' => (string) ($row['label'] ?? $code),
@@ -616,11 +641,12 @@ final class GroupStepConfig
                 'ops_button' => !empty($row['ops_button']),
                 'ops_label' => trim((string) ($row['ops_label'] ?? '')),
                 'ops_icon' => trim((string) ($row['ops_icon'] ?? '')),
-                'action' => self::LEGACY_ACTION_MAP[(string) ($row['action'] ?? self::ACTION_NONE)]
-                    ?? (string) ($row['action'] ?? self::ACTION_NONE),
+                'action' => self::LEGACY_ACTION_MAP[$rawAction] ?? $rawAction,
+                'requires_results' => !empty($row['requires_results'])
+                    || $rawAction === self::ACTION_SEND_RESULTS,
                 'email' => [
                     'enabled' => !empty($row['email_enabled'])
-                        || (string) ($row['action'] ?? '') === self::ACTION_SEND_RESULTS,
+                        || $rawAction === self::ACTION_SEND_RESULTS,
                     'trigger' => (string) ($row['email_trigger'] ?? 'admin'),
                     'template_code' => trim((string) ($row['email_template'] ?? '')),
                     // Destinatario lo define la plantilla; no se pide en el grupo.
@@ -727,6 +753,10 @@ final class GroupStepConfig
     public static function normalizeDef(string $code, array $row): array
     {
         $action = (string) ($row['action'] ?? self::ACTION_NONE);
+        $wasSendResults = $action === self::ACTION_SEND_RESULTS;
+        if ($wasSendResults) {
+            $action = self::ACTION_SEND_MAIL;
+        }
         if (!isset(self::ACTIONS[$action])) {
             $action = self::ACTION_NONE;
         }
@@ -751,10 +781,8 @@ final class GroupStepConfig
             $opsIcon = '';
         }
 
-        $emailEnabled = !empty($emailRaw['enabled']) || !empty($row['email_enabled']);
-        if ($action === self::ACTION_SEND_RESULTS) {
-            $emailEnabled = true;
-        }
+        $emailEnabled = !empty($emailRaw['enabled']) || !empty($row['email_enabled']) || $wasSendResults;
+        $requiresResults = !empty($row['requires_results']) || $wasSendResults;
 
         return [
             'code' => $code,
@@ -767,6 +795,7 @@ final class GroupStepConfig
             'ops_label' => trim((string) ($row['ops_label'] ?? '')),
             'ops_icon' => $opsIcon,
             'action' => $action,
+            'requires_results' => $requiresResults,
             'email' => [
                 'enabled' => $emailEnabled,
                 'trigger' => $trigger,
@@ -811,7 +840,8 @@ final class GroupStepConfig
         }
 
         return match ($action) {
-            self::ACTION_CONFIRM_PAYMENT => 'dollar',
+            self::ACTION_CONFIRM_PAYMENT,
+            self::ACTION_CONFIRM_PAYMENT_POPUP => 'dollar',
             self::ACTION_SEND_RESULTS => 'document',
             self::ACTION_DOWNLOAD_CSV => 'download',
             self::ACTION_EXAM_ACCESS => 'key',
