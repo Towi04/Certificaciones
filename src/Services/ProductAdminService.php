@@ -1017,7 +1017,7 @@ final class ProductAdminService
         if ($supplierId !== null && $this->suppliers->find($supplierId) === null) {
             throw new \InvalidArgumentException('El proveedor seleccionado no existe.');
         }
-        $certifierId = $this->nullableInt($input['certifier_id'] ?? null);
+        $certifierId = $this->nullableInt($input['certifier_id'] ?? ($existing['certifier_id'] ?? null));
         if ($certifierId !== null && $this->certifiers->find($certifierId) === null) {
             throw new \InvalidArgumentException('El certificador seleccionado no existe.');
         }
