@@ -28,6 +28,8 @@ use App\Services\MailTemplateService;
 use App\Services\ProductAdminService;
 use App\Services\ExamScheduleService;
 use App\Services\ProductMediaService;
+use App\Services\ResultsDeliveryService;
+use App\Services\DocumentService;
 use App\Services\StepMailService;
 use App\Services\TrackingService;
 use App\Services\UksEletService;
@@ -925,6 +927,17 @@ final class AdminController
             'eletExamUrl' => $uksElet->examUrl(),
             'accessKeyHint' => $accessKeyHint,
             'inventoryEnabled' => InventoryService::isEnabledForProduct($tracking),
+            'resultsDelivery' => ResultsDeliveryService::fromConfig($productCfg),
+            'resultsState' => ResultsDeliveryService::stateFromTracking($tracking),
+            'resultsStepCode' => (static function () use ($productCfg): string {
+                foreach (GroupStepConfig::defsFromConfig($productCfg) as $code => $def) {
+                    if ((string) ($def['action'] ?? '') === GroupStepConfig::ACTION_SEND_RESULTS) {
+                        return (string) $code;
+                    }
+                }
+
+                return '';
+            })(),
             'layout' => 'admin',
         ]);
     }
@@ -1136,20 +1149,61 @@ final class AdminController
         $trackingId = (int) $id;
         try {
             $notify = !empty($_POST['notify']);
+            $cancelled = !empty($_POST['cancelled']);
             (new TrackingService())->saveResults($trackingId, [
+                'cancelled' => $cancelled,
+                'cancel_reason' => trim((string) ($_POST['cancel_reason'] ?? '')),
                 'results_level' => trim((string) ($_POST['results_level'] ?? '')),
                 'results_score' => $_POST['results_score'] ?? '',
                 'results_url' => trim((string) ($_POST['results_url'] ?? '')),
+                'score_report_url' => trim((string) ($_POST['score_report_url'] ?? '')),
                 'cenni_folio' => trim((string) ($_POST['cenni_folio'] ?? '')),
+                'results_pdf' => $_FILES['results_pdf'] ?? null,
+                'results_step_code' => trim((string) ($_POST['results_step_code'] ?? '')),
                 'notify' => $notify,
             ], (int) Auth::id());
-            flash('success', $notify
-                ? 'Resultados guardados y correo enviado al alumno.'
-                : 'Resultados guardados (sin correo).');
+            if ($cancelled) {
+                flash('success', $notify
+                    ? 'Cancelación guardada y correo enviado.'
+                    : 'Cancelación guardada (sin correo).');
+            } else {
+                flash('success', $notify
+                    ? 'Resultados guardados y correo enviado al alumno.'
+                    : 'Resultados guardados (sin correo).');
+            }
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
         redirect('/admin/seguimientos/' . $trackingId);
+    }
+
+    public function trackingResultsPdf(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $tracking = (new TrackingService())->find((int) $id);
+        if ($tracking === null) {
+            http_response_code(404);
+            exit('Seguimiento no encontrado');
+        }
+        $state = ResultsDeliveryService::stateFromTracking($tracking);
+        if ($state['pdf_path'] === '') {
+            http_response_code(404);
+            exit('PDF de resultados no encontrado');
+        }
+        $docs = new DocumentService();
+        $path = $docs->absolutePath($state['pdf_path']);
+        if (!is_file($path)) {
+            http_response_code(404);
+            exit('Archivo no disponible en disco');
+        }
+        $name = $state['pdf_name'] !== '' ? $state['pdf_name'] : basename($state['pdf_path']);
+        $mime = mime_content_type($path) ?: 'application/pdf';
+        header('Content-Type: ' . $mime);
+        header('Content-Disposition: inline; filename="' . basename($name) . '"');
+        header('Content-Length: ' . (string) filesize($path));
+        header('X-Content-Type-Options: nosniff');
+        readfile($path);
+        exit;
     }
 
     public function trackingResendUksRequest(string $id): void

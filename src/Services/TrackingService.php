@@ -906,14 +906,19 @@ final class TrackingService
     }
 
     /**
-     * Publica resultados (y opcional CENNI) y dispara correo al alumno.
+     * Publica resultados / cancelación (y opcional CENNI) y opcionalmente notifica.
      *
      * @param array{
+     *   cancelled?:bool,
+     *   cancel_reason?:string,
      *   results_level?:string,
      *   results_score?:string|float|int|null,
      *   results_url?:string,
+     *   score_report_url?:string,
      *   cenni_folio?:string,
-     *   notify?:bool
+     *   results_pdf?:array{tmp_name?:string,name?:string,error?:int,size?:int,type?:string}|null,
+     *   notify?:bool,
+     *   results_step_code?:string
      * } $data
      */
     public function saveResults(int $trackingId, array $data, ?int $actorUserId = null): void
@@ -922,6 +927,22 @@ final class TrackingService
         if ($tracking === null) {
             throw new \InvalidArgumentException('Seguimiento no encontrado.');
         }
+
+        $product = [
+            'id' => $tracking['product_id'] ?? 0,
+            'config_json' => $tracking['config_json'] ?? null,
+            'group_config_json' => $tracking['group_config_json'] ?? null,
+            'type' => $tracking['product_type'] ?? '',
+            'code' => $tracking['product_code'] ?? '',
+            'name' => $tracking['product_name'] ?? '',
+        ];
+        $cfg = CheckoutRequirements::config($product);
+        $delivery = ResultsDeliveryService::fromConfig($cfg);
+        $prevState = ResultsDeliveryService::stateFromTracking($tracking);
+        $inventoryOn = InventoryService::isEnabledForProduct($product);
+
+        $cancelled = !empty($data['cancelled']);
+        $cancelReason = trim((string) ($data['cancel_reason'] ?? ''));
 
         $level = trim((string) ($data['results_level'] ?? $tracking['results_level'] ?? ''));
         $scoreRaw = $data['results_score'] ?? $tracking['results_score'] ?? null;
@@ -936,10 +957,57 @@ final class TrackingService
         if ($url !== '' && !filter_var($url, FILTER_VALIDATE_URL)) {
             throw new \InvalidArgumentException('La URL de resultados no es válida.');
         }
+        $scoreReportUrl = trim((string) ($data['score_report_url'] ?? $prevState['score_report_url']));
+        if ($scoreReportUrl !== '' && !filter_var($scoreReportUrl, FILTER_VALIDATE_URL)) {
+            throw new \InvalidArgumentException('La URL del score report no es válida.');
+        }
         $cenni = trim((string) ($data['cenni_folio'] ?? $tracking['cenni_folio'] ?? ''));
 
-        if ($level === '' && $score === null && $url === '' && $cenni === '') {
-            throw new \InvalidArgumentException('Indica al menos un dato de resultados o folio CENNI.');
+        $pdfPath = $prevState['pdf_path'];
+        $pdfName = $prevState['pdf_name'];
+        $pdfFile = is_array($data['results_pdf'] ?? null) ? $data['results_pdf'] : null;
+        if ($pdfFile !== null && (int) ($pdfFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            $stored = $this->documents->storeUploaded(
+                $pdfFile,
+                'results/' . $trackingId,
+                '.pdf'
+            );
+            $pdfPath = (string) ($stored['path'] ?? '');
+            $pdfName = (string) ($stored['original_name'] ?? 'resultados.pdf');
+        }
+
+        if ($cancelled) {
+            if ($cancelReason === '') {
+                throw new \InvalidArgumentException('Indica el motivo de cancelación del examen.');
+            }
+            // Conservar datos previos de resultados; el estado de cancelación vive en extra_json.
+        } else {
+            $mode = (string) ($delivery['mode'] ?? ResultsDeliveryService::MODE_NONE);
+            if ($delivery['enabled']) {
+                if ($mode === ResultsDeliveryService::MODE_CERTIFICATE && $url === '') {
+                    throw new \InvalidArgumentException('Indica el enlace del certificado.');
+                }
+                if ($mode === ResultsDeliveryService::MODE_CERTIFICATE_SCORE) {
+                    if ($url === '') {
+                        throw new \InvalidArgumentException('Indica el enlace del certificado.');
+                    }
+                    if ($scoreReportUrl === '') {
+                        throw new \InvalidArgumentException('Indica el enlace del score report.');
+                    }
+                }
+                if ($mode === ResultsDeliveryService::MODE_PDF && $pdfPath === '') {
+                    throw new \InvalidArgumentException('Sube el PDF de resultados.');
+                }
+            } elseif ($inventoryOn) {
+                if ($level === '' && $score === null && $url === '' && $cenni === '') {
+                    throw new \InvalidArgumentException('Indica al menos un dato de resultados o folio CENNI.');
+                }
+            } else {
+                if ($level === '' && $score === null && $url === '' && $cenni === ''
+                    && $scoreReportUrl === '' && $pdfPath === '') {
+                    throw new \InvalidArgumentException('Indica al menos un dato de resultados.');
+                }
+            }
         }
 
         $this->pdo->prepare(
@@ -954,23 +1022,69 @@ final class TrackingService
             $trackingId,
         ]);
 
+        $extra = [];
+        if (!empty($tracking['extra_json']) && is_string($tracking['extra_json'])) {
+            $decoded = json_decode($tracking['extra_json'], true);
+            $extra = is_array($decoded) ? $decoded : [];
+        } elseif (is_array($tracking['extra_json'] ?? null)) {
+            $extra = $tracking['extra_json'];
+        }
+        $bag = is_array($extra['results_delivery'] ?? null) ? $extra['results_delivery'] : [];
+        if ($cancelled) {
+            $bag['cancelled'] = true;
+            $bag['cancel_reason'] = $cancelReason;
+        } else {
+            $bag['cancelled'] = false;
+            $bag['cancel_reason'] = '';
+            $bag['score_report_url'] = $scoreReportUrl;
+            if ($pdfPath !== '') {
+                $bag['pdf_path'] = $pdfPath;
+                $bag['pdf_name'] = $pdfName;
+            }
+        }
+        $bag['updated_at'] = date('c');
+        $extra['results_delivery'] = $bag;
+        $this->pdo->prepare('UPDATE trackings SET extra_json = ? WHERE id = ?')
+            ->execute([json_encode($extra, JSON_UNESCAPED_UNICODE), $trackingId]);
+
         $parts = [];
-        if ($level !== '') {
-            $parts[] = 'nivel ' . $level;
+        if ($cancelled) {
+            $parts[] = 'cancelación: ' . $cancelReason;
+        } else {
+            if ($level !== '') {
+                $parts[] = 'nivel ' . $level;
+            }
+            if ($score !== null) {
+                $parts[] = 'puntaje ' . $score;
+            }
+            if ($url !== '') {
+                $parts[] = 'url';
+            }
+            if ($scoreReportUrl !== '') {
+                $parts[] = 'score report';
+            }
+            if ($pdfPath !== '') {
+                $parts[] = 'pdf';
+            }
+            if ($cenni !== '') {
+                $parts[] = 'CENNI ' . $cenni;
+            }
         }
-        if ($score !== null) {
-            $parts[] = 'puntaje ' . $score;
-        }
-        if ($url !== '') {
-            $parts[] = 'url';
-        }
-        if ($cenni !== '') {
-            $parts[] = 'CENNI ' . $cenni;
-        }
-        $this->log($trackingId, 'resultados', 'Resultados publicados: ' . implode(' · ', $parts), $actorUserId);
+        $this->log(
+            $trackingId,
+            'resultados',
+            ($cancelled ? 'Examen cancelado: ' : 'Resultados publicados: ') . implode(' · ', $parts),
+            $actorUserId
+        );
 
         try {
-            $this->setStep($trackingId, 'resultados', $actorUserId, 'Resultados cargados', 'waiting_student');
+            $this->setStep(
+                $trackingId,
+                'resultados',
+                $actorUserId,
+                $cancelled ? 'Cancelación registrada' : 'Resultados cargados',
+                'waiting_student'
+            );
         } catch (\Throwable) {
             // Pipelines sin paso resultados.
         }
@@ -984,7 +1098,38 @@ final class TrackingService
         if ($fresh === null) {
             return;
         }
-        $product = [
+
+        $resultsStep = trim((string) ($data['results_step_code'] ?? ''));
+        if ($resultsStep === '') {
+            $defs = GroupStepConfig::defsFromConfig(CheckoutRequirements::config([
+                'config_json' => $fresh['config_json'] ?? null,
+                'group_config_json' => $fresh['group_config_json'] ?? null,
+            ]));
+            foreach ($defs as $code => $def) {
+                if ((string) ($def['action'] ?? '') === GroupStepConfig::ACTION_SEND_RESULTS) {
+                    $resultsStep = (string) $code;
+                    break;
+                }
+            }
+        }
+
+        if ($delivery['enabled']) {
+            if ($resultsStep === '') {
+                throw new \InvalidArgumentException(
+                    'Configura un paso con acción «Enviar resultados / cancelación» en el grupo.'
+                );
+            }
+            (new StepMailService())->sendForStep($trackingId, $resultsStep, $actorUserId);
+
+            return;
+        }
+
+        if ($cancelled) {
+            // Cancelación solo aplica con entrega de resultados del grupo (plantilla de cancelación).
+            return;
+        }
+
+        $productFresh = [
             'id' => $fresh['product_id'] ?? 0,
             'config_json' => $fresh['config_json'] ?? null,
             'group_config_json' => $fresh['group_config_json'] ?? null,
@@ -992,7 +1137,7 @@ final class TrackingService
             'code' => $fresh['product_code'] ?? '',
             'name' => $fresh['product_name'] ?? '',
         ];
-        if (InventoryService::isEnabledForProduct($product)) {
+        if (InventoryService::isEnabledForProduct($productFresh)) {
             (new InventoryService())->sendResultsMail($trackingId, $actorUserId);
         }
     }

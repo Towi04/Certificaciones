@@ -362,51 +362,167 @@ $needsAdminProof = $providerCfg && !empty($providerCfg['require_admin_payment_pr
 </div>
 <?php endif; ?>
 
-<?php if (!empty($inventoryEnabled) && (string) ($tracking['purchase_status'] ?? '') === 'paid'): ?>
+<?php if (
+    (
+        !empty($resultsDelivery['enabled'])
+        || !empty($inventoryEnabled)
+    )
+    && (string) ($tracking['purchase_status'] ?? '') === 'paid'
+): ?>
+<?php
+$resultsDelivery = is_array($resultsDelivery ?? null) ? $resultsDelivery : ['mode' => 'none', 'enabled' => false];
+$resultsState = is_array($resultsState ?? null) ? $resultsState : [
+    'score_report_url' => '',
+    'pdf_path' => '',
+    'pdf_name' => '',
+    'cancelled' => false,
+    'cancel_reason' => '',
+];
+$resultsMode = (string) ($resultsDelivery['mode'] ?? 'none');
+$resultsStepCode = (string) ($resultsStepCode ?? '');
+$deliveryEnabled = !empty($resultsDelivery['enabled']);
+$isCancelled = $deliveryEnabled && !empty($resultsState['cancelled']);
+?>
 <div class="panel" style="margin-top:1rem;border:2px solid #bbf7d0;background:#f0fdf4">
-    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Resultados + CENNI (inventario)</h2>
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">
+        <?= $deliveryEnabled ? 'Resultados / cancelación' : 'Resultados + CENNI (inventario)' ?>
+    </h2>
     <p class="muted" style="margin-top:0;font-size:.88rem">
-        Al guardar se avanza al paso <code>resultados</code> y, si está marcado, se envía la plantilla
-        <code>student_results_cenni</code> al alumno (nivel, puntaje, certificado y folio CENNI).
+        <?php if ($deliveryEnabled): ?>
+            Modo: <code><?= e($resultsMode) ?></code>.
+            Al guardar se avanza al paso <code>resultados</code>.
+            <?php if ($resultsStepCode !== ''): ?>
+                El envío usa el paso <code><?= e($resultsStepCode) ?></code> (acción Enviar resultados / cancelación).
+            <?php endif; ?>
+        <?php else: ?>
+            Al guardar se avanza al paso <code>resultados</code> y, si está marcado, se envía la plantilla
+            de resultados CENNI al alumno.
+        <?php endif; ?>
     </p>
-    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/resultados')) ?>" style="margin-top:.75rem">
+    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/resultados')) ?>"
+          enctype="multipart/form-data" style="margin-top:.75rem" id="results-form">
         <?= csrf_field() ?>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;max-width:720px">
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-                Nivel
-                <input type="text" name="results_level" value="<?= e((string) ($tracking['results_level'] ?? '')) ?>"
-                       placeholder="B2 / 4.5 …"
-                       style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-            </label>
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-                Puntaje
-                <input type="text" name="results_score" value="<?= e((string) ($tracking['results_score'] ?? '')) ?>"
-                       style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-            </label>
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-                Folio CENNI
-                <input type="text" name="cenni_folio" value="<?= e((string) ($tracking['cenni_folio'] ?? '')) ?>"
-                       style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-            </label>
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;grid-column:1/-1">
-                URL certificado / resultados
-                <input type="url" name="results_url" value="<?= e((string) ($tracking['results_url'] ?? '')) ?>"
-                       placeholder="https://…"
-                       style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+        <?php if ($resultsStepCode !== ''): ?>
+            <input type="hidden" name="results_step_code" value="<?= e($resultsStepCode) ?>">
+        <?php endif; ?>
+        <?php if ($deliveryEnabled): ?>
+        <label class="muted" style="display:flex;gap:.4rem;align-items:center;margin:0 0 .85rem;font-size:.88rem;font-weight:600">
+            <input type="checkbox" name="cancelled" value="1" id="results-cancelled"
+                <?= $isCancelled ? 'checked' : '' ?>>
+            Examen cancelado (enviar plantilla de cancelación)
+        </label>
+        <div id="results-cancel-fields" style="<?= $isCancelled ? '' : 'display:none' ?>">
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;max-width:720px">
+                Motivo de cancelación
+                <textarea name="cancel_reason" rows="3"
+                          style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;font:inherit"
+                          placeholder="Motivo que verá el alumno…"><?= e((string) ($resultsState['cancel_reason'] ?? '')) ?></textarea>
             </label>
         </div>
+        <?php endif; ?>
+        <div id="results-data-fields" style="<?= $isCancelled ? 'display:none' : '' ?>">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;max-width:720px">
+                <?php if (
+                    !empty($inventoryEnabled)
+                    || in_array($resultsMode, ['certificate_score', 'certificate_link'], true)
+                ): ?>
+                    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                        Nivel
+                        <input type="text" name="results_level" value="<?= e((string) ($tracking['results_level'] ?? '')) ?>"
+                               placeholder="B2 / 4.5 …"
+                               style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                    </label>
+                    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                        Puntaje
+                        <input type="text" name="results_score" value="<?= e((string) ($tracking['results_score'] ?? '')) ?>"
+                               style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                    </label>
+                <?php endif; ?>
+                <?php if (!empty($inventoryEnabled)): ?>
+                    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                        Folio CENNI
+                        <input type="text" name="cenni_folio" value="<?= e((string) ($tracking['cenni_folio'] ?? '')) ?>"
+                               style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                    </label>
+                <?php endif; ?>
+                <?php if (
+                    !empty($inventoryEnabled)
+                    || in_array($resultsMode, ['certificate_link', 'certificate_score'], true)
+                ): ?>
+                    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;grid-column:1/-1">
+                        URL certificado / resultados
+                        <input type="url" name="results_url" value="<?= e((string) ($tracking['results_url'] ?? '')) ?>"
+                               placeholder="https://…"
+                               style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                    </label>
+                <?php endif; ?>
+                <?php if ($resultsMode === 'certificate_score'): ?>
+                    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;grid-column:1/-1">
+                        URL score report
+                        <input type="url" name="score_report_url"
+                               value="<?= e((string) ($resultsState['score_report_url'] ?? '')) ?>"
+                               placeholder="https://…"
+                               style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                    </label>
+                <?php endif; ?>
+                <?php if ($resultsMode === 'pdf'): ?>
+                    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;grid-column:1/-1">
+                        PDF de resultados
+                        <input type="file" name="results_pdf" accept=".pdf,application/pdf"
+                               style="padding:.35rem 0">
+                        <?php if (!empty($resultsState['pdf_path'])): ?>
+                            <span class="muted" style="font-weight:500;font-size:.8rem">
+                                Actual:
+                                <a href="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/resultados-pdf')) ?>" target="_blank" rel="noopener">
+                                    <?= e((string) ($resultsState['pdf_name'] ?: 'Ver PDF')) ?>
+                                </a>
+                            </span>
+                        <?php endif; ?>
+                    </label>
+                <?php endif; ?>
+            </div>
+        </div>
         <label class="muted" style="display:flex;gap:.4rem;align-items:center;margin:.85rem 0;font-size:.88rem">
-            <input type="checkbox" name="notify" value="1" checked> Enviar correo al alumno con resultados y CENNI
+            <input type="checkbox" name="notify" value="1" id="results-notify" checked>
+            Enviar correo al alumno
         </label>
-        <button class="btn btn-accent" type="submit">Guardar resultados</button>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+            <button class="btn btn-ghost" type="submit" id="results-save-only">Guardar</button>
+            <button class="btn btn-accent" type="submit" id="results-save-send">Guardar y enviar</button>
+        </div>
     </form>
-    <?php if (!empty($tracking['folio']) || !empty($tracking['access_key'])): ?>
+    <?php if (!empty($inventoryEnabled) && (!empty($tracking['folio']) || !empty($tracking['access_key']))): ?>
         <p class="muted" style="font-size:.82rem;margin:.85rem 0 0">
             Acceso examen (inventario): folio <code><?= e((string) ($tracking['folio'] ?? '')) ?></code>
             · clave <code><?= e((string) ($tracking['access_key'] ?? '')) ?></code>
         </p>
     <?php endif; ?>
 </div>
+<script>
+(function () {
+  var cb = document.getElementById('results-cancelled');
+  var cancelBox = document.getElementById('results-cancel-fields');
+  var dataBox = document.getElementById('results-data-fields');
+  var notify = document.getElementById('results-notify');
+  var saveOnly = document.getElementById('results-save-only');
+  var saveSend = document.getElementById('results-save-send');
+  if (cb && cancelBox && dataBox) {
+    function sync() {
+      var on = !!cb.checked;
+      cancelBox.style.display = on ? '' : 'none';
+      dataBox.style.display = on ? 'none' : '';
+    }
+    cb.addEventListener('change', sync);
+    sync();
+  }
+  if (notify && saveOnly) {
+    saveOnly.addEventListener('click', function () { notify.checked = false; });
+  }
+  if (notify && saveSend) {
+    saveSend.addEventListener('click', function () { notify.checked = true; });
+  }
+})();
+</script>
 <?php endif; ?>
 
 <?php require BASE_PATH . '/views/shared/uks_report.php'; ?>
