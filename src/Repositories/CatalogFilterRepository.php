@@ -19,10 +19,21 @@ final class CatalogFilterRepository
     /** @return list<array<string, mixed>> */
     public function catalogVisible(): array
     {
+        // Solo filtros con al menos un producto público y activo asignado.
         $stmt = $this->pdo->query(
-            'SELECT * FROM catalog_filters
-             WHERE is_active = 1 AND show_in_catalog = 1
-             ORDER BY sort_order ASC, label ASC'
+            'SELECT cf.*
+             FROM catalog_filters cf
+             WHERE cf.is_active = 1
+               AND cf.show_in_catalog = 1
+               AND EXISTS (
+                    SELECT 1
+                    FROM product_catalog_filters pcf
+                    INNER JOIN products p ON p.id = pcf.product_id
+                    WHERE pcf.filter_id = cf.id
+                      AND p.is_active = 1
+                      AND p.is_public = 1
+               )
+             ORDER BY cf.sort_order ASC, cf.label ASC'
         );
 
         return $stmt->fetchAll();
