@@ -2,8 +2,20 @@
 /** @var list<array<string,mixed>> $products */
 /** @var list<array<string,mixed>> $suppliers */
 /** @var list<array<string,mixed>> $groups */
+/** @var array{supplier_id?:int,product_group_id?:int,is_public?:string,is_star?:string} $filters */
 $suppliers = $suppliers ?? [];
 $groups = $groups ?? [];
+$filters = $filters ?? [
+    'supplier_id' => 0,
+    'product_group_id' => 0,
+    'is_public' => '',
+    'is_star' => '',
+];
+$hasExtraFilters = ((int) ($filters['supplier_id'] ?? 0) > 0)
+    || ((int) ($filters['product_group_id'] ?? 0) > 0)
+    || (($filters['is_public'] ?? '') !== '')
+    || (($filters['is_star'] ?? '') !== '')
+    || trim((string) ($q ?? '')) !== '';
 $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;width:100%;box-sizing:border-box';
 $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600';
 ?>
@@ -17,10 +29,6 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
         </p>
     </div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-        <form method="get" class="search" style="max-width:280px;margin:0">
-            <input type="search" name="q" value="<?= e($q) ?>" placeholder="Buscar…">
-            <button class="btn btn-primary" type="submit">Filtrar</button>
-        </form>
         <a class="btn btn-ghost" href="<?= e(url('/admin/grupos')) ?>">Grupos</a>
         <a class="btn btn-accent" href="<?= e(url('/admin/productos/nuevo')) ?>">Nuevo producto</a>
     </div>
@@ -33,6 +41,59 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
         y pulsa <strong>Cargar grupos sugeridos</strong>.
     </div>
 <?php endif; ?>
+
+<form method="get" action="<?= e(url('/admin/productos')) ?>" class="panel"
+      style="margin-top:1rem;display:grid;gap:.75rem;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));align-items:end">
+    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.85rem;font-weight:600">
+        Buscar
+        <input type="search" name="q" value="<?= e($q ?? '') ?>" placeholder="Código, nombre…"
+               style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+    </label>
+    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.85rem;font-weight:600">
+        Proveedor
+        <select name="supplier_id" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            <option value="">— Todos —</option>
+            <?php foreach ($suppliers as $s): ?>
+                <option value="<?= (int) $s['id'] ?>" <?= (int) ($filters['supplier_id'] ?? 0) === (int) $s['id'] ? 'selected' : '' ?>>
+                    <?= e((string) $s['name']) ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+    </label>
+    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.85rem;font-weight:600">
+        Grupo
+        <select name="product_group_id" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            <option value="">— Todos —</option>
+            <?php foreach ($groups as $g): ?>
+                <option value="<?= (int) $g['id'] ?>" <?= (int) ($filters['product_group_id'] ?? 0) === (int) $g['id'] ? 'selected' : '' ?>>
+                    <?= e((string) $g['name']) ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+    </label>
+    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.85rem;font-weight:600">
+        Publicados
+        <select name="is_public" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            <option value="" <?= ($filters['is_public'] ?? '') === '' ? 'selected' : '' ?>>— Todos —</option>
+            <option value="1" <?= (string) ($filters['is_public'] ?? '') === '1' ? 'selected' : '' ?>>Sí (en catálogo)</option>
+            <option value="0" <?= (string) ($filters['is_public'] ?? '') === '0' ? 'selected' : '' ?>>No</option>
+        </select>
+    </label>
+    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.85rem;font-weight:600">
+        Estrella
+        <select name="is_star" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            <option value="" <?= ($filters['is_star'] ?? '') === '' ? 'selected' : '' ?>>— Todos —</option>
+            <option value="1" <?= (string) ($filters['is_star'] ?? '') === '1' ? 'selected' : '' ?>>Solo estrellas</option>
+            <option value="0" <?= (string) ($filters['is_star'] ?? '') === '0' ? 'selected' : '' ?>>Sin estrella</option>
+        </select>
+    </label>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <button class="btn btn-primary" type="submit">Filtrar</button>
+        <?php if ($hasExtraFilters): ?>
+            <a class="btn btn-ghost" href="<?= e(url('/admin/productos')) ?>">Limpiar</a>
+        <?php endif; ?>
+    </div>
+</form>
 
 <div class="panel" style="margin-top:1rem;max-width:920px">
     <h2 style="margin:0 0 .35rem;font-size:1.05rem;color:var(--doceo-blue)">Cargar certificaciones (CSV)</h2>
@@ -82,8 +143,8 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
         <table class="data">
             <thead>
             <tr>
-                <th>Código</th><th>Nombre</th><th>Grupo</th><th>Tipo</th><th>Plataforma</th>
-                <th>Moodle ID</th><th>Público</th><th></th>
+                <th>Código</th><th>Nombre</th><th>Proveedor</th><th>Grupo</th><th>Tipo</th>
+                <th>Catálogo</th><th>Precio</th><th></th>
             </tr>
             </thead>
             <tbody>
@@ -91,10 +152,10 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                 <tr>
                     <td><code><?= e($p['code']) ?></code></td>
                     <td><?= e($p['name']) ?><?= !empty($p['is_star']) ? ' ⭐' : '' ?></td>
+                    <td><?= e($p['supplier_name'] ?? '—') ?></td>
                     <td><?= e($p['product_group_name'] ?? $p['product_group_code'] ?? '—') ?></td>
                     <td><?= e($p['type']) ?></td>
-                    <td><?= e($p['platform_type'] ?? 'none') ?></td>
-                    <td><?= !empty($p['moodle_course_id']) ? (int) $p['moodle_course_id'] : '—' ?></td>
+                    <td><?= !empty($p['is_public']) ? 'Sí' : 'No' ?></td>
                     <td><?= money($p['public_price']) ?></td>
                     <td>
                         <span class="row-actions">
@@ -109,7 +170,7 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                 </tr>
             <?php endforeach; ?>
             <?php if ($products === []): ?>
-                <tr><td colspan="8" class="muted">Sin productos. Crea uno nuevo o ejecuta el seed.</td></tr>
+                <tr><td colspan="8" class="muted">Sin productos con esos filtros.</td></tr>
             <?php endif; ?>
             </tbody>
         </table>

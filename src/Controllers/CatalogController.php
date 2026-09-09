@@ -12,6 +12,7 @@ use App\Repositories\TrackingRepository;
 use App\Services\CatalogFilterService;
 use App\Services\PartnerRegistrationService;
 use App\Services\PricingService;
+use App\Support\Pagination;
 use App\Support\Settings;
 
 final class CatalogController
@@ -21,12 +22,23 @@ final class CatalogController
         $repo = new ProductRepository();
         $stars = [];
         $products = [];
+        $pagination = null;
         $dbOk = true;
         try {
             $stars = $repo->starProducts();
             $filter = $_GET['filtro'] ?? $_GET['categoria'] ?? 'all';
+            $filter = is_string($filter) ? $filter : 'all';
             $q = $_GET['q'] ?? null;
-            $products = $repo->publicCatalog(is_string($filter) ? $filter : 'all', is_string($q) ? $q : null);
+            $q = is_string($q) ? $q : null;
+            $total = $repo->publicCatalogCount($filter, $q);
+            $pagination = Pagination::fromRequest($total, 20);
+            $products = $repo->publicCatalog(
+                $filter,
+                $q,
+                false,
+                $pagination['limit'],
+                $pagination['offset']
+            );
             $catalogFilters = (new CatalogFilterService())->catalogFilters();
         } catch (\Throwable $e) {
             $dbOk = false;
@@ -59,6 +71,8 @@ final class CatalogController
             'title' => 'Catálogo',
             'stars' => $stars,
             'products' => $products,
+            'pagination' => $pagination,
+            'paginationPerPageOptions' => ['20' => '20', '40' => '40', 'all' => 'Todas'],
             'catalogFilters' => $catalogFilters ?? [],
             'filter' => $_GET['filtro'] ?? $_GET['categoria'] ?? 'all',
             'q' => $_GET['q'] ?? '',

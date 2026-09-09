@@ -5,9 +5,15 @@ $user = $user ?? null;
 /** @var list<array<string,mixed>> $stars */
 /** @var list<array<string,mixed>> $products */
 /** @var list<array<string,mixed>> $catalogFilters */
+/** @var array{page:int,per_page:int,per_page_param:string,total:int,total_pages:int,offset:int,limit:?int}|null $pagination */
+/** @var array<string,string> $paginationPerPageOptions */
 /** @var string $filter */
 /** @var string $q */
 /** @var bool $dbOk */
+$filter = is_string($filter ?? null) ? $filter : 'all';
+$q = is_string($q ?? null) ? $q : '';
+$totalShown = $pagination['total'] ?? count($products);
+$qsExtra = ($q !== '' ? '&q=' . urlencode($q) : '');
 ?>
 <section class="hero">
     <div class="hero-banner">
@@ -32,7 +38,7 @@ $user = $user ?? null;
         <h3>Filtros</h3>
         <div class="filter-list">
             <a class="<?= $filter === 'all' ? 'active' : '' ?>"
-               href="<?= e(url('/catalogo?filtro=all' . ($q !== '' ? '&q=' . urlencode($q) : ''))) ?>">
+               href="<?= e(url('/catalogo?filtro=all' . $qsExtra)) ?>">
                 Todos
             </a>
             <?php
@@ -45,7 +51,7 @@ $user = $user ?? null;
                     <div class="filter-group-label"><?= e($group) ?></div>
                 <?php endif; ?>
                 <a class="<?= $filter === $f['slug'] ? 'active' : '' ?>"
-                   href="<?= e(url('/catalogo?filtro=' . urlencode((string) $f['slug']) . ($q !== '' ? '&q=' . urlencode($q) : ''))) ?>">
+                   href="<?= e(url('/catalogo?filtro=' . urlencode((string) $f['slug']) . $qsExtra)) ?>">
                     <?= e($f['label']) ?>
                 </a>
             <?php endforeach; ?>
@@ -58,7 +64,7 @@ $user = $user ?? null;
                 <input type="search" name="q" value="<?= e($q) ?>" placeholder="Buscar certificación, proveedor…">
                 <button class="btn btn-primary" type="submit">Buscar</button>
             </form>
-            <div class="muted"><?= count($products) ?> productos</div>
+            <div class="muted"><?= (int) $totalShown ?> producto<?= (int) $totalShown === 1 ? '' : 's' ?></div>
         </div>
         <?php if ($products === []): ?>
             <div class="empty">Aún no hay productos públicos. El admin puede cargarlos en <strong>Admin → Productos</strong>.</div>
@@ -68,6 +74,13 @@ $user = $user ?? null;
                     <?php require __DIR__ . '/_card.php'; ?>
                 <?php endforeach; ?>
             </div>
+            <?php if ($pagination !== null): ?>
+                <?php
+                $basePath = '/catalogo';
+                $paginationPerPageOptions = $paginationPerPageOptions ?? ['20' => '20', '40' => '40', 'all' => 'Todas'];
+                require BASE_PATH . '/views/shared/pagination.php';
+                ?>
+            <?php endif; ?>
         <?php endif; ?>
     </section>
 </div>

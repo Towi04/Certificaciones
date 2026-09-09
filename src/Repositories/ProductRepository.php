@@ -29,10 +29,44 @@ final class ProductRepository
              LEFT JOIN product_groups pg ON pg.id = p.product_group_id';
 
     /** @return list<array<string, mixed>> */
-    public function publicCatalog(?string $filterSlug = null, ?string $q = null, bool $starsOnly = false): array
+    public function publicCatalog(
+        ?string $filterSlug = null,
+        ?string $q = null,
+        bool $starsOnly = false,
+        ?int $limit = null,
+        ?int $offset = null
+    ): array {
+        [$sql, $params] = $this->publicCatalogWhere($filterSlug, $q, $starsOnly);
+        $sql = self::SELECT_WITH_RELATIONS . $sql
+            . ' ORDER BY p.is_star DESC, p.sort_order ASC, p.name ASC';
+        if ($limit !== null) {
+            $sql .= ' LIMIT ' . (int) $limit . ' OFFSET ' . max(0, (int) ($offset ?? 0));
+        }
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
+    }
+
+    public function publicCatalogCount(?string $filterSlug = null, ?string $q = null, bool $starsOnly = false): int
     {
-        $sql = self::SELECT_WITH_RELATIONS . '
-                WHERE p.is_active = 1 AND p.is_public = 1';
+        [$where, $params] = $this->publicCatalogWhere($filterSlug, $q, $starsOnly);
+        $sql = 'SELECT COUNT(*) FROM products p
+                LEFT JOIN certifiers c ON c.id = p.certifier_id
+                LEFT JOIN suppliers s ON s.id = p.supplier_id'
+            . $where;
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * @return array{0:string,1:list<mixed>}
+     */
+    private function publicCatalogWhere(?string $filterSlug, ?string $q, bool $starsOnly): array
+    {
+        $sql = ' WHERE p.is_active = 1 AND p.is_public = 1';
         $params = [];
         if ($filterSlug !== null && $filterSlug !== '' && $filterSlug !== 'all') {
             $sql .= ' AND EXISTS (
@@ -50,11 +84,8 @@ final class ProductRepository
             $like = '%' . trim($q) . '%';
             array_push($params, $like, $like, $like, $like);
         }
-        $sql .= ' ORDER BY p.is_star DESC, p.sort_order ASC, p.name ASC';
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
 
-        return $stmt->fetchAll();
+        return [$sql, $params];
     }
 
     /** @return list<array<string, mixed>> */
@@ -71,17 +102,13 @@ final class ProductRepository
         return $stmt->fetchAll();
     }
 
-    public function adminCount(?string $q = null): int
+    public function adminCount(?string $q = null, array $filters = []): int
     {
+        [$where, $params] = $this->adminFiltersWhere($q, $filters);
         $sql = 'SELECT COUNT(*) FROM products p
                 LEFT JOIN product_groups pg ON pg.id = p.product_group_id
-                WHERE 1=1';
-        $params = [];
-        if ($q) {
-            $sql .= ' AND (p.name LIKE ? OR p.code LIKE ? OR pg.name LIKE ? OR pg.code LIKE ?)';
-            $like = '%' . $q . '%';
-            array_push($params, $like, $like, $like, $like);
-        }
+                LEFT JOIN suppliers s ON s.id = p.supplier_id'
+            . $where;
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
 
@@ -112,18 +139,19 @@ final class ProductRepository
         return $row ?: null;
     }
 
-    /** @return list<array<string, mixed>> */
-    public function adminList(?string $q = null, ?int $limit = null, ?int $offset = null): array
+    /**
+     * @param array{
+     *   supplier_id?:int|string|null,
+     *   product_group_id?:int|string|null,
+     *   is_public?:int|string|null,
+     *   is_star?:int|string|null
+     * } $filters
+     * @return list<array<string, mixed>>
+     */
+    public function adminList(?string $q = null, ?int $limit = null, ?int $offset = null, array $filters = []): array
     {
-        $sql = self::SELECT_WITH_RELATIONS . '
-                WHERE 1=1';
-        $params = [];
-        if ($q) {
-            $sql .= ' AND (p.name LIKE ? OR p.code LIKE ? OR pg.name LIKE ? OR pg.code LIKE ?)';
-            $like = '%' . $q . '%';
-            array_push($params, $like, $like, $like, $like);
-        }
-        $sql .= ' ORDER BY p.type, p.name';
+        [$where, $params] = $this->adminFiltersWhere($q, $filters);
+        $sql = self::SELECT_WITH_RELATIONS . $where . ' ORDER BY p.type, p.name';
         // MariaDB rejects quoted LIMIT/OFFSET from PDO string binding; cast inline.
         if ($limit !== null) {
             $sql .= ' LIMIT ' . (int) $limit . ' OFFSET ' . max(0, (int) ($offset ?? 0));
@@ -132,6 +160,41 @@ final class ProductRepository
         $stmt->execute($params);
 
         return $stmt->fetchAll();
+    }
+
+    /**
+     * @param array<string, mixed> $filters
+     * @return array{0:string,1:list<mixed>}
+     */
+    private function adminFiltersWhere(?string $q, array $filters): array
+    {
+        $sql = ' WHERE 1=1';
+        $params = [];
+        if ($q) {
+            $sql .= ' AND (p.name LIKE ? OR p.code LIKE ? OR pg.name LIKE ? OR pg.code LIKE ? OR s.name LIKE ? OR s.code LIKE ?)';
+            $like = '%' . $q . '%';
+            array_push($params, $like, $like, $like, $like, $like, $like);
+        }
+        $supplierId = isset($filters['supplier_id']) ? (int) $filters['supplier_id'] : 0;
+        if ($supplierId > 0) {
+            $sql .= ' AND p.supplier_id = ?';
+            $params[] = $supplierId;
+        }
+        $groupId = isset($filters['product_group_id']) ? (int) $filters['product_group_id'] : 0;
+        if ($groupId > 0) {
+            $sql .= ' AND p.product_group_id = ?';
+            $params[] = $groupId;
+        }
+        if (array_key_exists('is_public', $filters) && $filters['is_public'] !== '' && $filters['is_public'] !== null) {
+            $sql .= ' AND p.is_public = ?';
+            $params[] = ((int) $filters['is_public']) === 1 ? 1 : 0;
+        }
+        if (array_key_exists('is_star', $filters) && $filters['is_star'] !== '' && $filters['is_star'] !== null) {
+            $sql .= ' AND p.is_star = ?';
+            $params[] = ((int) $filters['is_star']) === 1 ? 1 : 0;
+        }
+
+        return [$sql, $params];
     }
 
     /** @param array<string, mixed> $data */

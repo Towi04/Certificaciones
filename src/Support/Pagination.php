@@ -12,12 +12,14 @@ final class Pagination
         $page = max(1, (int) ($_GET['page'] ?? 1));
         $perPageParam = (string) ($_GET['per_page'] ?? (string) $defaultPerPage);
 
-        $perPage = match ($perPageParam) {
-            '50' => 50,
-            '100' => 100,
-            'all', '0' => $total > 0 ? $total : 1,
-            default => $defaultPerPage,
-        };
+        if ($perPageParam === 'all' || $perPageParam === '0') {
+            $perPage = $total > 0 ? $total : 1;
+        } elseif (ctype_digit($perPageParam)) {
+            $n = (int) $perPageParam;
+            $perPage = ($n >= 1 && $n <= 200) ? $n : $defaultPerPage;
+        } else {
+            $perPage = $defaultPerPage;
+        }
 
         if ($perPage < 1) {
             $perPage = $defaultPerPage;
