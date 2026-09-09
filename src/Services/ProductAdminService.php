@@ -800,6 +800,19 @@ final class ProductAdminService
                 }
             }
 
+            if (isset($map['certifier_code'])) {
+                $cCode = CertifierAdminService::normalizeCode((string) $get('certifier_code', ''));
+                if ($cCode !== '') {
+                    $certifier = $this->certifiers->findByCode($cCode);
+                    if ($certifier === null) {
+                        $errors[] = "Fila {$line}: certificadora {$cCode} no existe.";
+                        $skipped++;
+                        continue;
+                    }
+                    $input['certifier_id'] = (int) $certifier['id'];
+                }
+            }
+
             $groupFromCsv = false;
             if (isset($map['product_group_code'])) {
                 $gCode = self::normalizeGroupCode((string) $get('product_group_code', ''));
@@ -882,6 +895,7 @@ final class ProductAdminService
                 continue;
             }
             $syncCategoryTag = isset($map['category']) || isset($map['type']) || $existing === null;
+            $syncCertifierTag = isset($map['certifier_code']) || $existing === null;
             try {
                 if ($existing !== null) {
                     $this->updateProduct((int) $existing['id'], $input);
@@ -893,6 +907,13 @@ final class ProductAdminService
                 }
                 if ($syncCategoryTag) {
                     $this->ensureCategoryCatalogFilter($productId, $category);
+                }
+                if ($syncCertifierTag) {
+                    $certifierId = isset($input['certifier_id']) ? (int) $input['certifier_id'] : 0;
+                    $this->ensureCertifierCatalogFilter(
+                        $productId,
+                        $certifierId > 0 ? $certifierId : null
+                    );
                 }
             } catch (\Throwable $e) {
                 $errors[] = "Fila {$line} ({$code}): " . $e->getMessage();
@@ -927,6 +948,7 @@ final class ProductAdminService
             'price_partner_c',
             'product_group_code',
             'supplier_code',
+            'certifier_code',
             'short_description',
             'description',
             'benefits_html',
@@ -957,6 +979,7 @@ final class ProductAdminService
             '2400',
             '2450',
             'itep-exams',
+            'itep',
             'itep',
             'Resumen con <strong>negritas</strong> opcional.',
             '<p>Descripción larga del producto.</p>',
@@ -999,6 +1022,7 @@ final class ProductAdminService
                 (string) ($p['price_partner_c'] ?? ''),
                 (string) ($p['product_group_code'] ?? ''),
                 (string) ($p['supplier_code'] ?? ''),
+                (string) ($p['certifier_code'] ?? ''),
                 (string) ($p['short_description'] ?? ''),
                 (string) ($p['description'] ?? ''),
                 (string) ($p['benefits_html'] ?? ''),
@@ -1161,6 +1185,55 @@ final class ProductAdminService
             $kept[] = $filterId;
         }
         $kept[] = (int) $wanted['id'];
+        $filters->setProductFilters($productId, $kept);
+    }
+
+    /**
+     * Vincula el filtro de catálogo de la certificadora del producto (grupo Certificadora).
+     * No requiere marcar checkboxes: se deriva de products.certifier_id.
+     */
+    public function ensureCertifierCatalogFilter(int $productId, ?int $certifierId): void
+    {
+        if ($productId < 1) {
+            return;
+        }
+        $filters = new CatalogFilterRepository();
+        $filters->ensureDefaults();
+        $filters->syncCertifierFilters();
+
+        $certifierFilterIds = array_fill_keys(
+            $filters->filterIdsByGroup(CatalogFilterRepository::CERTIFIER_GROUP),
+            true
+        );
+        $kept = [];
+        foreach ($filters->filterIdsForProduct($productId) as $filterId) {
+            if (isset($certifierFilterIds[$filterId])) {
+                continue;
+            }
+            $kept[] = $filterId;
+        }
+
+        if ($certifierId !== null && $certifierId > 0) {
+            $cert = $this->certifiers->find($certifierId);
+            if ($cert !== null) {
+                $code = trim((string) ($cert['code'] ?? ''));
+                $name = trim((string) ($cert['name'] ?? ''));
+                if ($code !== '' && $name !== '') {
+                    $filterId = $filters->ensureFilter(
+                        'cert-' . $code,
+                        $name,
+                        CatalogFilterRepository::CERTIFIER_GROUP,
+                        50 + $certifierId,
+                        [
+                            'is_active' => !empty($cert['is_active']),
+                            'show_in_catalog' => !empty($cert['is_active']),
+                        ]
+                    );
+                    $kept[] = $filterId;
+                }
+            }
+        }
+
         $filters->setProductFilters($productId, $kept);
     }
 

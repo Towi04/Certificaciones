@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Repositories\CatalogFilterRepository;
 use App\Repositories\CertifierRepository;
 
 /** CRUD de casas certificadoras (logo, web y plataforma). */
@@ -53,7 +54,10 @@ final class CertifierAdminService
             throw new \InvalidArgumentException('Ya existe una certificadora con el código ' . $data['code']);
         }
 
-        return $this->certifiers->create($data);
+        $id = $this->certifiers->create($data);
+        $this->syncCatalogFilterFor($id);
+
+        return $id;
     }
 
     /** @param array<string, mixed> $input */
@@ -65,6 +69,33 @@ final class CertifierAdminService
         $data = $this->buildPayload($input, false);
         unset($data['code']);
         $this->certifiers->update($id, $data);
+        $this->syncCatalogFilterFor($id);
+    }
+
+    /** Refleja la certificadora como filtro del catálogo (grupo Certificadora). */
+    private function syncCatalogFilterFor(int $certifierId): void
+    {
+        $cert = $this->certifiers->find($certifierId);
+        if ($cert === null) {
+            return;
+        }
+        $code = trim((string) ($cert['code'] ?? ''));
+        $name = trim((string) ($cert['name'] ?? ''));
+        if ($code === '' || $name === '') {
+            return;
+        }
+        $active = !empty($cert['is_active']);
+        try {
+            (new CatalogFilterRepository())->ensureFilter(
+                'cert-' . $code,
+                $name,
+                CatalogFilterRepository::CERTIFIER_GROUP,
+                50 + $certifierId,
+                ['is_active' => $active, 'show_in_catalog' => $active]
+            );
+        } catch (\Throwable $e) {
+            error_log('[Doceo] syncCatalogFilterFor certifier: ' . $e->getMessage());
+        }
     }
 
     public function delete(int $id): void

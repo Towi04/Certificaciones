@@ -230,6 +230,8 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
             <h2 style="font-size:1.05rem;color:var(--doceo-blue);margin-top:1.25rem">Etiquetas del catálogo</h2>
             <p class="muted" style="font-size:.85rem;margin:.25rem 0 .75rem">
                 Marca en qué filtros aparece este producto en el catálogo público.
+                La certificadora (<strong>Quién certifica</strong>) se publica sola como filtro del grupo
+                «Certificadora»; no hace falta marcarla aquí.
                 Administra los filtros en <a href="<?= e(url('/admin/filtros-catalogo')) ?>">Filtros del catálogo</a>.
             </p>
             <?php if ($catalogFilters === []): ?>
@@ -238,11 +240,15 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                 <div class="filter-tag-grid">
                     <?php
                     $lastGroup = null;
+                    $certifierGroup = \App\Repositories\CatalogFilterRepository::CERTIFIER_GROUP;
                     foreach ($catalogFilters as $cf):
                         if (!(int) ($cf['is_active'] ?? 1)) {
                             continue;
                         }
                         $group = trim((string) ($cf['filter_group'] ?? ''));
+                        if ($group === $certifierGroup) {
+                            continue;
+                        }
                         if ($group !== '' && $group !== $lastGroup):
                             $lastGroup = $group;
                             ?>
