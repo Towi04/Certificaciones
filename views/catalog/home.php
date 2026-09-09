@@ -69,15 +69,47 @@ $qsExtra = ($q !== '' ? '&q=' . urlencode($q) : '');
         <?php if ($products === []): ?>
             <div class="empty">Aún no hay productos públicos. El admin puede cargarlos en <strong>Admin → Productos</strong>.</div>
         <?php else: ?>
+            <?php
+            $remaining = 0;
+            $hasMorePages = false;
+            if ($pagination !== null && (string) ($pagination['per_page_param'] ?? '') !== 'all') {
+                $remaining = max(0, (int) $pagination['total'] - ((int) $pagination['offset'] + count($products)));
+                $hasMorePages = $remaining > 0 || (int) $pagination['page'] < (int) $pagination['total_pages'];
+            }
+            $seeMoreQs = http_build_query(array_filter([
+                'filtro' => $filter !== 'all' ? $filter : null,
+                'q' => $q !== '' ? $q : null,
+                'per_page' => 'all',
+            ], static fn ($v) => $v !== null && $v !== ''));
+            ?>
             <div class="product-grid">
                 <?php foreach ($products as $p): ?>
                     <?php require __DIR__ . '/_card.php'; ?>
                 <?php endforeach; ?>
+                <?php if ($hasMorePages): ?>
+                    <a class="product-card product-card-link product-card-more"
+                       href="<?= e(url('/catalogo' . ($seeMoreQs !== '' ? '?' . $seeMoreQs : '?per_page=all'))) ?>">
+                        <div class="body">
+                            <div class="product-card-more-icon" aria-hidden="true">＋</div>
+                            <h3>Ver más certificaciones</h3>
+                            <p class="meta">
+                                <?php if ($remaining > 0): ?>
+                                    Quedan <?= (int) $remaining ?> producto<?= $remaining === 1 ? '' : 's' ?> por mostrar
+                                <?php else: ?>
+                                    Ver el catálogo completo
+                                <?php endif; ?>
+                            </p>
+                            <div class="actions">
+                                <span class="btn btn-accent btn-sm">Ver todas</span>
+                            </div>
+                        </div>
+                    </a>
+                <?php endif; ?>
             </div>
             <?php if ($pagination !== null): ?>
                 <?php
                 $basePath = '/catalogo';
-                $paginationPerPageOptions = $paginationPerPageOptions ?? ['20' => '20', '40' => '40', 'all' => 'Todas'];
+                $paginationPerPageOptions = $paginationPerPageOptions ?? ['all' => 'Todas', '20' => '20', '40' => '40'];
                 require BASE_PATH . '/views/shared/pagination.php';
                 ?>
             <?php endif; ?>
