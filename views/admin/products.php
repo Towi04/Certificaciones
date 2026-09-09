@@ -60,8 +60,9 @@ $exportQs = http_build_query(array_filter([
     <div class="panel" style="margin-top:.75rem;max-width:920px">
         <h2 style="margin:0 0 .35rem;font-size:1.05rem;color:var(--doceo-blue)">Plantilla y exportación</h2>
         <p class="muted" style="margin:0 0 .75rem;font-size:.85rem">
-            La clave es la columna <code>code</code>. Descarga los productos actuales, edítalos en Excel y vuelve a subirlos
-            en modo <strong>Actualizar</strong> o <strong>Crear y actualizar</strong>.
+            La clave es la columna <code>code</code>. Para actualizar <strong>todos</strong> los productos
+            (varios proveedores): descarga el CSV, edítalo y súbelo en modo <strong>Solo actualizar</strong>
+            <em>sin elegir proveedor</em>. Cada fila conserva su <code>supplier_code</code>.
             Los códigos de grupo deben existir en <a href="<?= e(url('/admin/grupos')) ?>">Grupos</a>.
         </p>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
@@ -78,20 +79,23 @@ $exportQs = http_build_query(array_filter([
             <label class="muted" style="<?= e($labelStyle) ?>">
                 Modo
                 <select name="import_mode" id="products-import-mode" style="<?= e($inputStyle) ?>">
-                    <option value="upsert" selected>Crear y actualizar (por código)</option>
-                    <option value="update">Solo actualizar existentes</option>
+                    <option value="update" selected>Solo actualizar existentes</option>
+                    <option value="upsert">Crear y actualizar (por código)</option>
                     <option value="create">Solo crear nuevos</option>
                 </select>
             </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
-                Proveedor
+                Proveedor por defecto (opc.)
                 <select name="supplier_id" id="products-import-supplier" style="<?= e($inputStyle) ?>">
-                    <option value="">— Sin cambiar / del CSV o grupo —</option>
+                    <option value="">— No cambiar / usar supplier_code del CSV —</option>
                     <?php foreach ($suppliers as $s): ?>
                         <option value="<?= (int) $s['id'] ?>"><?= e((string) $s['name']) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <span class="muted" style="font-weight:400;font-size:.78rem">Obligatorio solo si eliges «Solo crear nuevos».</span>
+                <span class="muted" style="font-weight:400;font-size:.78rem">
+                    Déjalo vacío para actualizar productos de varios proveedores.
+                    Solo se usa en altas nuevas si la fila no trae <code>supplier_code</code>.
+                </span>
             </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
                 Grupo por defecto (opcional)
@@ -111,18 +115,6 @@ $exportQs = http_build_query(array_filter([
             </div>
         </form>
     </div>
-    <script>
-    (function () {
-      var mode = document.getElementById('products-import-mode');
-      var supplier = document.getElementById('products-import-supplier');
-      if (!mode || !supplier) return;
-      function sync() {
-        supplier.required = mode.value === 'create';
-      }
-      mode.addEventListener('change', sync);
-      sync();
-    })();
-    </script>
 <?php else: ?>
 
 <form method="get" action="<?= e(url('/admin/productos')) ?>" class="panel"
