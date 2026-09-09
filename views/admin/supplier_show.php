@@ -356,11 +356,11 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
                     <input type="url" name="account_login_url" placeholder="https://..." style="<?= e($inputStyle) ?>">
                 </label>
                 <label class="muted" style="<?= e($labelStyle) ?>">
-                    Usuario <span style="font-weight:500;opacity:.75">(opcional)</span>
+                    Usuario
                     <input type="text" name="account_username" style="<?= e($inputStyle) ?>" autocomplete="off">
                 </label>
                 <label class="muted" style="<?= e($labelStyle) ?>">
-                    Contraseña <span style="font-weight:500;opacity:.75">(opcional)</span>
+                    Contraseña
                     <div class="pwd-toggle-wrap">
                         <input type="password" name="account_password" class="pwd-toggle-input"
                                style="<?= e($inputStyle) ?>" autocomplete="new-password">
