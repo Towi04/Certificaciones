@@ -1674,6 +1674,130 @@ final class AdminController
         redirect('/admin/partners/' . $partnerId);
     }
 
+    public function users(): void
+    {
+        Auth::requireRole(['admin']);
+        $q = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
+        $repo = new \App\Repositories\UserRepository();
+        $pagination = Pagination::fromRequest($repo->countAdmins($q !== '' ? $q : null));
+        $users = $repo->adminList($q !== '' ? $q : null, $pagination['limit'], $pagination['offset']);
+        view('admin/users', [
+            'title' => 'Usuarios admin',
+            'users' => $users,
+            'pagination' => $pagination,
+            'q' => $q,
+            'currentUserId' => Auth::id(),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function userCreateForm(): void
+    {
+        Auth::requireRole(['admin']);
+        view('admin/user_form', [
+            'title' => 'Nuevo admin',
+            'userRow' => null,
+            'isSelf' => false,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function userCreate(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            $result = (new \App\Services\UserAdminService())->createAdmin([
+                'email' => (string) ($_POST['email'] ?? ''),
+                'password' => (string) ($_POST['password'] ?? ''),
+                'first_name' => (string) ($_POST['first_name'] ?? ''),
+                'last_name_p' => (string) ($_POST['last_name_p'] ?? ''),
+                'last_name_m' => (string) ($_POST['last_name_m'] ?? ''),
+                'phone' => (string) ($_POST['phone'] ?? ''),
+                'is_active' => !empty($_POST['is_active']),
+                'must_change_password' => !empty($_POST['must_change_password']),
+            ]);
+            flash(
+                'success',
+                'Usuario admin creado. Contraseña temporal: ' . $result['plain_password']
+                . ' · Guárdala y compártela (no se envía por correo).'
+            );
+            redirect('/admin/usuarios/' . $result['user_id']);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/admin/usuarios/nuevo');
+        }
+    }
+
+    public function userEdit(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $userRow = (new \App\Repositories\UserRepository())->findAdmin((int) $id);
+        if ($userRow === null) {
+            http_response_code(404);
+            view('errors/404', ['title' => 'Usuario no encontrado', 'layout' => 'admin']);
+
+            return;
+        }
+        view('admin/user_form', [
+            'title' => 'Editar admin',
+            'userRow' => $userRow,
+            'isSelf' => Auth::id() !== null && (int) Auth::id() === (int) $userRow['id'],
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function userUpdate(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $userId = (int) $id;
+        try {
+            $isSelf = Auth::id() !== null && (int) Auth::id() === $userId;
+            $result = (new \App\Services\UserAdminService())->updateAdmin($userId, [
+                'email' => (string) ($_POST['email'] ?? ''),
+                'password' => (string) ($_POST['password'] ?? ''),
+                'first_name' => (string) ($_POST['first_name'] ?? ''),
+                'last_name_p' => (string) ($_POST['last_name_p'] ?? ''),
+                'last_name_m' => (string) ($_POST['last_name_m'] ?? ''),
+                'phone' => (string) ($_POST['phone'] ?? ''),
+                'is_active' => $isSelf ? true : !empty($_POST['is_active']),
+                'must_change_password' => !empty($_POST['must_change_password']),
+            ]);
+            $msg = 'Usuario admin actualizado.';
+            if (!empty($result['plain_password'])) {
+                $msg .= ' Nueva contraseña: ' . $result['plain_password']
+                    . ' · Compártela (no se envía por correo).';
+            }
+            flash('success', $msg);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/usuarios/' . $userId);
+    }
+
+    public function userResetPassword(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $userId = (int) $id;
+        try {
+            $password = trim((string) ($_POST['password'] ?? ''));
+            $result = (new \App\Services\UserAdminService())->resetPassword(
+                $userId,
+                $password !== '' ? $password : null
+            );
+            flash(
+                'success',
+                'Contraseña temporal: ' . $result['plain_password']
+                . ' · Compártela (no se envía por correo).'
+            );
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/usuarios/' . $userId);
+    }
+
     public function suppliers(): void
     {
         Auth::requireRole(['admin']);
