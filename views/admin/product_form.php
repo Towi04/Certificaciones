@@ -328,12 +328,23 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
 
         <div class="product-tab-panel" data-tab-panel="contenido" role="tabpanel" hidden>
             <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Contenido</h2>
-            <label class="muted" style="<?= e($labelStyle) ?>;margin-bottom:.75rem">
-                Descripción corta
-                <input type="text" name="short_description" maxlength="255"
-                       value="<?= e((string) ($product['short_description'] ?? '')) ?>"
-                       style="<?= e($inputStyle) ?>">
-            </label>
+            <div class="html-field" style="margin-bottom:.75rem" data-html-field>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.35rem">
+                    <span class="muted" style="font-size:.88rem;font-weight:600">Descripción corta</span>
+                    <button type="button" class="btn btn-ghost btn-sm html-preview-toggle" aria-pressed="false"
+                            title="Ver texto sin código HTML">
+                        &lt;/&gt;
+                    </button>
+                </div>
+                <textarea name="short_description" rows="3" class="html-field-source"
+                          style="<?= e($inputStyle) ?>;width:100%;display:block"
+                          placeholder="Ej. Examen con <strong>resultados inmediatos</strong>"><?= e((string) ($product['short_description'] ?? '')) ?></textarea>
+                <div class="html-field-preview" hidden></div>
+                <p class="muted html-field-hint" style="font-size:.78rem;margin:.35rem 0 0">
+                    Puedes usar HTML sencillo (<code>&lt;strong&gt;</code>, <code>&lt;em&gt;</code>, enlaces).
+                    Pulsa <code>&lt;/&gt;</code> para previsualizar.
+                </p>
+            </div>
             <div class="html-field" style="margin-bottom:.75rem" data-html-field>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.35rem">
                     <span class="muted" style="font-size:.88rem;font-weight:600">Descripción</span>

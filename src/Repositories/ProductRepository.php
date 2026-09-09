@@ -14,6 +14,31 @@ final class ProductRepository
     public function __construct()
     {
         $this->pdo = Connection::get();
+        $this->ensureShortDescriptionText();
+    }
+
+    /** Descripción corta como TEXT (permite HTML; instalaciones ya existentes). */
+    private function ensureShortDescriptionText(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        try {
+            $stmt = $this->pdo->query("SHOW COLUMNS FROM products LIKE 'short_description'");
+            $col = $stmt ? $stmt->fetch() : false;
+            if (!is_array($col)) {
+                return;
+            }
+            $type = strtolower((string) ($col['Type'] ?? ''));
+            if (str_starts_with($type, 'text') || str_starts_with($type, 'mediumtext') || str_starts_with($type, 'longtext')) {
+                return;
+            }
+            $this->pdo->exec('ALTER TABLE products MODIFY COLUMN short_description TEXT NULL');
+        } catch (\Throwable $e) {
+            error_log('[Doceo] ensureShortDescriptionText: ' . $e->getMessage());
+        }
     }
 
     private const SELECT_WITH_RELATIONS = 'SELECT p.*,

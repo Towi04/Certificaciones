@@ -28,7 +28,7 @@ $youtubeThumb = static function (array $item): ?string {
         <div style="flex:1;min-width:240px">
             <h1 style="margin:.25rem 0 .5rem;color:var(--doceo-blue)"><?= e($product['name']) ?></h1>
             <?php if (!empty($product['short_description'])): ?>
-                <p class="muted"><?= e($product['short_description']) ?></p>
+                <div class="muted product-richtext" style="margin:.25rem 0 .5rem"><?= rich_text((string) $product['short_description']) ?></div>
             <?php endif; ?>
             <?php
             $isPartnerView = !empty($partner);

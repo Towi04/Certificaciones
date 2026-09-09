@@ -153,7 +153,7 @@ CREATE TABLE IF NOT EXISTS products (
   code VARCHAR(60) NOT NULL,
   name VARCHAR(190) NOT NULL,
   slug VARCHAR(190) NOT NULL,
-  short_description VARCHAR(255) NULL,
+  short_description TEXT NULL,
   description TEXT NULL,
   benefits_html TEXT NULL,
   audience ENUM('adult','kids','any') NOT NULL DEFAULT 'any',
