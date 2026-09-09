@@ -486,6 +486,7 @@ final class AdminController
                 (new MailTemplateService())->all(),
                 static fn (array $t): bool => !array_key_exists('is_active', $t) || !empty($t['is_active'])
             )),
+            'csvTemplates' => (new \App\Repositories\ExportTemplateRepository())->listActive(),
             'layout' => 'admin',
         ];
         view('admin/product_group_form', $this->mergeOldIntoGroupForm($view));
@@ -551,6 +552,7 @@ final class AdminController
                 (new MailTemplateService())->all(),
                 static fn (array $t): bool => !array_key_exists('is_active', $t) || !empty($t['is_active'])
             )),
+            'csvTemplates' => (new \App\Repositories\ExportTemplateRepository())->listActive(),
             'layout' => 'admin',
         ];
         $view = $this->mergeOldIntoGroupForm($view);
@@ -2129,7 +2131,195 @@ final class AdminController
         redirect('/admin/exportaciones');
     }
 
-    
+    public function csvTemplates(): void
+    {
+        Auth::requireRole(['admin']);
+        $templates = (new \App\Repositories\ExportTemplateRepository())->all();
+        view('admin/csv_templates', [
+            'title' => 'Plantillas CSV',
+            'templates' => $templates,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function csvTemplateCreate(): void
+    {
+        Auth::requireRole(['admin']);
+        $old = old_input();
+        $template = [
+            'code' => (string) ($old['code'] ?? ''),
+            'name' => (string) ($old['name'] ?? ''),
+            'batch_by' => (string) ($old['batch_by'] ?? 'none'),
+            'is_active' => array_key_exists('is_active', $old) ? (!empty($old['is_active']) ? 1 : 0) : 1,
+            'mapping_json' => null,
+        ];
+        $columns = [];
+        if (isset($old['col_header'], $old['col_field']) && is_array($old['col_header']) && is_array($old['col_field'])) {
+            foreach ($old['col_header'] as $i => $header) {
+                $columns[] = [
+                    'header' => (string) $header,
+                    'field' => (string) ($old['col_field'][$i] ?? 'first_name'),
+                ];
+            }
+        }
+        if ($columns === []) {
+            $columns = [
+                ['header' => 'Matrícula', 'field' => 'matricula'],
+                ['header' => 'Nombre(s)', 'field' => 'first_name'],
+                ['header' => 'Apellido Paterno', 'field' => 'last_name_p'],
+                ['header' => 'Apellido Materno', 'field' => 'last_name_m'],
+                ['header' => 'Correo Electrónico', 'field' => 'email'],
+            ];
+        }
+        $normalize = (string) ($old['normalize'] ?? 'none');
+        $template['mapping_json'] = json_encode([
+            'normalize' => $normalize,
+            'filters' => [
+                'product_codes' => array_values(array_filter(preg_split('/[\s,;]+/', (string) ($old['product_codes'] ?? '')) ?: [])),
+                'product_group_codes' => array_values(array_filter(preg_split('/[\s,;]+/', (string) ($old['product_group_codes'] ?? '')) ?: [])),
+                'purchase_status' => array_values(array_filter(preg_split('/[\s,;]+/', (string) ($old['purchase_status'] ?? 'paid')) ?: [])),
+            ],
+        ], JSON_UNESCAPED_UNICODE);
+
+        view('admin/csv_template_edit', [
+            'title' => 'Nueva plantilla CSV',
+            'template' => $template,
+            'columns' => $columns,
+            'fieldOptions' => ExportService::fieldOptions(),
+            'isNew' => true,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function csvTemplateStore(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            $code = (new ExportService())->createFromAdmin($_POST);
+            flash('success', 'Plantilla CSV creada.');
+            redirect('/admin/plantillas-csv/' . $code);
+        } catch (\Throwable $e) {
+            $this->formError($e->getMessage());
+            redirect('/admin/plantillas-csv/nueva');
+        }
+    }
+
+    public function csvTemplateEdit(string $code): void
+    {
+        Auth::requireRole(['admin']);
+        $svc = new ExportService();
+        $template = $svc->template($code);
+        if ($template === null) {
+            http_response_code(404);
+            view('errors/404', ['title' => 'Plantilla no encontrada', 'layout' => 'admin']);
+
+            return;
+        }
+
+        $old = old_input();
+        if ($old !== []) {
+            $template['name'] = (string) ($old['name'] ?? $template['name']);
+            $template['batch_by'] = (string) ($old['batch_by'] ?? $template['batch_by']);
+            $template['is_active'] = !empty($old['is_active']) ? 1 : 0;
+            $map = $svc->mapping($template);
+            $map['normalize'] = (string) ($old['normalize'] ?? ($map['normalize'] ?? 'none'));
+            $map['filters'] = [
+                'product_codes' => array_values(array_filter(preg_split('/[\s,;]+/', (string) ($old['product_codes'] ?? '')) ?: [])),
+                'product_group_codes' => array_values(array_filter(preg_split('/[\s,;]+/', (string) ($old['product_group_codes'] ?? '')) ?: [])),
+                'purchase_status' => array_values(array_filter(preg_split('/[\s,;]+/', (string) ($old['purchase_status'] ?? 'paid')) ?: [])),
+            ];
+            $template['mapping_json'] = json_encode($map, JSON_UNESCAPED_UNICODE);
+        }
+
+        $mapping = $svc->mapping($template);
+        $columns = [];
+        if (isset($old['col_header'], $old['col_field']) && is_array($old['col_header']) && is_array($old['col_field'])) {
+            foreach ($old['col_header'] as $i => $header) {
+                $columns[] = [
+                    'header' => (string) $header,
+                    'field' => (string) ($old['col_field'][$i] ?? ''),
+                ];
+            }
+        } else {
+            foreach (($mapping['columns'] ?? []) as $col) {
+                if (is_array($col)) {
+                    $columns[] = [
+                        'header' => (string) ($col['header'] ?? ''),
+                        'field' => (string) ($col['field'] ?? ''),
+                    ];
+                }
+            }
+        }
+
+        view('admin/csv_template_edit', [
+            'title' => 'Editar CSV · ' . (string) ($template['name'] ?? $code),
+            'template' => $template,
+            'columns' => $columns,
+            'fieldOptions' => ExportService::fieldOptions(),
+            'isNew' => false,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function csvTemplateUpdate(string $code): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            (new ExportService())->updateFromAdmin($code, $_POST);
+            flash('success', 'Plantilla CSV guardada.');
+        } catch (\Throwable $e) {
+            $this->formError($e->getMessage());
+        }
+        redirect('/admin/plantillas-csv/' . $code);
+    }
+
+    public function csvTemplateDelete(string $code): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            (new ExportService())->delete($code);
+            flash('success', 'Plantilla CSV eliminada.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/plantillas-csv');
+    }
+
+    public function csvTemplateDownload(string $code): void
+    {
+        Auth::requireRole(['admin']);
+        $svc = new ExportService();
+        $trackingId = (int) ($_GET['tracking_id'] ?? 0);
+        $scope = (string) ($_GET['scope'] ?? 'student');
+        $returnTo = trim((string) ($_GET['return'] ?? ''));
+        if ($returnTo === '' || !str_starts_with($returnTo, '/admin')) {
+            $returnTo = $trackingId > 0
+                ? '/admin/seguimientos/' . $trackingId
+                : '/admin/plantillas-csv';
+        }
+
+        try {
+            if ($trackingId > 0) {
+                $svc->sendDownloadForTracking($code, $trackingId, ['scope' => $scope]);
+            }
+
+            $options = [];
+            if (!empty($_GET['exam_date']) && is_string($_GET['exam_date'])) {
+                $options['exam_date'] = trim($_GET['exam_date']);
+            }
+            if (!empty($_GET['all_paid'])) {
+                $options['step_codes'] = [];
+            }
+            $svc->sendDownload($code, $options);
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect($returnTo);
+        }
+    }
+
     public function vacations(): void
     {
         Auth::requireRole(['admin']);

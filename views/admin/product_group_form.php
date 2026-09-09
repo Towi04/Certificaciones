@@ -36,6 +36,7 @@ $checkoutFieldRequired = is_array($extras['checkout_field_required'] ?? null)
 $alwaysFields = ['email', 'first_name', 'last_name_p', 'phone'];
 $fieldMeta = \App\Services\CheckoutRequirements::allFieldMeta();
 $mailTemplates = isset($mailTemplates) && is_array($mailTemplates) ? $mailTemplates : [];
+$csvTemplates = isset($csvTemplates) && is_array($csvTemplates) ? $csvTemplates : [];
 $emailsCfg = is_array($extras['emails'] ?? null)
     ? $extras['emails']
     : \App\Services\GroupEmailAutomation::normalize(null);
@@ -1582,6 +1583,9 @@ $renderMailTemplateField = static function (
   var mailTemplatesJs = <?= json_encode(array_values(array_map(static function ($t) {
       return ['code' => (string) ($t['code'] ?? ''), 'name' => (string) ($t['name'] ?? '')];
   }, $mailTemplates)), JSON_UNESCAPED_UNICODE) ?> || [];
+  var csvTemplatesJs = <?= json_encode(array_values(array_map(static function ($t) {
+      return ['code' => (string) ($t['code'] ?? ''), 'name' => (string) ($t['name'] ?? '')];
+  }, $csvTemplates)), JSON_UNESCAPED_UNICODE) ?> || [];
   var actionOptions = <?= json_encode(\App\Services\GroupStepConfig::ACTIONS_EDITABLE, JSON_UNESCAPED_UNICODE) ?>;
   var allActionLabels = <?= json_encode(\App\Services\GroupStepConfig::ACTIONS, JSON_UNESCAPED_UNICODE) ?>;
   var pipelineSelect = document.getElementById('pipeline-code-select');
@@ -1622,7 +1626,9 @@ $renderMailTemplateField = static function (
       email_trigger: (def.email && def.email.trigger) || 'admin',
       email_template: (def.email && def.email.template_code) || '',
       email_to: (def.email && def.email.to) || '',
-      email_cc: (def.email && def.email.cc) || ''
+      email_cc: (def.email && def.email.cc) || '',
+      csv_template: (def.csv && def.csv.template_code) || s.csv_template || '',
+      csv_scope: (def.csv && def.csv.scope) || s.csv_scope || 'student'
     });
   }
 
@@ -1641,6 +1647,8 @@ $renderMailTemplateField = static function (
       var emailEn = g('email_enabled');
       var emailTr = g('email_trigger');
       var emailTpl = g('email_template');
+      var csvTpl = g('csv_template');
+      var csvScope = g('csv_scope');
       var labelVal = label ? label.value : '';
       var codeVal = code ? code.value : '';
       if (!codeVal && labelVal) codeVal = slugStepCode(labelVal);
@@ -1657,7 +1665,9 @@ $renderMailTemplateField = static function (
         email_trigger: emailTr ? emailTr.value : 'admin',
         email_template: emailTpl ? emailTpl.value : '',
         email_to: '',
-        email_cc: ''
+        email_cc: '',
+        csv_template: csvTpl ? csvTpl.value : '',
+        csv_scope: csvScope ? csvScope.value : 'student'
       });
     });
     if (rows.length) {
@@ -1682,6 +1692,46 @@ $renderMailTemplateField = static function (
     }
     html += '</select>';
     return html;
+  }
+
+  function csvTplSelect(idx, value) {
+    var html = '<select data-field="csv_template" name="pipeline_steps[' + idx + '][csv_template]" style="' + inp + '">';
+    html += '<option value="">— Plantilla CSV —</option>';
+    var found = false;
+    csvTemplatesJs.forEach(function (t) {
+      if (!t.code) return;
+      var sel = t.code === value;
+      if (sel) found = true;
+      html += '<option value="' + escapeHtml(t.code) + '"' + (sel ? ' selected' : '') + '>'
+        + escapeHtml(t.name || t.code) + ' (' + escapeHtml(t.code) + ')</option>';
+    });
+    if (value && !found) {
+      html += '<option value="' + escapeHtml(value) + '" selected>' + escapeHtml(value) + '</option>';
+    }
+    html += '</select>';
+    return html;
+  }
+
+  function csvScopeSelect(idx, value) {
+    var v = value === 'exam_date' ? 'exam_date' : 'student';
+    return '<select data-field="csv_scope" name="pipeline_steps[' + idx + '][csv_scope]" style="' + inp + '">'
+      + '<option value="student"' + (v === 'student' ? ' selected' : '') + '>Solo este alumno</option>'
+      + '<option value="exam_date"' + (v === 'exam_date' ? ' selected' : '') + '>Todos del mismo día + misma certificación</option>'
+      + '</select>';
+  }
+
+  function syncStepActionUi(card) {
+    if (!card) return;
+    var actionEl = card.querySelector('[data-field="action"]');
+    var emailBox = card.querySelector('.progress-step-email');
+    var csvBox = card.querySelector('.progress-step-csv');
+    var emailFlag = card.querySelector('[data-field="email_enabled"]');
+    var isCsv = actionEl && actionEl.value === 'download_csv';
+    if (emailBox) emailBox.style.display = isCsv ? 'none' : '';
+    if (csvBox) csvBox.style.display = isCsv ? '' : 'none';
+    if (emailFlag && emailFlag.closest('label')) {
+      emailFlag.closest('label').style.display = isCsv ? 'none' : '';
+    }
   }
 
   function actionSelectHtml(idx, current) {
@@ -1719,6 +1769,7 @@ $renderMailTemplateField = static function (
       var actorOpts = actors.map(function (a) {
         return '<option value="' + a.value + '"' + ((s.actor || 'admin') === a.value ? ' selected' : '') + '>' + a.label + '</option>';
       }).join('');
+      var isCsv = (s.action || 'none') === 'download_csv';
       card.innerHTML =
         '<div class="progress-step-head">' +
           '<div class="progress-step-head-left">' +
@@ -1732,19 +1783,23 @@ $renderMailTemplateField = static function (
           '<label class="muted">Etiqueta<input data-field="label" name="pipeline_steps[' + idx + '][label]" value="' + escapeHtml(s.label || '') + '" style="' + inp + '" required></label>' +
           '<label class="muted">Actor<select data-field="actor" name="pipeline_steps[' + idx + '][actor]" style="' + inp + '">' + actorOpts + '</select></label>' +
           '<label class="muted">Acción en Operación' + actionSelectHtml(idx, s.action || 'none') + '</label>' +
-          '<label class="muted">Texto del botón<input data-field="ops_label" name="pipeline_steps[' + idx + '][ops_label]" value="' + escapeHtml(s.ops_label || '') + '" placeholder="Ej. Enviar solicitud" style="' + inp + '"></label>' +
+          '<label class="muted">Texto del botón<input data-field="ops_label" name="pipeline_steps[' + idx + '][ops_label]" value="' + escapeHtml(s.ops_label || '') + '" placeholder="Ej. Descargar CSV registro" style="' + inp + '"></label>' +
         '</div>' +
         '<div class="progress-step-flags">' +
           '<label><input data-field="ops_button" type="checkbox" name="pipeline_steps[' + idx + '][ops_button]" value="1"' + (s.ops_button == 1 || s.ops_button === true ? ' checked' : '') + '> Mostrar en Operación</label>' +
           '<label><input data-field="admin_only" type="checkbox" name="pipeline_steps[' + idx + '][admin_only]" value="1"' + (s.admin_only == 1 || s.admin_only === true ? ' checked' : '') + '> Solo admin (oculto al alumno)</label>' +
-          '<label><input data-field="email_enabled" type="checkbox" name="pipeline_steps[' + idx + '][email_enabled]" value="1"' + (s.email_enabled == 1 || s.email_enabled === true ? ' checked' : '') + '> Enviar correo</label>' +
+          '<label' + (isCsv ? ' style="display:none"' : '') + '><input data-field="email_enabled" type="checkbox" name="pipeline_steps[' + idx + '][email_enabled]" value="1"' + (s.email_enabled == 1 || s.email_enabled === true ? ' checked' : '') + '> Enviar correo</label>' +
         '</div>' +
-        '<div class="progress-step-grid progress-step-email">' +
+        '<div class="progress-step-grid progress-step-email"' + (isCsv ? ' style="display:none"' : '') + '>' +
           '<label class="muted">Cuándo<select data-field="email_trigger" name="pipeline_steps[' + idx + '][email_trigger]" style="' + inp + '">' +
             '<option value="admin"' + ((s.email_trigger || 'admin') === 'admin' ? ' selected' : '') + '>Al activarlo el admin</option>' +
             '<option value="auto"' + (s.email_trigger === 'auto' ? ' selected' : '') + '>Automático al llegar al paso</option>' +
           '</select></label>' +
           '<label class="muted">Plantilla' + mailTplSelect('email_template', idx, s.email_template || '') + '</label>' +
+        '</div>' +
+        '<div class="progress-step-grid progress-step-csv"' + (isCsv ? '' : ' style="display:none"') + '>' +
+          '<label class="muted">Plantilla CSV' + csvTplSelect(idx, s.csv_template || '') + '</label>' +
+          '<label class="muted">Alcance' + csvScopeSelect(idx, s.csv_scope || 'student') + '</label>' +
         '</div>';
       stepsBody.appendChild(card);
       var labelInput = card.querySelector('[data-field="label"]');
@@ -1759,10 +1814,18 @@ $renderMailTemplateField = static function (
       } else if (codeHidden && codeHidden.value) {
         codeHidden.dataset.locked = '1';
       }
-      card.querySelectorAll('[data-field="email_enabled"], [data-field="email_template"], [data-field="email_trigger"], [data-field="label"], [data-field="ops_label"]').forEach(function (el) {
+      card.querySelectorAll('[data-field="email_enabled"], [data-field="email_template"], [data-field="email_trigger"], [data-field="label"], [data-field="ops_label"], [data-field="csv_template"], [data-field="csv_scope"]').forEach(function (el) {
         el.addEventListener('change', refreshStepEmailsSummary);
         el.addEventListener('input', refreshStepEmailsSummary);
       });
+      var actionSel = card.querySelector('[data-field="action"]');
+      if (actionSel) {
+        actionSel.addEventListener('change', function () {
+          syncStepActionUi(card);
+          refreshStepEmailsSummary();
+        });
+      }
+      syncStepActionUi(card);
     });
     refreshStepEmailsSummary();
     bindStepDrag();
