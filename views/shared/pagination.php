@@ -26,9 +26,12 @@ $to = min($pagination['offset'] + $pagination['per_page'], $pagination['total'])
             <label>
                 Filas
                 <select name="per_page" onchange="this.form.submit()">
-                    <?php foreach (['25' => '25', '50' => '50', '100' => '100', 'all' => 'Todas'] as $val => $label): ?>
-                        <option value="<?= e($val) ?>" <?= ($pagination['per_page_param'] ?? '25') === $val ? 'selected' : '' ?>>
-                            <?= e($label) ?>
+                    <?php
+                    $perPageOptions = $paginationPerPageOptions ?? ['25' => '25', '50' => '50', '100' => '100', 'all' => 'Todas'];
+                    foreach ($perPageOptions as $val => $label):
+                        ?>
+                        <option value="<?= e((string) $val) ?>" <?= (string) ($pagination['per_page_param'] ?? '25') === (string) $val ? 'selected' : '' ?>>
+                            <?= e((string) $label) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>

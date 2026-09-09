@@ -252,13 +252,26 @@ final class AdminController
     public function products(): void
     {
         Auth::requireRole(['admin']);
-        $q = isset($_GET['q']) && is_string($_GET['q']) ? $_GET['q'] : null;
+        $q = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
+        $filters = [
+            'supplier_id' => isset($_GET['supplier_id']) ? (int) $_GET['supplier_id'] : 0,
+            'product_group_id' => isset($_GET['product_group_id']) ? (int) $_GET['product_group_id'] : 0,
+            'is_public' => array_key_exists('is_public', $_GET) ? (string) $_GET['is_public'] : '',
+            'is_star' => array_key_exists('is_star', $_GET) ? (string) $_GET['is_star'] : '',
+        ];
         $repo = new ProductRepository();
-        $pagination = Pagination::fromRequest($repo->adminCount($q));
-        $products = $repo->adminList($q, $pagination['limit'], $pagination['offset']);
-        $groupsCount = 0;
+        $qArg = $q !== '' ? $q : null;
+        $pagination = Pagination::fromRequest($repo->adminCount($qArg, $filters));
+        $products = $repo->adminList($qArg, $pagination['limit'], $pagination['offset'], $filters);
+        $groups = [];
+        $suppliers = [];
         try {
-            $groupsCount = count((new ProductGroupRepository())->all());
+            $groups = (new ProductGroupRepository())->all();
+        } catch (\Throwable $e) {
+            // ignore
+        }
+        try {
+            $suppliers = (new SupplierRepository())->all();
         } catch (\Throwable $e) {
             // ignore
         }
@@ -266,8 +279,11 @@ final class AdminController
             'title' => 'Productos',
             'products' => $products,
             'pagination' => $pagination,
-            'q' => $q ?? '',
-            'groupsCount' => $groupsCount,
+            'q' => $q,
+            'filters' => $filters,
+            'groups' => $groups,
+            'suppliers' => $suppliers,
+            'groupsCount' => count($groups),
             'layout' => 'admin',
         ]);
     }
