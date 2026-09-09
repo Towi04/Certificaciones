@@ -15,6 +15,7 @@ final class SupplierRepository
     {
         $this->pdo = Connection::get();
         $this->ensureWordmarkColumn();
+        $this->ensureSupplierCertifiersTable();
     }
 
     /** Columna de logo con denominación (instalaciones ya existentes). */
@@ -35,6 +36,31 @@ final class SupplierRepository
             );
         } catch (\Throwable $e) {
             error_log('[Doceo] ensureWordmarkColumn: ' . $e->getMessage());
+        }
+    }
+
+    /** Pivot proveedor ↔ certificadoras (instalaciones ya existentes). */
+    private function ensureSupplierCertifiersTable(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        try {
+            $this->pdo->exec(
+                'CREATE TABLE IF NOT EXISTS supplier_certifiers (
+                  supplier_id BIGINT UNSIGNED NOT NULL,
+                  certifier_id BIGINT UNSIGNED NOT NULL,
+                  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (supplier_id, certifier_id),
+                  KEY idx_supplier_certifiers_certifier (certifier_id),
+                  CONSTRAINT fk_sc_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE,
+                  CONSTRAINT fk_sc_certifier FOREIGN KEY (certifier_id) REFERENCES certifiers(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+            );
+        } catch (\Throwable $e) {
+            error_log('[Doceo] ensureSupplierCertifiersTable: ' . $e->getMessage());
         }
     }
 
@@ -256,5 +282,101 @@ final class SupplierRepository
     {
         $stmt = $this->pdo->prepare('DELETE FROM supplier_accounts WHERE id = ?');
         $stmt->execute([$id]);
+    }
+
+    /** @return list<int> */
+    public function certifierIds(int $supplierId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT certifier_id FROM supplier_certifiers WHERE supplier_id = ? ORDER BY certifier_id'
+        );
+        $stmt->execute([$supplierId]);
+
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function certifiers(int $supplierId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT c.*
+             FROM supplier_certifiers sc
+             INNER JOIN certifiers c ON c.id = sc.certifier_id
+             WHERE sc.supplier_id = ?
+             ORDER BY c.name'
+        );
+        $stmt->execute([$supplierId]);
+
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Mapa supplier_id => list of {id, name, code} for product form filtering.
+     *
+     * @return array<int, list<array{id:int,name:string,code:string}>>
+     */
+    public function certifiersGroupedBySupplier(): array
+    {
+        $sql = 'SELECT sc.supplier_id, c.id, c.name, c.code
+                FROM supplier_certifiers sc
+                INNER JOIN certifiers c ON c.id = sc.certifier_id
+                ORDER BY sc.supplier_id, c.name';
+        $rows = $this->pdo->query($sql)->fetchAll();
+        $out = [];
+        foreach ($rows as $row) {
+            $sid = (int) $row['supplier_id'];
+            $out[$sid][] = [
+                'id' => (int) $row['id'],
+                'name' => (string) $row['name'],
+                'code' => (string) $row['code'],
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Reemplaza las certificadoras vinculadas al proveedor.
+     *
+     * @param list<int> $certifierIds
+     */
+    public function syncCertifiers(int $supplierId, array $certifierIds): void
+    {
+        $ids = [];
+        foreach ($certifierIds as $cid) {
+            $cid = (int) $cid;
+            if ($cid > 0) {
+                $ids[$cid] = $cid;
+            }
+        }
+        $ids = array_values($ids);
+
+        $this->pdo->beginTransaction();
+        try {
+            $del = $this->pdo->prepare('DELETE FROM supplier_certifiers WHERE supplier_id = ?');
+            $del->execute([$supplierId]);
+            if ($ids !== []) {
+                $ins = $this->pdo->prepare(
+                    'INSERT INTO supplier_certifiers (supplier_id, certifier_id) VALUES (?, ?)'
+                );
+                foreach ($ids as $cid) {
+                    $ins->execute([$supplierId, $cid]);
+                }
+            }
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    public function linkCertifier(int $supplierId, int $certifierId): void
+    {
+        $stmt = $this->pdo->prepare(
+            'INSERT IGNORE INTO supplier_certifiers (supplier_id, certifier_id) VALUES (?, ?)'
+        );
+        $stmt->execute([$supplierId, $certifierId]);
     }
 }

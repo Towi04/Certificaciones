@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Repositories\CertifierRepository;
 use App\Repositories\SupplierRepository;
 use App\Support\Crypto;
 
@@ -25,11 +26,13 @@ final class SupplierAdminService
     public const LOGO_WORDMARK = 'wordmark';
 
     private SupplierRepository $suppliers;
+    private CertifierRepository $certifiers;
     private BrandAssetService $assets;
 
     public function __construct()
     {
         $this->suppliers = new SupplierRepository();
+        $this->certifiers = new CertifierRepository();
         $this->assets = new BrandAssetService();
     }
 
@@ -132,6 +135,31 @@ final class SupplierAdminService
                 $parts[] = $contactSync['deleted'] . ' contacto(s) eliminado(s)';
             }
             $applied[] = 'Contactos: ' . implode(', ', $parts);
+        }
+
+        if (array_key_exists('certifier_ids', $input) || array_key_exists('certifier_ids_present', $input)) {
+            $raw = $input['certifier_ids'] ?? [];
+            if (!is_array($raw)) {
+                $raw = [];
+            }
+            $ids = [];
+            foreach ($raw as $cid) {
+                $cid = (int) $cid;
+                if ($cid > 0) {
+                    if ($this->certifiers->find($cid) === null) {
+                        throw new \InvalidArgumentException('Certificadora no válida: #' . $cid);
+                    }
+                    $ids[] = $cid;
+                }
+            }
+            $before = $this->suppliers->certifierIds($id);
+            sort($before);
+            $after = $ids;
+            sort($after);
+            $this->suppliers->syncCertifiers($id, $ids);
+            if ($before !== $after) {
+                $applied[] = 'Certificadoras vinculadas: ' . count($ids);
+            }
         }
 
         $accountLabel = trim((string) ($input['account_label'] ?? ''));

@@ -247,7 +247,7 @@ final class ImportService
             throw new \InvalidArgumentException('No se pudo abrir el archivo CSV.');
         }
 
-        $header = fgetcsv($handle);
+        $header = csv_get($handle);
         if ($header === false || $header === [null]) {
             fclose($handle);
             throw new \InvalidArgumentException('El CSV no tiene encabezados.');
@@ -255,7 +255,7 @@ final class ImportService
 
         $header = array_map(static fn ($h) => trim((string) $h), $header);
         $rows = [];
-        while (($data = fgetcsv($handle)) !== false) {
+        while (($data = csv_get($handle)) !== false) {
             if ($data === [null] || $data === false) {
                 continue;
             }

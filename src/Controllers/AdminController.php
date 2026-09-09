@@ -288,6 +288,63 @@ final class AdminController
         ]);
     }
 
+    public function productsBulkTemplate(): void
+    {
+        Auth::requireRole(['admin']);
+        (new ProductAdminService())->sendProductBulkTemplateCsv();
+    }
+
+    public function productsBulkImport(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $file = $_FILES['csv'] ?? null;
+        if (!is_array($file) || (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            flash('error', 'Selecciona un archivo CSV válido.');
+            redirect('/admin/productos');
+
+            return;
+        }
+        $name = strtolower((string) ($file['name'] ?? ''));
+        if (!str_ends_with($name, '.csv')) {
+            flash('error', 'El archivo debe ser CSV.');
+            redirect('/admin/productos');
+
+            return;
+        }
+        $supplierId = !empty($_POST['supplier_id']) ? (int) $_POST['supplier_id'] : null;
+        if ($supplierId === null || $supplierId < 1) {
+            flash('error', 'Elige el proveedor al que pertenecen las certificaciones.');
+            redirect('/admin/productos');
+
+            return;
+        }
+        if ((new SupplierRepository())->find($supplierId) === null) {
+            flash('error', 'Proveedor no encontrado.');
+            redirect('/admin/productos');
+
+            return;
+        }
+        $groupId = !empty($_POST['product_group_id']) ? (int) $_POST['product_group_id'] : null;
+        try {
+            $result = (new ProductAdminService())->importProductsFromCsv(
+                (string) $file['tmp_name'],
+                $groupId,
+                $supplierId
+            );
+            $msg = 'Certificaciones creadas: ' . $result['created'] . '. Omitidas: ' . $result['skipped'] . '.';
+            if ($result['errors'] !== []) {
+                $msg .= ' ' . implode(' ', array_slice($result['errors'], 0, 8));
+                flash('error', $msg);
+            } else {
+                flash('success', $msg);
+            }
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/productos');
+    }
+
     public function productCreateForm(): void
     {
         Auth::requireRole(['admin']);
@@ -700,6 +757,7 @@ final class AdminController
             'groups' => (new ProductGroupRepository())->all(),
             'suppliers' => (new SupplierRepository())->all(),
             'certifiers' => (new CertifierRepository())->all(),
+            'supplierCertifiers' => (new SupplierRepository())->certifiersGroupedBySupplier(),
             'catalogFilters' => $filterSvc->adminFilters(),
             'selectedFilterIds' => $productId > 0 ? $filterSvc->productFilterIds($productId) : [],
             'typeOptions' => ProductAdminService::typeOptions(),
@@ -1701,6 +1759,8 @@ final class AdminController
             'products' => $products,
             'contacts' => $repo->contacts($sid),
             'accounts' => $repo->accounts($sid),
+            'allCertifiers' => (new CertifierRepository())->all(),
+            'linkedCertifierIds' => $repo->certifierIds($sid),
             'revealedPasswords' => $revealedPasswords,
             'productCount' => $repo->countProducts($sid),
             'groupCount' => $repo->countGroups($sid),
