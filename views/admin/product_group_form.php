@@ -540,29 +540,58 @@ $renderMailTemplateField = static function (
         $resultsDelivery = is_array($extras['results_delivery'] ?? null)
             ? $extras['results_delivery']
             : \App\Services\ResultsDeliveryService::fromConfig([]);
-        $resultsMode = (string) ($resultsDelivery['mode'] ?? \App\Services\ResultsDeliveryService::MODE_NONE);
+        $resultsFields = is_array($resultsDelivery['fields'] ?? null) ? $resultsDelivery['fields'] : [];
         $resultsCancelTpl = (string) ($resultsDelivery['cancel_template'] ?? '');
+        $resultsFieldTypes = \App\Services\ResultsDeliveryService::FIELD_TYPES;
         ?>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Entrega de resultados</h2>
         <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
-            Define cómo se publican resultados o cancelaciones desde el detalle del caso.
-            Enlace un paso de Progreso con acción
-            <strong>Enviar resultados / cancelación</strong> para el botón en Operación.
+            Vacío = este grupo no pide subir resultados; el envío usa «Enviar correo» + plantilla
+            (marca «Requiere datos de resultados del grupo» en el paso).
             Placeholders útiles: <code>results_url</code>, <code>score_report_url</code>,
             <code>results_pdf_url</code>, <code>cancel_reason</code>, <code>results_score</code>,
             <code>results_level</code>.
         </p>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem;max-width:40rem">
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Modo de entrega
-                <select name="results_delivery_mode" style="<?= e($inputStyle) ?>">
-                    <?php foreach (\App\Services\ResultsDeliveryService::MODES as $modeCode => $modeLabel): ?>
-                        <option value="<?= e($modeCode) ?>" <?= $resultsMode === $modeCode ? 'selected' : '' ?>>
-                            <?= e($modeLabel) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
+        <div id="results-fields-list" style="display:flex;flex-direction:column;gap:.65rem;max-width:52rem;margin-bottom:.75rem">
+            <?php if ($resultsFields === []): ?>
+                <p class="muted" id="results-fields-empty" style="margin:0;font-size:.85rem">Sin campos. Agrega los que necesite la plantilla.</p>
+            <?php else: ?>
+                <?php foreach ($resultsFields as $fi => $rf): ?>
+                    <div class="results-field-row" style="display:grid;grid-template-columns:1.4fr .9fr 1fr auto auto;gap:.5rem;align-items:end">
+                        <label class="muted" style="<?= e($labelStyle) ?>">
+                            Etiqueta
+                            <input type="text" name="results_field_label[]" value="<?= e((string) ($rf['label'] ?? '')) ?>"
+                                   style="<?= e($inputStyle) ?>" required>
+                            <input type="hidden" name="results_field_code[]" value="<?= e((string) ($rf['code'] ?? '')) ?>">
+                        </label>
+                        <label class="muted" style="<?= e($labelStyle) ?>">
+                            Tipo
+                            <select name="results_field_type[]" style="<?= e($inputStyle) ?>">
+                                <?php foreach ($resultsFieldTypes as $tCode => $tLabel): ?>
+                                    <option value="<?= e($tCode) ?>" <?= (($rf['type'] ?? '') === $tCode) ? 'selected' : '' ?>>
+                                        <?= e($tLabel) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </label>
+                        <label class="muted" style="<?= e($labelStyle) ?>">
+                            Placeholder
+                            <input type="text" name="results_field_placeholder[]"
+                                   value="<?= e((string) ($rf['placeholder'] ?? '')) ?>"
+                                   placeholder="results_url" style="<?= e($inputStyle) ?>">
+                        </label>
+                        <label class="muted" style="display:flex;align-items:center;gap:.35rem;font-size:.82rem;font-weight:600;padding-bottom:.45rem">
+                            <input type="checkbox" name="results_field_required[<?= (int) $fi ?>]" value="1"
+                                <?= !empty($rf['required']) ? 'checked' : '' ?>>
+                            Req.
+                        </label>
+                        <button type="button" class="btn btn-ghost btn-sm results-field-remove" title="Quitar">✕</button>
+                    </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="results-field-add">+ Agregar campo</button>
+        <div style="margin-top:1rem;max-width:28rem">
             <label class="muted" style="<?= e($labelStyle) ?>">
                 Plantilla de cancelación
                 <select name="results_cancel_template" style="<?= e($inputStyle) ?>">
@@ -580,6 +609,71 @@ $renderMailTemplateField = static function (
                 </select>
             </label>
         </div>
+        <template id="results-field-row-tpl">
+            <div class="results-field-row" style="display:grid;grid-template-columns:1.4fr .9fr 1fr auto auto;gap:.5rem;align-items:end">
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Etiqueta
+                    <input type="text" name="results_field_label[]" value="" style="<?= e($inputStyle) ?>" required>
+                    <input type="hidden" name="results_field_code[]" value="">
+                </label>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Tipo
+                    <select name="results_field_type[]" style="<?= e($inputStyle) ?>">
+                        <?php foreach ($resultsFieldTypes as $tCode => $tLabel): ?>
+                            <option value="<?= e($tCode) ?>"><?= e($tLabel) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Placeholder
+                    <input type="text" name="results_field_placeholder[]" value="" placeholder="results_url" style="<?= e($inputStyle) ?>">
+                </label>
+                <label class="muted" style="display:flex;align-items:center;gap:.35rem;font-size:.82rem;font-weight:600;padding-bottom:.45rem">
+                    <input type="checkbox" class="results-field-required-cb" value="1">
+                    Req.
+                </label>
+                <button type="button" class="btn btn-ghost btn-sm results-field-remove" title="Quitar">✕</button>
+            </div>
+        </template>
+        <script>
+        (function () {
+          var list = document.getElementById('results-fields-list');
+          var addBtn = document.getElementById('results-field-add');
+          var tpl = document.getElementById('results-field-row-tpl');
+          if (!list || !addBtn || !tpl) return;
+          function reindexRequired() {
+            list.querySelectorAll('.results-field-row').forEach(function (row, i) {
+              var cb = row.querySelector('input[type="checkbox"]');
+              if (cb) cb.name = 'results_field_required[' + i + ']';
+            });
+            var empty = document.getElementById('results-fields-empty');
+            if (empty) empty.style.display = list.querySelectorAll('.results-field-row').length ? 'none' : '';
+          }
+          addBtn.addEventListener('click', function () {
+            var empty = document.getElementById('results-fields-empty');
+            if (empty) empty.remove();
+            var node = tpl.content.cloneNode(true);
+            list.appendChild(node);
+            reindexRequired();
+          });
+          list.addEventListener('click', function (e) {
+            var btn = e.target.closest('.results-field-remove');
+            if (!btn) return;
+            var row = btn.closest('.results-field-row');
+            if (row) row.remove();
+            if (!list.querySelector('.results-field-row')) {
+              var p = document.createElement('p');
+              p.className = 'muted';
+              p.id = 'results-fields-empty';
+              p.style.cssText = 'margin:0;font-size:.85rem';
+              p.textContent = 'Sin campos. Agrega los que necesite la plantilla.';
+              list.appendChild(p);
+            }
+            reindexRequired();
+          });
+          reindexRequired();
+        })();
+        </script>
     </div>
 
     <div class="group-panel" data-panel="extra" hidden>
@@ -1665,6 +1759,10 @@ $renderMailTemplateField = static function (
   var actionOptions = <?= json_encode(\App\Services\GroupStepConfig::ACTIONS_EDITABLE, JSON_UNESCAPED_UNICODE) ?>;
   var allActionLabels = <?= json_encode(\App\Services\GroupStepConfig::ACTIONS, JSON_UNESCAPED_UNICODE) ?>;
   var opsIconsJs = <?= json_encode(\App\Services\GroupStepConfig::OPS_ICONS, JSON_UNESCAPED_UNICODE) ?>;
+  var opsIconSvgs = <?= json_encode(array_combine(
+      array_keys(\App\Services\GroupStepConfig::OPS_ICONS),
+      array_map(static fn (string $k): string => icon($k), array_keys(\App\Services\GroupStepConfig::OPS_ICONS))
+  ), JSON_UNESCAPED_UNICODE) ?> || {};
   var pipelineSelect = document.getElementById('pipeline-code-select');
   var stepsBody = document.getElementById('pipeline-steps-body');
   var stepsEmpty = document.getElementById('pipeline-steps-empty');
@@ -1700,6 +1798,7 @@ $renderMailTemplateField = static function (
       ops_label: def.ops_label || '',
       ops_icon: def.ops_icon || s.ops_icon || '',
       action: def.action || 'none',
+      requires_results: def.requires_results ? 1 : 0,
       email_enabled: def.email && def.email.enabled ? 1 : 0,
       email_trigger: (def.email && def.email.trigger) || 'admin',
       email_template: (def.email && def.email.template_code) || '',
@@ -1728,6 +1827,7 @@ $renderMailTemplateField = static function (
       var emailTpl = g('email_template');
       var csvTpl = g('csv_template');
       var csvScope = g('csv_scope');
+      var reqResults = g('requires_results');
       var labelVal = label ? label.value : '';
       var codeVal = code ? code.value : '';
       if (!codeVal && labelVal) codeVal = slugStepCode(labelVal);
@@ -1741,6 +1841,7 @@ $renderMailTemplateField = static function (
         ops_label: opsLabel ? opsLabel.value : '',
         ops_icon: opsIcon ? opsIcon.value : '',
         action: action ? action.value : 'none',
+        requires_results: !!(reqResults && reqResults.checked),
         email_enabled: !!(emailEn && emailEn.checked),
         email_trigger: emailTr ? emailTr.value : 'admin',
         email_template: emailTpl ? emailTpl.value : '',
@@ -1801,17 +1902,88 @@ $renderMailTemplateField = static function (
   }
 
   function opsIconSelect(idx, value) {
-    var html = '<select data-field="ops_icon" name="pipeline_steps[' + idx + '][ops_icon]" style="' + inp + '">';
-    html += '<option value="">— Automático —</option>';
+    var v = value || '';
+    var preview = v && opsIconSvgs[v]
+      ? opsIconSvgs[v]
+      : '<span class="muted" style="font-size:.75rem">Auto</span>';
+    var label = v && opsIconsJs[v] ? opsIconsJs[v] : (v || 'Automático');
+    var html = ''
+      + '<div class="ops-icon-picker" data-ops-icon-picker>'
+      + '<input type="hidden" data-field="ops_icon" name="pipeline_steps[' + idx + '][ops_icon]" value="' + escapeHtml(v) + '">'
+      + '<button type="button" class="ops-icon-picker-btn" aria-haspopup="listbox" aria-expanded="false" style="'
+      + 'display:flex;align-items:center;gap:.45rem;width:100%;padding:.4rem .55rem;border:1px solid #cfd8e6;'
+      + 'border-radius:8px;background:#fff;font:inherit;cursor:pointer;text-align:left">'
+      + '<span class="ops-icon-picker-preview" style="display:inline-flex;width:1.25rem;height:1.25rem;align-items:center;justify-content:center;color:var(--doceo-blue)">'
+      + preview + '</span>'
+      + '<span class="ops-icon-picker-label" style="flex:1">' + escapeHtml(label) + '</span>'
+      + '<span aria-hidden="true" style="opacity:.55">▾</span>'
+      + '</button>'
+      + '<div class="ops-icon-picker-menu" hidden role="listbox" style="'
+      + 'position:absolute;z-index:30;margin-top:.25rem;max-height:220px;overflow:auto;min-width:12rem;'
+      + 'background:#fff;border:1px solid #cfd8e6;border-radius:10px;box-shadow:0 10px 28px rgba(16,42,86,.14);padding:.25rem">'
+      + '<button type="button" class="ops-icon-picker-opt" data-value="" role="option" style="'
+      + 'display:flex;align-items:center;gap:.5rem;width:100%;padding:.4rem .55rem;border:0;background:transparent;'
+      + 'font:inherit;cursor:pointer;text-align:left;border-radius:6px">'
+      + '<span style="width:1.25rem"></span><span>Automático</span></button>';
     Object.keys(opsIconsJs || {}).forEach(function (k) {
-      html += '<option value="' + escapeHtml(k) + '"' + (value === k ? ' selected' : '') + '>'
-        + escapeHtml(opsIconsJs[k] || k) + '</option>';
+      html += '<button type="button" class="ops-icon-picker-opt" data-value="' + escapeHtml(k) + '" role="option" style="'
+        + 'display:flex;align-items:center;gap:.5rem;width:100%;padding:.4rem .55rem;border:0;background:transparent;'
+        + 'font:inherit;cursor:pointer;text-align:left;border-radius:6px">'
+        + '<span style="display:inline-flex;width:1.25rem;height:1.25rem;align-items:center;justify-content:center;color:var(--doceo-blue)">'
+        + (opsIconSvgs[k] || '') + '</span>'
+        + '<span>' + escapeHtml(opsIconsJs[k] || k) + '</span></button>';
     });
-    if (value && !(opsIconsJs && opsIconsJs[value])) {
-      html += '<option value="' + escapeHtml(value) + '" selected>' + escapeHtml(value) + '</option>';
-    }
-    html += '</select>';
+    html += '</div></div>';
     return html;
+  }
+
+  function bindOpsIconPicker(card) {
+    var root = card.querySelector('[data-ops-icon-picker]');
+    if (!root || root.dataset.bound) return;
+    root.dataset.bound = '1';
+    root.style.position = 'relative';
+    var btn = root.querySelector('.ops-icon-picker-btn');
+    var menu = root.querySelector('.ops-icon-picker-menu');
+    var hidden = root.querySelector('input[data-field="ops_icon"]');
+    var preview = root.querySelector('.ops-icon-picker-preview');
+    var labelEl = root.querySelector('.ops-icon-picker-label');
+    function close() {
+      if (!menu) return;
+      menu.hidden = true;
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+    function open() {
+      if (!menu) return;
+      menu.hidden = false;
+      if (btn) btn.setAttribute('aria-expanded', 'true');
+    }
+    if (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        if (menu && menu.hidden) open(); else close();
+      });
+    }
+    root.querySelectorAll('.ops-icon-picker-opt').forEach(function (opt) {
+      opt.addEventListener('click', function () {
+        var val = opt.getAttribute('data-value') || '';
+        if (hidden) hidden.value = val;
+        if (preview) {
+          preview.innerHTML = val && opsIconSvgs[val]
+            ? opsIconSvgs[val]
+            : '<span class="muted" style="font-size:.75rem">Auto</span>';
+        }
+        if (labelEl) {
+          labelEl.textContent = val && opsIconsJs[val] ? opsIconsJs[val] : 'Automático';
+        }
+        close();
+        refreshStepEmailsSummary();
+      });
+      opt.addEventListener('mouseenter', function () { opt.style.background = '#f0f4fa'; });
+      opt.addEventListener('mouseleave', function () { opt.style.background = 'transparent'; });
+    });
+    document.addEventListener('click', function (e) {
+      if (!root.contains(e.target)) close();
+    });
   }
 
   function syncStepActionUi(card) {
@@ -1820,20 +1992,25 @@ $renderMailTemplateField = static function (
     var emailBox = card.querySelector('.progress-step-email');
     var csvBox = card.querySelector('.progress-step-csv');
     var emailFlag = card.querySelector('[data-field="email_enabled"]');
+    var reqResultsWrap = card.querySelector('.progress-step-requires-results');
     var tplLabel = card.querySelector('.progress-step-tpl-label');
     var action = actionEl ? actionEl.value : 'none';
     var isCsv = action === 'download_csv';
-    var isResults = action === 'send_results';
+    var isMail = action === 'send_mail';
     if (emailBox) emailBox.style.display = isCsv ? 'none' : '';
     if (csvBox) csvBox.style.display = isCsv ? '' : 'none';
     if (emailFlag && emailFlag.closest('label')) {
-      emailFlag.closest('label').style.display = (isCsv || isResults) ? 'none' : '';
+      emailFlag.closest('label').style.display = isCsv ? 'none' : '';
     }
-    if (isResults && emailFlag) {
-      emailFlag.checked = true;
+    if (reqResultsWrap) {
+      reqResultsWrap.style.display = isMail ? '' : 'none';
+      if (!isMail) {
+        var cb = reqResultsWrap.querySelector('[data-field="requires_results"]');
+        if (cb) cb.checked = false;
+      }
     }
     if (tplLabel) {
-      tplLabel.textContent = isResults ? 'Plantilla de resultados' : 'Plantilla';
+      tplLabel.textContent = 'Plantilla';
     }
   }
 
@@ -1873,8 +2050,9 @@ $renderMailTemplateField = static function (
         return '<option value="' + a.value + '"' + ((s.actor || 'admin') === a.value ? ' selected' : '') + '>' + a.label + '</option>';
       }).join('');
       var isCsv = (s.action || 'none') === 'download_csv';
-      var isResults = (s.action || 'none') === 'send_results';
-      var emailChecked = s.email_enabled == 1 || s.email_enabled === true || isResults;
+      var isMail = (s.action || 'none') === 'send_mail';
+      var emailChecked = s.email_enabled == 1 || s.email_enabled === true;
+      var reqResultsChecked = s.requires_results == 1 || s.requires_results === true;
       card.innerHTML =
         '<div class="progress-step-head">' +
           '<div class="progress-step-head-left">' +
@@ -1894,20 +2072,22 @@ $renderMailTemplateField = static function (
         '<div class="progress-step-flags">' +
           '<label><input data-field="ops_button" type="checkbox" name="pipeline_steps[' + idx + '][ops_button]" value="1"' + (s.ops_button == 1 || s.ops_button === true ? ' checked' : '') + '> Mostrar en Operación</label>' +
           '<label><input data-field="admin_only" type="checkbox" name="pipeline_steps[' + idx + '][admin_only]" value="1"' + (s.admin_only == 1 || s.admin_only === true ? ' checked' : '') + '> Solo admin (oculto al alumno)</label>' +
-          '<label' + ((isCsv || isResults) ? ' style="display:none"' : '') + '><input data-field="email_enabled" type="checkbox" name="pipeline_steps[' + idx + '][email_enabled]" value="1"' + (emailChecked ? ' checked' : '') + '> Enviar correo</label>' +
+          '<label' + (isCsv ? ' style="display:none"' : '') + '><input data-field="email_enabled" type="checkbox" name="pipeline_steps[' + idx + '][email_enabled]" value="1"' + (emailChecked ? ' checked' : '') + '> Enviar correo</label>' +
+          '<label class="progress-step-requires-results"' + (isMail ? '' : ' style="display:none"') + '><input data-field="requires_results" type="checkbox" name="pipeline_steps[' + idx + '][requires_results]" value="1"' + (reqResultsChecked ? ' checked' : '') + '> Requiere datos de resultados del grupo</label>' +
         '</div>' +
         '<div class="progress-step-grid progress-step-email"' + (isCsv ? ' style="display:none"' : '') + '>' +
           '<label class="muted">Cuándo<select data-field="email_trigger" name="pipeline_steps[' + idx + '][email_trigger]" style="' + inp + '">' +
             '<option value="admin"' + ((s.email_trigger || 'admin') === 'admin' ? ' selected' : '') + '>Al activarlo el admin</option>' +
             '<option value="auto"' + (s.email_trigger === 'auto' ? ' selected' : '') + '>Automático al llegar al paso</option>' +
           '</select></label>' +
-          '<label class="muted"><span class="progress-step-tpl-label">' + (isResults ? 'Plantilla de resultados' : 'Plantilla') + '</span>' + mailTplSelect('email_template', idx, s.email_template || '') + '</label>' +
+          '<label class="muted"><span class="progress-step-tpl-label">Plantilla</span>' + mailTplSelect('email_template', idx, s.email_template || '') + '</label>' +
         '</div>' +
         '<div class="progress-step-grid progress-step-csv"' + (isCsv ? '' : ' style="display:none"') + '>' +
           '<label class="muted">Plantilla CSV' + csvTplSelect(idx, s.csv_template || '') + '</label>' +
           '<label class="muted">Alcance' + csvScopeSelect(idx, s.csv_scope || 'student') + '</label>' +
         '</div>';
       stepsBody.appendChild(card);
+      bindOpsIconPicker(card);
       var labelInput = card.querySelector('[data-field="label"]');
       var codeHidden = card.querySelector('[data-field="code"]');
       if (labelInput && codeHidden && !codeHidden.value) {
@@ -1920,7 +2100,7 @@ $renderMailTemplateField = static function (
       } else if (codeHidden && codeHidden.value) {
         codeHidden.dataset.locked = '1';
       }
-      card.querySelectorAll('[data-field="email_enabled"], [data-field="email_template"], [data-field="email_trigger"], [data-field="label"], [data-field="ops_label"], [data-field="ops_icon"], [data-field="csv_template"], [data-field="csv_scope"]').forEach(function (el) {
+      card.querySelectorAll('[data-field="email_enabled"], [data-field="email_template"], [data-field="email_trigger"], [data-field="label"], [data-field="ops_label"], [data-field="ops_icon"], [data-field="csv_template"], [data-field="csv_scope"], [data-field="requires_results"]').forEach(function (el) {
         el.addEventListener('change', refreshStepEmailsSummary);
         el.addEventListener('input', refreshStepEmailsSummary);
       });
@@ -1945,8 +2125,7 @@ $renderMailTemplateField = static function (
     var autoCount = 0;
     var adminCount = 0;
     steps.forEach(function (s, i) {
-      var isResults = String(s.action || '') === 'send_results';
-      if ((!s.email_enabled && !isResults) || !String(s.email_template || '').trim()) return;
+      if (!s.email_enabled || !String(s.email_template || '').trim()) return;
       var tplLabel = String(s.email_template).trim();
       var sel = document.querySelector('[name="pipeline_steps[' + i + '][email_template]"]');
       if (sel && sel.selectedOptions && sel.selectedOptions[0]) {

@@ -906,17 +906,17 @@ final class TrackingService
     }
 
     /**
-     * Publica resultados / cancelación (y opcional CENNI) y opcionalmente notifica.
+     * Publica resultados / cancelación (campos dinámicos del grupo) y opcionalmente notifica.
      *
      * @param array{
      *   cancelled?:bool,
      *   cancel_reason?:string,
+     *   results_value?:array<string,mixed>,
+     *   results_file?:array<string,mixed>|null,
      *   results_level?:string,
      *   results_score?:string|float|int|null,
      *   results_url?:string,
-     *   score_report_url?:string,
      *   cenni_folio?:string,
-     *   results_pdf?:array{tmp_name?:string,name?:string,error?:int,size?:int,type?:string}|null,
      *   notify?:bool,
      *   results_step_code?:string
      * } $data
@@ -940,73 +940,137 @@ final class TrackingService
         $delivery = ResultsDeliveryService::fromConfig($cfg);
         $prevState = ResultsDeliveryService::stateFromTracking($tracking);
         $inventoryOn = InventoryService::isEnabledForProduct($product);
+        $fields = is_array($delivery['fields'] ?? null) ? $delivery['fields'] : [];
 
         $cancelled = !empty($data['cancelled']);
         $cancelReason = trim((string) ($data['cancel_reason'] ?? ''));
 
-        $level = trim((string) ($data['results_level'] ?? $tracking['results_level'] ?? ''));
-        $scoreRaw = $data['results_score'] ?? $tracking['results_score'] ?? null;
-        $score = null;
-        if ($scoreRaw !== null && $scoreRaw !== '') {
-            if (!is_numeric($scoreRaw)) {
-                throw new \InvalidArgumentException('El puntaje debe ser numérico.');
-            }
-            $score = (float) $scoreRaw;
+        $postedValues = is_array($data['results_value'] ?? null) ? $data['results_value'] : [];
+        $postedFiles = self::normalizeResultsFiles($data['results_file'] ?? null);
+        $values = is_array($prevState['values'] ?? null) ? $prevState['values'] : [];
+
+        $level = trim((string) ($tracking['results_level'] ?? ''));
+        $score = $tracking['results_score'] ?? null;
+        if ($score !== null && $score !== '') {
+            $score = is_numeric($score) ? (float) $score : null;
+        } else {
+            $score = null;
         }
-        $url = trim((string) ($data['results_url'] ?? $tracking['results_url'] ?? ''));
-        if ($url !== '' && !filter_var($url, FILTER_VALIDATE_URL)) {
-            throw new \InvalidArgumentException('La URL de resultados no es válida.');
-        }
-        $scoreReportUrl = trim((string) ($data['score_report_url'] ?? $prevState['score_report_url']));
-        if ($scoreReportUrl !== '' && !filter_var($scoreReportUrl, FILTER_VALIDATE_URL)) {
-            throw new \InvalidArgumentException('La URL del score report no es válida.');
-        }
+        $url = trim((string) ($tracking['results_url'] ?? ''));
         $cenni = trim((string) ($data['cenni_folio'] ?? $tracking['cenni_folio'] ?? ''));
 
-        $pdfPath = $prevState['pdf_path'];
-        $pdfName = $prevState['pdf_name'];
-        $pdfFile = is_array($data['results_pdf'] ?? null) ? $data['results_pdf'] : null;
-        if ($pdfFile !== null && (int) ($pdfFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
-            $stored = $this->documents->storeUploaded(
-                $pdfFile,
-                'results/' . $trackingId,
-                '.pdf'
-            );
-            $pdfPath = (string) ($stored['path'] ?? '');
-            $pdfName = (string) ($stored['original_name'] ?? 'resultados.pdf');
+        // Fallback inventario / POST directo a columnas tipadas.
+        if (array_key_exists('results_level', $data)) {
+            $level = trim((string) $data['results_level']);
+        }
+        if (array_key_exists('results_score', $data) && $data['results_score'] !== '') {
+            if (!is_numeric($data['results_score'])) {
+                throw new \InvalidArgumentException('El puntaje debe ser numérico.');
+            }
+            $score = (float) $data['results_score'];
+        } elseif (array_key_exists('results_score', $data) && $data['results_score'] === '') {
+            $score = null;
+        }
+        if (array_key_exists('results_url', $data)) {
+            $url = trim((string) $data['results_url']);
+            if ($url !== '' && !filter_var($url, FILTER_VALIDATE_URL)) {
+                throw new \InvalidArgumentException('La URL de resultados no es válida.');
+            }
+        }
+
+        foreach ($fields as $field) {
+            if (!is_array($field)) {
+                continue;
+            }
+            $code = (string) ($field['code'] ?? '');
+            if ($code === '') {
+                continue;
+            }
+            $type = (string) ($field['type'] ?? ResultsDeliveryService::TYPE_TEXT);
+            $placeholder = (string) ($field['placeholder'] ?? $code);
+
+            if ($type === ResultsDeliveryService::TYPE_PDF) {
+                $file = is_array($postedFiles[$code] ?? null) ? $postedFiles[$code] : null;
+                if ($file !== null && (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                    $stored = $this->documents->storeUploaded(
+                        $file,
+                        'results/' . $trackingId,
+                        '.pdf'
+                    );
+                    $values[$code] = [
+                        'path' => (string) ($stored['path'] ?? ''),
+                        'name' => (string) ($stored['original_name'] ?? 'resultados.pdf'),
+                    ];
+                }
+                continue;
+            }
+
+            if (!array_key_exists($code, $postedValues)) {
+                continue;
+            }
+            $raw = trim((string) $postedValues[$code]);
+            if ($type === ResultsDeliveryService::TYPE_URL && $raw !== ''
+                && !filter_var($raw, FILTER_VALIDATE_URL)
+            ) {
+                throw new \InvalidArgumentException(
+                    'La URL de «' . (string) ($field['label'] ?? $code) . '» no es válida.'
+                );
+            }
+            $values[$code] = $raw;
+
+            // Sync columnas tipadas cuando code/placeholder coincide.
+            foreach ([$code, $placeholder] as $key) {
+                if ($key === 'results_url') {
+                    $url = $raw;
+                    if ($url !== '' && !filter_var($url, FILTER_VALIDATE_URL)) {
+                        throw new \InvalidArgumentException('La URL de resultados no es válida.');
+                    }
+                } elseif ($key === 'results_level') {
+                    $level = $raw;
+                } elseif ($key === 'results_score') {
+                    if ($raw === '') {
+                        $score = null;
+                    } elseif (!is_numeric($raw)) {
+                        throw new \InvalidArgumentException('El puntaje debe ser numérico.');
+                    } else {
+                        $score = (float) $raw;
+                    }
+                }
+            }
         }
 
         if ($cancelled) {
             if ($cancelReason === '') {
                 throw new \InvalidArgumentException('Indica el motivo de cancelación del examen.');
             }
-            // Conservar datos previos de resultados; el estado de cancelación vive en extra_json.
+        } elseif ($delivery['enabled']) {
+            $probe = $tracking;
+            $probe['results_url'] = $url !== '' ? $url : null;
+            $probe['results_level'] = $level !== '' ? $level : null;
+            $probe['results_score'] = $score;
+            $probeExtra = [];
+            if (!empty($tracking['extra_json']) && is_string($tracking['extra_json'])) {
+                $decoded = json_decode($tracking['extra_json'], true);
+                $probeExtra = is_array($decoded) ? $decoded : [];
+            } elseif (is_array($tracking['extra_json'] ?? null)) {
+                $probeExtra = $tracking['extra_json'];
+            }
+            $probeExtra['results_delivery'] = [
+                'values' => $values,
+                'cancelled' => false,
+                'cancel_reason' => '',
+            ];
+            $probe['extra_json'] = $probeExtra;
+            if (!ResultsDeliveryService::isReady($probe, $delivery)) {
+                throw new \InvalidArgumentException(ResultsDeliveryService::blockedReason($probe, $delivery));
+            }
+        } elseif ($inventoryOn) {
+            if ($level === '' && $score === null && $url === '' && $cenni === '') {
+                throw new \InvalidArgumentException('Indica al menos un dato de resultados o folio CENNI.');
+            }
         } else {
-            $mode = (string) ($delivery['mode'] ?? ResultsDeliveryService::MODE_NONE);
-            if ($delivery['enabled']) {
-                if ($mode === ResultsDeliveryService::MODE_CERTIFICATE && $url === '') {
-                    throw new \InvalidArgumentException('Indica el enlace del certificado.');
-                }
-                if ($mode === ResultsDeliveryService::MODE_CERTIFICATE_SCORE) {
-                    if ($url === '') {
-                        throw new \InvalidArgumentException('Indica el enlace del certificado.');
-                    }
-                    if ($scoreReportUrl === '') {
-                        throw new \InvalidArgumentException('Indica el enlace del score report.');
-                    }
-                }
-                if ($mode === ResultsDeliveryService::MODE_PDF && $pdfPath === '') {
-                    throw new \InvalidArgumentException('Sube el PDF de resultados.');
-                }
-            } elseif ($inventoryOn) {
-                if ($level === '' && $score === null && $url === '' && $cenni === '') {
-                    throw new \InvalidArgumentException('Indica al menos un dato de resultados o folio CENNI.');
-                }
-            } else {
-                if ($level === '' && $score === null && $url === '' && $cenni === ''
-                    && $scoreReportUrl === '' && $pdfPath === '') {
-                    throw new \InvalidArgumentException('Indica al menos un dato de resultados.');
-                }
+            if ($level === '' && $score === null && $url === '' && $cenni === '' && $values === []) {
+                throw new \InvalidArgumentException('Indica al menos un dato de resultados.');
             }
         }
 
@@ -1030,17 +1094,13 @@ final class TrackingService
             $extra = $tracking['extra_json'];
         }
         $bag = is_array($extra['results_delivery'] ?? null) ? $extra['results_delivery'] : [];
+        $bag['values'] = $values;
         if ($cancelled) {
             $bag['cancelled'] = true;
             $bag['cancel_reason'] = $cancelReason;
         } else {
             $bag['cancelled'] = false;
             $bag['cancel_reason'] = '';
-            $bag['score_report_url'] = $scoreReportUrl;
-            if ($pdfPath !== '') {
-                $bag['pdf_path'] = $pdfPath;
-                $bag['pdf_name'] = $pdfName;
-            }
         }
         $bag['updated_at'] = date('c');
         $extra['results_delivery'] = $bag;
@@ -1051,6 +1111,24 @@ final class TrackingService
         if ($cancelled) {
             $parts[] = 'cancelación: ' . $cancelReason;
         } else {
+            foreach ($fields as $field) {
+                if (!is_array($field)) {
+                    continue;
+                }
+                $code = (string) ($field['code'] ?? '');
+                if ($code === '' || !isset($values[$code])) {
+                    continue;
+                }
+                $label = (string) ($field['label'] ?? $code);
+                if (($field['type'] ?? '') === ResultsDeliveryService::TYPE_PDF) {
+                    $raw = $values[$code];
+                    if (is_array($raw) && trim((string) ($raw['path'] ?? '')) !== '') {
+                        $parts[] = $label . ' (pdf)';
+                    }
+                } elseif (trim((string) $values[$code]) !== '') {
+                    $parts[] = $label;
+                }
+            }
             if ($level !== '') {
                 $parts[] = 'nivel ' . $level;
             }
@@ -1060,15 +1138,10 @@ final class TrackingService
             if ($url !== '') {
                 $parts[] = 'url';
             }
-            if ($scoreReportUrl !== '') {
-                $parts[] = 'score report';
-            }
-            if ($pdfPath !== '') {
-                $parts[] = 'pdf';
-            }
             if ($cenni !== '') {
                 $parts[] = 'CENNI ' . $cenni;
             }
+            $parts = array_values(array_unique($parts));
         }
         $this->log(
             $trackingId,
@@ -1106,7 +1179,13 @@ final class TrackingService
                 'group_config_json' => $fresh['group_config_json'] ?? null,
             ]));
             foreach ($defs as $code => $def) {
-                if ((string) ($def['action'] ?? '') === GroupStepConfig::ACTION_SEND_RESULTS) {
+                if ((string) ($def['action'] ?? '') !== GroupStepConfig::ACTION_SEND_MAIL) {
+                    continue;
+                }
+                $tpl = trim((string) (($def['email']['template_code'] ?? '')));
+                if (!empty($def['requires_results'])
+                    || ResultsDeliveryService::stepRequiresResults($def, $delivery, $tpl)
+                ) {
                     $resultsStep = (string) $code;
                     break;
                 }
@@ -1116,7 +1195,7 @@ final class TrackingService
         if ($delivery['enabled']) {
             if ($resultsStep === '') {
                 throw new \InvalidArgumentException(
-                    'Configura un paso con acción «Enviar resultados / cancelación» en el grupo.'
+                    'Configura un paso «Enviar correo» que requiera datos de resultados del grupo.'
                 );
             }
             (new StepMailService())->sendForStep($trackingId, $resultsStep, $actorUserId);
@@ -1140,6 +1219,46 @@ final class TrackingService
         if (InventoryService::isEnabledForProduct($productFresh)) {
             (new InventoryService())->sendResultsMail($trackingId, $actorUserId);
         }
+    }
+
+    /**
+     * Normaliza $_FILES['results_file'] (por código de campo) a archivos individuales.
+     *
+     * @param mixed $raw
+     * @return array<string, array{tmp_name?:string,name?:string,error?:int,size?:int,type?:string}>
+     */
+    private static function normalizeResultsFiles(mixed $raw): array
+    {
+        if (!is_array($raw)) {
+            return [];
+        }
+        // Ya es mapa code => file meta
+        if (isset($raw['tmp_name']) && is_string($raw['tmp_name'])) {
+            return ['results_pdf' => $raw];
+        }
+        if (isset($raw['tmp_name']) && is_array($raw['tmp_name'])) {
+            $out = [];
+            foreach ($raw['tmp_name'] as $code => $tmp) {
+                $code = (string) $code;
+                $out[$code] = [
+                    'tmp_name' => (string) $tmp,
+                    'name' => (string) ($raw['name'][$code] ?? ''),
+                    'type' => (string) ($raw['type'][$code] ?? ''),
+                    'error' => (int) ($raw['error'][$code] ?? UPLOAD_ERR_NO_FILE),
+                    'size' => (int) ($raw['size'][$code] ?? 0),
+                ];
+            }
+
+            return $out;
+        }
+        $out = [];
+        foreach ($raw as $code => $file) {
+            if (is_array($file) && isset($file['tmp_name'])) {
+                $out[(string) $code] = $file;
+            }
+        }
+
+        return $out;
     }
 
     /**

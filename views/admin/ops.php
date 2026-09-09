@@ -224,31 +224,41 @@ $extraColHeader = count($extraColLabels) === 1
                                             <?php endif; ?>
                                         </button>
                                     </form>
-                                <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_CONFIRM_PAYMENT): ?>
-                                    <form method="post" action="<?= e(url('/admin/compras/' . $pid . '/confirmar-pago')) ?>" class="ops-inline-form">
-                                        <?= csrf_field() ?>
-                                        <input type="hidden" name="return_ops" value="1">
-                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
-                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
-                                        <button class="<?= e($btnClass) ?>" type="submit"
+                                <?php elseif (
+                                    $action === \App\Services\GroupStepConfig::ACTION_CONFIRM_PAYMENT
+                                    || $action === \App\Services\GroupStepConfig::ACTION_CONFIRM_PAYMENT_POPUP
+                                ): ?>
+                                    <?php
+                                    $hasProof = !empty($r['payment_proof_path']);
+                                    $proofUrl = $hasProof
+                                        ? url('/admin/compras/' . $pid . '/comprobante')
+                                        : '';
+                                    ?>
+                                    <button type="button"
+                                            class="<?= e($btnClass) ?> ops-confirm-pay-btn"
+                                            data-confirm-url="<?= e(url('/admin/compras/' . $pid . '/confirmar-pago')) ?>"
+                                            data-proof-url="<?= e($proofUrl) ?>"
+                                            data-has-proof="<?= $hasProof ? '1' : '0' ?>"
+                                            data-return-view="<?= e($view) ?>"
+                                            data-return-q="<?= e($q) ?>"
+                                            data-csrf="<?= e(csrf_token()) ?>"
+                                            data-title="<?= e((!empty($r['is_package'])
+                                                ? 'Confirmar pago del paquete'
+                                                : 'Confirmar pago') . ' · ' . (string) ($r['matricula'] ?? '')) ?>"
                                             title="<?= e((!empty($r['is_package'])
                                                 ? 'Confirma el pago único del paquete; aplica a todos los productos de la matrícula'
-                                                : 'Confirmar pago') . ' · ' . $label) ?>"
+                                                : 'Confirmar pago (ver comprobante)') . ' · ' . $label) ?>"
                                             aria-label="<?= e($label) ?>">
-                                            <?= $iconSvg ?>
-                                        </button>
-                                    </form>
-                                    <?php if (!empty($r['payment_proof_path'])): ?>
-                                        <button type="button" class="btn btn-ghost btn-sm ops-proof-btn"
-                                                data-proof-url="<?= e(url('/admin/compras/' . $pid . '/comprobante')) ?>"
-                                                data-proof-title="Comprobante alumno · <?= e((string) ($r['matricula'] ?? '')) ?>">
-                                            Ver comprobante alumno
-                                        </button>
-                                    <?php endif; ?>
+                                        <?= $iconSvg ?>
+                                    </button>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_SEND_MAIL): ?>
                                     <?php
                                     $audience = (string) ($btn['audience'] ?? ($btn['email']['audience'] ?? 'student'));
                                     $sendTpl = trim((string) ($btn['email']['template_code'] ?? ''));
+                                    $resultsReady = array_key_exists('results_ready', $btn)
+                                        ? !empty($btn['results_ready'])
+                                        : true;
+                                    $resultsBlocked = trim((string) ($btn['results_blocked'] ?? ''));
                                     // Solo la solicitud inicial UKS usa ProviderRequestService
                                     // (reglamento / pago / Excel). Otras plantillas de proveedor
                                     // (p. ej. reagendar_uks) van por enviar-correo-paso.
@@ -257,6 +267,14 @@ $extraColHeader = count($extraColLabels) === 1
                                             $sendTpl === ''
                                             || \App\Services\MailTemplateService::isUksSolicitudCode($sendTpl)
                                         );
+                                    $mailBtnClass = $btnClass . ($resultsReady ? '' : ' ops-icon-btn--disabled');
+                                    $mailTitle = $resultsReady
+                                        ? (($audience === 'partner'
+                                            ? 'Enviar al partner del caso'
+                                            : ($audience === 'provider'
+                                                ? 'Enviar plantilla al proveedor'
+                                                : 'Enviar plantilla al alumno')) . ' · ' . $label)
+                                        : ($resultsBlocked !== '' ? $resultsBlocked : $label);
                                     ?>
                                     <?php if ($isHeavyProviderRequest): ?>
                                     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/solicitud-proveedor')) ?>" class="ops-inline-form">
@@ -266,10 +284,13 @@ $extraColHeader = count($extraColLabels) === 1
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                         <input type="hidden" name="include_payment_proof" value="1">
                                         <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
-                                        <button class="<?= e($btnClass) ?>" type="submit"
-                                            title="<?= e((empty($r['admin_proof_uploaded'])
-                                                ? 'Sube el comprobante DOCEO en Detalle si el grupo lo exige'
-                                                : $label) ) ?>"
+                                        <button class="<?= e($mailBtnClass) ?>" type="submit"
+                                            <?= $resultsReady ? '' : 'disabled' ?>
+                                            title="<?= e(!$resultsReady
+                                                ? $mailTitle
+                                                : (empty($r['admin_proof_uploaded'])
+                                                    ? 'Sube el comprobante DOCEO en Detalle si el grupo lo exige'
+                                                    : $label)) ?>"
                                             aria-label="<?= e($label) ?>">
                                             <?= $iconSvg ?>
                                         </button>
@@ -284,38 +305,14 @@ $extraColHeader = count($extraColLabels) === 1
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                         <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
-                                        <button class="<?= e($btnClass) ?>" type="submit"
-                                            title="<?= e(($audience === 'partner'
-                                                ? 'Enviar al partner del caso'
-                                                : ($audience === 'provider'
-                                                    ? 'Enviar plantilla al proveedor'
-                                                    : 'Enviar plantilla al alumno')) . ' · ' . $label) ?>"
+                                        <button class="<?= e($mailBtnClass) ?>" type="submit"
+                                            <?= $resultsReady ? '' : 'disabled' ?>
+                                            title="<?= e($mailTitle) ?>"
                                             aria-label="<?= e($label) ?>">
                                             <?= $iconSvg ?>
                                         </button>
                                     </form>
                                     <?php endif; ?>
-                                <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_SEND_RESULTS): ?>
-                                    <?php
-                                    $resultsReady = !empty($btn['results_ready']);
-                                    $resultsTitle = $resultsReady
-                                        ? $label
-                                        : (trim((string) ($btn['results_blocked'] ?? '')) ?: $label);
-                                    $resultsBtnClass = $btnClass . ($resultsReady ? '' : ' ops-icon-btn--disabled');
-                                    ?>
-                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/enviar-correo-paso')) ?>" class="ops-inline-form">
-                                        <?= csrf_field() ?>
-                                        <input type="hidden" name="return_ops" value="1">
-                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
-                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
-                                        <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
-                                        <button class="<?= e($resultsBtnClass) ?>" type="submit"
-                                            <?= $resultsReady ? '' : 'disabled' ?>
-                                            title="<?= e($resultsTitle) ?>"
-                                            aria-label="<?= e($label) ?>">
-                                            <?= $iconSvg ?>
-                                        </button>
-                                    </form>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_EXAM_ACCESS): ?>
                                     <form method="post" action="<?= e(url('/admin/operacion/' . $tid . '/accesos')) ?>"
                                           class="ops-inline-form ops-access-form" id="ops-access-form-<?= $tid ?>"
@@ -409,13 +406,6 @@ $extraColHeader = count($extraColLabels) === 1
                                 <span class="ops-mini-ok muted" title="El pago se confirma una sola vez en otra fila del mismo paquete">
                                     Mismo pago · matrícula <?= e((string) ($r['matricula'] ?? '')) ?>
                                 </span>
-                                <?php if (!empty($r['payment_proof_path'])): ?>
-                                    <button type="button" class="btn btn-ghost btn-sm ops-proof-btn"
-                                            data-proof-url="<?= e(url('/admin/compras/' . $pid . '/comprobante')) ?>"
-                                            data-proof-title="Comprobante alumno · <?= e((string) ($r['matricula'] ?? '')) ?>">
-                                        Ver comprobante alumno
-                                    </button>
-                                <?php endif; ?>
                             <?php endif; ?>
 
                             <?php
@@ -697,7 +687,24 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
 .ops-proof-head strong { color:var(--doceo-blue); font-size:.95rem; }
 .ops-proof-body { flex:1; min-height:0; background:#edf1f7; }
 .ops-proof-frame {
-  width:100%; height:min(72vh, 780px); border:0; background:#fff; display:block;
+  width:100%; height:min(52vh, 560px); border:0; background:#fff; display:block;
+}
+.ops-proof-frame[hidden],
+.ops-proof-empty[hidden],
+.ops-proof-confirm[hidden] { display:none !important; }
+.ops-proof-empty {
+  padding:1.25rem 1.1rem; color:#5b6b7c; font-size:.9rem; line-height:1.45;
+}
+.ops-proof-confirm {
+  padding:.85rem 1rem; border-top:1px solid #e6ebf2; background:#fff;
+  display:flex; flex-wrap:wrap; gap:.65rem; align-items:flex-end;
+}
+.ops-proof-confirm label {
+  flex:1 1 220px; display:flex; flex-direction:column; gap:.3rem;
+  font-size:.82rem; font-weight:600; color:#5b6b7c;
+}
+.ops-proof-confirm input[type="text"] {
+  padding:.45rem .6rem; border:1px solid #cfd8e6; border-radius:8px; font:inherit;
 }
 </style>
 
@@ -713,7 +720,20 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
         </div>
         <div class="ops-proof-body">
             <iframe class="ops-proof-frame" id="ops-proof-frame" title="Vista del comprobante"></iframe>
+            <div class="ops-proof-empty" id="ops-proof-empty" hidden>
+                No hay comprobante del alumno. Puedes confirmar el pago de todas formas.
+            </div>
         </div>
+        <form method="post" id="ops-proof-confirm" class="ops-proof-confirm" hidden>
+            <input type="hidden" name="_csrf" id="ops-proof-csrf" value="">
+            <input type="hidden" name="return_ops" value="1">
+            <input type="hidden" name="return_view" id="ops-proof-return-view" value="">
+            <input type="hidden" name="return_q" id="ops-proof-return-q" value="">
+            <label>Nota (opcional)
+                <input type="text" name="notes" id="ops-proof-notes" placeholder="Ej. Transferencia vista en banco">
+            </label>
+            <button type="submit" class="btn btn-accent" id="ops-proof-submit">Confirmar pago</button>
+        </form>
     </div>
 </div>
 
@@ -721,26 +741,86 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
 (function () {
   var proofModal = document.getElementById('ops-proof-modal');
   var proofFrame = document.getElementById('ops-proof-frame');
+  var proofEmpty = document.getElementById('ops-proof-empty');
   var proofTitle = document.getElementById('ops-proof-title');
   var proofOpen = document.getElementById('ops-proof-open');
   var proofClose = document.getElementById('ops-proof-close');
   var proofBackdrop = document.getElementById('ops-proof-backdrop');
+  var proofConfirm = document.getElementById('ops-proof-confirm');
+  var proofCsrf = document.getElementById('ops-proof-csrf');
+  var proofReturnView = document.getElementById('ops-proof-return-view');
+  var proofReturnQ = document.getElementById('ops-proof-return-q');
+  var proofNotes = document.getElementById('ops-proof-notes');
 
   function closeProof() {
     if (!proofModal) return;
     proofModal.hidden = true;
-    if (proofFrame) proofFrame.src = 'about:blank';
+    if (proofFrame) {
+      proofFrame.src = 'about:blank';
+      proofFrame.hidden = false;
+    }
+    if (proofEmpty) proofEmpty.hidden = true;
+    if (proofConfirm) proofConfirm.hidden = true;
+    if (proofNotes) proofNotes.value = '';
   }
-  function openProof(url, title) {
-    if (!proofModal || !proofFrame) return;
+  function openProof(url, title, opts) {
+    if (!proofModal) return;
+    opts = opts || {};
     if (proofTitle) proofTitle.textContent = title || 'Comprobante';
-    if (proofOpen) proofOpen.href = url;
-    proofFrame.src = url;
+    var hasUrl = !!(url && String(url).trim());
+    if (proofOpen) {
+      if (hasUrl) {
+        proofOpen.href = url;
+        proofOpen.hidden = false;
+      } else {
+        proofOpen.hidden = true;
+      }
+    }
+    if (proofFrame && proofEmpty) {
+      if (hasUrl) {
+        proofFrame.hidden = false;
+        proofEmpty.hidden = true;
+        proofFrame.src = url;
+      } else {
+        proofFrame.hidden = true;
+        proofFrame.src = 'about:blank';
+        proofEmpty.hidden = false;
+        if (opts.warnText) proofEmpty.textContent = opts.warnText;
+        else proofEmpty.textContent = 'No hay comprobante del alumno. Puedes confirmar el pago de todas formas.';
+      }
+    }
+    if (proofConfirm) {
+      if (opts.confirmUrl) {
+        proofConfirm.action = opts.confirmUrl;
+        proofConfirm.hidden = false;
+        if (proofCsrf) proofCsrf.value = opts.csrf || '';
+        if (proofReturnView) proofReturnView.value = opts.returnView || '';
+        if (proofReturnQ) proofReturnQ.value = opts.returnQ || '';
+      } else {
+        proofConfirm.hidden = true;
+      }
+    }
     proofModal.hidden = false;
   }
   document.querySelectorAll('.ops-proof-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
       openProof(btn.getAttribute('data-proof-url') || '', btn.getAttribute('data-proof-title') || 'Comprobante');
+    });
+  });
+  document.querySelectorAll('.ops-confirm-pay-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var hasProof = btn.getAttribute('data-has-proof') === '1';
+      openProof(
+        hasProof ? (btn.getAttribute('data-proof-url') || '') : '',
+        btn.getAttribute('data-title') || 'Confirmar pago',
+        {
+          confirmUrl: btn.getAttribute('data-confirm-url') || '',
+          csrf: btn.getAttribute('data-csrf') || '',
+          returnView: btn.getAttribute('data-return-view') || '',
+          returnQ: btn.getAttribute('data-return-q') || '',
+          warnText: 'No hay comprobante del alumno cargado. Confirma solo si verificaste el pago por otro medio.'
+        }
+      );
     });
   });
   proofClose && proofClose.addEventListener('click', closeProof);

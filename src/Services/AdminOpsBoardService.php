@@ -138,7 +138,10 @@ final class AdminOpsBoardService
             $buttons = is_array($row['ops_buttons'] ?? null) ? $row['ops_buttons'] : [];
             $hasConfirm = false;
             foreach ($buttons as $btn) {
-                if (($btn['action'] ?? '') === GroupStepConfig::ACTION_CONFIRM_PAYMENT) {
+                if (in_array(($btn['action'] ?? ''), [
+                    GroupStepConfig::ACTION_CONFIRM_PAYMENT,
+                    GroupStepConfig::ACTION_CONFIRM_PAYMENT_POPUP,
+                ], true)) {
                     $hasConfirm = true;
                     break;
                 }
@@ -156,7 +159,10 @@ final class AdminOpsBoardService
             if (isset($seen[$pid])) {
                 $filtered = [];
                 foreach ($buttons as $btn) {
-                    if (($btn['action'] ?? '') === GroupStepConfig::ACTION_CONFIRM_PAYMENT) {
+                    if (in_array(($btn['action'] ?? ''), [
+                        GroupStepConfig::ACTION_CONFIRM_PAYMENT,
+                        GroupStepConfig::ACTION_CONFIRM_PAYMENT_POPUP,
+                    ], true)) {
                         continue;
                     }
                     $filtered[] = $btn;
@@ -178,7 +184,10 @@ final class AdminOpsBoardService
             $seen[$pid] = true;
             if ($siblingCount > 1 || (int) ($row['combo_id'] ?? 0) > 0) {
                 foreach ($buttons as $j => $btn) {
-                    if (($btn['action'] ?? '') !== GroupStepConfig::ACTION_CONFIRM_PAYMENT) {
+                    if (!in_array(($btn['action'] ?? ''), [
+                        GroupStepConfig::ACTION_CONFIRM_PAYMENT,
+                        GroupStepConfig::ACTION_CONFIRM_PAYMENT_POPUP,
+                    ], true)) {
                         continue;
                     }
                     $n = max($siblingCount, 2);
