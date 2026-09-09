@@ -3,6 +3,7 @@
 /** @var list<array<string,mixed>> $groups */
 /** @var list<array<string,mixed>> $suppliers */
 /** @var list<array<string,mixed>> $certifiers */
+/** @var array<int, list<array{id:int,name:string,code:string}>> $supplierCertifiers */
 /** @var list<string> $typeOptions */
 /** @var list<string> $categoryOptions */
 /** @var list<string> $audienceOptions */
@@ -23,6 +24,7 @@ $platformOptions = $platformOptions ?? [];
 $groups = $groups ?? [];
 $suppliers = $suppliers ?? [];
 $certifiers = $certifiers ?? [];
+$supplierCertifiers = $supplierCertifiers ?? [];
 $cefrOptions = $cefrOptions ?? [];
 $cenniOptions = $cenniOptions ?? \App\Services\ProductAdminService::cenniOptions();
 $levelExam = $levelExam ?? [
@@ -190,7 +192,7 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                 </label>
                 <label class="muted" style="<?= e($labelStyle) ?>">
                     Proveedor
-                    <select name="supplier_id" style="<?= e($inputStyle) ?>">
+                    <select name="supplier_id" id="product-supplier-id" style="<?= e($inputStyle) ?>">
                         <option value="">— Ninguno —</option>
                         <?php foreach ($suppliers as $s): ?>
                             <option value="<?= (int) $s['id'] ?>" <?= (int) ($product['supplier_id'] ?? 0) === (int) $s['id'] ? 'selected' : '' ?>>
@@ -200,8 +202,8 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                     </select>
                 </label>
                 <label class="muted" style="<?= e($labelStyle) ?>">
-                    Certificador
-                    <select name="certifier_id" style="<?= e($inputStyle) ?>">
+                    Quién certifica
+                    <select name="certifier_id" id="product-certifier-id" style="<?= e($inputStyle) ?>">
                         <option value="">— Ninguno —</option>
                         <?php foreach ($certifiers as $c): ?>
                             <option value="<?= (int) $c['id'] ?>" <?= (int) ($product['certifier_id'] ?? 0) === (int) $c['id'] ? 'selected' : '' ?>>
@@ -209,6 +211,9 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                             </option>
                         <?php endforeach; ?>
                     </select>
+                    <span class="muted" id="product-certifier-hint" style="font-weight:400;font-size:.78rem;line-height:1.35">
+                        Vincula las certificadoras en el proveedor (pestaña Certificadoras) para filtrar esta lista.
+                    </span>
                 </label>
             </div>
 
@@ -853,6 +858,69 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
     }
 }
 </style>
+<script>
+window.__supplierCertifiers = <?= json_encode($supplierCertifiers, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>;
+window.__allCertifiers = <?= json_encode(array_map(static fn ($c) => [
+    'id' => (int) $c['id'],
+    'name' => (string) $c['name'],
+    'code' => (string) ($c['code'] ?? ''),
+], $certifiers), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>;
+</script>
+<script>
+(function () {
+  var supplierSelect = document.getElementById('product-supplier-id');
+  var certifierSelect = document.getElementById('product-certifier-id');
+  var hint = document.getElementById('product-certifier-hint');
+  if (!supplierSelect || !certifierSelect) return;
+
+  var map = window.__supplierCertifiers || {};
+  var all = window.__allCertifiers || [];
+  var selectedKeep = certifierSelect.value;
+
+  function optionsForSupplier(supplierId) {
+    if (!supplierId) return all;
+    var list = map[String(supplierId)] || map[Number(supplierId)] || [];
+    return list.length ? list : all;
+  }
+
+  function rebuild() {
+    var sid = supplierSelect.value;
+    var list = optionsForSupplier(sid);
+    var current = certifierSelect.value || selectedKeep;
+    certifierSelect.innerHTML = '';
+    var empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = '— Ninguno —';
+    certifierSelect.appendChild(empty);
+    var found = false;
+    list.forEach(function (c) {
+      var opt = document.createElement('option');
+      opt.value = String(c.id);
+      opt.textContent = c.name;
+      if (String(c.id) === String(current)) {
+        opt.selected = true;
+        found = true;
+      }
+      certifierSelect.appendChild(opt);
+    });
+    if (!found) {
+      certifierSelect.value = '';
+    }
+    if (hint) {
+      var linked = sid && (map[String(sid)] || map[Number(sid)] || []).length > 0;
+      hint.textContent = linked
+        ? 'Mostrando solo las certificadoras vinculadas a este proveedor.'
+        : (sid
+          ? 'Este proveedor aún no tiene certificadoras vinculadas; se muestran todas. Configúralas en Proveedores → Certificadoras.'
+          : 'Vincula las certificadoras en el proveedor (pestaña Certificadoras) para filtrar esta lista.');
+    }
+    selectedKeep = certifierSelect.value;
+  }
+
+  supplierSelect.addEventListener('change', rebuild);
+  rebuild();
+})();
+</script>
 <script>
 (function () {
   var editor = document.querySelector('.product-editor');

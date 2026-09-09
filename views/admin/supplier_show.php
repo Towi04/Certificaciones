@@ -4,12 +4,16 @@
 /** @var list<array<string,mixed>> $products */
 /** @var list<array<string,mixed>> $contacts */
 /** @var list<array<string,mixed>> $accounts */
+/** @var list<array<string,mixed>> $allCertifiers */
+/** @var list<int> $linkedCertifierIds */
 /** @var array<int,string> $revealedPasswords */
 /** @var int $productCount */
 /** @var int $groupCount */
 $sid = (int) $supplier['id'];
 $contacts = $contacts ?? [];
 $accounts = $accounts ?? [];
+$allCertifiers = $allCertifiers ?? [];
+$linkedCertifierIds = array_map('intval', $linkedCertifierIds ?? []);
 $revealedPasswords = $revealedPasswords ?? [];
 $contactRoles = \App\Services\SupplierAdminService::CONTACT_ROLES;
 $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px';
@@ -50,7 +54,7 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
 </div>
 
 <p class="muted" style="font-size:.85rem;margin:.75rem 0 0;max-width:48rem">
-    Usa las pestañas para editar. <strong>Guardar todo</strong> guarda datos, logos y la lista de
+    Usa las pestañas para editar. <strong>Guardar todo</strong> guarda datos, logos, certificadoras y la lista de
     contactos (altas, cambios y bajas). Los accesos existentes se editan con sus iconos;
     un acceso nuevo se crea al guardar si llenaste el bloque «Agregar acceso».
 </p>
@@ -58,6 +62,7 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
 <nav class="group-tabs" style="margin-top:1rem" role="tablist" aria-label="Secciones del proveedor">
     <button type="button" class="group-tab active" data-tab="general">Datos</button>
     <button type="button" class="group-tab" data-tab="logos">Logos</button>
+    <button type="button" class="group-tab" data-tab="certifiers">Certificadoras</button>
     <button type="button" class="group-tab" data-tab="contacts">Contactos</button>
     <button type="button" class="group-tab" data-tab="accounts">Accesos</button>
     <button type="button" class="group-tab" data-tab="groups">Grupos</button>
@@ -148,6 +153,47 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
                     <?php endif; ?>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div class="supplier-panel" data-panel="certifiers" hidden>
+        <div class="panel" style="margin-top:.75rem;max-width:860px">
+            <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Certificadoras</h2>
+            <p class="muted" style="font-size:.85rem;margin-top:0">
+                Marca las instituciones que emiten las certificaciones de este proveedor
+                (ej. ETC → Microsoft, Adobe, Apple, Certiport; Lingua Franca → TOEFL / TOEIC).
+                Luego, al editar un producto de este proveedor, el selector «Quién certifica»
+                se limita a estas opciones.
+            </p>
+            <input type="hidden" name="certifier_ids_present" value="1">
+            <?php if ($allCertifiers === []): ?>
+                <p class="muted" style="margin:0">
+                    Aún no hay certificadoras.
+                    <a href="<?= e(url('/admin/certificadoras/nueva')) ?>">Crear una</a>.
+                </p>
+            <?php else: ?>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.55rem">
+                    <?php foreach ($allCertifiers as $c): ?>
+                        <?php $cid = (int) $c['id']; ?>
+                        <label style="display:flex;align-items:flex-start;gap:.55rem;border:1px solid #e6ebf2;border-radius:12px;padding:.65rem .75rem;background:#fff;font-size:.88rem;font-weight:600">
+                            <input type="checkbox" name="certifier_ids[]" value="<?= $cid ?>"
+                                <?= in_array($cid, $linkedCertifierIds, true) ? 'checked' : '' ?>
+                                style="margin-top:.2rem">
+                            <span>
+                                <?= e((string) $c['name']) ?>
+                                <span class="muted" style="display:block;font-weight:500;font-size:.78rem">
+                                    <code><?= e((string) $c['code']) ?></code>
+                                </span>
+                            </span>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+                <p class="muted" style="font-size:.8rem;margin:.85rem 0 0">
+                    ¿Falta una marca?
+                    <a href="<?= e(url('/admin/certificadoras/nueva')) ?>">Agregar certificadora</a>
+                    y vuelve a esta pestaña.
+                </p>
+            <?php endif; ?>
         </div>
     </div>
 
