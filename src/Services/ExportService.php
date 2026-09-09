@@ -248,12 +248,17 @@ final class ExportService
 
         $content = $this->csvContent($code, $options);
         $filename = $this->downloadFilename($code, $options);
+        $payload = "\xEF\xBB\xBF" . $content;
 
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
         header('Content-Type: text/csv; charset=UTF-8');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Content-Length: ' . (string) strlen($content));
+        header('Cache-Control: no-store');
+        header('Content-Length: ' . (string) strlen($payload));
         header('X-Content-Type-Options: nosniff');
-        echo "\xEF\xBB\xBF" . $content;
+        echo $payload;
         exit;
     }
 
