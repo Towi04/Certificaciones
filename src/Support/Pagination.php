@@ -23,7 +23,10 @@ final class Pagination
         }
 
         if ($perPage < 1) {
-            $perPage = $defaultPerPage;
+            $perPage = is_int($defaultPerPage) ? max(1, $defaultPerPage) : max(1, $total > 0 ? $total : 1);
+            if (!is_int($defaultPerPage)) {
+                $perPageParam = 'all';
+            }
         }
 
         $totalPages = max(1, (int) ceil($total / $perPage));
