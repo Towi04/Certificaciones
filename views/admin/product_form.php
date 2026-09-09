@@ -81,8 +81,18 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
 ?>
 <p class="meta"><a href="<?= e(url('/admin/productos')) ?>">← Productos</a></p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">
-    <?= $isEdit ? 'Editar producto' : 'Nuevo producto' ?>
+    <?php if ($isEdit): ?>
+        Editar producto
+        <span id="product-edit-title-name" style="font-weight:600;color:#334155">· <?= e((string) ($product['name'] ?? '')) ?></span>
+    <?php else: ?>
+        Nuevo producto
+    <?php endif; ?>
 </h1>
+<?php if ($isEdit && trim((string) ($product['code'] ?? '')) !== ''): ?>
+    <p class="muted" style="margin:.15rem 0 0;font-size:.85rem">
+        Código <code><?= e((string) $product['code']) ?></code>
+    </p>
+<?php endif; ?>
 <p class="muted">
     Asigna un <a href="<?= e(url('/admin/grupos')) ?>">grupo de proceso</a> para heredar pagos/MSI.
     El código interno se asigna solo al crear el producto.
@@ -125,7 +135,7 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                 <?php endif; ?>
                 <label class="muted" style="<?= e($labelStyle) ?>">
                     Nombre *
-                    <input type="text" name="name" required
+                    <input type="text" name="name" id="product-name-input" required
                            value="<?= e((string) ($product['name'] ?? '')) ?>"
                            style="<?= e($inputStyle) ?>">
                     <?php if (!$isEdit): ?>
