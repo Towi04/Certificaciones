@@ -23,7 +23,7 @@ $displayPrice = $hasPartnerPrice
         <div class="meta"><?= e($p['certifier_name'] ?? category_label((string) $p['category'])) ?></div>
         <h3><?= e($p['name']) ?></h3>
         <?php if (!empty($p['short_description'])): ?>
-            <div class="meta"><?= e($p['short_description']) ?></div>
+            <div class="meta product-richtext"><?= rich_text((string) $p['short_description']) ?></div>
         <?php endif; ?>
         <div class="price">
             <?= money($displayPrice) ?>

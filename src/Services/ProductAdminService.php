@@ -670,6 +670,12 @@ final class ProductAdminService
                 // No reasignar proveedor en masa al actualizar: conservar el existente
                 // salvo que la fila traiga supplier_code o sea un alta nueva con default.
                 'supplier_id' => $existing['supplier_id'] ?? null,
+                'certifier_id' => $existing['certifier_id'] ?? null,
+                'platform_type' => $existing['platform_type'] ?? 'none',
+                'moodle_course_id' => $existing['moodle_course_id'] ?? null,
+                'level_label' => $existing['level_label'] ?? null,
+                'access_months' => $existing['access_months'] ?? 6,
+                'sort_order' => $existing['sort_order'] ?? 100,
             ];
 
             $rowSupplierResolved = false;
@@ -689,6 +695,13 @@ final class ProductAdminService
             if (!$rowSupplierResolved && $existing === null && $defaultSupplierId !== null) {
                 $input['supplier_id'] = $defaultSupplierId;
                 $rowSupplierResolved = true;
+            }
+            foreach (['short_description', 'description', 'benefits_html'] as $textCol) {
+                if (isset($map[$textCol])) {
+                    $input[$textCol] = (string) $get($textCol, '');
+                } elseif ($existing !== null) {
+                    $input[$textCol] = $existing[$textCol] ?? null;
+                }
             }
             if (isset($map['is_public'])) {
                 $raw = trim((string) $get('is_public', ''));
@@ -784,6 +797,9 @@ final class ProductAdminService
             'price_partner_c',
             'product_group_code',
             'supplier_code',
+            'short_description',
+            'description',
+            'benefits_html',
             'is_public',
             'is_star',
         ];
@@ -811,6 +827,9 @@ final class ProductAdminService
             '2450',
             'itep-exams',
             'itep',
+            'Resumen con <strong>negritas</strong> opcional.',
+            '<p>Descripción larga del producto.</p>',
+            '<ul><li>Beneficio 1</li><li>Beneficio 2</li></ul>',
             '1',
             '0',
         ]);
@@ -848,6 +867,9 @@ final class ProductAdminService
                 (string) ($p['price_partner_c'] ?? ''),
                 (string) ($p['product_group_code'] ?? ''),
                 (string) ($p['supplier_code'] ?? ''),
+                (string) ($p['short_description'] ?? ''),
+                (string) ($p['description'] ?? ''),
+                (string) ($p['benefits_html'] ?? ''),
                 !empty($p['is_public']) ? '1' : '0',
                 !empty($p['is_star']) ? '1' : '0',
             ]);
@@ -1029,7 +1051,7 @@ final class ProductAdminService
         if ($supplierId !== null && $this->suppliers->find($supplierId) === null) {
             throw new \InvalidArgumentException('El proveedor seleccionado no existe.');
         }
-        $certifierId = $this->nullableInt($input['certifier_id'] ?? null);
+        $certifierId = $this->nullableInt($input['certifier_id'] ?? ($existing['certifier_id'] ?? null));
         if ($certifierId !== null && $this->certifiers->find($certifierId) === null) {
             throw new \InvalidArgumentException('El certificador seleccionado no existe.');
         }
@@ -1068,18 +1090,18 @@ final class ProductAdminService
             'product_group_id' => $groupId,
             'supplier_id' => $supplierId,
             'certifier_id' => $certifierId,
-            'short_description' => $this->nullableString($input['short_description'] ?? null),
-            'description' => $this->nullableString($input['description'] ?? null),
-            'benefits_html' => $this->nullableString($input['benefits_html'] ?? null),
-            'level_label' => $this->nullableString($input['level_label'] ?? null),
+            'short_description' => $this->nullableString($input['short_description'] ?? ($existing['short_description'] ?? null)),
+            'description' => $this->nullableString($input['description'] ?? ($existing['description'] ?? null)),
+            'benefits_html' => $this->nullableString($input['benefits_html'] ?? ($existing['benefits_html'] ?? null)),
+            'level_label' => $this->nullableString($input['level_label'] ?? ($existing['level_label'] ?? null)),
             'public_price' => $publicPrice,
             'catalog_price' => $catalogPrice,
             'cost_price' => round(max(0, (float) ($input['cost_price'] ?? ($existing['cost_price'] ?? 0))), 2),
-            'price_cncm' => $this->nullableMoney($input['price_cncm'] ?? null),
-            'price_partner_a' => $this->nullableMoney($input['price_partner_a'] ?? null),
-            'price_partner_b' => $this->nullableMoney($input['price_partner_b'] ?? null),
-            'price_partner_c' => $this->nullableMoney($input['price_partner_c'] ?? null),
-            'moodle_course_id' => $this->nullableInt($input['moodle_course_id'] ?? null),
+            'price_cncm' => $this->nullableMoney($input['price_cncm'] ?? ($existing['price_cncm'] ?? null)),
+            'price_partner_a' => $this->nullableMoney($input['price_partner_a'] ?? ($existing['price_partner_a'] ?? null)),
+            'price_partner_b' => $this->nullableMoney($input['price_partner_b'] ?? ($existing['price_partner_b'] ?? null)),
+            'price_partner_c' => $this->nullableMoney($input['price_partner_c'] ?? ($existing['price_partner_c'] ?? null)),
+            'moodle_course_id' => $this->nullableInt($input['moodle_course_id'] ?? ($existing['moodle_course_id'] ?? null)),
             'access_months' => $months,
             'is_active' => !empty($input['is_active']) ? 1 : 0,
             'is_public' => !empty($input['is_public']) ? 1 : 0,

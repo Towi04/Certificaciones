@@ -60,9 +60,12 @@ $exportQs = http_build_query(array_filter([
     <div class="panel" style="margin-top:.75rem;max-width:920px">
         <h2 style="margin:0 0 .35rem;font-size:1.05rem;color:var(--doceo-blue)">Plantilla y exportación</h2>
         <p class="muted" style="margin:0 0 .75rem;font-size:.85rem">
-            La clave es la columna <code>code</code>. Para actualizar <strong>todos</strong> los productos
-            (varios proveedores): descarga el CSV, edítalo y súbelo en modo <strong>Solo actualizar</strong>
-            <em>sin elegir proveedor</em>. Cada fila conserva su <code>supplier_code</code>.
+            La clave es la columna <code>code</code>. El CSV incluye
+            <code>supplier_code</code>, <code>short_description</code>, <code>description</code>
+            y <code>benefits_html</code> (HTML sencillo permitido).
+            Para actualizar <strong>todos</strong> los productos (varios proveedores): descarga el CSV,
+            edítalo y súbelo en modo <strong>Solo actualizar</strong> <em>sin elegir proveedor</em>;
+            cada fila conserva su <code>supplier_code</code>.
             Los códigos de grupo deben existir en <a href="<?= e(url('/admin/grupos')) ?>">Grupos</a>.
         </p>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
