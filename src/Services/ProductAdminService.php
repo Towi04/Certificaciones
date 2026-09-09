@@ -667,7 +667,9 @@ final class ProductAdminService
                 'price_partner_b' => $get('price_partner_b', $existing['price_partner_b'] ?? ''),
                 'price_partner_c' => $get('price_partner_c', $existing['price_partner_c'] ?? ''),
                 'product_group_id' => $defaultGroupId ?? ($existing['product_group_id'] ?? null),
-                'supplier_id' => $defaultSupplierId ?? ($existing['supplier_id'] ?? null),
+                // No reasignar proveedor en masa al actualizar: conservar el existente
+                // salvo que la fila traiga supplier_code o sea un alta nueva con default.
+                'supplier_id' => $existing['supplier_id'] ?? null,
                 'certifier_id' => $existing['certifier_id'] ?? null,
                 'platform_type' => $existing['platform_type'] ?? 'none',
                 'moodle_course_id' => $existing['moodle_course_id'] ?? null,
@@ -675,6 +677,25 @@ final class ProductAdminService
                 'access_months' => $existing['access_months'] ?? 6,
                 'sort_order' => $existing['sort_order'] ?? 100,
             ];
+
+            $rowSupplierResolved = false;
+            if (isset($map['supplier_code'])) {
+                $sCode = \App\Services\SupplierAdminService::normalizeCode((string) $get('supplier_code', ''));
+                if ($sCode !== '') {
+                    $supplier = $this->suppliers->findByCode($sCode);
+                    if ($supplier === null) {
+                        $errors[] = "Fila {$line}: proveedor {$sCode} no existe.";
+                        $skipped++;
+                        continue;
+                    }
+                    $input['supplier_id'] = (int) $supplier['id'];
+                    $rowSupplierResolved = true;
+                }
+            }
+            if (!$rowSupplierResolved && $existing === null && $defaultSupplierId !== null) {
+                $input['supplier_id'] = $defaultSupplierId;
+                $rowSupplierResolved = true;
+            }
             foreach (['short_description', 'description', 'benefits_html'] as $textCol) {
                 if (isset($map[$textCol])) {
                     $input[$textCol] = (string) $get($textCol, '');
@@ -721,10 +742,20 @@ final class ProductAdminService
                         continue;
                     }
                     $input['product_group_id'] = (int) $group['id'];
-                    if ($defaultSupplierId === null && empty($existing['supplier_id'] ?? null) && !empty($group['supplier_id'])) {
+                    if (
+                        !$rowSupplierResolved
+                        && $existing === null
+                        && empty($input['supplier_id'])
+                        && !empty($group['supplier_id'])
+                    ) {
                         $input['supplier_id'] = (int) $group['supplier_id'];
                     }
                 }
+            }
+            if ($existing === null && empty($input['supplier_id'])) {
+                $errors[] = "Fila {$line} ({$code}): indica supplier_code en el CSV o elige un proveedor por defecto para altas nuevas.";
+                $skipped++;
+                continue;
             }
             try {
                 if ($existing !== null) {
@@ -765,6 +796,7 @@ final class ProductAdminService
             'price_partner_b',
             'price_partner_c',
             'product_group_code',
+            'supplier_code',
             'short_description',
             'description',
             'benefits_html',
@@ -794,6 +826,7 @@ final class ProductAdminService
             '2400',
             '2450',
             'itep-exams',
+            'itep',
             'Resumen con <strong>negritas</strong> opcional.',
             '<p>Descripción larga del producto.</p>',
             '<ul><li>Beneficio 1</li><li>Beneficio 2</li></ul>',
@@ -833,6 +866,7 @@ final class ProductAdminService
                 (string) ($p['price_partner_b'] ?? ''),
                 (string) ($p['price_partner_c'] ?? ''),
                 (string) ($p['product_group_code'] ?? ''),
+                (string) ($p['supplier_code'] ?? ''),
                 (string) ($p['short_description'] ?? ''),
                 (string) ($p['description'] ?? ''),
                 (string) ($p['benefits_html'] ?? ''),

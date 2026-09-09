@@ -333,17 +333,13 @@ final class AdminController
 
             return;
         }
-        $mode = trim((string) ($_POST['import_mode'] ?? 'upsert'));
+        $mode = trim((string) ($_POST['import_mode'] ?? 'update'));
         if (!in_array($mode, ['create', 'update', 'upsert'], true)) {
-            $mode = 'upsert';
+            $mode = 'update';
         }
         $supplierId = !empty($_POST['supplier_id']) ? (int) $_POST['supplier_id'] : null;
-        if ($mode === 'create' && ($supplierId === null || $supplierId < 1)) {
-            flash('error', 'Para crear productos nuevos elige el proveedor.');
-            redirect('/admin/productos?tab=csv');
-
-            return;
-        }
+        // El proveedor del formulario solo aplica a altas nuevas sin supplier_code en el CSV.
+        // Para actualizar todos los productos de varios proveedores, déjalo vacío.
         if ($supplierId !== null && $supplierId > 0 && (new SupplierRepository())->find($supplierId) === null) {
             flash('error', 'Proveedor no encontrado.');
             redirect('/admin/productos?tab=csv');
