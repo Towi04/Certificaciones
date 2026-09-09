@@ -777,13 +777,13 @@ final class TrackingService
         $examTime2 = array_key_exists('exam_time_2', $data)
             ? $this->normalizeTime($data['exam_time_2'])
             : $this->normalizeTime($tracking['exam_time_2'] ?? null);
-        // Zoom = acceso que carga admin; no borrar si el partner solo actualiza fecha
+        // Campo extra (Zoom / ID escuela / código…): no borrar si el partner solo actualiza fecha
         if (array_key_exists('zoom_url', $data)) {
             $zoom = trim((string) ($data['zoom_url'] ?? ''));
             if ($zoom === '') {
                 $zoom = null;
-            } elseif (!filter_var($zoom, FILTER_VALIDATE_URL)) {
-                throw new \InvalidArgumentException('La URL de Zoom/meet no es válida.');
+            } else {
+                $zoom = AdminOpsBoardService::normalizeExtraValue($zoom);
             }
         } else {
             $zoom = isset($tracking['zoom_url']) && $tracking['zoom_url'] !== ''
@@ -815,7 +815,7 @@ final class TrackingService
             $note .= ' · reagenda: ' . $examDate2 . ($examTime2 ? ' ' . substr($examTime2, 0, 5) : '');
         }
         if ($zoom && array_key_exists('zoom_url', $data)) {
-            $note .= ' · enlace Zoom asignado';
+            $note .= ' · dato extra asignado';
         }
         if ($scheduleChanged) {
             $count = $this->bumpExamRescheduleCount($trackingId, $tracking);

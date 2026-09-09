@@ -132,8 +132,25 @@ $portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($track
             <button class="btn btn-accent btn-sm" type="submit">Enviar solicitud de reagenda</button>
         </form>
     <?php endif; ?>
-    <?php if (!empty($tracking['zoom_url'])): ?>
-        <p><a class="btn btn-accent" href="<?= e((string) $tracking['zoom_url']) ?>" target="_blank" rel="noopener">Abrir acceso Zoom</a></p>
+    <?php
+    $extraVal = trim((string) ($tracking['zoom_url'] ?? ''));
+    $extraCfg = [];
+    if (!empty($tracking['group_config_json']) && is_string($tracking['group_config_json'])) {
+        $decodedG = json_decode((string) $tracking['group_config_json'], true);
+        $extraCfg = is_array($decodedG) ? $decodedG : [];
+    }
+    $extraLabel = \App\Services\AdminOpsBoardService::extraFieldLabelFromConfig($extraCfg);
+    $extraIsUrl = \App\Services\AdminOpsBoardService::looksLikeUrl($extraVal);
+    ?>
+    <?php if ($extraVal !== ''): ?>
+        <?php if ($extraIsUrl): ?>
+            <p><a class="btn btn-accent" href="<?= e($extraVal) ?>" target="_blank" rel="noopener">Abrir <?= e($extraLabel) ?></a></p>
+        <?php else: ?>
+            <p style="margin:.5rem 0 0">
+                <?= e($extraLabel) ?>:
+                <strong style="font-family:ui-monospace,monospace"><?= e($extraVal) ?></strong>
+            </p>
+        <?php endif; ?>
     <?php elseif (empty($tracking['folio']) && empty($tracking['access_key'])): ?>
         <p class="muted">Los accesos al examen (folio y clave del día) se publicarán aquí cuando UKS confirme tu registro.</p>
     <?php endif; ?>

@@ -46,7 +46,11 @@ final class MailTemplateService
             'exam_time' => 'Hora de examen',
             'folio' => 'Folio UKS / examen',
             'access_key' => 'Clave del día',
-            'zoom_url' => 'Enlace Zoom / reunión',
+            'zoom' => 'Campo extra (texto libre: Zoom, ID escuela, código…)',
+            'zoom_url' => 'Alias de {{zoom}} (compatibilidad)',
+            'extra' => 'Alias de {{zoom}}',
+            'extra_label' => 'Etiqueta del campo extra (config del grupo)',
+            'zoom_label' => 'Alias de {{extra_label}}',
         ],
         'Instrucciones de examen' => [
             'instruction_pdf_url' => 'URL del PDF de instrucciones (primer archivo/enlace)',
@@ -437,7 +441,7 @@ final class MailTemplateService
         return match ($code) {
             self::UKS_SOLICITUD, self::UKS_SOLICITUD_LEGACY => $uks,
             'student_elet_exam_access' => [
-                'name', 'matricula', 'exam_url', 'exam_date', 'exam_time', 'folio', 'access_key', 'zoom_url',
+                'name', 'matricula', 'exam_url', 'exam_date', 'exam_time', 'folio', 'access_key', 'zoom', 'zoom_url', 'extra', 'extra_label',
             ],
             'student_registration' => [
                 'full_name', 'matricula', 'product_name', 'amount', 'pay_instructions_html',
@@ -634,7 +638,11 @@ final class MailTemplateService
                 'exam_time' => '10:00',
                 'folio' => 'FOLIO-12345',
                 'access_key' => 'CLAVE-DIA',
+                'zoom' => 'https://zoom.us/j/123456789',
                 'zoom_url' => 'https://zoom.us/j/123456789',
+                'extra' => 'https://zoom.us/j/123456789',
+                'extra_label' => 'Zoom',
+                'zoom_label' => 'Zoom',
             ],
             'student_registration' => [
                 'full_name' => 'María Ejemplo',
@@ -673,7 +681,11 @@ final class MailTemplateService
             'exam_url' => 'https://exam.elet.com.mx/',
             'folio' => 'FOLIO-12345',
             'access_key' => 'CLAVE-DIA',
+            'zoom' => 'https://zoom.us/j/123456789',
             'zoom_url' => 'https://zoom.us/j/123456789',
+            'extra' => 'https://zoom.us/j/123456789',
+            'extra_label' => 'Zoom',
+            'zoom_label' => 'Zoom',
             'instruction_pdf_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/uploads/groups/1/instructions/guia.pdf',
             'instruction_pdf_label' => 'Guía de acceso al examen',
             'instruction_video_url' => 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',

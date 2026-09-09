@@ -12,12 +12,22 @@ $viewHints = $viewHints ?? [];
 $todayYmd = date('Y-m-d');
 $tomorrowYmd = date('Y-m-d', strtotime('+1 day'));
 $hasAccessEditors = false;
+$extraColLabels = [];
 foreach ($rows as $__r) {
     if (!empty($__r['show_folio_fields']) || !empty($__r['show_zoom_fields'])) {
         $hasAccessEditors = true;
-        break;
+    }
+    if (!empty($__r['show_zoom_fields'])) {
+        $lbl = trim((string) ($__r['extra_field_label'] ?? 'Extra'));
+        if ($lbl === '') {
+            $lbl = 'Extra';
+        }
+        $extraColLabels[$lbl] = true;
     }
 }
+$extraColHeader = count($extraColLabels) === 1
+    ? (string) array_key_first($extraColLabels)
+    : 'Extra';
 ?>
 <div class="ops-page">
     <div class="ops-header">
@@ -32,8 +42,8 @@ foreach ($rows as $__r) {
         <div class="ops-header-actions" style="display:flex;flex-wrap:wrap;gap:.45rem;align-items:center">
             <?php if ($hasAccessEditors): ?>
                 <button class="btn btn-accent btn-sm" type="submit" form="ops-bulk-form" id="ops-save-all-btn"
-                        title="Guarda folio, clave y Zoom de todas las filas visibles">
-                    Guardar folio/clave/Zoom
+                        title="Guarda folio, clave y dato extra de todas las filas visibles">
+                    Guardar folio/clave/extra
                 </button>
             <?php endif; ?>
             <a class="btn btn-ghost btn-sm" href="<?= e(url('/admin/operacion/exportar?' . http_build_query(array_filter(['view' => $view, 'q' => $q ?: null])))) ?>">
@@ -98,7 +108,7 @@ foreach ($rows as $__r) {
                     <th>Examen</th>
                     <th>Folio</th>
                     <th>Clave</th>
-                    <th>Zoom</th>
+                    <th title="Campo extra del grupo (Zoom, ID escuela, código de acceso…)"><?= e($extraColHeader) ?></th>
                     <th>Triggers</th>
                 </tr>
                 </thead>
@@ -195,11 +205,14 @@ foreach ($rows as $__r) {
                         </td>
                         <td>
                             <?php if (!empty($r['show_zoom_fields'])): ?>
-                                <input class="ops-input ops-zoom" type="url"
+                                <?php $extraLbl = trim((string) ($r['extra_field_label'] ?? 'Extra')) ?: 'Extra'; ?>
+                                <input class="ops-input ops-zoom" type="text"
                                        id="ops-zoom-<?= $tid ?>"
                                        name="zoom_url_display"
                                        value="<?= e((string) ($r['zoom_url'] ?? '')) ?>"
-                                       placeholder="https://zoom.us/…" autocomplete="off" data-tid="<?= $tid ?>"
+                                       placeholder="<?= e($extraLbl) ?>"
+                                       title="<?= e($extraLbl) ?>"
+                                       autocomplete="off" data-tid="<?= $tid ?>"
                                        style="min-width:9.5rem;max-width:14rem">
                             <?php else: ?>
                                 <span class="muted">—</span>
@@ -722,7 +735,7 @@ foreach ($rows as $__r) {
       }
       if (injected < 1) {
         e.preventDefault();
-        alert('No hay folio, clave o Zoom para guardar en las filas visibles.');
+        alert('No hay folio, clave o dato extra para guardar en las filas visibles.');
         return false;
       }
     });

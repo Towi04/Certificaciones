@@ -302,6 +302,7 @@ final class ProductAdminService
             'exam_slot_minutes' => max(15, (int) ($exam['slot_minutes'] ?? 30)),
             'exam_validity_months' => max(1, (int) ($exam['validity_months'] ?? 6)),
             'exam_capture_zoom' => !empty($exam['capture_zoom']),
+            'exam_extra_field_label' => trim((string) ($exam['extra_field_label'] ?? '')),
             'schedule_mode' => ExamScheduleService::normalizeMode((string) ($schedule['mode'] ?? ExamScheduleService::MODE_WINDOW)),
             'schedule_min_advance_days' => max(0, (int) ($schedule['min_advance_days'] ?? 2)),
             'schedule_available_365' => (bool) ($schedule['available_365'] ?? false),
@@ -1115,6 +1116,12 @@ final class ProductAdminService
         $validity = (int) ($input['exam_validity_months'] ?? ($exam['validity_months'] ?? 6));
         $exam['validity_months'] = max(1, min(36, $validity));
         $exam['capture_zoom'] = !empty($input['exam_capture_zoom']);
+        $extraLabel = trim((string) ($input['exam_extra_field_label'] ?? ''));
+        if ($extraLabel !== '') {
+            $exam['extra_field_label'] = mb_substr($extraLabel, 0, 60);
+        } else {
+            unset($exam['extra_field_label']);
+        }
         $config['exam'] = $exam;
 
         $existingInstr = is_array($config['exam_instructions'] ?? null) ? $config['exam_instructions'] : [];

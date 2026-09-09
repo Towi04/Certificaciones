@@ -112,7 +112,7 @@ final class AdminController
         }
         fputcsv($out, [
             'Matrícula', 'Alumno', 'Email', 'Teléfono', 'Partner', 'Producto', 'Código producto',
-            'Pago', 'Paso', 'Estado caso', 'Examen', 'Folio', 'Clave', 'Zoom', 'Proveedor', 'CENNI', 'Actualizado',
+            'Pago', 'Paso', 'Estado caso', 'Examen', 'Folio', 'Clave', 'Extra', 'Proveedor', 'CENNI', 'Actualizado',
         ]);
         foreach ($rows as $r) {
             $exam = trim((string) ($r['exam_date'] ?? '') . ' ' . (string) ($r['exam_time'] ?? ''));
@@ -162,10 +162,10 @@ final class AdminController
             flash(
                 $result['notified'] ? 'success' : ($notify ? 'error' : 'success'),
                 $result['notified']
-                    ? 'Folio/clave/Zoom guardados y plantilla enviada al alumno.'
+                    ? 'Folio/clave/extra guardados y plantilla enviada al alumno.'
                     : ($notify
                         ? 'Datos guardados, pero no se envió el correo. Revisa que el paso de accesos tenga «Enviar correo» y la plantilla.'
-                        : 'Folio/clave/Zoom guardados.')
+                        : 'Folio/clave/extra guardados.')
             );
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
@@ -209,7 +209,7 @@ final class AdminController
             ];
         }
         if ($items === []) {
-            flash('error', 'No hay folio, clave o Zoom para guardar en las filas visibles.');
+            flash('error', 'No hay folio, clave o dato extra para guardar en las filas visibles.');
             redirect('/admin' . $return);
         }
         try {
