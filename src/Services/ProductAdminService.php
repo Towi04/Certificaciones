@@ -506,7 +506,7 @@ final class ProductAdminService
             throw new \InvalidArgumentException('No se pudo leer el archivo CSV.');
         }
 
-        $header = fgetcsv($handle);
+        $header = csv_get($handle);
         if ($header === false) {
             fclose($handle);
             throw new \InvalidArgumentException('El CSV no tiene encabezados.');
@@ -518,7 +518,13 @@ final class ProductAdminService
         if (isset($header[0])) {
             $header[0] = preg_replace('/^\xEF\xBB\xBF/', '', $header[0]) ?? $header[0];
         }
-        $map = array_flip($header);
+        $map = [];
+        foreach ($header as $i => $col) {
+            if ($col === '') {
+                continue;
+            }
+            $map[$col] = $i;
+        }
         if (!isset($map['code'])) {
             fclose($handle);
             throw new \InvalidArgumentException('El CSV debe incluir la columna code.');
@@ -528,7 +534,7 @@ final class ProductAdminService
         $skipped = 0;
         $errors = [];
         $line = 1;
-        while (($data = fgetcsv($handle)) !== false) {
+        while (($data = csv_get($handle)) !== false) {
             $line++;
             if ($this->csvRowEmpty($data)) {
                 continue;
@@ -577,7 +583,7 @@ final class ProductAdminService
         if ($handle === false) {
             throw new \InvalidArgumentException('No se pudo leer el archivo CSV.');
         }
-        $header = fgetcsv($handle);
+        $header = csv_get($handle);
         if ($header === false) {
             fclose($handle);
             throw new \InvalidArgumentException('El CSV no tiene encabezados.');
@@ -589,7 +595,13 @@ final class ProductAdminService
         if (isset($header[0])) {
             $header[0] = preg_replace('/^\xEF\xBB\xBF/', '', $header[0]) ?? $header[0];
         }
-        $map = array_flip($header);
+        $map = [];
+        foreach ($header as $i => $col) {
+            if ($col === '') {
+                continue;
+            }
+            $map[$col] = $i;
+        }
         foreach (['code', 'name'] as $required) {
             if (!isset($map[$required])) {
                 fclose($handle);
@@ -601,7 +613,7 @@ final class ProductAdminService
         $skipped = 0;
         $errors = [];
         $line = 1;
-        while (($data = fgetcsv($handle)) !== false) {
+        while (($data = csv_get($handle)) !== false) {
             $line++;
             if ($this->csvRowEmpty($data)) {
                 continue;
