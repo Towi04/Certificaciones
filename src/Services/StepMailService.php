@@ -136,6 +136,14 @@ final class StepMailService
             'folio' => (string) ($tracking['folio'] ?? ''),
             'access_key' => (string) ($tracking['access_key'] ?? ''),
             'zoom_url' => (string) ($tracking['zoom_url'] ?? ''),
+            'zoom' => (string) ($tracking['zoom_url'] ?? ''),
+            'extra' => (string) ($tracking['zoom_url'] ?? ''),
+            'extra_label' => AdminOpsBoardService::extraFieldLabelFromConfig(
+                is_array($cfg) ? $cfg : []
+            ),
+            'zoom_label' => AdminOpsBoardService::extraFieldLabelFromConfig(
+                is_array($cfg) ? $cfg : []
+            ),
             'exam_url' => $examUrl,
             'login_url' => $loginUrl,
             'moodle_url' => $moodleUrl,

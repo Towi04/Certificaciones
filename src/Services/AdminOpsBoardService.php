@@ -234,6 +234,7 @@ final class AdminOpsBoardService
         $captureZoom = !empty($examCfg['capture_zoom'])
             || str_contains($groupCode, 'linguafranca')
             || str_contains($groupCode, 'toefl');
+        $extraLabel = self::extraFieldLabelFromExamConfig($examCfg);
 
         $needsPayment = in_array($purchaseStatus, ['awaiting_payment', 'payment_review'], true);
 
@@ -294,8 +295,9 @@ final class AdminOpsBoardService
             || ($isElet && $purchaseStatus === 'paid')
             || $folio !== ''
             || $accessKey !== '';
-        // Zoom (p. ej. TOEFL): por config del grupo, proveedor Lingua Franca, o ya hay enlace.
+        // Campo extra (Zoom / ID escuela / código curso…): por config del grupo, heurística TOEFL, o ya hay valor.
         $row['show_zoom_fields'] = $captureZoom || $zoomUrl !== '';
+        $row['extra_field_label'] = $extraLabel;
         $row['needs_action'] = $pendingOps > 0
             || (string) ($row['tracking_status'] ?? '') === 'waiting_admin';
 
@@ -303,7 +305,43 @@ final class AdminOpsBoardService
     }
 
     /**
-     * Guarda folio/clave/Zoom y, si $notify, publica accesos (plantilla alumno).
+     * Etiqueta del 3.er campo de acceso (columna Ops + plantillas {{extra_label}} / {{zoom_label}}).
+     *
+     * @param array<string, mixed> $examCfg
+     */
+    public static function extraFieldLabelFromExamConfig(array $examCfg): string
+    {
+        $label = trim((string) ($examCfg['extra_field_label'] ?? ''));
+        if ($label === '') {
+            $label = 'Zoom';
+        }
+
+        return mb_substr($label, 0, 60);
+    }
+
+    /** @param array<string, mixed>|null $groupOrProductConfig */
+    public static function extraFieldLabelFromConfig(?array $groupOrProductConfig): string
+    {
+        $exam = is_array($groupOrProductConfig['exam'] ?? null) ? $groupOrProductConfig['exam'] : [];
+
+        return self::extraFieldLabelFromExamConfig($exam);
+    }
+
+    public static function looksLikeUrl(string $value): bool
+    {
+        $v = trim($value);
+        if ($v === '') {
+            return false;
+        }
+        if (preg_match('#^https?://#i', $v) === 1) {
+            return filter_var($v, FILTER_VALIDATE_URL) !== false;
+        }
+
+        return false;
+    }
+
+    /**
+     * Guarda folio/clave/campo extra y, si $notify, publica accesos (plantilla alumno).
      *
      * @return array{saved:bool,notified:bool}
      */
@@ -317,17 +355,17 @@ final class AdminOpsBoardService
     ): array {
         $folio = trim($folio);
         $accessKey = trim($accessKey);
-        $zoomUrl = self::normalizeZoomUrl($zoomUrl);
+        $zoomUrl = self::normalizeExtraValue($zoomUrl);
 
         if (($folio !== '' || $accessKey !== '') && ($folio === '' || $accessKey === '')) {
             throw new \InvalidArgumentException('Indica folio y clave juntos.');
         }
         if ($folio === '' && $accessKey === '' && $zoomUrl === '') {
-            throw new \InvalidArgumentException('Indica folio/clave o enlace Zoom.');
+            throw new \InvalidArgumentException('Indica folio/clave o el dato extra (Zoom / ID / código…).');
         }
 
         // Siempre guardar primero; si el correo falla, los datos no se pierden.
-        // Zoom-only (TOEFL): no tocar folio/clave existentes.
+        // Extra-only: no tocar folio/clave existentes.
         if ($folio !== '' || $accessKey !== '') {
             $this->pdo->prepare('UPDATE trackings SET folio = ?, access_key = ?, zoom_url = ? WHERE id = ?')
                 ->execute([$folio, $accessKey, $zoomUrl !== '' ? $zoomUrl : null, $trackingId]);
@@ -340,7 +378,7 @@ final class AdminOpsBoardService
             $logParts[] = 'folio/clave';
         }
         if ($zoomUrl !== '') {
-            $logParts[] = 'Zoom';
+            $logParts[] = 'dato extra';
         }
         (new TrackingService())->addLog(
             $trackingId,
@@ -355,7 +393,7 @@ final class AdminOpsBoardService
 
         if ($folio === '' || $accessKey === '') {
             throw new \InvalidArgumentException(
-                'Para enviar la plantilla de accesos indica folio y clave (el Zoom ya quedó guardado si lo escribiste).'
+                'Para enviar la plantilla de accesos indica folio y clave (el dato extra ya quedó guardado si lo escribiste).'
             );
         }
 
@@ -364,23 +402,27 @@ final class AdminOpsBoardService
         return ['saved' => true, 'notified' => $notified];
     }
 
-    public static function normalizeZoomUrl(string $raw): string
+    /**
+     * Valor libre del campo extra (Zoom, ID escuela, código de curso, etc.).
+     * Se guarda en trackings.zoom_url por compatibilidad.
+     */
+    public static function normalizeExtraValue(string $raw): string
     {
-        $url = trim($raw);
-        if ($url === '') {
+        $value = trim($raw);
+        if ($value === '') {
             return '';
         }
-        if (!preg_match('#^https?://#i', $url)) {
-            $url = 'https://' . ltrim($url, '/');
-        }
-        if (filter_var($url, FILTER_VALIDATE_URL) === false) {
-            throw new \InvalidArgumentException('El enlace Zoom no es una URL válida.');
-        }
-        if (strlen($url) > 255) {
-            throw new \InvalidArgumentException('El enlace Zoom es demasiado largo (máx. 255).');
+        if (strlen($value) > 255) {
+            throw new \InvalidArgumentException('El dato extra es demasiado largo (máx. 255).');
         }
 
-        return $url;
+        return $value;
+    }
+
+    /** @deprecated Use normalizeExtraValue — acepta texto libre, no solo URLs. */
+    public static function normalizeZoomUrl(string $raw): string
+    {
+        return self::normalizeExtraValue($raw);
     }
 
     /**

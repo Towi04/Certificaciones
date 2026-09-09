@@ -47,7 +47,7 @@ $current = (string) ($tracking['current_step_code'] ?? '');
             <?php endif; ?>
             <?php if (!empty($tracking['zoom_url'])): ?>
                 <?php if (!empty($tracking['exam_date_2'])): ?> · <?php endif; ?>
-                Zoom asignado por admin
+                Dato extra asignado por admin
             <?php endif; ?>
         </p>
     <?php endif; ?>
@@ -62,7 +62,7 @@ $current = (string) ($tracking['current_step_code'] ?? '');
             </label>
         </div>
         <p class="muted" style="font-size:.82rem;margin:.75rem 0 0">
-            La 2ª fecha (reagenda) y el enlace Zoom los gestiona administración.
+            La 2ª fecha (reagenda) y el dato extra (Zoom / ID / código…) los gestiona administración.
         </p>
         <label class="muted" style="display:flex;gap:.4rem;align-items:center;margin:.85rem 0;font-size:.88rem">
             <input type="checkbox" name="notify" value="1" checked> Avisar al alumno por correo

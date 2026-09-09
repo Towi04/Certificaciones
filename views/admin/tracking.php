@@ -94,6 +94,16 @@ $statusLabels = [
 
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Examen y accesos</h2>
+    <?php
+    $extraVal = trim((string) ($tracking['zoom_url'] ?? ''));
+    $extraCfg = [];
+    if (!empty($tracking['group_config_json']) && is_string($tracking['group_config_json'])) {
+        $decodedG = json_decode($tracking['group_config_json'], true);
+        $extraCfg = is_array($decodedG) ? $decodedG : [];
+    }
+    $extraLabel = \App\Services\AdminOpsBoardService::extraFieldLabelFromConfig($extraCfg);
+    $extraIsUrl = \App\Services\AdminOpsBoardService::looksLikeUrl($extraVal);
+    ?>
     <?php if (!empty($tracking['exam_date'])): ?>
         <p style="margin-top:0">
             Fecha programada:
@@ -111,10 +121,14 @@ $statusLabels = [
                 <?php endif; ?>
             </p>
         <?php endif; ?>
-        <?php if (!empty($tracking['zoom_url'])): ?>
+        <?php if ($extraVal !== ''): ?>
             <p class="muted" style="margin-top:0">
-                Acceso Zoom:
-                <a href="<?= e((string) $tracking['zoom_url']) ?>" target="_blank" rel="noopener">abrir enlace</a>
+                <?= e($extraLabel) ?>:
+                <?php if ($extraIsUrl): ?>
+                    <a href="<?= e($extraVal) ?>" target="_blank" rel="noopener">abrir enlace</a>
+                <?php else: ?>
+                    <strong style="font-family:ui-monospace,monospace"><?= e($extraVal) ?></strong>
+                <?php endif; ?>
             </p>
         <?php endif; ?>
     <?php else: ?>
@@ -144,15 +158,18 @@ $statusLabels = [
             </label>
         </div>
 
-        <h3 style="margin:1rem 0 .35rem;font-size:.95rem;color:var(--doceo-blue)">Acceso Zoom (certificación)</h3>
-        <p class="muted" style="font-size:.82rem;margin:0 0 .5rem">Lo asigna administración y se comparte al alumno con los accesos (p. ej. TOEFL).</p>
+        <h3 style="margin:1rem 0 .35rem;font-size:.95rem;color:var(--doceo-blue)">Campo extra (<?= e($extraLabel) ?>)</h3>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .5rem">
+            Texto libre según el grupo: Zoom, ID de escuela, código de acceso al curso, etc.
+            En correos usa <code>{{zoom}}</code> / <code>{{extra}}</code> (la plantilla define si va en enlace o en negrita).
+        </p>
         <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-            URL Zoom / reunión
-            <input type="url" name="zoom_url" value="<?= e((string) ($tracking['zoom_url'] ?? '')) ?>" placeholder="https://…" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            <?= e($extraLabel) ?>
+            <input type="text" name="zoom_url" value="<?= e($extraVal) ?>" placeholder="<?= e($extraLabel) ?>" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
         </label>
 
         <label class="muted" style="display:flex;gap:.4rem;align-items:center;margin:.85rem 0;font-size:.88rem">
-            <input type="checkbox" name="notify" value="1" checked> Avisar al alumno por correo (fecha y/o Zoom)
+            <input type="checkbox" name="notify" value="1" checked> Avisar al alumno por correo (fecha y/o dato extra)
         </label>
         <button class="btn btn-accent" type="submit">Guardar examen / accesos</button>
     </form>

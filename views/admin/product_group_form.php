@@ -87,7 +87,7 @@ $renderMailTemplateField = static function (
 </h1>
 <p class="muted">
     Configura lo compartido por varias certificaciones del mismo proveedor:
-    datos del alumno, fechas/horarios, inventario, Zoom, docs para correos,
+    datos del alumno, fechas/horarios, inventario, campo extra (Zoom/ID/código…), docs para correos,
     reglamento, pagos y la tarjeta de <strong>Progreso</strong> del caso.
     Las <a href="<?= e(url('/admin/vacaciones')) ?>"><strong>vacaciones globales</strong></a>
     se publican una sola vez (excepto grupos marcados como 365 días).
@@ -98,7 +98,7 @@ $renderMailTemplateField = static function (
     <button type="button" class="group-tab" data-tab="fields" role="tab" aria-selected="false">Datos del alumno</button>
     <button type="button" class="group-tab" data-tab="schedule" role="tab" aria-selected="false">Fechas y horarios</button>
     <button type="button" class="group-tab" data-tab="inventory" role="tab" aria-selected="false">Inventario</button>
-    <button type="button" class="group-tab" data-tab="zoom" role="tab" aria-selected="false">Zoom</button>
+    <button type="button" class="group-tab" data-tab="extra" role="tab" aria-selected="false">Campo extra</button>
     <button type="button" class="group-tab" data-tab="docs" role="tab" aria-selected="false">Docs</button>
     <button type="button" class="group-tab" data-tab="rules" role="tab" aria-selected="false">Reglamento</button>
     <button type="button" class="group-tab" data-tab="payments" role="tab" aria-selected="false">Pagos</button>
@@ -579,17 +579,29 @@ $renderMailTemplateField = static function (
         </label>
     </div>
 
-    <div class="group-panel" data-panel="zoom" hidden>
-        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Accesos y Zoom</h2>
+    <div class="group-panel" data-panel="extra" hidden>
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Campo extra de acceso</h2>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
+            Tercer dato por alumno (además de folio y clave), libre según la certificación:
+            enlace Zoom, ID de escuela (OOPT), código de acceso al curso (Excel), etc.
+            En Operación aparece una columna con la etiqueta que elijas. En plantillas de correo
+            usa el valor crudo (tú decides si va en <code>&lt;a&gt;</code>, <code>&lt;strong&gt;</code>, etc.):
+            <code>{{zoom}}</code>, <code>{{zoom_url}}</code> o <code>{{extra}}</code>;
+            la etiqueta con <code>{{extra_label}}</code> / <code>{{zoom_label}}</code>.
+        </p>
         <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:1rem">
             <input type="checkbox" name="exam_capture_zoom" value="1" style="margin-top:.2rem"
                 <?= !empty($extras['exam_capture_zoom']) ? 'checked' : '' ?>>
-            <span>
-                Mostrar columna <strong>Zoom</strong> en Operación (junto a folio/clave)
-                <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin-top:.15rem">
-                    Pensado para TOEFL / Lingua Franca. El enlace queda disponible como
-                    <code>{{zoom_url}}</code> en plantillas de correo.
-                </span>
+            <span>Mostrar esta columna en Operación (junto a folio/clave)</span>
+        </label>
+        <label class="muted" style="<?= e($labelStyle) ?>;max-width:28rem">
+            Etiqueta de la columna / dato
+            <input type="text" name="exam_extra_field_label"
+                   value="<?= e((string) ($extras['exam_extra_field_label'] ?? '')) ?>"
+                   placeholder="Ej. Zoom, ID escuela, Código de acceso…"
+                   style="<?= e($inputStyle) ?>">
+            <span class="muted" style="font-weight:500;font-size:.75rem;margin-top:.25rem;display:block">
+                Si la dejas vacía se usa «Zoom» (compatibilidad con TOEFL / Lingua Franca).
             </span>
         </label>
     </div>
@@ -1006,6 +1018,7 @@ $renderMailTemplateField = static function (
     tab.addEventListener('click', function () { activate(tab.getAttribute('data-tab')); });
   });
   var hash = (location.hash || '').replace(/^#/, '');
+  if (hash === 'zoom') hash = 'extra';
   if (hash && document.querySelector('.group-panel[data-panel="' + hash + '"]')) activate(hash);
 
   function syncScheduleModePanels() {
@@ -1201,6 +1214,12 @@ $renderMailTemplateField = static function (
       validity_months: Math.max(1, Math.min(36, intVal('exam_validity_months', 6))),
       capture_zoom: checked('exam_capture_zoom')
     });
+    var extraLabel = val('exam_extra_field_label', '');
+    if (extraLabel) {
+      base.exam.extra_field_label = extraLabel;
+    } else {
+      delete base.exam.extra_field_label;
+    }
     var instrDocs = [];
     var docRows = document.querySelectorAll('#instruction-docs-list .instruction-doc-row');
     docRows.forEach(function (row) {
