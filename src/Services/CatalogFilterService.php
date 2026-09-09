@@ -20,6 +20,7 @@ final class CatalogFilterService
     {
         try {
             $this->filters->ensureDefaults();
+            $this->filters->ensureCenniTypeFilters();
             $this->filters->syncCertifierFilters();
 
             return $this->filters->catalogVisible();
@@ -34,6 +35,7 @@ final class CatalogFilterService
     public function adminFilters(): array
     {
         $this->filters->ensureDefaults();
+        $this->filters->ensureCenniTypeFilters();
         $this->filters->syncCertifierFilters();
 
         return $this->filters->adminList();
@@ -103,18 +105,85 @@ final class CatalogFilterService
         $this->filters->delete($id);
     }
 
-    /** @param list<int|string> $filterIds */
-    public function syncProductFilters(int $productId, array $filterIds): void
+    /**
+     * @param list<int|string> $filterIds
+     * @param list<string>|null $cenniTypeKeys null = conservar CENNI actuales; lista = fijar exactamente
+     */
+    public function syncProductFilters(int $productId, array $filterIds, ?array $cenniTypeKeys = null): void
     {
+        $this->filters->ensureCenniTypeFilters();
         $ids = array_map('intval', $filterIds);
-        // Conservar filtros de certificadora: se gestionan desde "Quién certifica".
-        $certifierIds = $this->filters->filterIdsByGroup(CatalogFilterRepository::CERTIFIER_GROUP);
-        $manual = array_values(array_filter(
-            $ids,
-            static fn (int $id): bool => !in_array($id, $certifierIds, true)
-        ));
+        $certifierIds = array_fill_keys(
+            $this->filters->filterIdsByGroup(CatalogFilterRepository::CERTIFIER_GROUP),
+            true
+        );
+        $cenniIds = array_fill_keys(
+            $this->filters->filterIdsByGroup(CatalogFilterRepository::CENNI_GROUP),
+            true
+        );
+        $manual = [];
+        foreach ($ids as $id) {
+            if ($id < 1 || isset($certifierIds[$id]) || isset($cenniIds[$id])) {
+                continue;
+            }
+            $manual[] = $id;
+        }
+
+        if ($cenniTypeKeys !== null) {
+            foreach ($this->resolveCenniTypeFilterIds($cenniTypeKeys) as $cenniFilterId) {
+                $manual[] = $cenniFilterId;
+            }
+        } else {
+            foreach ($this->filters->filterIdsForProduct($productId) as $existingId) {
+                if (isset($cenniIds[$existingId])) {
+                    $manual[] = $existingId;
+                }
+            }
+        }
+
         $this->filters->setProductFilters($productId, $manual);
         $this->syncProductCertifierFilter($productId);
+    }
+
+    /**
+     * @param list<string|int> $keys
+     * @return list<int>
+     */
+    public function resolveCenniTypeFilterIds(array $keys): array
+    {
+        $this->filters->ensureCenniTypeFilters();
+        $defs = CatalogFilterRepository::cenniTypeDefinitions();
+        $out = [];
+        foreach ($keys as $raw) {
+            $key = strtolower(trim((string) $raw));
+            $key = str_replace([' ', '_'], '-', $key);
+            $key = preg_replace('/^cenni-/', '', $key) ?? $key;
+            if (!isset($defs[$key])) {
+                continue;
+            }
+            $filter = $this->filters->findBySlug($defs[$key]['slug']);
+            if ($filter !== null) {
+                $out[] = (int) $filter['id'];
+            }
+        }
+
+        return array_values(array_unique($out));
+    }
+
+    /** @return list<string> */
+    public function cenniTypeKeysForProduct(int $productId): array
+    {
+        $this->filters->ensureCenniTypeFilters();
+        $selected = array_fill_keys($this->filters->filterIdsForProduct($productId), true);
+        $keys = [];
+        foreach (CatalogFilterRepository::cenniTypeDefinitions() as $key => $def) {
+            $filter = $this->filters->findBySlug($def['slug']);
+            if ($filter !== null && isset($selected[(int) $filter['id']])) {
+                $keys[] = $key;
+            }
+        }
+
+        return $keys;
     }
 
     /** Reaplica el filtro de certificadora según products.certifier_id. */

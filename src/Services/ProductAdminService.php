@@ -896,6 +896,10 @@ final class ProductAdminService
             }
             $syncCategoryTag = isset($map['category']) || isset($map['type']) || $existing === null;
             $syncCertifierTag = isset($map['certifier_code']) || $existing === null;
+            $cenniTypeKeys = null;
+            if (isset($map['cenni_types'])) {
+                $cenniTypeKeys = self::parseCenniTypesCsv((string) $get('cenni_types', ''));
+            }
             try {
                 if ($existing !== null) {
                     $this->updateProduct((int) $existing['id'], $input);
@@ -914,6 +918,9 @@ final class ProductAdminService
                         $productId,
                         $certifierId > 0 ? $certifierId : null
                     );
+                }
+                if ($cenniTypeKeys !== null) {
+                    $this->ensureCenniTypeCatalogFilters($productId, $cenniTypeKeys);
                 }
             } catch (\Throwable $e) {
                 $errors[] = "Fila {$line} ({$code}): " . $e->getMessage();
@@ -949,6 +956,7 @@ final class ProductAdminService
             'product_group_code',
             'supplier_code',
             'certifier_code',
+            'cenni_types',
             'short_description',
             'description',
             'benefits_html',
@@ -981,6 +989,7 @@ final class ProductAdminService
             'itep-exams',
             'itep',
             'itep',
+            'constancia|certificado',
             'Resumen con <strong>negritas</strong> opcional.',
             '<p>Descripción larga del producto.</p>',
             '<ul><li>Beneficio 1</li><li>Beneficio 2</li></ul>',
@@ -1006,7 +1015,14 @@ final class ProductAdminService
         }
         $headers = self::productBulkCsvHeaders();
         csv_put($out, $headers);
+        $filterSvc = new CatalogFilterService();
         foreach ($rows as $p) {
+            $cenniTypes = '';
+            try {
+                $cenniTypes = implode('|', $filterSvc->cenniTypeKeysForProduct((int) ($p['id'] ?? 0)));
+            } catch (\Throwable $e) {
+                error_log('[Doceo] export cenni_types: ' . $e->getMessage());
+            }
             csv_put($out, [
                 (string) ($p['code'] ?? ''),
                 (string) ($p['name'] ?? ''),
@@ -1023,6 +1039,7 @@ final class ProductAdminService
                 (string) ($p['product_group_code'] ?? ''),
                 (string) ($p['supplier_code'] ?? ''),
                 (string) ($p['certifier_code'] ?? ''),
+                $cenniTypes,
                 (string) ($p['short_description'] ?? ''),
                 (string) ($p['description'] ?? ''),
                 (string) ($p['benefits_html'] ?? ''),
@@ -1235,6 +1252,73 @@ final class ProductAdminService
         }
 
         $filters->setProductFilters($productId, $kept);
+    }
+
+    /**
+     * Fija los filtros de tipo CENNI del producto (constancia / certificado / diploma).
+     *
+     * @param list<string> $typeKeys
+     */
+    public function ensureCenniTypeCatalogFilters(int $productId, array $typeKeys): void
+    {
+        if ($productId < 1) {
+            return;
+        }
+        $filters = new CatalogFilterRepository();
+        $filters->ensureDefaults();
+        $filters->ensureCenniTypeFilters();
+
+        $cenniFilterIds = array_fill_keys(
+            $filters->filterIdsByGroup(CatalogFilterRepository::CENNI_GROUP),
+            true
+        );
+        $kept = [];
+        foreach ($filters->filterIdsForProduct($productId) as $filterId) {
+            if (isset($cenniFilterIds[$filterId])) {
+                continue;
+            }
+            $kept[] = $filterId;
+        }
+
+        $defs = CatalogFilterRepository::cenniTypeDefinitions();
+        foreach ($typeKeys as $key) {
+            $key = strtolower(trim((string) $key));
+            $key = str_replace([' ', '_'], '-', $key);
+            $key = preg_replace('/^cenni-/', '', $key) ?? $key;
+            if (!isset($defs[$key])) {
+                continue;
+            }
+            $filter = $filters->findBySlug($defs[$key]['slug']);
+            if ($filter !== null) {
+                $kept[] = (int) $filter['id'];
+            }
+        }
+
+        $filters->setProductFilters($productId, $kept);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function parseCenniTypesCsv(string $raw): array
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return [];
+        }
+        $parts = preg_split('/[|,;\/]+/', $raw) ?: [];
+        $defs = CatalogFilterRepository::cenniTypeDefinitions();
+        $out = [];
+        foreach ($parts as $part) {
+            $key = strtolower(trim((string) $part));
+            $key = str_replace([' ', '_'], '-', $key);
+            $key = preg_replace('/^cenni-/', '', $key) ?? $key;
+            if (isset($defs[$key])) {
+                $out[] = $key;
+            }
+        }
+
+        return array_values(array_unique($out));
     }
 
     /**

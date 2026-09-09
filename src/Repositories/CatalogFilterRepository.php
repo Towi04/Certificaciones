@@ -180,6 +180,9 @@ final class CatalogFilterRepository
             ['it', 'Informática', 'Área', 30],
             ['teaching', 'Enseñanza', 'Área', 40],
             ['other', 'Otros', 'Área', 90],
+            ['cenni-constancia', 'Constancia CENNI', 'CENNI', 5],
+            ['cenni-certificado', 'Certificado CENNI', 'CENNI', 6],
+            ['cenni-diploma', 'Diploma CENNI', 'CENNI', 7],
         ];
 
         $stmt = $this->pdo->prepare(
@@ -194,6 +197,48 @@ final class CatalogFilterRepository
     }
 
     public const CERTIFIER_GROUP = 'Certificadora';
+
+    public const CENNI_GROUP = 'CENNI';
+
+    /**
+     * Tipos de documento CENNI filtrables en catálogo.
+     *
+     * @return array<string, array{slug:string,label:string,sort:int}>
+     */
+    public static function cenniTypeDefinitions(): array
+    {
+        return [
+            'constancia' => [
+                'slug' => 'cenni-constancia',
+                'label' => 'Constancia CENNI',
+                'sort' => 5,
+            ],
+            'certificado' => [
+                'slug' => 'cenni-certificado',
+                'label' => 'Certificado CENNI',
+                'sort' => 6,
+            ],
+            'diploma' => [
+                'slug' => 'cenni-diploma',
+                'label' => 'Diploma CENNI',
+                'sort' => 7,
+            ],
+        ];
+    }
+
+    /** Crea los 3 filtros de tipo CENNI si faltan. */
+    public function ensureCenniTypeFilters(): void
+    {
+        foreach (self::cenniTypeDefinitions() as $def) {
+            $this->ensureFilter(
+                $def['slug'],
+                $def['label'],
+                self::CENNI_GROUP,
+                $def['sort'],
+                ['is_active' => 1, 'show_in_catalog' => 1]
+            );
+        }
+    }
 
     /**
      * Crea o actualiza un filtro por slug (p. ej. filtros derivados de certificadoras).

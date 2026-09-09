@@ -227,11 +227,32 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                 </label>
             </div>
 
+            <h2 style="font-size:1.05rem;color:var(--doceo-blue);margin-top:1.25rem">Tipo de CENNI que otorga</h2>
+            <p class="muted" style="font-size:.85rem;margin:.25rem 0 .75rem">
+                Marca si este producto otorga Constancia, Certificado y/o Diploma CENNI.
+                Estas opciones aparecen como filtros en el catálogo público.
+            </p>
+            <?php
+            /** @var array<string, array{slug:string,label:string,sort:int}> $cenniTypeOptions */
+            $cenniTypeOptions = $cenniTypeOptions ?? \App\Repositories\CatalogFilterRepository::cenniTypeDefinitions();
+            /** @var list<string> $selectedCenniTypes */
+            $selectedCenniTypes = $selectedCenniTypes ?? [];
+            ?>
+            <div class="filter-tag-grid" style="margin-bottom:.5rem">
+                <?php foreach ($cenniTypeOptions as $cenniKey => $cenniDef): ?>
+                    <label class="filter-tag-item">
+                        <input type="checkbox" name="cenni_types[]" value="<?= e((string) $cenniKey) ?>"
+                            <?= in_array((string) $cenniKey, $selectedCenniTypes, true) ? 'checked' : '' ?>>
+                        <?= e((string) $cenniDef['label']) ?>
+                    </label>
+                <?php endforeach; ?>
+            </div>
+
             <h2 style="font-size:1.05rem;color:var(--doceo-blue);margin-top:1.25rem">Etiquetas del catálogo</h2>
             <p class="muted" style="font-size:.85rem;margin:.25rem 0 .75rem">
                 Marca en qué filtros aparece este producto en el catálogo público.
-                La certificadora (<strong>Quién certifica</strong>) se publica sola como filtro del grupo
-                «Certificadora»; no hace falta marcarla aquí.
+                La certificadora (<strong>Quién certifica</strong>) y los tipos CENNI se configuran arriba;
+                no hace falta marcarlos aquí.
                 Administra los filtros en <a href="<?= e(url('/admin/filtros-catalogo')) ?>">Filtros del catálogo</a>.
             </p>
             <?php if ($catalogFilters === []): ?>
@@ -241,12 +262,13 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                     <?php
                     $lastGroup = null;
                     $certifierGroup = \App\Repositories\CatalogFilterRepository::CERTIFIER_GROUP;
+                    $cenniGroup = \App\Repositories\CatalogFilterRepository::CENNI_GROUP;
                     foreach ($catalogFilters as $cf):
                         if (!(int) ($cf['is_active'] ?? 1)) {
                             continue;
                         }
                         $group = trim((string) ($cf['filter_group'] ?? ''));
-                        if ($group === $certifierGroup) {
+                        if ($group === $certifierGroup || $group === $cenniGroup) {
                             continue;
                         }
                         if ($group !== '' && $group !== $lastGroup):
