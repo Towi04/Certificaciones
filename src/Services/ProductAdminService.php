@@ -333,6 +333,7 @@ final class ProductAdminService
             'inventory_access_mail_template' => (string) (($cfg['inventory'] ?? [])['access_mail_template'] ?? 'student_inventory_exam_access'),
             'inventory_results_mail_template' => (string) (($cfg['inventory'] ?? [])['results_mail_template'] ?? 'student_results_cenni'),
             'inventory_low_stock_mail_template' => trim((string) (($cfg['inventory'] ?? [])['low_stock_mail_template'] ?? '')),
+            'results_delivery' => ResultsDeliveryService::fromConfig($cfg),
             'reglamento_enabled' => $reg !== [] && (
                 trim((string) ($reg['template_path'] ?? '')) !== ''
                 || trim((string) ($reg['source_url'] ?? '')) !== ''
@@ -1235,6 +1236,8 @@ final class ProductAdminService
         } else {
             unset($config['inventory']);
         }
+
+        $config = ResultsDeliveryService::applyFromGroupInput($input, $config);
 
         $order = [];
         if (!empty($input['pay_transfer'])) {

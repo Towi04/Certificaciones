@@ -20,10 +20,12 @@ final class GroupStepConfig
     public const ACTION_EDIT_EXAM = 'edit_exam';
     public const ACTION_EDIT_STUDENT = 'edit_student';
     public const ACTION_DOWNLOAD_CSV = 'download_csv';
+    public const ACTION_SEND_RESULTS = 'send_results';
 
     public const ACTIONS = [
         self::ACTION_NONE => 'Solo progreso (sin botón)',
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
+        self::ACTION_SEND_RESULTS => 'Enviar resultados / cancelación',
         self::ACTION_DOWNLOAD_CSV => 'Descargar CSV (plantilla)',
         self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
         // Legado (ya no se eligen en el editor; se siguen ejecutando si existen).
@@ -40,8 +42,29 @@ final class GroupStepConfig
     public const ACTIONS_EDITABLE = [
         self::ACTION_NONE => 'Solo progreso (sin botón)',
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
+        self::ACTION_SEND_RESULTS => 'Enviar resultados / cancelación',
         self::ACTION_DOWNLOAD_CSV => 'Descargar CSV (plantilla)',
         self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
+    ];
+
+    /** Iconos disponibles para botones de Operación (clave = icon()). */
+    public const OPS_ICONS = [
+        'mail' => 'Correo',
+        'send' => 'Enviar',
+        'calendar' => 'Calendario / reagendar',
+        'download' => 'Descargar',
+        'dollar' => 'Pago / $',
+        'factory' => 'Proveedor / fábrica',
+        'document' => 'Documento / resultados',
+        'award' => 'Certificado / logro',
+        'key' => 'Accesos / folio',
+        'user' => 'Alumno',
+        'link' => 'Enlace',
+        'ban' => 'Cancelación',
+        'advance' => 'Avanzar',
+        'check' => 'Hecho / check',
+        'upload' => 'Subir archivo',
+        'clock' => 'Pendiente',
     ];
 
     /** Mapeo de acciones legadas → acción editable al re-guardar el grupo. */
@@ -214,11 +237,12 @@ final class GroupStepConfig
                 return match (self::effectiveOpsAction($s)) {
                     self::ACTION_CONFIRM_PAYMENT => 0,
                     self::ACTION_SEND_MAIL => 1,
-                    self::ACTION_DOWNLOAD_CSV => 2,
-                    self::ACTION_EXAM_ACCESS => 3,
-                    self::ACTION_EDIT_EXAM => 4,
-                    self::ACTION_EDIT_STUDENT => 5,
-                    self::ACTION_ADVANCE => 6,
+                    self::ACTION_SEND_RESULTS => 2,
+                    self::ACTION_DOWNLOAD_CSV => 3,
+                    self::ACTION_EXAM_ACCESS => 4,
+                    self::ACTION_EDIT_EXAM => 5,
+                    self::ACTION_EDIT_STUDENT => 6,
+                    self::ACTION_ADVANCE => 7,
                     default => 9,
                 };
             };
@@ -247,6 +271,7 @@ final class GroupStepConfig
             if ($done && !$collectExam && $action !== self::ACTION_DOWNLOAD_CSV) {
                 $label = match ($action) {
                     self::ACTION_SEND_MAIL => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
+                    self::ACTION_SEND_RESULTS => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
                     self::ACTION_EXAM_ACCESS => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
                     self::ACTION_EDIT_STUDENT => $label . ' (actualizado)',
                     self::ACTION_ADVANCE => $label . ' (hecho)',
@@ -256,17 +281,28 @@ final class GroupStepConfig
             $rescheduleCount = $collectExam
                 ? \App\Services\TrackingService::examRescheduleCountFromTracking($row)
                 : 0;
+            $opsIcon = self::resolveOpsIcon($step, $action);
+            $resultsReady = true;
+            $resultsBlocked = '';
+            if ($action === self::ACTION_SEND_RESULTS) {
+                $delivery = ResultsDeliveryService::fromConfig($config);
+                $resultsReady = ResultsDeliveryService::isReady($row, $delivery);
+                $resultsBlocked = $resultsReady ? '' : ResultsDeliveryService::blockedReason($row, $delivery);
+            }
             $buttons[] = [
                 'code' => (string) $step['code'],
                 'label' => $label,
                 'action' => $action,
                 'email' => $email,
                 'csv' => $csv,
+                'ops_icon' => $opsIcon,
                 'audience' => $audience,
                 'admin_only' => !empty($step['admin_only']),
                 'done' => $done,
                 'collect_exam' => $collectExam,
                 'reschedule_count' => $rescheduleCount,
+                'results_ready' => $resultsReady,
+                'results_blocked' => $resultsBlocked,
             ];
         }
 
@@ -283,6 +319,7 @@ final class GroupStepConfig
                     'label' => 'Confirmar pago',
                     'action' => self::ACTION_CONFIRM_PAYMENT,
                     'email' => [],
+                    'ops_icon' => self::defaultOpsIcon(self::ACTION_CONFIRM_PAYMENT),
                     'audience' => 'student',
                     'admin_only' => false,
                     'done' => false,
@@ -297,6 +334,7 @@ final class GroupStepConfig
                     'label' => 'Enviar folio/clave',
                     'action' => self::ACTION_EXAM_ACCESS,
                     'email' => is_array($examStep['email'] ?? null) ? $examStep['email'] : [],
+                    'ops_icon' => self::defaultOpsIcon(self::ACTION_EXAM_ACCESS),
                     'audience' => 'student',
                     'admin_only' => true,
                 ];
@@ -325,6 +363,9 @@ final class GroupStepConfig
                         'label' => $done ? 'Reenviar solicitud' : 'Enviar solicitud',
                         'action' => self::ACTION_SEND_MAIL,
                         'email' => ['audience' => 'provider', 'enabled' => true],
+                        'ops_icon' => self::defaultOpsIcon(self::ACTION_SEND_MAIL, [
+                            'email' => ['audience' => 'provider'],
+                        ]),
                         'audience' => 'provider',
                         'admin_only' => true,
                         'done' => $done,
@@ -339,6 +380,7 @@ final class GroupStepConfig
                 'label' => 'Confirmar pago',
                 'action' => self::ACTION_CONFIRM_PAYMENT,
                 'email' => [],
+                'ops_icon' => self::defaultOpsIcon(self::ACTION_CONFIRM_PAYMENT),
                 'audience' => 'student',
                 'admin_only' => false,
                 'done' => false,
@@ -507,6 +549,7 @@ final class GroupStepConfig
                 true
             ),
             self::ACTION_SEND_MAIL => self::isMailStepDone($row, $step),
+            self::ACTION_SEND_RESULTS => self::isMailStepDone($row, $step),
             self::ACTION_DOWNLOAD_CSV => false,
             self::ACTION_EXAM_ACCESS => trim((string) ($row['folio'] ?? '')) !== ''
                 && trim((string) ($row['access_key'] ?? '')) !== '',
@@ -572,10 +615,12 @@ final class GroupStepConfig
                 'admin_only' => !empty($row['admin_only']),
                 'ops_button' => !empty($row['ops_button']),
                 'ops_label' => trim((string) ($row['ops_label'] ?? '')),
+                'ops_icon' => trim((string) ($row['ops_icon'] ?? '')),
                 'action' => self::LEGACY_ACTION_MAP[(string) ($row['action'] ?? self::ACTION_NONE)]
                     ?? (string) ($row['action'] ?? self::ACTION_NONE),
                 'email' => [
-                    'enabled' => !empty($row['email_enabled']),
+                    'enabled' => !empty($row['email_enabled'])
+                        || (string) ($row['action'] ?? '') === self::ACTION_SEND_RESULTS,
                     'trigger' => (string) ($row['email_trigger'] ?? 'admin'),
                     'template_code' => trim((string) ($row['email_template'] ?? '')),
                     // Destinatario lo define la plantilla; no se pide en el grupo.
@@ -701,6 +746,15 @@ final class GroupStepConfig
             $csvScope = 'student';
         }
         $csvTemplate = trim((string) ($csvRaw['template_code'] ?? $row['csv_template'] ?? ''));
+        $opsIcon = strtolower(trim((string) ($row['ops_icon'] ?? '')));
+        if ($opsIcon !== '' && !isset(self::OPS_ICONS[$opsIcon])) {
+            $opsIcon = '';
+        }
+
+        $emailEnabled = !empty($emailRaw['enabled']) || !empty($row['email_enabled']);
+        if ($action === self::ACTION_SEND_RESULTS) {
+            $emailEnabled = true;
+        }
 
         return [
             'code' => $code,
@@ -711,9 +765,10 @@ final class GroupStepConfig
             'admin_only' => !empty($row['admin_only']),
             'ops_button' => !empty($row['ops_button']),
             'ops_label' => trim((string) ($row['ops_label'] ?? '')),
+            'ops_icon' => $opsIcon,
             'action' => $action,
             'email' => [
-                'enabled' => !empty($emailRaw['enabled']) || !empty($row['email_enabled']),
+                'enabled' => $emailEnabled,
                 'trigger' => $trigger,
                 'template_code' => $templateCode,
                 'audience' => $audience,
@@ -725,6 +780,46 @@ final class GroupStepConfig
                 'scope' => $csvScope,
             ],
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $step
+     */
+    public static function resolveOpsIcon(array $step, ?string $action = null): string
+    {
+        $action = $action ?? (string) ($step['action'] ?? self::ACTION_NONE);
+        $icon = strtolower(trim((string) ($step['ops_icon'] ?? '')));
+        if ($icon !== '' && isset(self::OPS_ICONS[$icon])) {
+            return $icon;
+        }
+
+        return self::defaultOpsIcon($action, $step);
+    }
+
+    /**
+     * @param array<string, mixed> $step
+     */
+    public static function defaultOpsIcon(string $action, array $step = []): string
+    {
+        if ($action === self::ACTION_SEND_MAIL) {
+            $email = is_array($step['email'] ?? null) ? $step['email'] : [];
+            if (self::audienceFromEmail($email) === 'provider') {
+                return 'factory';
+            }
+
+            return 'mail';
+        }
+
+        return match ($action) {
+            self::ACTION_CONFIRM_PAYMENT => 'dollar',
+            self::ACTION_SEND_RESULTS => 'document',
+            self::ACTION_DOWNLOAD_CSV => 'download',
+            self::ACTION_EXAM_ACCESS => 'key',
+            self::ACTION_EDIT_EXAM => 'calendar',
+            self::ACTION_EDIT_STUDENT => 'user',
+            self::ACTION_ADVANCE => 'advance',
+            default => 'check',
+        };
     }
 
     public static function normalizeCode(string $code): string

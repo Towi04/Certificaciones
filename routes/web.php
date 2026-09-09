@@ -105,6 +105,7 @@ $router->post('/admin/seguimientos/{id}/examen/autorizar', fn (string $id) => $a
 $router->post('/admin/seguimientos/{id}/alumno', fn (string $id) => $admin->trackingUpdateStudent($id));
 $router->post('/admin/seguimientos/{id}/elet-accesos', fn (string $id) => $admin->trackingPublishEletAccess($id));
 $router->post('/admin/seguimientos/{id}/resultados', fn (string $id) => $admin->trackingSaveResults($id));
+$router->get('/admin/seguimientos/{id}/resultados-pdf', fn (string $id) => $admin->trackingResultsPdf($id));
 $router->post('/admin/seguimientos/{id}/uks-solicitud', fn (string $id) => $admin->trackingResendUksRequest($id));
 $router->post('/admin/seguimientos/{id}/comprobante-proveedor', fn (string $id) => $admin->trackingUploadProviderProof($id));
 $router->post('/admin/seguimientos/{id}/solicitud-proveedor', fn (string $id) => $admin->trackingSendProviderRequest($id));

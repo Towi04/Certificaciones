@@ -66,7 +66,7 @@ final class AdminOpsBoardService
         $sql = 'SELECT t.id, t.purchase_id, t.product_id, t.pipeline_template_id, t.current_step_code, t.status AS tracking_status,
                     t.exam_date, t.exam_time, t.exam_date_2, t.exam_time_2, t.zoom_url,
                     t.folio, t.access_key, t.cenni_folio, t.extra_json, t.updated_at, t.created_at,
-                    t.moodle_username, t.results_level, t.results_score,
+                    t.moodle_username, t.results_level, t.results_score, t.results_url,
                     pr.name AS product_name, pr.code AS product_code, pr.type AS product_type,
                     pr.platform_type, pr.config_json,
                     pg.code AS product_group_code, pg.name AS product_group_name,

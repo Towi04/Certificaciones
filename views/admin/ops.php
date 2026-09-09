@@ -225,8 +225,14 @@ $extraColHeader = count($extraColLabels) === 1
                                 $action = (string) ($btn['action'] ?? '');
                                 $label = (string) ($btn['label'] ?? 'Acción');
                                 $done = !empty($btn['done']);
-                                $btnClass = $done ? 'btn btn-ops-done btn-sm' : 'btn btn-accent btn-sm';
-                                $statusIcon = $done ? icon('check') : icon('clock');
+                                $opsIcon = trim((string) ($btn['ops_icon'] ?? ''));
+                                $iconSvg = $opsIcon !== ''
+                                    ? icon($opsIcon)
+                                    : icon(\App\Services\GroupStepConfig::defaultOpsIcon($action, $btn));
+                                if ($iconSvg === '') {
+                                    $iconSvg = icon($done ? 'check' : 'clock');
+                                }
+                                $btnClass = 'ops-icon-btn' . ($done ? ' ops-icon-btn--done' : ' ops-icon-btn--pending');
                                 ?>
                                 <?php
                                 $collectExam = !empty($btn['collect_exam'])
@@ -274,21 +280,22 @@ $extraColHeader = count($extraColLabels) === 1
                                                    value="<?= e($examTimeVal) ?>" title="Hora examen">
                                         </div>
                                         <button class="<?= e($btnClass) ?>" type="submit"
-                                            title="<?= $examMailOn
+                                            title="<?= e(($examMailOn
                                                 ? ($audience === 'provider'
                                                     ? 'Guardar fecha y enviar plantilla al proveedor'
                                                     : ($audience === 'partner'
                                                         ? 'Guardar fecha y enviar plantilla al partner'
                                                         : 'Guardar fecha y enviar plantilla al alumno'))
-                                                : 'Guardar fecha de examen' ?><?= $rescheduleCount > 0
-                                                ? ' · Reagendado ' . $rescheduleCount . ' vez' . ($rescheduleCount === 1 ? '' : 'es')
-                                                : '' ?>">
-                                            <span class="ops-btn-ico">
-                                                <?= $statusIcon ?>
-                                                <?php if ($rescheduleCount > 0): ?>
-                                                    <span class="ops-reschedule-count" aria-label="Reagendado <?= (int) $rescheduleCount ?> veces"><?= (int) $rescheduleCount ?></span>
-                                                <?php endif; ?>
-                                            </span><?= e($label) ?>
+                                                : 'Guardar fecha de examen')
+                                                . ($rescheduleCount > 0
+                                                    ? ' · Reagendado ' . $rescheduleCount . ' vez' . ($rescheduleCount === 1 ? '' : 'es')
+                                                    : '')
+                                                . ' · ' . $label) ?>"
+                                            aria-label="<?= e($label) ?>">
+                                            <?= $iconSvg ?>
+                                            <?php if ($rescheduleCount > 0): ?>
+                                                <span class="ops-reschedule-count" aria-label="Reagendado <?= (int) $rescheduleCount ?> veces"><?= (int) $rescheduleCount ?></span>
+                                            <?php endif; ?>
                                         </button>
                                     </form>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_CONFIRM_PAYMENT): ?>
@@ -298,10 +305,11 @@ $extraColHeader = count($extraColLabels) === 1
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                         <button class="<?= e($btnClass) ?>" type="submit"
-                                            title="<?= !empty($r['is_package'])
+                                            title="<?= e((!empty($r['is_package'])
                                                 ? 'Confirma el pago único del paquete; aplica a todos los productos de la matrícula'
-                                                : 'Confirmar pago' ?>">
-                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
+                                                : 'Confirmar pago') . ' · ' . $label) ?>"
+                                            aria-label="<?= e($label) ?>">
+                                            <?= $iconSvg ?>
                                         </button>
                                     </form>
                                     <?php if (!empty($r['payment_proof_path'])): ?>
@@ -324,7 +332,8 @@ $extraColHeader = count($extraColLabels) === 1
                                             || \App\Services\MailTemplateService::isUksSolicitudCode($sendTpl)
                                         );
                                     ?>
-                                    <?php if ($isHeavyProviderRequest): ?>                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/solicitud-proveedor')) ?>" class="ops-inline-form">
+                                    <?php if ($isHeavyProviderRequest): ?>
+                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/solicitud-proveedor')) ?>" class="ops-inline-form">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="return_ops" value="1">
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">
@@ -332,8 +341,11 @@ $extraColHeader = count($extraColLabels) === 1
                                         <input type="hidden" name="include_payment_proof" value="1">
                                         <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
                                         <button class="<?= e($btnClass) ?>" type="submit"
-                                            <?= empty($r['admin_proof_uploaded']) ? 'title="Sube el comprobante DOCEO en Detalle si el grupo lo exige"' : '' ?>>
-                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
+                                            title="<?= e((empty($r['admin_proof_uploaded'])
+                                                ? 'Sube el comprobante DOCEO en Detalle si el grupo lo exige'
+                                                : $label) ) ?>"
+                                            aria-label="<?= e($label) ?>">
+                                            <?= $iconSvg ?>
                                         </button>
                                     </form>
                                     <?php if (!empty($r['admin_proof_uploaded'])): ?>
@@ -347,15 +359,37 @@ $extraColHeader = count($extraColLabels) === 1
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                         <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
                                         <button class="<?= e($btnClass) ?>" type="submit"
-                                            title="<?= $audience === 'partner'
+                                            title="<?= e(($audience === 'partner'
                                                 ? 'Enviar al partner del caso'
                                                 : ($audience === 'provider'
                                                     ? 'Enviar plantilla al proveedor'
-                                                    : 'Enviar plantilla al alumno') ?>">
-                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
+                                                    : 'Enviar plantilla al alumno')) . ' · ' . $label) ?>"
+                                            aria-label="<?= e($label) ?>">
+                                            <?= $iconSvg ?>
                                         </button>
                                     </form>
                                     <?php endif; ?>
+                                <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_SEND_RESULTS): ?>
+                                    <?php
+                                    $resultsReady = !empty($btn['results_ready']);
+                                    $resultsTitle = $resultsReady
+                                        ? $label
+                                        : (trim((string) ($btn['results_blocked'] ?? '')) ?: $label);
+                                    $resultsBtnClass = $btnClass . ($resultsReady ? '' : ' ops-icon-btn--disabled');
+                                    ?>
+                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/enviar-correo-paso')) ?>" class="ops-inline-form">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="return_ops" value="1">
+                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                        <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
+                                        <button class="<?= e($resultsBtnClass) ?>" type="submit"
+                                            <?= $resultsReady ? '' : 'disabled' ?>
+                                            title="<?= e($resultsTitle) ?>"
+                                            aria-label="<?= e($label) ?>">
+                                            <?= $iconSvg ?>
+                                        </button>
+                                    </form>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_EXAM_ACCESS): ?>
                                     <form method="post" action="<?= e(url('/admin/operacion/' . $tid . '/accesos')) ?>"
                                           class="ops-inline-form ops-access-form" id="ops-access-form-<?= $tid ?>"
@@ -367,14 +401,16 @@ $extraColHeader = count($extraColLabels) === 1
                                         <input type="hidden" name="access_key" class="ops-access-key-hidden" value="<?= e((string) ($r['access_key'] ?? '')) ?>">
                                         <input type="hidden" name="zoom_url" class="ops-access-zoom-hidden" value="<?= e((string) ($r['zoom_url'] ?? '')) ?>">
                                         <button class="<?= e($btnClass) ?>" type="submit" name="notify" value="1"
-                                                title="Guarda y envía la plantilla de accesos al alumno">
-                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
+                                                title="<?= e('Guarda y envía la plantilla de accesos al alumno · ' . $label) ?>"
+                                                aria-label="<?= e($label) ?>">
+                                            <?= $iconSvg ?>
                                         </button>
                                     </form>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_EDIT_STUDENT): ?>
                                     <details class="ops-collect-details">
-                                        <summary class="<?= e($btnClass) ?>" style="list-style:none;cursor:pointer">
-                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
+                                        <summary class="<?= e($btnClass) ?>" style="list-style:none;cursor:pointer"
+                                                 title="<?= e($label) ?>" aria-label="<?= e($label) ?>">
+                                            <?= $iconSvg ?>
                                         </summary>
                                         <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/alumno')) ?>"
                                               class="ops-inline-form ops-collect-form" style="margin-top:.4rem">
@@ -421,8 +457,9 @@ $extraColHeader = count($extraColLabels) === 1
                                     <?php if ($csvTpl !== ''): ?>
                                         <a class="<?= e($btnClass) ?>"
                                            href="<?= e(url('/admin/plantillas-csv/' . rawurlencode($csvTpl) . '/descargar?' . $csvQs)) ?>"
-                                           title="<?= e($csvTitle) ?>">
-                                            <span class="ops-btn-ico"><?= icon('export') ?></span><?= e($label) ?>
+                                           title="<?= e($csvTitle . ' · ' . $label) ?>"
+                                           aria-label="<?= e($label) ?>">
+                                            <?= $iconSvg !== '' ? $iconSvg : icon('download') ?>
                                         </a>
                                     <?php else: ?>
                                         <span class="muted" title="Configura la plantilla CSV en el grupo">CSV sin plantilla</span>
@@ -434,8 +471,9 @@ $extraColHeader = count($extraColLabels) === 1
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                         <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
-                                        <button class="<?= e($btnClass) ?>" type="submit">
-                                            <span class="ops-btn-ico"><?= $statusIcon ?></span><?= e($label) ?>
+                                        <button class="<?= e($btnClass) ?>" type="submit"
+                                            title="<?= e($label) ?>" aria-label="<?= e($label) ?>">
+                                            <?= $iconSvg ?>
                                         </button>
                                     </form>
                                 <?php endif; ?>
@@ -577,6 +615,33 @@ $extraColHeader = count($extraColLabels) === 1
   background:#16a34a !important; border-color:#15803d !important; color:#fff !important;
 }
 .btn-ops-done:hover { filter:brightness(.95); }
+.ops-icon-btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:.15rem;
+  width:2.05rem; height:2.05rem; padding:0;
+  border-radius:10px; border:1px solid transparent;
+  vertical-align:middle; cursor:pointer; text-decoration:none;
+  line-height:1; flex-shrink:0;
+}
+.ops-icon-btn svg { width:16px; height:16px; display:block; }
+.ops-icon-btn--pending {
+  background: var(--doceo-yellow, #f5c518); color:#1f2937; border-color:#eab308;
+}
+.ops-icon-btn--done {
+  background:#16a34a; color:#fff; border-color:#15803d;
+}
+.ops-icon-btn--disabled,
+.ops-icon-btn:disabled {
+  opacity:.45; cursor:not-allowed; filter:grayscale(.25);
+}
+details.ops-collect-details > summary.ops-icon-btn {
+  display:inline-flex; list-style:none;
+}
+details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { display:none; }
+.ops-icon-btn .ops-reschedule-count {
+  position:absolute; top:-.35rem; right:-.35rem;
+  min-width:1rem; height:1rem; font-size:.65rem;
+}
+.ops-inline-form .ops-icon-btn { position:relative; }
 .ops-btn-ico {
   display:inline-flex; align-items:center; gap:.2rem; margin-right:.35rem; vertical-align:-2px;
 }
@@ -587,7 +652,8 @@ $extraColHeader = count($extraColLabels) === 1
   background:rgba(255,255,255,.95); color:#15803d;
   border:1px solid rgba(21,128,61,.35);
 }
-.btn-accent .ops-reschedule-count {
+.btn-accent .ops-reschedule-count,
+.ops-icon-btn--pending .ops-reschedule-count {
   background:#fff7cc; color:#92400e; border-color:rgba(146,64,14,.25);
 }
 .ops-file-btn { position:relative; overflow:hidden; cursor:pointer; }
