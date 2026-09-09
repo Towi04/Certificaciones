@@ -26,6 +26,7 @@ $configGroups = [
         'label' => 'Operadores',
         'items' => [
             ['href' => '/admin/partners', 'label' => 'Partners', 'icon' => 'partners', 'match' => '/partners'],
+            ['href' => '/admin/usuarios', 'label' => 'Usuarios admin', 'icon' => 'partners', 'match' => '/usuarios'],
             // Certificadoras: pestaña dentro de Proveedores (/admin/proveedores?tab=certificadoras)
             ['href' => '/admin/proveedores', 'label' => 'Proveedores', 'icon' => 'suppliers', 'match' => '/proveedores'],
         ],
