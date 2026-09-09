@@ -119,16 +119,19 @@ final class SupplierAdminService
             }
         }
 
-        $contactRole = trim((string) ($input['contact_role_label'] ?? ''));
-        if ($contactRole !== '') {
-            $this->addContact($id, [
-                'role_label' => $contactRole,
-                'name' => (string) ($input['contact_name'] ?? ''),
-                'phone' => (string) ($input['contact_phone'] ?? ''),
-                'email' => (string) ($input['contact_email'] ?? ''),
-                'notes' => (string) ($input['contact_notes'] ?? ''),
-            ]);
-            $applied[] = 'Contacto agregado';
+        $contactSync = $this->syncContactsFromInput($id, $input);
+        if ($contactSync['created'] > 0 || $contactSync['updated'] > 0 || $contactSync['deleted'] > 0) {
+            $parts = [];
+            if ($contactSync['created'] > 0) {
+                $parts[] = $contactSync['created'] . ' contacto(s) nuevo(s)';
+            }
+            if ($contactSync['updated'] > 0) {
+                $parts[] = $contactSync['updated'] . ' contacto(s) actualizado(s)';
+            }
+            if ($contactSync['deleted'] > 0) {
+                $parts[] = $contactSync['deleted'] . ' contacto(s) eliminado(s)';
+            }
+            $applied[] = 'Contactos: ' . implode(', ', $parts);
         }
 
         $accountLabel = trim((string) ($input['account_label'] ?? ''));
@@ -258,6 +261,101 @@ final class SupplierAdminService
             throw new \InvalidArgumentException('Contacto no encontrado.');
         }
         $this->suppliers->deleteContact($contactId);
+    }
+
+    /**
+     * Sincroniza la lista de contactos desde el formulario (crear / actualizar / eliminar).
+     *
+     * @param array<string, mixed> $input
+     * @return array{created:int,updated:int,deleted:int}
+     */
+    public function syncContactsFromInput(int $supplierId, array $input): array
+    {
+        $this->assertSupplier($supplierId);
+
+        $deleted = 0;
+        $deleteIds = is_array($input['contact_delete_ids'] ?? null) ? $input['contact_delete_ids'] : [];
+        foreach ($deleteIds as $rawId) {
+            $cid = (int) $rawId;
+            if ($cid < 1) {
+                continue;
+            }
+            $existing = $this->suppliers->findContact($cid);
+            if ($existing === null || (int) $existing['supplier_id'] !== $supplierId) {
+                continue;
+            }
+            $this->suppliers->deleteContact($cid);
+            $deleted++;
+        }
+
+        $ids = is_array($input['contact_id'] ?? null) ? $input['contact_id'] : [];
+        $roles = is_array($input['contact_role_label'] ?? null) ? $input['contact_role_label'] : [];
+        $names = is_array($input['contact_name'] ?? null) ? $input['contact_name'] : [];
+        $phones = is_array($input['contact_phone'] ?? null) ? $input['contact_phone'] : [];
+        $emails = is_array($input['contact_email'] ?? null) ? $input['contact_email'] : [];
+        $notes = is_array($input['contact_notes'] ?? null) ? $input['contact_notes'] : [];
+
+        // Compat: un solo contacto “nuevo” con nombres planos (legado).
+        if ($roles === [] && trim((string) ($input['contact_role_label'] ?? '')) !== '') {
+            $ids = [''];
+            $roles = [(string) $input['contact_role_label']];
+            $names = [(string) ($input['contact_name'] ?? '')];
+            $phones = [(string) ($input['contact_phone'] ?? '')];
+            $emails = [(string) ($input['contact_email'] ?? '')];
+            $notes = [(string) ($input['contact_notes'] ?? '')];
+        }
+
+        $created = 0;
+        $updated = 0;
+        $n = max(count($ids), count($roles), count($names), count($phones), count($emails), count($notes));
+        $deletedSet = [];
+        foreach ($deleteIds as $rawId) {
+            $deletedSet[(int) $rawId] = true;
+        }
+
+        for ($i = 0; $i < $n; $i++) {
+            $cid = (int) ($ids[$i] ?? 0);
+            if ($cid > 0 && isset($deletedSet[$cid])) {
+                continue;
+            }
+            $row = [
+                'role_label' => (string) ($roles[$i] ?? ''),
+                'name' => (string) ($names[$i] ?? ''),
+                'phone' => (string) ($phones[$i] ?? ''),
+                'email' => (string) ($emails[$i] ?? ''),
+                'notes' => (string) ($notes[$i] ?? ''),
+            ];
+            $role = trim($row['role_label']);
+            $name = trim($row['name']);
+            $phone = trim($row['phone']);
+            $email = trim($row['email']);
+            $note = trim($row['notes']);
+
+            // Fila vacía (nuevo sin datos): ignorar.
+            if ($cid < 1 && $role === '' && $name === '' && $phone === '' && $email === '' && $note === '') {
+                continue;
+            }
+
+            if ($cid > 0) {
+                $existing = $this->suppliers->findContact($cid);
+                if ($existing === null || (int) $existing['supplier_id'] !== $supplierId) {
+                    throw new \InvalidArgumentException('Contacto no encontrado (#' . $cid . ').');
+                }
+                $payload = $this->contactPayload($supplierId, $row);
+                unset($payload['supplier_id']);
+                $this->suppliers->updateContact($cid, $payload);
+                $updated++;
+            } else {
+                $this->suppliers->createContact($this->contactPayload($supplierId, $row));
+                $created++;
+            }
+        }
+
+        return [
+            'created' => $created,
+            'updated' => $updated,
+            'deleted' => $deleted,
+        ];
     }
 
     /** @param array<string, mixed> $input */

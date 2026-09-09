@@ -50,8 +50,9 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
 </div>
 
 <p class="muted" style="font-size:.85rem;margin:.75rem 0 0;max-width:48rem">
-    Usa las pestañas para editar. El botón <strong>Guardar todo</strong> (arriba o abajo) guarda
-    datos, logos y, si los llenaste, el contacto o acceso nuevo — sin importar en qué pestaña estés.
+    Usa las pestañas para editar. <strong>Guardar todo</strong> guarda datos, logos y la lista de
+    contactos (altas, cambios y bajas). Los accesos existentes se editan con sus iconos;
+    un acceso nuevo se crea al guardar si llenaste el bloque «Agregar acceso».
 </p>
 
 <nav class="group-tabs" style="margin-top:1rem" role="tablist" aria-label="Secciones del proveedor">
@@ -154,77 +155,101 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
         <div class="panel" style="margin-top:.75rem;max-width:960px">
             <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Contactos</h2>
             <p class="muted" style="font-size:.85rem;margin-top:0">
-                Lista actual abajo. Para agregar uno, llena el bloque y pulsa <strong>Guardar todo</strong>
-                (también guarda datos y logos si los cambiaste).
+                Edita los contactos existentes o agrega varios con <strong>+ Agregar contacto</strong>.
+                Todo se guarda con <strong>Guardar todo</strong> (también datos y logos).
             </p>
-            <?php if ($contacts !== []): ?>
-                <div class="table-wrap" style="margin-bottom:1rem">
-                    <table class="data">
-                        <thead>
-                        <tr><th>Área</th><th>Nombre</th><th>Teléfono</th><th>Correo</th><th>Notas</th><th></th></tr>
-                        </thead>
-                        <tbody>
-                        <?php foreach ($contacts as $c): ?>
-                            <tr>
-                                <td><?= e((string) $c['role_label']) ?></td>
-                                <td><?= e((string) ($c['name'] ?: '—')) ?></td>
-                                <td><?= e((string) ($c['phone'] ?: '—')) ?></td>
-                                <td>
-                                    <?php if (!empty($c['email'])): ?>
-                                        <a href="mailto:<?= e((string) $c['email']) ?>"><?= e((string) $c['email']) ?></a>
-                                    <?php else: ?>—<?php endif; ?>
-                                </td>
-                                <td class="muted" style="font-size:.82rem"><?= e((string) ($c['notes'] ?: '—')) ?></td>
-                                <td>
-                                    <button class="btn btn-ghost btn-sm" type="submit"
-                                            form="supplier-contact-delete-<?= (int) $c['id'] ?>"
-                                            onclick="return confirm('¿Eliminar este contacto?')">
-                                        Eliminar
-                                    </button>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            <?php else: ?>
-                <p class="muted">Aún no hay contactos.</p>
-            <?php endif; ?>
+            <div id="supplier-contacts-list" style="display:flex;flex-direction:column;gap:.75rem">
+                <?php if ($contacts === []): ?>
+                    <p class="muted" id="supplier-contacts-empty" style="margin:0;font-size:.85rem">Aún no hay contactos.</p>
+                <?php endif; ?>
+                <?php foreach ($contacts as $c): ?>
+                    <div class="supplier-contact-row" data-contact-id="<?= (int) $c['id'] ?>"
+                         style="border:1px solid #e6ebf2;border-radius:12px;padding:.75rem .85rem;background:#fff">
+                        <input type="hidden" name="contact_id[]" value="<?= (int) $c['id'] ?>">
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.55rem;align-items:end">
+                            <label class="muted" style="<?= e($labelStyle) ?>">
+                                Área / rol *
+                                <input type="text" name="contact_role_label[]" list="contact-roles" required
+                                       value="<?= e((string) ($c['role_label'] ?? '')) ?>"
+                                       placeholder="Ventas" style="<?= e($inputStyle) ?>">
+                            </label>
+                            <label class="muted" style="<?= e($labelStyle) ?>">
+                                Nombre
+                                <input type="text" name="contact_name[]"
+                                       value="<?= e((string) ($c['name'] ?? '')) ?>" style="<?= e($inputStyle) ?>">
+                            </label>
+                            <label class="muted" style="<?= e($labelStyle) ?>">
+                                Teléfono
+                                <input type="text" name="contact_phone[]"
+                                       value="<?= e((string) ($c['phone'] ?? '')) ?>"
+                                       placeholder="+52 ..." style="<?= e($inputStyle) ?>">
+                            </label>
+                            <label class="muted" style="<?= e($labelStyle) ?>">
+                                Correo
+                                <input type="email" name="contact_email[]"
+                                       value="<?= e((string) ($c['email'] ?? '')) ?>" style="<?= e($inputStyle) ?>">
+                            </label>
+                            <label class="muted" style="<?= e($labelStyle) ?>">
+                                Notas
+                                <input type="text" name="contact_notes[]"
+                                       value="<?= e((string) ($c['notes'] ?? '')) ?>" style="<?= e($inputStyle) ?>">
+                            </label>
+                            <div style="display:flex;justify-content:flex-end;padding-bottom:.15rem">
+                                <button type="button" class="icon-btn supplier-contact-remove"
+                                        title="Eliminar contacto" aria-label="Eliminar contacto"
+                                        style="color:#b42318"><?= icon('trash') ?></button>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+            <datalist id="contact-roles">
+                <?php foreach ($contactRoles as $role): ?>
+                    <option value="<?= e($role) ?>"></option>
+                <?php endforeach; ?>
+            </datalist>
+            <div id="supplier-contact-delete-bag" hidden></div>
+            <div style="margin-top:.85rem;display:flex;gap:.55rem;flex-wrap:wrap;align-items:center">
+                <button type="button" class="btn btn-ghost btn-sm" id="supplier-contact-add">+ Agregar contacto</button>
+                <span class="muted" style="font-size:.8rem">Cada fila necesita área/rol y teléfono o correo.</span>
+            </div>
+        </div>
+    </div>
 
-            <h3 style="font-size:.95rem;color:var(--doceo-blue)">Agregar contacto</h3>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem">
+    <template id="supplier-contact-row-template">
+        <div class="supplier-contact-row" data-contact-id="0"
+             style="border:1px solid #e6ebf2;border-radius:12px;padding:.75rem .85rem;background:#fafcff">
+            <input type="hidden" name="contact_id[]" value="">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.55rem;align-items:end">
                 <label class="muted" style="<?= e($labelStyle) ?>">
-                    Área / rol
-                    <input type="text" name="contact_role_label" list="contact-roles" placeholder="Ventas"
-                           style="<?= e($inputStyle) ?>">
-                    <datalist id="contact-roles">
-                        <?php foreach ($contactRoles as $role): ?>
-                            <option value="<?= e($role) ?>"></option>
-                        <?php endforeach; ?>
-                    </datalist>
+                    Área / rol *
+                    <input type="text" name="contact_role_label[]" list="contact-roles" required
+                           value="" placeholder="Ventas" style="<?= e($inputStyle) ?>">
                 </label>
                 <label class="muted" style="<?= e($labelStyle) ?>">
                     Nombre
-                    <input type="text" name="contact_name" style="<?= e($inputStyle) ?>">
+                    <input type="text" name="contact_name[]" value="" style="<?= e($inputStyle) ?>">
                 </label>
                 <label class="muted" style="<?= e($labelStyle) ?>">
                     Teléfono
-                    <input type="text" name="contact_phone" placeholder="+52 ..." style="<?= e($inputStyle) ?>">
+                    <input type="text" name="contact_phone[]" value="" placeholder="+52 ..." style="<?= e($inputStyle) ?>">
                 </label>
                 <label class="muted" style="<?= e($labelStyle) ?>">
                     Correo
-                    <input type="email" name="contact_email" style="<?= e($inputStyle) ?>">
+                    <input type="email" name="contact_email[]" value="" style="<?= e($inputStyle) ?>">
                 </label>
                 <label class="muted" style="<?= e($labelStyle) ?>">
                     Notas
-                    <input type="text" name="contact_notes" style="<?= e($inputStyle) ?>">
+                    <input type="text" name="contact_notes[]" value="" style="<?= e($inputStyle) ?>">
                 </label>
+                <div style="display:flex;justify-content:flex-end;padding-bottom:.15rem">
+                    <button type="button" class="icon-btn supplier-contact-remove"
+                            title="Quitar" aria-label="Quitar"
+                            style="color:#b42318"><?= icon('trash') ?></button>
+                </div>
             </div>
-            <p class="muted" style="font-size:.8rem;margin:.75rem 0 0">
-                Si dejas «Área / rol» vacío, no se agrega contacto al guardar.
-            </p>
         </div>
-    </div>
+    </template>
 
     <div class="supplier-panel" data-panel="accounts" hidden>
         <div class="panel" style="margin-top:.75rem;max-width:960px">
@@ -259,15 +284,16 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
                                         </p>
                                     <?php endif; ?>
                                 </div>
-                                <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:flex-start">
-                                    <button class="btn btn-ghost btn-sm" type="submit" form="supplier-account-reveal-<?= $aid ?>">
-                                        Ver contraseña
-                                    </button>
-                                    <button class="btn btn-ghost btn-sm" type="submit" form="supplier-account-delete-<?= $aid ?>"
+                                <div style="display:flex;gap:.25rem;flex-wrap:wrap;align-items:flex-start">
+                                    <button class="icon-btn" type="submit" form="supplier-account-reveal-<?= $aid ?>"
+                                            title="Ver contraseña" aria-label="Ver contraseña"><?= icon('key') ?></button>
+                                    <button class="icon-btn" type="button"
+                                            title="Editar acceso" aria-label="Editar acceso"
+                                            onclick="var d=this.closest('article').querySelector('details'); if(d){ d.open=!d.open; }"><?= icon('edit') ?></button>
+                                    <button class="icon-btn" type="submit" form="supplier-account-delete-<?= $aid ?>"
+                                            title="Eliminar acceso" aria-label="Eliminar acceso"
                                             style="color:#b42318"
-                                            onclick="return confirm('¿Eliminar este acceso?')">
-                                        Eliminar
-                                    </button>
+                                            onclick="return confirm('¿Eliminar este acceso?')"><?= icon('trash') ?></button>
                                 </div>
                             </div>
                             <details style="margin-top:.65rem">
@@ -342,13 +368,6 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
     </div>
 </form>
 
-<?php foreach ($contacts as $c): ?>
-    <form id="supplier-contact-delete-<?= (int) $c['id'] ?>" method="post"
-          action="<?= e(url('/admin/proveedores/' . $sid . '/contactos/' . (int) $c['id'] . '/eliminar')) ?>">
-        <?= csrf_field() ?>
-    </form>
-<?php endforeach; ?>
-
 <?php foreach ($accounts as $a): ?>
     <?php $aid = (int) $a['id']; ?>
     <form id="supplier-account-reveal-<?= $aid ?>" method="post"
@@ -422,7 +441,7 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
 </div>
 
 <div class="supplier-sticky-save">
-    <span class="muted" style="font-size:.82rem">Los cambios de Datos, Logos, Contacto nuevo y Acceso nuevo se guardan juntos.</span>
+    <span class="muted" style="font-size:.82rem">Datos, logos, contactos y acceso nuevo se guardan juntos.</span>
     <button class="btn btn-accent" type="submit" form="supplier-main-form">Guardar todo</button>
 </div>
 
@@ -474,5 +493,54 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
   } else {
     activate('general');
   }
+
+  (function setupContactsEditor() {
+    var list = document.getElementById('supplier-contacts-list');
+    var tpl = document.getElementById('supplier-contact-row-template');
+    var addBtn = document.getElementById('supplier-contact-add');
+    var bag = document.getElementById('supplier-contact-delete-bag');
+    if (!list || !tpl || !addBtn || !bag) return;
+
+    function syncEmpty() {
+      var empty = document.getElementById('supplier-contacts-empty');
+      var hasRows = list.querySelectorAll('.supplier-contact-row').length > 0;
+      if (empty) empty.hidden = hasRows;
+      else if (!hasRows) {
+        var p = document.createElement('p');
+        p.id = 'supplier-contacts-empty';
+        p.className = 'muted';
+        p.style.cssText = 'margin:0;font-size:.85rem';
+        p.textContent = 'Aún no hay contactos.';
+        list.prepend(p);
+      }
+    }
+
+    addBtn.addEventListener('click', function () {
+      var empty = document.getElementById('supplier-contacts-empty');
+      if (empty) empty.remove();
+      var node = tpl.content.cloneNode(true);
+      list.appendChild(node);
+      var last = list.querySelector('.supplier-contact-row:last-child input[name="contact_role_label[]"]');
+      if (last) last.focus();
+    });
+
+    list.addEventListener('click', function (e) {
+      var btn = e.target.closest('.supplier-contact-remove');
+      if (!btn) return;
+      var row = btn.closest('.supplier-contact-row');
+      if (!row) return;
+      var id = parseInt(row.getAttribute('data-contact-id') || '0', 10);
+      if (id > 0) {
+        if (!confirm('¿Eliminar este contacto al guardar?')) return;
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'contact_delete_ids[]';
+        input.value = String(id);
+        bag.appendChild(input);
+      }
+      row.remove();
+      syncEmpty();
+    });
+  })();
 })();
 </script>
