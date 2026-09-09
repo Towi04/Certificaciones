@@ -20,6 +20,7 @@ final class CatalogFilterService
     {
         try {
             $this->filters->ensureDefaults();
+            $this->filters->syncCertifierFilters();
 
             return $this->filters->catalogVisible();
         } catch (\Throwable $e) {
@@ -33,6 +34,7 @@ final class CatalogFilterService
     public function adminFilters(): array
     {
         $this->filters->ensureDefaults();
+        $this->filters->syncCertifierFilters();
 
         return $this->filters->adminList();
     }
@@ -105,7 +107,28 @@ final class CatalogFilterService
     public function syncProductFilters(int $productId, array $filterIds): void
     {
         $ids = array_map('intval', $filterIds);
-        $this->filters->setProductFilters($productId, $ids);
+        // Conservar filtros de certificadora: se gestionan desde "Quién certifica".
+        $certifierIds = $this->filters->filterIdsByGroup(CatalogFilterRepository::CERTIFIER_GROUP);
+        $manual = array_values(array_filter(
+            $ids,
+            static fn (int $id): bool => !in_array($id, $certifierIds, true)
+        ));
+        $this->filters->setProductFilters($productId, $manual);
+        $this->syncProductCertifierFilter($productId);
+    }
+
+    /** Reaplica el filtro de certificadora según products.certifier_id. */
+    public function syncProductCertifierFilter(int $productId): void
+    {
+        $product = (new \App\Repositories\ProductRepository())->find($productId);
+        if ($product === null) {
+            return;
+        }
+        $certifierId = isset($product['certifier_id']) ? (int) $product['certifier_id'] : 0;
+        (new ProductAdminService())->ensureCertifierCatalogFilter(
+            $productId,
+            $certifierId > 0 ? $certifierId : null
+        );
     }
 
     /** @return list<int> */

@@ -43,6 +43,7 @@ final class ProductRepository
 
     private const SELECT_WITH_RELATIONS = 'SELECT p.*,
                 c.name AS certifier_name,
+                c.code AS certifier_code,
                 s.name AS supplier_name,
                 s.code AS supplier_code,
                 pg.code AS product_group_code,

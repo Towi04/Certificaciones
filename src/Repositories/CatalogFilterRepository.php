@@ -182,6 +182,122 @@ final class CatalogFilterRepository
         $this->syncProductTagsFromCategories();
     }
 
+    public const CERTIFIER_GROUP = 'Certificadora';
+
+    /**
+     * Crea o actualiza un filtro por slug (p. ej. filtros derivados de certificadoras).
+     *
+     * @param array{is_active?:bool|int,show_in_catalog?:bool|int} $flags
+     */
+    public function ensureFilter(
+        string $slug,
+        string $label,
+        ?string $group,
+        int $sortOrder = 50,
+        array $flags = []
+    ): int {
+        $slug = trim($slug);
+        $label = trim($label);
+        if ($slug === '' || $label === '') {
+            throw new \InvalidArgumentException('Slug y etiqueta del filtro son obligatorios.');
+        }
+
+        $existing = $this->findBySlug($slug);
+        $isActive = array_key_exists('is_active', $flags)
+            ? (!empty($flags['is_active']) ? 1 : 0)
+            : 1;
+        $showInCatalog = array_key_exists('show_in_catalog', $flags)
+            ? (!empty($flags['show_in_catalog']) ? 1 : 0)
+            : 1;
+
+        if ($existing !== null) {
+            $id = (int) $existing['id'];
+            $needsUpdate = (string) ($existing['label'] ?? '') !== $label
+                || (string) ($existing['filter_group'] ?? '') !== (string) ($group ?? '')
+                || (int) ($existing['is_active'] ?? 1) !== $isActive
+                || (int) ($existing['show_in_catalog'] ?? 1) !== $showInCatalog;
+            if ($needsUpdate) {
+                $this->update($id, [
+                    'slug' => $slug,
+                    'label' => $label,
+                    'filter_group' => $group,
+                    'sort_order' => (int) ($existing['sort_order'] ?? $sortOrder),
+                    'is_active' => $isActive,
+                    'show_in_catalog' => $showInCatalog,
+                ]);
+            }
+
+            return $id;
+        }
+
+        return $this->create([
+            'slug' => $slug,
+            'label' => $label,
+            'filter_group' => $group,
+            'sort_order' => $sortOrder,
+            'is_active' => $isActive,
+            'show_in_catalog' => $showInCatalog,
+        ]);
+    }
+
+    /** @return list<int> */
+    public function filterIdsByGroup(string $group): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT id FROM catalog_filters WHERE filter_group = ? ORDER BY id'
+        );
+        $stmt->execute([$group]);
+
+        return array_map('intval', array_column($stmt->fetchAll(), 'id'));
+    }
+
+    /**
+     * Crea filtros de grupo Certificadora y vincula productos según certifier_id.
+     */
+    public function syncCertifierFilters(): void
+    {
+        try {
+            $certs = (new CertifierRepository())->all();
+        } catch (\Throwable $e) {
+            error_log('[Doceo] syncCertifierFilters certifiers: ' . $e->getMessage());
+
+            return;
+        }
+
+        foreach ($certs as $c) {
+            $code = trim((string) ($c['code'] ?? ''));
+            $name = trim((string) ($c['name'] ?? ''));
+            if ($code === '' || $name === '') {
+                continue;
+            }
+            $active = !empty($c['is_active']);
+            $this->ensureFilter(
+                'cert-' . $code,
+                $name,
+                self::CERTIFIER_GROUP,
+                50 + (int) ($c['id'] ?? 0),
+                ['is_active' => $active, 'show_in_catalog' => $active]
+            );
+        }
+
+        try {
+            $this->pdo->exec(
+                'INSERT IGNORE INTO product_catalog_filters (product_id, filter_id)
+                 SELECT p.id, cf.id
+                 FROM products p
+                 INNER JOIN certifiers c ON c.id = p.certifier_id
+                 INNER JOIN catalog_filters cf ON cf.slug = CONCAT(\'cert-\', c.code)
+                   AND cf.filter_group = ' . $this->pdo->quote(self::CERTIFIER_GROUP) . '
+                 WHERE NOT EXISTS (
+                    SELECT 1 FROM product_catalog_filters pcf
+                    WHERE pcf.product_id = p.id AND pcf.filter_id = cf.id
+                 )'
+            );
+        } catch (\Throwable $e) {
+            error_log('[Doceo] syncCertifierFilters backfill: ' . $e->getMessage());
+        }
+    }
+
     public function syncProductTagsFromCategories(): void
     {
         $stmt = $this->pdo->query(
