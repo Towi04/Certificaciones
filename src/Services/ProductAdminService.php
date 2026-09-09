@@ -667,8 +667,29 @@ final class ProductAdminService
                 'price_partner_b' => $get('price_partner_b', $existing['price_partner_b'] ?? ''),
                 'price_partner_c' => $get('price_partner_c', $existing['price_partner_c'] ?? ''),
                 'product_group_id' => $defaultGroupId ?? ($existing['product_group_id'] ?? null),
-                'supplier_id' => $defaultSupplierId ?? ($existing['supplier_id'] ?? null),
+                // No reasignar proveedor en masa al actualizar: conservar el existente
+                // salvo que la fila traiga supplier_code o sea un alta nueva con default.
+                'supplier_id' => $existing['supplier_id'] ?? null,
             ];
+
+            $rowSupplierResolved = false;
+            if (isset($map['supplier_code'])) {
+                $sCode = \App\Services\SupplierAdminService::normalizeCode((string) $get('supplier_code', ''));
+                if ($sCode !== '') {
+                    $supplier = $this->suppliers->findByCode($sCode);
+                    if ($supplier === null) {
+                        $errors[] = "Fila {$line}: proveedor {$sCode} no existe.";
+                        $skipped++;
+                        continue;
+                    }
+                    $input['supplier_id'] = (int) $supplier['id'];
+                    $rowSupplierResolved = true;
+                }
+            }
+            if (!$rowSupplierResolved && $existing === null && $defaultSupplierId !== null) {
+                $input['supplier_id'] = $defaultSupplierId;
+                $rowSupplierResolved = true;
+            }
             if (isset($map['is_public'])) {
                 $raw = trim((string) $get('is_public', ''));
                 if ($raw !== '') {
@@ -708,10 +729,20 @@ final class ProductAdminService
                         continue;
                     }
                     $input['product_group_id'] = (int) $group['id'];
-                    if ($defaultSupplierId === null && empty($existing['supplier_id'] ?? null) && !empty($group['supplier_id'])) {
+                    if (
+                        !$rowSupplierResolved
+                        && $existing === null
+                        && empty($input['supplier_id'])
+                        && !empty($group['supplier_id'])
+                    ) {
                         $input['supplier_id'] = (int) $group['supplier_id'];
                     }
                 }
+            }
+            if ($existing === null && empty($input['supplier_id'])) {
+                $errors[] = "Fila {$line} ({$code}): indica supplier_code en el CSV o elige un proveedor por defecto para altas nuevas.";
+                $skipped++;
+                continue;
             }
             try {
                 if ($existing !== null) {
@@ -752,6 +783,7 @@ final class ProductAdminService
             'price_partner_b',
             'price_partner_c',
             'product_group_code',
+            'supplier_code',
             'is_public',
             'is_star',
         ];
@@ -778,6 +810,7 @@ final class ProductAdminService
             '2400',
             '2450',
             'itep-exams',
+            'itep',
             '1',
             '0',
         ]);
@@ -814,6 +847,7 @@ final class ProductAdminService
                 (string) ($p['price_partner_b'] ?? ''),
                 (string) ($p['price_partner_c'] ?? ''),
                 (string) ($p['product_group_code'] ?? ''),
+                (string) ($p['supplier_code'] ?? ''),
                 !empty($p['is_public']) ? '1' : '0',
                 !empty($p['is_star']) ? '1' : '0',
             ]);
