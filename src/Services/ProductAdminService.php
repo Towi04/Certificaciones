@@ -881,6 +881,15 @@ final class ProductAdminService
         if ($certifierId !== null && $this->certifiers->find($certifierId) === null) {
             throw new \InvalidArgumentException('El certificador seleccionado no existe.');
         }
+        if ($supplierId !== null && $certifierId !== null) {
+            $allowed = $this->suppliers->certifierIds($supplierId);
+            if ($allowed !== [] && !in_array($certifierId, $allowed, true)) {
+                throw new \InvalidArgumentException(
+                    'Esa certificadora no está vinculada a este proveedor. '
+                    . 'Agrégala en Proveedores → Certificadoras.'
+                );
+            }
+        }
 
         $publicPrice = round(max(0, (float) ($input['public_price'] ?? ($existing['public_price'] ?? 0))), 2);
         $catalogRaw = trim((string) ($input['catalog_price'] ?? ''));
