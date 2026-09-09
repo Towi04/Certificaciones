@@ -933,6 +933,15 @@ window.__allCertifiers = <?= json_encode(array_map(static fn ($c) => [
 </script>
 <script>
 (function () {
+  var titleName = document.getElementById('product-edit-title-name');
+  var nameInput = document.getElementById('product-name-input');
+  if (titleName && nameInput) {
+    nameInput.addEventListener('input', function () {
+      var v = (nameInput.value || '').trim();
+      titleName.textContent = v !== '' ? ('· ' + v) : '';
+    });
+  }
+
   var editor = document.querySelector('.product-editor');
   if (!editor) return;
 
