@@ -169,7 +169,7 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.55rem;align-items:end">
                             <label class="muted" style="<?= e($labelStyle) ?>">
                                 Área / rol *
-                                <input type="text" name="contact_role_label[]" list="contact-roles" required
+                                <input type="text" name="contact_role_label[]" list="contact-roles"
                                        value="<?= e((string) ($c['role_label'] ?? '')) ?>"
                                        placeholder="Ventas" style="<?= e($inputStyle) ?>">
                             </label>
@@ -223,7 +223,7 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.55rem;align-items:end">
                 <label class="muted" style="<?= e($labelStyle) ?>">
                     Área / rol *
-                    <input type="text" name="contact_role_label[]" list="contact-roles" required
+                    <input type="text" name="contact_role_label[]" list="contact-roles"
                            value="" placeholder="Ventas" style="<?= e($inputStyle) ?>">
                 </label>
                 <label class="muted" style="<?= e($labelStyle) ?>">
