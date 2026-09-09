@@ -332,7 +332,7 @@ final class ProductAdminService
             'inventory_reallocate_min_future_days' => max(1, (int) (($cfg['inventory'] ?? [])['reallocate_min_future_days'] ?? 14)),
             'inventory_access_mail_template' => (string) (($cfg['inventory'] ?? [])['access_mail_template'] ?? 'student_inventory_exam_access'),
             'inventory_results_mail_template' => (string) (($cfg['inventory'] ?? [])['results_mail_template'] ?? 'student_results_cenni'),
-            'inventory_low_stock_email' => (string) (($cfg['inventory'] ?? [])['low_stock_notify_email'] ?? ''),
+            'inventory_low_stock_mail_template' => trim((string) (($cfg['inventory'] ?? [])['low_stock_mail_template'] ?? '')),
             'reglamento_enabled' => $reg !== [] && (
                 trim((string) ($reg['template_path'] ?? '')) !== ''
                 || trim((string) ($reg['source_url'] ?? '')) !== ''
@@ -1215,6 +1215,7 @@ final class ProductAdminService
         $config['schedule'] = $schedule;
 
         if (!empty($input['inventory_enabled'])) {
+            $prevInv = is_array($config['inventory'] ?? null) ? $config['inventory'] : [];
             $config['inventory'] = [
                 'enabled' => true,
                 'send_access_days_before' => max(0, (int) ($input['inventory_send_days_before'] ?? 3)),
@@ -1224,11 +1225,12 @@ final class ProductAdminService
                 'provider_validity_months' => max(1, (int) ($input['inventory_provider_months'] ?? 12)),
                 'reallocate_enabled' => !empty($input['inventory_reallocate_enabled']),
                 'reallocate_min_future_days' => max(1, (int) ($input['inventory_reallocate_min_future_days'] ?? 14)),
-                'access_mail_template' => trim((string) ($input['inventory_access_mail_template'] ?? ''))
+                // Acceso/resultados se definen en Progreso; se conservan defaults internos si ya existían.
+                'access_mail_template' => trim((string) ($prevInv['access_mail_template'] ?? ''))
                     ?: 'student_inventory_exam_access',
-                'results_mail_template' => trim((string) ($input['inventory_results_mail_template'] ?? ''))
+                'results_mail_template' => trim((string) ($prevInv['results_mail_template'] ?? ''))
                     ?: 'student_results_cenni',
-                'low_stock_notify_email' => trim((string) ($input['inventory_low_stock_email'] ?? '')),
+                'low_stock_mail_template' => trim((string) ($input['inventory_low_stock_mail_template'] ?? '')),
             ];
         } else {
             unset($config['inventory']);
@@ -1372,14 +1374,8 @@ final class ProductAdminService
             unset($config['pipeline_code']);
         }
 
-        $initialStep = strtolower(trim((string) ($input['initial_step_code'] ?? '')));
-        $initialStep = preg_replace('/[^a-z0-9_]+/', '_', $initialStep) ?? '';
-        $initialStep = trim($initialStep, '_');
-        if ($initialStep !== '') {
-            $config['initial_step_code'] = $initialStep;
-        } else {
-            unset($config['initial_step_code']);
-        }
+        // El paso inicial siempre es el primero de la plantilla de progreso.
+        unset($config['initial_step_code']);
 
         $config = $this->applyProviderRequestConfig($config, $input);
         $config = $this->applyEmailsConfig($config, $input);
@@ -1760,8 +1756,11 @@ final class ProductAdminService
                 'code' => $code,
                 'label' => (string) ($row['label'] ?? $code),
                 'actor' => (string) ($row['actor'] ?? 'admin'),
-                'is_terminal' => !empty($row['is_terminal']),
+                'is_terminal' => false,
             ];
+        }
+        if ($steps !== []) {
+            $steps[count($steps) - 1]['is_terminal'] = true;
         }
         $repo->replaceSteps((int) $tpl['id'], $steps);
     }
