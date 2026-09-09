@@ -100,6 +100,7 @@ $extraColHeader = count($extraColLabels) === 1
             <table class="data ops-table">
                 <thead>
                 <tr>
+                    <th>Triggers</th>
                     <th>Matrícula</th>
                     <th>Alumno</th>
                     <th>Producto</th>
@@ -109,7 +110,6 @@ $extraColHeader = count($extraColLabels) === 1
                     <th>Folio</th>
                     <th>Clave</th>
                     <th title="Campo extra del grupo (Zoom, ID escuela, código de acceso…)"><?= e($extraColHeader) ?></th>
-                    <th>Triggers</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -144,80 +144,6 @@ $extraColHeader = count($extraColLabels) === 1
                     }
                     ?>
                     <tr class="<?= e($rowClass) ?>" data-tracking-id="<?= $tid ?>">
-                        <td>
-                            <a href="<?= e(url('/admin/seguimientos/' . $tid)) ?>"><strong><?= e((string) $r['matricula']) ?></strong></a>
-                            <?php if (!empty($r['partner_code'])): ?>
-                                <div class="muted" style="font-size:.72rem"><?= e((string) $r['partner_code']) ?></div>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <div><?= e((string) ($r['student_full_name'] ?? '')) ?></div>
-                            <div class="muted" style="font-size:.75rem"><?= e((string) ($r['student_email'] ?? '')) ?></div>
-                            <?php if (!empty($r['student_phone'])): ?>
-                                <div class="muted" style="font-size:.72rem"><?= e((string) $r['student_phone']) ?></div>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <div><?= e((string) ($r['product_name'] ?? '')) ?></div>
-                            <div class="muted" style="font-size:.72rem"><?= e((string) ($r['product_code'] ?? '')) ?></div>
-                        </td>
-                        <td>
-                            <span class="pill"><?= e((string) ($r['purchase_status'] ?? '')) ?></span>
-                            <div class="muted" style="font-size:.72rem;margin-top:.2rem"><?= money($r['charged_amount'] ?? 0) ?></div>
-                        </td>
-                        <td>
-                            <span class="pill"><?= e((string) ($r['current_step_code'] ?? '—')) ?></span>
-                            <div class="muted" style="font-size:.72rem"><?= e((string) ($r['tracking_status'] ?? '')) ?></div>
-                        </td>
-                        <td style="white-space:nowrap;font-size:.82rem">
-                            <?php if ($exam === ''): ?>
-                                <span class="muted">—</span>
-                            <?php else: ?>
-                                <span class="ops-exam-pill ops-exam-pill--<?= e($examTone) ?>"
-                                      title="<?= $examTone === 'today' ? 'Examen hoy'
-                                          : ($examTone === 'tomorrow' ? 'Examen mañana'
-                                          : ($examTone === 'future' ? 'Examen futuro' : 'Fecha pasada')) ?>">
-                                    <?= e($exam) ?>
-                                </span>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <?php if (!empty($r['show_folio_fields'])): ?>
-                                <input class="ops-input ops-folio" type="text"
-                                       id="ops-folio-<?= $tid ?>"
-                                       name="folio_display"
-                                       value="<?= e((string) ($r['folio'] ?? '')) ?>"
-                                       placeholder="Folio" autocomplete="off" data-tid="<?= $tid ?>">
-                            <?php else: ?>
-                                <span class="muted">—</span>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <?php if (!empty($r['show_folio_fields'])): ?>
-                                <input class="ops-input ops-key" type="text"
-                                       id="ops-key-<?= $tid ?>"
-                                       name="access_key_display"
-                                       value="<?= e((string) ($r['access_key'] ?? '')) ?>"
-                                       placeholder="Clave" autocomplete="off" data-tid="<?= $tid ?>">
-                            <?php else: ?>
-                                <span class="muted">—</span>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <?php if (!empty($r['show_zoom_fields'])): ?>
-                                <?php $extraLbl = trim((string) ($r['extra_field_label'] ?? 'Extra')) ?: 'Extra'; ?>
-                                <input class="ops-input ops-zoom" type="text"
-                                       id="ops-zoom-<?= $tid ?>"
-                                       name="zoom_url_display"
-                                       value="<?= e((string) ($r['zoom_url'] ?? '')) ?>"
-                                       placeholder="<?= e($extraLbl) ?>"
-                                       title="<?= e($extraLbl) ?>"
-                                       autocomplete="off" data-tid="<?= $tid ?>"
-                                       style="min-width:9.5rem;max-width:14rem">
-                            <?php else: ?>
-                                <span class="muted">—</span>
-                            <?php endif; ?>
-                        </td>
                         <td class="ops-actions">
                             <?php
                             $opsButtons = is_array($r['ops_buttons'] ?? null) ? $r['ops_buttons'] : [];
@@ -519,6 +445,80 @@ $extraColHeader = count($extraColLabels) === 1
                                 <span class="ops-flag ops-flag--ok">Al día</span>
                             <?php endif; ?>
                         </td>
+                        <td>
+                            <a href="<?= e(url('/admin/seguimientos/' . $tid)) ?>"><strong><?= e((string) $r['matricula']) ?></strong></a>
+                            <?php if (!empty($r['partner_code'])): ?>
+                                <div class="muted" style="font-size:.72rem"><?= e((string) $r['partner_code']) ?></div>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <div><?= e((string) ($r['student_full_name'] ?? '')) ?></div>
+                            <div class="muted" style="font-size:.75rem"><?= e((string) ($r['student_email'] ?? '')) ?></div>
+                            <?php if (!empty($r['student_phone'])): ?>
+                                <div class="muted" style="font-size:.72rem"><?= e((string) $r['student_phone']) ?></div>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <div><?= e((string) ($r['product_name'] ?? '')) ?></div>
+                            <div class="muted" style="font-size:.72rem"><?= e((string) ($r['product_code'] ?? '')) ?></div>
+                        </td>
+                        <td>
+                            <span class="pill"><?= e((string) ($r['purchase_status'] ?? '')) ?></span>
+                            <div class="muted" style="font-size:.72rem;margin-top:.2rem"><?= money($r['charged_amount'] ?? 0) ?></div>
+                        </td>
+                        <td>
+                            <span class="pill"><?= e((string) ($r['current_step_code'] ?? '—')) ?></span>
+                            <div class="muted" style="font-size:.72rem"><?= e((string) ($r['tracking_status'] ?? '')) ?></div>
+                        </td>
+                        <td style="white-space:nowrap;font-size:.82rem">
+                            <?php if ($exam === ''): ?>
+                                <span class="muted">—</span>
+                            <?php else: ?>
+                                <span class="ops-exam-pill ops-exam-pill--<?= e($examTone) ?>"
+                                      title="<?= $examTone === 'today' ? 'Examen hoy'
+                                          : ($examTone === 'tomorrow' ? 'Examen mañana'
+                                          : ($examTone === 'future' ? 'Examen futuro' : 'Fecha pasada')) ?>">
+                                    <?= e($exam) ?>
+                                </span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if (!empty($r['show_folio_fields'])): ?>
+                                <input class="ops-input ops-folio" type="text"
+                                       id="ops-folio-<?= $tid ?>"
+                                       name="folio_display"
+                                       value="<?= e((string) ($r['folio'] ?? '')) ?>"
+                                       placeholder="Folio" autocomplete="off" data-tid="<?= $tid ?>">
+                            <?php else: ?>
+                                <span class="muted">—</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if (!empty($r['show_folio_fields'])): ?>
+                                <input class="ops-input ops-key" type="text"
+                                       id="ops-key-<?= $tid ?>"
+                                       name="access_key_display"
+                                       value="<?= e((string) ($r['access_key'] ?? '')) ?>"
+                                       placeholder="Clave" autocomplete="off" data-tid="<?= $tid ?>">
+                            <?php else: ?>
+                                <span class="muted">—</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if (!empty($r['show_zoom_fields'])): ?>
+                                <?php $extraLbl = trim((string) ($r['extra_field_label'] ?? 'Extra')) ?: 'Extra'; ?>
+                                <input class="ops-input ops-zoom" type="text"
+                                       id="ops-zoom-<?= $tid ?>"
+                                       name="zoom_url_display"
+                                       value="<?= e((string) ($r['zoom_url'] ?? '')) ?>"
+                                       placeholder="<?= e($extraLbl) ?>"
+                                       title="<?= e($extraLbl) ?>"
+                                       autocomplete="off" data-tid="<?= $tid ?>"
+                                       style="min-width:9.5rem;max-width:14rem">
+                            <?php else: ?>
+                                <span class="muted">—</span>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                 <?php endforeach; ?>
                 <?php if ($rows === []): ?>
@@ -568,6 +568,17 @@ $extraColHeader = count($extraColLabels) === 1
   border:1px solid #cfd8e6; border-radius:8px;
 }
 .ops-actions { min-width:12.5rem; }
+.ops-table th:first-child,
+.ops-table td.ops-actions {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
+}
+.ops-table th:first-child { z-index: 3; background:#f7fafc; }
+.ops-table tr.ops-row--pay td.ops-actions { background:#fffbeb; }
+.ops-table tr.ops-row--provider td.ops-actions { background:#fff7ed; }
+.ops-table tr.ops-row--access td.ops-actions { background:#f0f7ff; }
 .ops-view-hint { margin:0; font-size:.82rem; max-width:52rem; }
 .ops-exam-pill {
   display:inline-flex; align-items:center; gap:.25rem;
