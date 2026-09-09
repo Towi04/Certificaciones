@@ -220,13 +220,13 @@ final class ExportService
             throw new \RuntimeException('No se pudo generar el CSV.');
         }
 
-        fputcsv($stream, $headers);
+        csv_put($stream, $headers);
         foreach ($rows as $row) {
             $line = [];
             foreach ($headers as $header) {
                 $line[] = $row[$header] ?? '';
             }
-            fputcsv($stream, $line);
+            csv_put($stream, $line);
         }
 
         rewind($stream);

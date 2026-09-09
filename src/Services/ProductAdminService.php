@@ -476,21 +476,19 @@ final class ProductAdminService
     public function sendPriceTemplateCsv(array $products, string $filename = 'plantilla-precios.csv'): void
     {
         $headers = self::priceCsvHeaders();
-        header('Content-Type: text/csv; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        echo "\xEF\xBB\xBF";
+        csv_download_headers($filename);
         $out = fopen('php://output', 'w');
         if ($out === false) {
             throw new \RuntimeException('No se pudo generar el CSV.');
         }
-        fputcsv($out, $headers);
+        csv_put($out, $headers);
         foreach ($products as $p) {
             $row = [];
             foreach ($headers as $h) {
                 $val = $p[$h] ?? '';
                 $row[] = $val === null ? '' : (string) $val;
             }
-            fputcsv($out, $row);
+            csv_put($out, $row);
         }
         fclose($out);
         exit;
@@ -682,15 +680,13 @@ final class ProductAdminService
 
     public function sendProductBulkTemplateCsv(string $filename = 'plantilla-certificaciones.csv'): void
     {
-        header('Content-Type: text/csv; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        echo "\xEF\xBB\xBF";
+        csv_download_headers($filename);
         $out = fopen('php://output', 'w');
         if ($out === false) {
             throw new \RuntimeException('No se pudo generar el CSV.');
         }
-        fputcsv($out, self::productBulkCsvHeaders());
-        fputcsv($out, [
+        csv_put($out, self::productBulkCsvHeaders());
+        csv_put($out, [
             'EJEMPLO-B1',
             'Certificación ejemplo B1',
             'certification',

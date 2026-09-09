@@ -104,15 +104,12 @@ final class AdminController
 
         $rows = (new AdminOpsBoardService())->list($filters, null, 0);
         $filename = 'operacion-' . date('Y-m-d-His') . '.csv';
-        header('Content-Type: text/csv; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Cache-Control: no-store');
-        echo "\xEF\xBB\xBF";
+        csv_download_headers($filename);
         $out = fopen('php://output', 'w');
         if ($out === false) {
             exit;
         }
-        fputcsv($out, [
+        csv_put($out, [
             'Matrícula', 'Alumno', 'Email', 'Teléfono', 'Partner', 'Producto', 'Código producto',
             'Pago', 'Paso', 'Estado caso', 'Examen', 'Folio', 'Clave', 'Extra', 'Proveedor', 'CENNI', 'Actualizado',
         ]);
@@ -121,7 +118,7 @@ final class AdminController
             $provider = !empty($r['provider_sent_at'])
                 ? 'enviado'
                 : (!empty($r['provider_pending']) ? 'pendiente' : (!empty($r['provider_enabled']) ? 'n/a' : '—'));
-            fputcsv($out, [
+            csv_put($out, [
                 $r['matricula'] ?? '',
                 $r['student_full_name'] ?? '',
                 $r['student_email'] ?? '',

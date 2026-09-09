@@ -263,6 +263,30 @@ function money(float|int|string|null $amount): string
 }
 
 /**
+ * fputcsv con $escape explícito (PHP 8.4+ depreca el default implícito).
+ * Evita que warnings HTML contaminen descargas CSV.
+ *
+ * @param resource $stream
+ * @param list<null|scalar> $fields
+ */
+function csv_put($stream, array $fields, string $separator = ',', string $enclosure = '"', string $escape = '\\'): int|false
+{
+    return fputcsv($stream, $fields, $separator, $enclosure, $escape);
+}
+
+/** Limpia buffers previos para que descargas CSV no mezclen HTML/warnings. */
+function csv_download_headers(string $filename, string $contentType = 'text/csv; charset=UTF-8'): void
+{
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    header('Content-Type: ' . $contentType);
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Cache-Control: no-store');
+    echo "\xEF\xBB\xBF";
+}
+
+/**
  * Iconos SVG monocromáticos (usan currentColor).
  */
 function icon(string $name): string
