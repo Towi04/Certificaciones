@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Config\Env;
-use App\Integrations\Mailer;
 use App\Repositories\InventoryRepository;
 use App\Repositories\ProductRepository;
 use App\Support\Settings;
@@ -51,6 +50,8 @@ final class InventoryService
                 ?: 'student_inventory_exam_access',
             'results_mail_template' => trim((string) ($inv['results_mail_template'] ?? 'student_results_cenni'))
                 ?: 'student_results_cenni',
+            'low_stock_mail_template' => trim((string) ($inv['low_stock_mail_template'] ?? '')),
+            // Legacy: email fijo (solo fallback si no hay plantilla).
             'low_stock_notify_email' => trim((string) ($inv['low_stock_notify_email'] ?? '')),
         ];
     }
@@ -417,11 +418,8 @@ final class InventoryService
             return;
         }
 
-        $to = $cfg['low_stock_notify_email'];
-        if ($to === '') {
-            $to = trim((string) (Env::get('SMTP_FROM', '') ?? ''));
-        }
-        if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        $templateCode = trim((string) ($cfg['low_stock_mail_template'] ?? ''));
+        if ($templateCode === '') {
             return;
         }
 
@@ -431,20 +429,28 @@ final class InventoryService
             return; // 1 alerta / día
         }
 
-        $body = '<p>Stock bajo de códigos de inventario.</p>'
-            . '<p><strong>Producto:</strong> ' . htmlspecialchars((string) ($product['name'] ?? ''), ENT_QUOTES, 'UTF-8')
-            . ' (' . htmlspecialchars((string) ($product['code'] ?? ''), ENT_QUOTES, 'UTF-8') . ')</p>'
-            . '<p><strong>Disponibles:</strong> ' . (int) $counts['available']
-            . ' · umbral: ' . $threshold . '</p>'
-            . '<p>Sube un nuevo lote en Admin → Inventario.</p>';
+        $vars = [
+            'product_name' => (string) ($product['name'] ?? ''),
+            'product_code' => (string) ($product['code'] ?? ''),
+            'stock_available' => (string) (int) $counts['available'],
+            'stock_threshold' => (string) $threshold,
+            'certificacion' => (string) ($product['name'] ?? ''),
+        ];
 
         try {
-            (new Mailer())->send(
-                $to,
-                'Stock bajo · ' . (string) ($product['code'] ?? 'inventario'),
-                strip_tags($body),
-                ['html' => true, 'body_html' => \App\Mail\MailBranding::wrap($body)]
-            );
+            $mail = new MailTemplateService();
+            if ($mail->render($templateCode, $vars) === null) {
+                return;
+            }
+            $to = $mail->routing($templateCode)['to'];
+            if ($to === '') {
+                $to = trim((string) (Env::get('SMTP_FROM', '') ?? ''));
+            }
+            if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+                // Intentar lista de destinatarios en routing.to (puede ser placeholder ya resuelto).
+                return;
+            }
+            $mail->send($templateCode, $to, $vars);
             Settings::set($key, (string) time());
         } catch (\Throwable $e) {
             error_log('[Doceo] low stock mail: ' . $e->getMessage());

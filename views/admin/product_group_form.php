@@ -85,13 +85,6 @@ $renderMailTemplateField = static function (
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">
     <?= $isEdit ? 'Editar grupo' : 'Nuevo grupo de producto' ?>
 </h1>
-<p class="muted">
-    Configura lo compartido por varias certificaciones del mismo proveedor:
-    datos del alumno, fechas/horarios, inventario, campo extra (Zoom/ID/código…), docs para correos,
-    reglamento, pagos y la tarjeta de <strong>Progreso</strong> del caso.
-    Las <a href="<?= e(url('/admin/vacaciones')) ?>"><strong>vacaciones globales</strong></a>
-    se publican una sola vez (excepto grupos marcados como 365 días).
-</p>
 
 <nav class="group-tabs" role="tablist" aria-label="Secciones del grupo">
     <button type="button" class="group-tab active" data-tab="general" role="tab" aria-selected="true">General</button>
@@ -126,7 +119,6 @@ $renderMailTemplateField = static function (
                     <input type="text" name="code" id="group-code" readonly maxlength="40"
                            value="<?= e($groupCode) ?>"
                            style="<?= e($inputStyle) ?>;background:#f4f7fb">
-                    <span style="font-weight:500;font-size:.78rem">Se asignó al crear el grupo; no se edita.</span>
                 </label>
             <?php else: ?>
                 <input type="hidden" name="code" id="group-code" value="">
@@ -159,11 +151,6 @@ $renderMailTemplateField = static function (
 
     <div class="group-panel" data-panel="fields" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Datos que se piden al alumno</h2>
-        <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
-            Marca qué información debe capturar el alumno y, para cada campo, si es
-            <strong>obligatorio</strong> u <strong>opcional</strong> cuando se pide.
-            Los campos personalizados se pueden editar (nombre, tipo, opciones si es lista) y quedan disponibles en todos los grupos.
-        </p>
         <div class="field-check-grid" id="checkout-field-grid">
             <?php foreach ($fieldMeta as $code => $meta): ?>
                 <?php
@@ -199,11 +186,6 @@ $renderMailTemplateField = static function (
                             Obligatorio en toda compra
                         </span>
                     <?php else: ?>
-                        <?php if ($code === 'sex'): ?>
-                            <span class="muted" style="display:block;font-size:.75rem;font-weight:500;margin:.15rem 0 .35rem 1.55rem">
-                                El alumno ve «Femenino / Masculino»; se guarda como <strong>F</strong> o <strong>M</strong>.
-                            </span>
-                        <?php endif; ?>
                         <label class="field-required-toggle muted" title="Si el campo se pide al alumno">
                             <select name="checkout_field_required[<?= e($code) ?>]" class="field-required-select"
                                     aria-label="Obligatorio u opcional">
@@ -235,11 +217,7 @@ $renderMailTemplateField = static function (
         </div>
 
         <div class="add-checkout-field" style="margin-top:1.1rem;padding:1rem;border:1px dashed #9db7e8;border-radius:14px;background:#f7faff">
-            <h3 style="margin:0 0 .35rem;font-size:.95rem;color:var(--doceo-blue)">Agregar campo nuevo</h3>
-            <p class="muted" style="margin:0 0 .75rem;font-size:.8rem">
-                El campo se guarda en el catálogo global y aparecerá en la lista de selección de <strong>todos</strong> los grupos.
-                Al guardar este grupo quedará marcado aquí automáticamente.
-            </p>
+            <h3 style="margin:0 0 .75rem;font-size:.95rem;color:var(--doceo-blue)">Agregar campo nuevo</h3>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.65rem;align-items:end">
                 <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
                     Nombre del campo *
@@ -334,10 +312,6 @@ $renderMailTemplateField = static function (
 
     <div class="group-panel" data-panel="schedule" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Fechas y horarios de aplicación</h2>
-        <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
-            Casi todas las certificaciones piden fecha y hora en el checkout (soporte y caducidad).
-            Marca los días en que se puede presentar el examen.
-        </p>
 
         <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:.65rem">
             <input type="checkbox" name="exam_choose_at_checkout" value="1"
@@ -362,9 +336,6 @@ $renderMailTemplateField = static function (
                     </option>
                 <?php endforeach; ?>
             </select>
-            <span style="font-weight:500;font-size:.75rem">
-                Todas guardan en <code>exam_date</code> / <code>exam_time</code> para los placeholders de correo.
-            </span>
         </label>
 
         <label class="muted" style="<?= e($labelStyle) ?>;margin-bottom:.85rem">
@@ -378,13 +349,7 @@ $renderMailTemplateField = static function (
         <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:1rem">
             <input type="checkbox" name="schedule_available_365" value="1" style="margin-top:.2rem"
                 <?= !empty($extras['schedule_available_365']) ? 'checked' : '' ?>>
-            <span>
-                Disponible los 365 días del año
-                <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin-top:.15rem">
-                    Si se marca, <strong>no</strong> aplican las vacaciones globales DOCEO.
-                    Igual se pide fecha/hora si la opción de arriba está activa.
-                </span>
-            </span>
+            <span>Disponible los 365 días del año</span>
         </label>
 
         <div style="margin-bottom:1rem">
@@ -408,17 +373,16 @@ $renderMailTemplateField = static function (
                        style="<?= e($inputStyle) ?>">
             </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
-                Anticipo mínimo (días)
+                Antelación (días)
                 <input type="number" name="schedule_min_advance_days" min="0" step="1"
                        value="<?= (int) ($extras['schedule_min_advance_days'] ?? 2) ?>"
                        style="<?= e($inputStyle) ?>">
             </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
-                Caducidad para presentar (meses)
+                Caducidad
                 <input type="number" name="exam_validity_months" min="1" max="36" step="1"
                        value="<?= (int) ($extras['exam_validity_months'] ?? 6) ?>"
                        style="<?= e($inputStyle) ?>">
-                <span style="font-weight:500;font-size:.75rem">Normalmente 6 meses; después pueden comprar prórroga.</span>
             </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
                 Lun–Vie desde
@@ -431,7 +395,6 @@ $renderMailTemplateField = static function (
                 <input type="text" name="schedule_weekdays_end" placeholder="17:30"
                        value="<?= e((string) ($extras['schedule_weekdays_end'] ?? '17:30')) ?>"
                        style="<?= e($inputStyle) ?>">
-                <span style="font-weight:500;font-size:.75rem">Usa 24:00 para cubrir hasta medianoche.</span>
             </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
                 Fin de semana desde
@@ -444,7 +407,6 @@ $renderMailTemplateField = static function (
                 <input type="text" name="schedule_saturday_end" placeholder="12:00"
                        value="<?= e((string) ($extras['schedule_saturday_end'] ?? '12:00')) ?>"
                        style="<?= e($inputStyle) ?>">
-                <span style="font-weight:500;font-size:.75rem">También acepta 24:00.</span>
             </label>
         </div>
         <p class="muted" style="font-size:.78rem;margin:.75rem 0 0">
@@ -553,23 +515,22 @@ $renderMailTemplateField = static function (
                        style="<?= e($inputStyle) ?>">
             </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
-                Plantilla correo acceso
-                <input type="text" name="inventory_access_mail_template"
-                       value="<?= e((string) ($extras['inventory_access_mail_template'] ?? 'student_inventory_exam_access')) ?>"
-                       style="<?= e($inputStyle) ?>">
-            </label>
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Plantilla resultados/CENNI
-                <input type="text" name="inventory_results_mail_template"
-                       value="<?= e((string) ($extras['inventory_results_mail_template'] ?? 'student_results_cenni')) ?>"
-                       style="<?= e($inputStyle) ?>">
-            </label>
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Email alerta stock
-                <input type="email" name="inventory_low_stock_email"
-                       value="<?= e((string) ($extras['inventory_low_stock_email'] ?? '')) ?>"
-                       placeholder="ops@…"
-                       style="<?= e($inputStyle) ?>">
+                Plantilla alerta stock
+                <select name="inventory_low_stock_mail_template" style="<?= e($inputStyle) ?>">
+                    <option value="">— Sin alerta —</option>
+                    <?php
+                    $lowStockTpl = (string) ($extras['inventory_low_stock_mail_template'] ?? '');
+                    foreach ($mailTemplates as $tpl):
+                        $tplCode = (string) ($tpl['code'] ?? '');
+                        if ($tplCode === '') {
+                            continue;
+                        }
+                        ?>
+                        <option value="<?= e($tplCode) ?>" <?= $lowStockTpl === $tplCode ? 'selected' : '' ?>>
+                            <?= e((string) ($tpl['name'] ?? $tplCode)) ?> (<?= e($tplCode) ?>)
+                        </option>
+                    <?php endforeach; ?>
+                </select>
             </label>
         </div>
         <label class="muted" style="display:flex;align-items:center;gap:.45rem;font-size:.88rem;font-weight:600;margin-top:.75rem">
@@ -581,14 +542,6 @@ $renderMailTemplateField = static function (
 
     <div class="group-panel" data-panel="extra" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Campo extra de acceso</h2>
-        <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
-            Tercer dato por alumno (además de folio y clave), libre según la certificación:
-            enlace Zoom, ID de escuela (OOPT), código de acceso al curso (Excel), etc.
-            En Operación aparece una columna con la etiqueta que elijas. En plantillas de correo
-            usa el valor crudo (tú decides si va en <code>&lt;a&gt;</code>, <code>&lt;strong&gt;</code>, etc.):
-            <code>{{zoom}}</code>, <code>{{zoom_url}}</code> o <code>{{extra}}</code>;
-            la etiqueta con <code>{{extra_label}}</code> / <code>{{zoom_label}}</code>.
-        </p>
         <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:1rem">
             <input type="checkbox" name="exam_capture_zoom" value="1" style="margin-top:.2rem"
                 <?= !empty($extras['exam_capture_zoom']) ? 'checked' : '' ?>>
@@ -601,24 +554,13 @@ $renderMailTemplateField = static function (
                    placeholder="Ej. Zoom, ID escuela, Código de acceso…"
                    style="<?= e($inputStyle) ?>">
             <span class="muted" style="font-weight:500;font-size:.75rem;margin-top:.25rem;display:block">
-                Si la dejas vacía se usa «Zoom» (compatibilidad con TOEFL / Lingua Franca).
+                Si la dejas vacía se usa «Zoom».
             </span>
         </label>
     </div>
 
     <div class="group-panel" data-panel="docs" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Docs para correos</h2>
-        <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
-            Sube varios archivos (PDF/DOC) o enlaces a videos/documentos que necesites en las plantillas.
-            Cada fila tiene un <strong>código</strong> para placeholders:
-            <code>{{doc_<em>codigo</em>_url}}</code>,
-            <code>{{doc_<em>codigo</em>_label}}</code>.
-            También puedes usar
-            <code>{{instruction_docs_html}}</code> (lista de todos),
-            <code>{{instructions_html}}</code>,
-            <code>{{instruction_pdf_url}}</code> y
-            <code>{{instruction_video_url}}</code> (primer archivo/enlace y primer video).
-        </p>
         <?php
         $instructionDocs = is_array($extras['instruction_docs'] ?? null) ? $extras['instruction_docs'] : [];
         if ($instructionDocs === []) {
@@ -776,9 +718,7 @@ $renderMailTemplateField = static function (
                 <input type="text" name="reglamento_doc_code" id="reglamento_doc_code"
                        value="<?= e($docCode) ?>"
                        style="<?= e($inputStyle) ?>">
-                <span id="doc-code-hint" style="font-weight:500;font-size:.78rem">
-                    Se propone automáticamente según el código del grupo. Puedes editarlo.
-                </span>
+                <span id="doc-code-hint" style="font-weight:500;font-size:.78rem"></span>
             </label>
         </div>
     </div>
@@ -786,7 +726,7 @@ $renderMailTemplateField = static function (
     <div class="group-panel" data-panel="payments" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Pagos y MSI</h2>
         <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
-            Elige cómo pueden pagar los alumnos. No necesitas editar JSON.
+            Elige cómo pueden pagar los alumnos.
         </p>
         <div style="display:flex;flex-direction:column;gap:.55rem;margin-bottom:1rem">
             <label style="display:flex;gap:.45rem;align-items:center;font-weight:600">
@@ -821,7 +761,6 @@ $renderMailTemplateField = static function (
     $pipelines = $pipelines ?? [];
     $pipelineStepsByCode = $pipelineStepsByCode ?? [];
     $selectedPipeline = (string) ($extras['pipeline_code'] ?? '');
-    $selectedInitialStep = (string) ($extras['initial_step_code'] ?? '');
     ?>
     <div class="group-panel" data-panel="progress" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Progreso y acciones</h2>
@@ -835,12 +774,7 @@ $renderMailTemplateField = static function (
 
         <div class="panel" style="margin:0 0 1rem;padding:.85rem 1rem;background:#f8fafc">
             <strong style="color:var(--doceo-blue);font-size:.92rem">Resumen de correos</strong>
-            <p class="muted" style="font-size:.78rem;margin:.25rem 0 .65rem">
-                Solo lectura. Los correos se configuran en <strong>cada paso</strong> más abajo
-                («Enviar correo» + plantilla + Cuándo). Aquí ves el total y si son
-                automáticos o los dispara el admin en Operación.
-            </p>
-            <div id="step-emails-summary" class="muted" style="font-size:.82rem;margin:0"></div>
+            <div id="step-emails-summary" class="muted" style="font-size:.82rem;margin:.45rem 0 0"></div>
         </div>
 
         <?php if ($pipelines === []): ?>
@@ -863,24 +797,10 @@ $renderMailTemplateField = static function (
                 </select>
             </label>
 
-            <label class="muted" style="<?= e($labelStyle) ?>;max-width:34rem;margin-bottom:1rem">
-                Paso inicial al crear el caso
-                <select name="initial_step_code" id="pipeline-initial-step" style="<?= e($inputStyle) ?>">
-                    <option value="">— Primero de la plantilla —</option>
-                </select>
-            </label>
-
             <div style="display:flex;justify-content:space-between;gap:.75rem;align-items:center;flex-wrap:wrap;margin-bottom:.55rem">
                 <strong style="color:var(--doceo-blue)">Pasos</strong>
                 <button type="button" class="btn btn-ghost btn-sm" id="pipeline-add-step">+ Agregar paso</button>
             </div>
-            <p class="muted" style="font-size:.78rem;margin:0 0 .65rem">
-                Arrastra las tarjetas (☰) para cambiar el orden. Acciones en Operación (solo 3):
-                <em>Solo progreso</em>, <em>Enviar correo (plantilla)</em> o <em>Avanzar / marcar hecho</em>.
-                El correo lo defines en el paso (plantilla y su destinatario en Admin → Correos).
-                Si el paso es de reagendar/fecha, Operación muestra fecha/hora y envía esa plantilla
-                (p. ej. al proveedor, sin reglamento/pago de la solicitud inicial).
-            </p>
             <div id="pipeline-steps-body" class="progress-steps-list"></div>
             <p id="pipeline-steps-empty" class="muted" style="display:none;margin:.5rem 0 0">
                 Elige una plantilla para editar sus pasos.
@@ -1108,7 +1028,7 @@ $renderMailTemplateField = static function (
       if (duplicate) {
         hint.innerHTML = '<span class="doc-code-error">Este código ya lo usa el grupo <code>' + owner + '</code>.</span>';
       } else {
-        hint.textContent = 'Se propone automáticamente según el nombre del grupo. Puedes editarlo.';
+        hint.textContent = '';
       }
     }
     return !duplicate;
@@ -1317,9 +1237,7 @@ $renderMailTemplateField = static function (
     var pipelineCode = val('pipeline_code', '');
     if (pipelineCode) base.pipeline_code = pipelineCode;
     else delete base.pipeline_code;
-    var initialStep = val('initial_step_code', '');
-    if (initialStep) base.initial_step_code = initialStep;
-    else delete base.initial_step_code;
+    delete base.initial_step_code;
 
     if (document.getElementById('provider-request-enabled') && document.getElementById('provider-request-enabled').checked) {
       var cellMap = [];
@@ -1666,9 +1584,7 @@ $renderMailTemplateField = static function (
   }, $mailTemplates)), JSON_UNESCAPED_UNICODE) ?> || [];
   var actionOptions = <?= json_encode(\App\Services\GroupStepConfig::ACTIONS_EDITABLE, JSON_UNESCAPED_UNICODE) ?>;
   var allActionLabels = <?= json_encode(\App\Services\GroupStepConfig::ACTIONS, JSON_UNESCAPED_UNICODE) ?>;
-  var initialSelectedStep = <?= json_encode($selectedInitialStep ?? '', JSON_UNESCAPED_UNICODE) ?>;
   var pipelineSelect = document.getElementById('pipeline-code-select');
-  var initialSelect = document.getElementById('pipeline-initial-step');
   var stepsBody = document.getElementById('pipeline-steps-body');
   var stepsEmpty = document.getElementById('pipeline-steps-empty');
   var addStepBtn = document.getElementById('pipeline-add-step');
@@ -1718,7 +1634,6 @@ $renderMailTemplateField = static function (
       var code = g('code');
       var label = g('label');
       var actor = g('actor');
-      var term = g('terminal');
       var adminOnly = g('admin_only');
       var opsBtn = g('ops_button');
       var opsLabel = g('ops_label');
@@ -1733,7 +1648,7 @@ $renderMailTemplateField = static function (
         code: codeVal,
         label: labelVal,
         actor: actor ? actor.value : 'admin',
-        is_terminal: !!(term && term.checked),
+        is_terminal: false,
         admin_only: !!(adminOnly && adminOnly.checked),
         ops_button: !!(opsBtn && opsBtn.checked),
         ops_label: opsLabel ? opsLabel.value : '',
@@ -1745,17 +1660,10 @@ $renderMailTemplateField = static function (
         email_cc: ''
       });
     });
+    if (rows.length) {
+      rows[rows.length - 1].is_terminal = true;
+    }
     return rows;
-  }
-
-  function renderInitialOptions(steps, selected) {
-    if (!initialSelect) return;
-    var html = '<option value="">— Primero de la plantilla —</option>';
-    steps.forEach(function (s) {
-      var sel = selected && selected === s.code ? ' selected' : '';
-      html += '<option value="' + escapeHtml(s.code) + '"' + sel + '>' + escapeHtml(s.label || s.code) + '</option>';
-    });
-    initialSelect.innerHTML = html;
   }
 
   function mailTplSelect(name, idx, value) {
@@ -1800,7 +1708,6 @@ $renderMailTemplateField = static function (
     stepsBody.innerHTML = '';
     if (!steps || !steps.length) {
       if (stepsEmpty) stepsEmpty.style.display = 'block';
-      renderInitialOptions([], '');
       return;
     }
     if (stepsEmpty) stepsEmpty.style.display = 'none';
@@ -1830,7 +1737,6 @@ $renderMailTemplateField = static function (
         '<div class="progress-step-flags">' +
           '<label><input data-field="ops_button" type="checkbox" name="pipeline_steps[' + idx + '][ops_button]" value="1"' + (s.ops_button == 1 || s.ops_button === true ? ' checked' : '') + '> Mostrar en Operación</label>' +
           '<label><input data-field="admin_only" type="checkbox" name="pipeline_steps[' + idx + '][admin_only]" value="1"' + (s.admin_only == 1 || s.admin_only === true ? ' checked' : '') + '> Solo admin (oculto al alumno)</label>' +
-          '<label><input data-field="terminal" type="checkbox" name="pipeline_steps[' + idx + '][is_terminal]" value="1"' + (s.is_terminal == 1 || s.is_terminal === true ? ' checked' : '') + '> Paso final</label>' +
           '<label><input data-field="email_enabled" type="checkbox" name="pipeline_steps[' + idx + '][email_enabled]" value="1"' + (s.email_enabled == 1 || s.email_enabled === true ? ' checked' : '') + '> Enviar correo</label>' +
         '</div>' +
         '<div class="progress-step-grid progress-step-email">' +
@@ -1858,7 +1764,6 @@ $renderMailTemplateField = static function (
         el.addEventListener('input', refreshStepEmailsSummary);
       });
     });
-    renderInitialOptions(steps, initialSelectedStep || (initialSelect && initialSelect.value) || '');
     refreshStepEmailsSummary();
     bindStepDrag();
   }
@@ -1987,7 +1892,6 @@ $renderMailTemplateField = static function (
 
   if (pipelineSelect) {
     pipelineSelect.addEventListener('change', function () {
-      initialSelectedStep = '';
       loadPipeline(pipelineSelect.value);
     });
     loadPipeline(pipelineSelect.value);

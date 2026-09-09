@@ -683,13 +683,27 @@ final class CheckoutRequirements
         return [];
     }
 
-    /** Paso inicial del pipeline al crear tracking (override en config_json.initial_step_code). */
+    /** Paso inicial del pipeline al crear tracking: primero de la plantilla del grupo. */
     public static function initialStepCode(array $product, string $productType, array $requiredDocs): string
     {
         $cfg = self::config($product);
-        $override = $cfg['initial_step_code'] ?? null;
-        if (is_string($override) && $override !== '') {
-            return $override;
+        $pipelineCode = strtolower(trim((string) ($cfg['pipeline_code'] ?? '')));
+        if ($pipelineCode !== '') {
+            try {
+                $repo = new \App\Repositories\PipelineRepository();
+                $tpl = $repo->findByCode($pipelineCode);
+                if ($tpl !== null) {
+                    $steps = $repo->stepsForTemplate((int) $tpl['id']);
+                    if ($steps !== []) {
+                        $first = trim((string) ($steps[0]['code'] ?? ''));
+                        if ($first !== '') {
+                            return $first;
+                        }
+                    }
+                }
+            } catch (\Throwable) {
+                // Fallback abajo.
+            }
         }
 
         $hasDocs = $requiredDocs !== [] || self::reglamentoForProduct($product) !== null;
