@@ -230,7 +230,8 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
         <div class="panel" style="margin-top:.75rem;max-width:960px">
             <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Accesos a plataformas</h2>
             <p class="muted" style="font-size:.85rem;margin-top:0">
-                Opcional: solo si el proveedor te da acceso a un portal. Las contraseñas se cifran con
+                Opcional: portales, formularios de registro o sitios sin login.
+                Usuario y contraseña son opcionales. Las contraseñas, si las capturas, se cifran con
                 <code>APP_KEY</code>. Editar/eliminar un acceso existente usa sus propios botones;
                 el acceso <em>nuevo</em> se crea con «Guardar todo».
             </p>
@@ -290,8 +291,14 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
                                     </label>
                                     <label class="muted" style="<?= e($labelStyle) ?>">
                                         Nueva contraseña
-                                        <input type="password" name="password" form="supplier-account-edit-<?= $aid ?>"
-                                               placeholder="Vacío = no cambiar" style="<?= e($inputStyle) ?>" autocomplete="new-password">
+                                        <div class="pwd-toggle-wrap">
+                                            <input type="password" name="password" form="supplier-account-edit-<?= $aid ?>"
+                                                   class="pwd-toggle-input"
+                                                   placeholder="Vacío = no cambiar" style="<?= e($inputStyle) ?>" autocomplete="new-password">
+                                            <button type="button" class="icon-btn pwd-toggle-btn" title="Mostrar contraseña"
+                                                    aria-label="Mostrar contraseña" data-eye="<?= e(icon('eye')) ?>"
+                                                    data-eye-off="<?= e(icon('eye-off')) ?>"><?= icon('eye') ?></button>
+                                        </div>
                                     </label>
                                     <label class="muted" style="<?= e($labelStyle) ?>">
                                         Notas
@@ -323,12 +330,18 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
                     <input type="url" name="account_login_url" placeholder="https://..." style="<?= e($inputStyle) ?>">
                 </label>
                 <label class="muted" style="<?= e($labelStyle) ?>">
-                    Usuario
+                    Usuario <span style="font-weight:500;opacity:.75">(opcional)</span>
                     <input type="text" name="account_username" style="<?= e($inputStyle) ?>" autocomplete="off">
                 </label>
                 <label class="muted" style="<?= e($labelStyle) ?>">
-                    Contraseña
-                    <input type="password" name="account_password" style="<?= e($inputStyle) ?>" autocomplete="new-password">
+                    Contraseña <span style="font-weight:500;opacity:.75">(opcional)</span>
+                    <div class="pwd-toggle-wrap">
+                        <input type="password" name="account_password" class="pwd-toggle-input"
+                               style="<?= e($inputStyle) ?>" autocomplete="new-password">
+                        <button type="button" class="icon-btn pwd-toggle-btn" title="Mostrar contraseña"
+                                aria-label="Mostrar contraseña" data-eye="<?= e(icon('eye')) ?>"
+                                data-eye-off="<?= e(icon('eye-off')) ?>"><?= icon('eye') ?></button>
+                    </div>
                 </label>
                 <label class="muted" style="<?= e($labelStyle) ?>">
                     Notas
@@ -336,6 +349,7 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
                 </label>
             </div>
             <p class="muted" style="font-size:.8rem;margin:.75rem 0 0">
+                Basta el nombre (y opcionalmente la URL). Usuario y contraseña solo si el sitio los pide.
                 Si dejas «Nombre del acceso» vacío, no se agrega acceso al guardar.
             </p>
         </div>
@@ -447,6 +461,22 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
     background:#102a56; color:#fff; box-shadow:0 -8px 24px rgba(16,42,86,.18);
 }
 .supplier-sticky-save .muted { color:rgba(255,255,255,.82); }
+.pwd-toggle-wrap {
+  position: relative;
+  display: block;
+}
+.pwd-toggle-wrap .pwd-toggle-input {
+  width: 100%;
+  padding-right: 2.4rem !important;
+  box-sizing: border-box;
+}
+.pwd-toggle-wrap .pwd-toggle-btn {
+  position: absolute;
+  right: .25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+}
 </style>
 <script>
 (function () {
@@ -474,5 +504,19 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
   } else {
     activate('general');
   }
+
+  document.querySelectorAll('.pwd-toggle-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var wrap = btn.closest('.pwd-toggle-wrap');
+      var input = wrap ? wrap.querySelector('.pwd-toggle-input') : null;
+      if (!input) return;
+      var show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.innerHTML = show ? (btn.getAttribute('data-eye-off') || '') : (btn.getAttribute('data-eye') || '');
+      btn.title = show ? 'Ocultar contraseña' : 'Mostrar contraseña';
+      btn.setAttribute('aria-label', btn.title);
+      input.focus();
+    });
+  });
 })();
 </script>
