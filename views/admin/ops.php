@@ -398,6 +398,35 @@ $extraColHeader = count($extraColLabels) === 1
                                             <button class="btn btn-accent btn-sm" type="submit">Guardar datos</button>
                                         </form>
                                     </details>
+                                <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_DOWNLOAD_CSV): ?>
+                                    <?php
+                                    $csvCfg = is_array($btn['csv'] ?? null) ? $btn['csv'] : [];
+                                    $csvTpl = trim((string) ($csvCfg['template_code'] ?? ''));
+                                    $csvScope = (string) ($csvCfg['scope'] ?? 'student');
+                                    if (!in_array($csvScope, ['student', 'exam_date'], true)) {
+                                        $csvScope = 'student';
+                                    }
+                                    $csvQs = http_build_query([
+                                        'tracking_id' => $tid,
+                                        'scope' => $csvScope,
+                                        'return' => '/admin/operacion?' . http_build_query(array_filter([
+                                            'view' => $view !== '' ? $view : null,
+                                            'q' => $q !== '' ? $q : null,
+                                        ])),
+                                    ]);
+                                    $csvTitle = $csvScope === 'exam_date'
+                                        ? 'Descargar CSV del día (misma fecha y certificación)'
+                                        : 'Descargar CSV de este alumno';
+                                    ?>
+                                    <?php if ($csvTpl !== ''): ?>
+                                        <a class="<?= e($btnClass) ?>"
+                                           href="<?= e(url('/admin/plantillas-csv/' . rawurlencode($csvTpl) . '/descargar?' . $csvQs)) ?>"
+                                           title="<?= e($csvTitle) ?>">
+                                            <span class="ops-btn-ico"><?= icon('export') ?></span><?= e($label) ?>
+                                        </a>
+                                    <?php else: ?>
+                                        <span class="muted" title="Configura la plantilla CSV en el grupo">CSV sin plantilla</span>
+                                    <?php endif; ?>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_ADVANCE): ?>
                                     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/avanzar')) ?>" class="ops-inline-form">
                                         <?= csrf_field() ?>

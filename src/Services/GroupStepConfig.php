@@ -19,10 +19,12 @@ final class GroupStepConfig
     public const ACTION_ADVANCE = 'advance';
     public const ACTION_EDIT_EXAM = 'edit_exam';
     public const ACTION_EDIT_STUDENT = 'edit_student';
+    public const ACTION_DOWNLOAD_CSV = 'download_csv';
 
     public const ACTIONS = [
         self::ACTION_NONE => 'Solo progreso (sin botón)',
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
+        self::ACTION_DOWNLOAD_CSV => 'Descargar CSV (plantilla)',
         self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
         // Legado (ya no se eligen en el editor; se siguen ejecutando si existen).
         self::ACTION_CONFIRM_PAYMENT => 'Confirmar pago (legado)',
@@ -38,6 +40,7 @@ final class GroupStepConfig
     public const ACTIONS_EDITABLE = [
         self::ACTION_NONE => 'Solo progreso (sin botón)',
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
+        self::ACTION_DOWNLOAD_CSV => 'Descargar CSV (plantilla)',
         self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
     ];
 
@@ -211,10 +214,11 @@ final class GroupStepConfig
                 return match (self::effectiveOpsAction($s)) {
                     self::ACTION_CONFIRM_PAYMENT => 0,
                     self::ACTION_SEND_MAIL => 1,
-                    self::ACTION_EXAM_ACCESS => 2,
-                    self::ACTION_EDIT_EXAM => 3,
-                    self::ACTION_EDIT_STUDENT => 4,
-                    self::ACTION_ADVANCE => 5,
+                    self::ACTION_DOWNLOAD_CSV => 2,
+                    self::ACTION_EXAM_ACCESS => 3,
+                    self::ACTION_EDIT_EXAM => 4,
+                    self::ACTION_EDIT_STUDENT => 5,
+                    self::ACTION_ADVANCE => 6,
                     default => 9,
                 };
             };
@@ -236,10 +240,11 @@ final class GroupStepConfig
                 ? (string) $step['ops_label']
                 : (string) ($step['label'] ?? $step['code']);
             $email = is_array($step['email'] ?? null) ? $step['email'] : [];
+            $csv = is_array($step['csv'] ?? null) ? $step['csv'] : [];
             $audience = self::audienceFromEmail($email);
             $email['audience'] = $audience;
             $collectExam = self::stepCollectsExamSchedule($step);
-            if ($done && !$collectExam) {
+            if ($done && !$collectExam && $action !== self::ACTION_DOWNLOAD_CSV) {
                 $label = match ($action) {
                     self::ACTION_SEND_MAIL => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
                     self::ACTION_EXAM_ACCESS => (str_starts_with(mb_strtolower($label), 'reenviar') ? $label : 'Reenviar · ' . $label),
@@ -256,6 +261,7 @@ final class GroupStepConfig
                 'label' => $label,
                 'action' => $action,
                 'email' => $email,
+                'csv' => $csv,
                 'audience' => $audience,
                 'admin_only' => !empty($step['admin_only']),
                 'done' => $done,
@@ -501,6 +507,7 @@ final class GroupStepConfig
                 true
             ),
             self::ACTION_SEND_MAIL => self::isMailStepDone($row, $step),
+            self::ACTION_DOWNLOAD_CSV => false,
             self::ACTION_EXAM_ACCESS => trim((string) ($row['folio'] ?? '')) !== ''
                 && trim((string) ($row['access_key'] ?? '')) !== '',
             self::ACTION_EDIT_STUDENT => self::isAdvanceDone($row, $step),
@@ -575,6 +582,10 @@ final class GroupStepConfig
                     'audience' => '',
                     'to' => trim((string) ($row['email_to'] ?? '')),
                     'cc' => trim((string) ($row['email_cc'] ?? '')),
+                ],
+                'csv' => [
+                    'template_code' => trim((string) ($row['csv_template'] ?? '')),
+                    'scope' => (string) ($row['csv_scope'] ?? 'student'),
                 ],
             ]);
         }
@@ -684,6 +695,12 @@ final class GroupStepConfig
             'template_code' => $templateCode,
             'audience' => (string) ($emailRaw['audience'] ?? $row['email_audience'] ?? ''),
         ]);
+        $csvRaw = is_array($row['csv'] ?? null) ? $row['csv'] : [];
+        $csvScope = strtolower(trim((string) ($csvRaw['scope'] ?? $row['csv_scope'] ?? 'student')));
+        if (!in_array($csvScope, ['student', 'exam_date'], true)) {
+            $csvScope = 'student';
+        }
+        $csvTemplate = trim((string) ($csvRaw['template_code'] ?? $row['csv_template'] ?? ''));
 
         return [
             'code' => $code,
@@ -702,6 +719,10 @@ final class GroupStepConfig
                 'audience' => $audience,
                 'to' => trim((string) ($emailRaw['to'] ?? $row['email_to'] ?? '')),
                 'cc' => trim((string) ($emailRaw['cc'] ?? $row['email_cc'] ?? '')),
+            ],
+            'csv' => [
+                'template_code' => $csvTemplate,
+                'scope' => $csvScope,
             ],
         ];
     }

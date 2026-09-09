@@ -150,6 +150,14 @@ $router->get('/admin/inventario', fn () => $admin->inventoryIndex());
 $router->get('/admin/inventario/{id}', fn (string $id) => $admin->inventoryProduct($id));
 $router->post('/admin/inventario/{id}/lote', fn (string $id) => $admin->inventoryImportLot($id));
 
+$router->get('/admin/plantillas-csv', fn () => $admin->csvTemplates());
+$router->get('/admin/plantillas-csv/nueva', fn () => $admin->csvTemplateCreate());
+$router->post('/admin/plantillas-csv/nueva', fn () => $admin->csvTemplateStore());
+$router->get('/admin/plantillas-csv/{code}/descargar', fn (string $code) => $admin->csvTemplateDownload($code));
+$router->post('/admin/plantillas-csv/{code}/eliminar', fn (string $code) => $admin->csvTemplateDelete($code));
+$router->get('/admin/plantillas-csv/{code}', fn (string $code) => $admin->csvTemplateEdit($code));
+$router->post('/admin/plantillas-csv/{code}', fn (string $code) => $admin->csvTemplateUpdate($code));
+
 $router->get('/admin/correos', fn () => $admin->mailTemplates());
 $router->post('/admin/correos/marca', fn () => $admin->mailBrandingUpdate());
 $router->get('/admin/correos/nueva', fn () => $admin->mailTemplateCreate());
