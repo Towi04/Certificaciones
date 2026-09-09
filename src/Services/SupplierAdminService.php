@@ -135,18 +135,12 @@ final class SupplierAdminService
         }
 
         $accountLabel = trim((string) ($input['account_label'] ?? ''));
-        $accountPassword = (string) ($input['account_password'] ?? '');
         if ($accountLabel !== '') {
-            if ($accountPassword === '') {
-                throw new \InvalidArgumentException(
-                    'Para agregar un acceso indica también la contraseña (o deja vacío el nombre del acceso).'
-                );
-            }
             $this->addAccount($id, [
                 'label' => $accountLabel,
                 'login_url' => (string) ($input['account_login_url'] ?? ''),
                 'username' => (string) ($input['account_username'] ?? ''),
-                'password' => $accountPassword,
+                'password' => (string) ($input['account_password'] ?? ''),
                 'notes' => (string) ($input['account_notes'] ?? ''),
             ]);
             $applied[] = 'Acceso agregado';
@@ -362,7 +356,7 @@ final class SupplierAdminService
     public function addAccount(int $supplierId, array $input): int
     {
         $this->assertSupplier($supplierId);
-        $payload = $this->accountPayload($supplierId, $input, true);
+        $payload = $this->accountPayload($supplierId, $input, false);
 
         return $this->suppliers->createAccount($payload);
     }
@@ -496,8 +490,10 @@ final class SupplierAdminService
         if ($password !== '') {
             $out['password_enc'] = Crypto::encrypt($password);
         } elseif ($requirePassword) {
+            // Conservado por compatibilidad; la creación ya no exige contraseña.
             throw new \InvalidArgumentException('La contraseña del acceso es obligatoria al crearlo.');
         }
+        // Si la contraseña viene vacía en edición, no tocar password_enc.
 
         return $out;
     }
