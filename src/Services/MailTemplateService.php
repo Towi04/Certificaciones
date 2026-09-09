@@ -27,6 +27,8 @@ final class MailTemplateService
             'last_name_m' => 'Apellido materno',
             'student_email' => 'Correo del alumno',
             'student_phone' => 'Teléfono del alumno',
+            'exam_date' => 'Fecha de examen',
+            'exam_time' => 'Hora de examen',
         ],
         'Caso / compra' => [
             'matricula' => 'Matrícula / caso',
@@ -42,8 +44,6 @@ final class MailTemplateService
         ],
         'Examen ELeT' => [
             'exam_url' => 'URL del examen',
-            'exam_date' => 'Fecha de examen',
-            'exam_time' => 'Hora de examen',
             'folio' => 'Folio UKS / examen',
             'access_key' => 'Clave del día',
             'zoom' => 'Campo extra (texto libre: Zoom, ID escuela, código…)',

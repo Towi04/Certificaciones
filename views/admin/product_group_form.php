@@ -466,19 +466,12 @@ $renderMailTemplateField = static function (
 
     <div class="group-panel" data-panel="inventory" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Inventario de códigos (folio/clave)</h2>
-        <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
-            Para iTEP y similares: compras lotes al proveedor, los subes en
-            <a href="<?= e(url('/admin/inventario')) ?>">Admin → Inventario</a>.
-            Al confirmar pago se <strong>reserva</strong> folio/clave; el correo de acceso sale
-            N días antes (o al momento si el examen es inmediato). Con stock 0 y urgencia,
-            se reasigna un código de un examen lejano y se repone al subir el siguiente lote.
-        </p>
         <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:.75rem">
-            <input type="checkbox" name="inventory_enabled" value="1" style="margin-top:.2rem"
+            <input type="checkbox" name="inventory_enabled" id="inventory-enabled-toggle" value="1" style="margin-top:.2rem"
                 <?= !empty($extras['inventory_enabled']) ? 'checked' : '' ?>>
             <span>Activar inventario automático en este grupo</span>
         </label>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem">
+        <div id="inventory-controls" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem">
             <label class="muted" style="<?= e($labelStyle) ?>">
                 Enviar acceso N días antes
                 <input type="number" min="0" name="inventory_send_days_before"
@@ -535,7 +528,7 @@ $renderMailTemplateField = static function (
                 </select>
             </label>
         </div>
-        <label class="muted" style="display:flex;align-items:center;gap:.45rem;font-size:.88rem;font-weight:600;margin-top:.75rem">
+        <label id="inventory-reallocate-label" class="muted" style="display:flex;align-items:center;gap:.45rem;font-size:.88rem;font-weight:600;margin-top:.75rem">
             <input type="checkbox" name="inventory_reallocate_enabled" value="1"
                 <?= !isset($extras['inventory_reallocate_enabled']) || !empty($extras['inventory_reallocate_enabled']) ? 'checked' : '' ?>>
             Permitir reasignar códigos de exámenes lejanos si hay urgencia y stock 0
@@ -592,20 +585,22 @@ $renderMailTemplateField = static function (
     <div class="group-panel" data-panel="extra" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Campo extra de acceso</h2>
         <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:1rem">
-            <input type="checkbox" name="exam_capture_zoom" value="1" style="margin-top:.2rem"
+            <input type="checkbox" name="exam_capture_zoom" id="exam-extra-toggle" value="1" style="margin-top:.2rem"
                 <?= !empty($extras['exam_capture_zoom']) ? 'checked' : '' ?>>
             <span>Mostrar esta columna en Operación (junto a folio/clave)</span>
         </label>
-        <label class="muted" style="<?= e($labelStyle) ?>;max-width:28rem">
-            Etiqueta de la columna / dato
-            <input type="text" name="exam_extra_field_label"
-                   value="<?= e((string) ($extras['exam_extra_field_label'] ?? '')) ?>"
-                   placeholder="Ej. Zoom, ID escuela, Código de acceso…"
-                   style="<?= e($inputStyle) ?>">
-            <span class="muted" style="font-weight:500;font-size:.75rem;margin-top:.25rem;display:block">
-                Si la dejas vacía se usa «Zoom».
-            </span>
-        </label>
+        <div id="exam-extra-controls">
+            <label class="muted" style="<?= e($labelStyle) ?>;max-width:28rem">
+                Etiqueta de la columna / dato
+                <input type="text" name="exam_extra_field_label"
+                       value="<?= e((string) ($extras['exam_extra_field_label'] ?? '')) ?>"
+                       placeholder="Ej. Zoom, ID escuela, Código de acceso…"
+                       style="<?= e($inputStyle) ?>">
+                <span class="muted" style="font-weight:500;font-size:.75rem;margin-top:.25rem;display:block">
+                    Si la dejas vacía se usa «Zoom».
+                </span>
+            </label>
+        </div>
     </div>
 
     <div class="group-panel" data-panel="docs" hidden>
@@ -1003,6 +998,39 @@ $renderMailTemplateField = static function (
     scheduleModeSelect.addEventListener('change', syncScheduleModePanels);
     syncScheduleModePanels();
   }
+
+  function setControlsEnabled(root, enabled) {
+    if (!root) return;
+    root.style.opacity = enabled ? '1' : '.55';
+    root.querySelectorAll('input, select, textarea, button').forEach(function (el) {
+      el.disabled = !enabled;
+    });
+  }
+
+  (function setupInventoryToggle() {
+    var toggle = document.getElementById('inventory-enabled-toggle');
+    var controls = document.getElementById('inventory-controls');
+    var realloc = document.getElementById('inventory-reallocate-label');
+    if (!toggle) return;
+    function sync() {
+      var on = !!toggle.checked;
+      setControlsEnabled(controls, on);
+      setControlsEnabled(realloc, on);
+    }
+    toggle.addEventListener('change', sync);
+    sync();
+  })();
+
+  (function setupExtraFieldToggle() {
+    var toggle = document.getElementById('exam-extra-toggle');
+    var controls = document.getElementById('exam-extra-controls');
+    if (!toggle || !controls) return;
+    function sync() {
+      setControlsEnabled(controls, !!toggle.checked);
+    }
+    toggle.addEventListener('change', sync);
+    sync();
+  })();
 
   (function setupInstructionDocs() {
     var list = document.getElementById('instruction-docs-list');
