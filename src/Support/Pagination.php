@@ -7,7 +7,7 @@ namespace App\Support;
 final class Pagination
 {
     /** @return array{page:int,per_page:int,per_page_param:string,total:int,total_pages:int,offset:int,limit:?int} */
-    public static function fromRequest(int $total, int $defaultPerPage = 25): array
+    public static function fromRequest(int $total, int|string $defaultPerPage = 25): array
     {
         $page = max(1, (int) ($_GET['page'] ?? 1));
         $perPageParam = (string) ($_GET['per_page'] ?? (string) $defaultPerPage);
@@ -16,9 +16,10 @@ final class Pagination
             $perPage = $total > 0 ? $total : 1;
         } elseif (ctype_digit($perPageParam)) {
             $n = (int) $perPageParam;
-            $perPage = ($n >= 1 && $n <= 200) ? $n : $defaultPerPage;
+            $defaultN = is_int($defaultPerPage) ? $defaultPerPage : 25;
+            $perPage = ($n >= 1 && $n <= 200) ? $n : $defaultN;
         } else {
-            $perPage = $defaultPerPage;
+            $perPage = is_int($defaultPerPage) ? $defaultPerPage : 25;
         }
 
         if ($perPage < 1) {

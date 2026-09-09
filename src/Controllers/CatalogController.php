@@ -31,7 +31,8 @@ final class CatalogController
             $q = $_GET['q'] ?? null;
             $q = is_string($q) ? $q : null;
             $total = $repo->publicCatalogCount($filter, $q);
-            $pagination = Pagination::fromRequest($total, 20);
+            // Por defecto mostrar todas: si solo salen 20 parece que no hay más.
+            $pagination = Pagination::fromRequest($total, 'all');
             $products = $repo->publicCatalog(
                 $filter,
                 $q,
@@ -72,7 +73,7 @@ final class CatalogController
             'stars' => $stars,
             'products' => $products,
             'pagination' => $pagination,
-            'paginationPerPageOptions' => ['20' => '20', '40' => '40', 'all' => 'Todas'],
+            'paginationPerPageOptions' => ['all' => 'Todas', '20' => '20', '40' => '40'],
             'catalogFilters' => $catalogFilters ?? [],
             'filter' => $_GET['filtro'] ?? $_GET['categoria'] ?? 'all',
             'q' => $_GET['q'] ?? '',
