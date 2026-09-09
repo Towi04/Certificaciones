@@ -2340,7 +2340,7 @@ public function promoCode(): void
             if ($action === 'reset') {
                 \App\Mail\MailBranding::reset();
                 flash('success', 'Encabezado y pie restablecidos a los valores por defecto.');
-                redirect('/admin/correos#mail-branding');
+                redirect('/admin/correos#branding');
             }
 
             $input = $_POST;
@@ -2353,7 +2353,7 @@ public function promoCode(): void
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
-        redirect('/admin/correos#mail-branding');
+        redirect('/admin/correos#branding');
     }
 
     public function catalogFilters(): void
