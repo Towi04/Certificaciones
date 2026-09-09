@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Repositories\CatalogFilterRepository;
 use App\Repositories\CertifierRepository;
 use App\Repositories\ProductGroupRepository;
 use App\Repositories\ProductRepository;
@@ -50,6 +51,71 @@ final class ProductAdminService
     public static function platformOptions(): array
     {
         return ['none', 'moodle', 'provider'];
+    }
+
+    /** Normaliza aliases de categoría CSV/formulario a códigos canónicos. */
+    public static function normalizeCategory(string $raw): string
+    {
+        $v = trim($raw);
+        $v = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $v) ?: $v;
+        $v = strtolower($v);
+        $v = str_replace([' ', '-'], '_', $v);
+        $v = preg_replace('/[^a-z0-9_]+/', '', $v) ?? $v;
+        $v = preg_replace('/_+/', '_', $v) ?? $v;
+        $aliases = [
+            'ingles_adultos' => 'english_adult',
+            'ingles_adulto' => 'english_adult',
+            'ingles_adult' => 'english_adult',
+            'english_adults' => 'english_adult',
+            'ingles_menores' => 'english_kids',
+            'ingles_kids' => 'english_kids',
+            'ingles_infantil' => 'english_kids',
+            'english_kid' => 'english_kids',
+            'english_children' => 'english_kids',
+            'kids' => 'english_kids',
+            'infantil' => 'english_kids',
+            'menores' => 'english_kids',
+            'informatica' => 'it',
+            'ti' => 'it',
+            'ensenanza' => 'teaching',
+            'otros' => 'other',
+        ];
+
+        return $aliases[$v] ?? $v;
+    }
+
+    /** Normaliza aliases de audiencia (p. ej. infantil → kids). */
+    public static function normalizeAudience(string $raw): string
+    {
+        $v = trim($raw);
+        $v = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $v) ?: $v;
+        $v = strtolower($v);
+        $v = str_replace([' ', '-'], '_', $v);
+        $v = preg_replace('/[^a-z0-9_]+/', '', $v) ?? $v;
+        $aliases = [
+            'infantil' => 'kids',
+            'menores' => 'kids',
+            'ninos' => 'kids',
+            'kid' => 'kids',
+            'children' => 'kids',
+            'adulto' => 'adult',
+            'adultos' => 'adult',
+            'cualquiera' => 'any',
+            'todos' => 'any',
+            'all' => 'any',
+        ];
+
+        return $aliases[$v] ?? $v;
+    }
+
+    /** Audiencia sugerida según categoría del producto. */
+    public static function audienceFromCategory(string $category): ?string
+    {
+        return match ($category) {
+            'english_kids' => 'kids',
+            'english_adult' => 'adult',
+            default => null,
+        };
     }
 
     public static function slugify(string $value): string
@@ -653,12 +719,53 @@ final class ProductAdminService
                 continue;
             }
 
+            $typeRaw = trim((string) $get('type', $existing['type'] ?? 'certification'));
+            $categoryRaw = trim((string) $get('category', $existing['category'] ?? 'other'));
+            // Si pusieron english_kids / english_adult en "type" por error, tratarlo como categoría.
+            $typeLooksLikeCategory = !in_array($typeRaw, self::typeOptions(), true)
+                && in_array(self::normalizeCategory($typeRaw), self::categoryOptions(), true);
+            if ($typeLooksLikeCategory) {
+                if ($categoryRaw === '' || self::normalizeCategory($categoryRaw) === 'other') {
+                    $categoryRaw = $typeRaw;
+                }
+                $typeRaw = (string) ($existing['type'] ?? 'certification');
+            }
+            $category = self::normalizeCategory($categoryRaw !== '' ? $categoryRaw : 'other');
+            if (!in_array($category, self::categoryOptions(), true)) {
+                $category = (string) ($existing['category'] ?? 'other');
+                if (!in_array($category, self::categoryOptions(), true)) {
+                    $category = 'other';
+                }
+            }
+
+            $audienceExplicit = false;
+            $audience = (string) ($existing['audience'] ?? 'any');
+            if (isset($map['audience'])) {
+                $audienceRaw = self::normalizeAudience((string) $get('audience', ''));
+                if ($audienceRaw !== '' && in_array($audienceRaw, self::audienceOptions(), true)) {
+                    $audience = $audienceRaw;
+                    $audienceExplicit = true;
+                }
+            }
+            if (!$audienceExplicit) {
+                $fromCat = self::audienceFromCategory($category);
+                $shouldInferAudience = $existing === null
+                    || isset($map['category'])
+                    || isset($map['audience'])
+                    || $typeLooksLikeCategory;
+                if ($fromCat !== null && $shouldInferAudience) {
+                    $audience = $fromCat;
+                } elseif ($existing === null) {
+                    $audience = 'any';
+                }
+            }
+
             $input = [
                 'code' => $code,
                 'name' => $get('name', ''),
-                'type' => $get('type', $existing['type'] ?? 'certification'),
-                'category' => $get('category', $existing['category'] ?? 'other'),
-                'audience' => $get('audience', $existing['audience'] ?? 'any'),
+                'type' => $typeRaw !== '' ? $typeRaw : ($existing['type'] ?? 'certification'),
+                'category' => $category,
+                'audience' => $audience,
                 'public_price' => $get('public_price', $existing['public_price'] ?? 0),
                 'catalog_price' => $get('catalog_price', $existing['catalog_price'] ?? ''),
                 'cost_price' => $get('cost_price', $existing['cost_price'] ?? 0),
@@ -666,9 +773,9 @@ final class ProductAdminService
                 'price_partner_a' => $get('price_partner_a', $existing['price_partner_a'] ?? ''),
                 'price_partner_b' => $get('price_partner_b', $existing['price_partner_b'] ?? ''),
                 'price_partner_c' => $get('price_partner_c', $existing['price_partner_c'] ?? ''),
-                'product_group_id' => $defaultGroupId ?? ($existing['product_group_id'] ?? null),
-                // No reasignar proveedor en masa al actualizar: conservar el existente
-                // salvo que la fila traiga supplier_code o sea un alta nueva con default.
+                'product_group_id' => $existing['product_group_id'] ?? null,
+                // No reasignar proveedor en masa: conservar el existente salvo supplier_code
+                // o herencia desde product_group_code / alta nueva.
                 'supplier_id' => $existing['supplier_id'] ?? null,
                 'certifier_id' => $existing['certifier_id'] ?? null,
                 'platform_type' => $existing['platform_type'] ?? 'none',
@@ -692,9 +799,46 @@ final class ProductAdminService
                     $rowSupplierResolved = true;
                 }
             }
-            if (!$rowSupplierResolved && $existing === null && $defaultSupplierId !== null) {
-                $input['supplier_id'] = $defaultSupplierId;
-                $rowSupplierResolved = true;
+
+            $groupFromCsv = false;
+            if (isset($map['product_group_code'])) {
+                $gCode = self::normalizeGroupCode((string) $get('product_group_code', ''));
+                if ($gCode !== '') {
+                    $group = $this->groups->findByCode($gCode);
+                    if ($group === null) {
+                        $errors[] = "Fila {$line}: grupo {$gCode} no existe.";
+                        $skipped++;
+                        continue;
+                    }
+                    $input['product_group_id'] = (int) $group['id'];
+                    $groupFromCsv = true;
+                    // El grupo del CSV manda el proveedor (salvo que la fila traiga supplier_code).
+                    if (!$rowSupplierResolved && !empty($group['supplier_id'])) {
+                        $input['supplier_id'] = (int) $group['supplier_id'];
+                        $rowSupplierResolved = true;
+                    }
+                }
+            }
+            if (!$groupFromCsv) {
+                if ($defaultGroupId !== null) {
+                    $input['product_group_id'] = $defaultGroupId;
+                } elseif ($existing !== null) {
+                    $input['product_group_id'] = $existing['product_group_id'] ?? null;
+                }
+            }
+            // Alta nueva: si aún no hay proveedor, heredar del grupo (CSV o default) o del form.
+            if (!$rowSupplierResolved && $existing === null) {
+                if (!empty($input['product_group_id'])) {
+                    $groupForSupplier = $this->groups->find((int) $input['product_group_id']);
+                    if ($groupForSupplier !== null && !empty($groupForSupplier['supplier_id'])) {
+                        $input['supplier_id'] = (int) $groupForSupplier['supplier_id'];
+                        $rowSupplierResolved = true;
+                    }
+                }
+                if (!$rowSupplierResolved && $defaultSupplierId !== null) {
+                    $input['supplier_id'] = $defaultSupplierId;
+                    $rowSupplierResolved = true;
+                }
             }
             foreach (['short_description', 'description', 'benefits_html'] as $textCol) {
                 if (isset($map[$textCol])) {
@@ -732,38 +876,23 @@ final class ProductAdminService
             } else {
                 $input['is_active'] = 1;
             }
-            if (isset($map['product_group_code'])) {
-                $gCode = self::normalizeGroupCode((string) $get('product_group_code', ''));
-                if ($gCode !== '') {
-                    $group = $this->groups->findByCode($gCode);
-                    if ($group === null) {
-                        $errors[] = "Fila {$line}: grupo {$gCode} no existe.";
-                        $skipped++;
-                        continue;
-                    }
-                    $input['product_group_id'] = (int) $group['id'];
-                    if (
-                        !$rowSupplierResolved
-                        && $existing === null
-                        && empty($input['supplier_id'])
-                        && !empty($group['supplier_id'])
-                    ) {
-                        $input['supplier_id'] = (int) $group['supplier_id'];
-                    }
-                }
-            }
             if ($existing === null && empty($input['supplier_id'])) {
-                $errors[] = "Fila {$line} ({$code}): indica supplier_code en el CSV o elige un proveedor por defecto para altas nuevas.";
+                $errors[] = "Fila {$line} ({$code}): indica supplier_code o product_group_code (con proveedor) en el CSV, o elige un proveedor/grupo por defecto para altas nuevas.";
                 $skipped++;
                 continue;
             }
+            $syncCategoryTag = isset($map['category']) || isset($map['type']) || $existing === null;
             try {
                 if ($existing !== null) {
                     $this->updateProduct((int) $existing['id'], $input);
+                    $productId = (int) $existing['id'];
                     $updated++;
                 } else {
-                    $this->createProduct($input);
+                    $productId = $this->createProduct($input);
                     $created++;
+                }
+                if ($syncCategoryTag) {
+                    $this->ensureCategoryCatalogFilter($productId, $category);
                 }
             } catch (\Throwable $e) {
                 $errors[] = "Fila {$line} ({$code}): " . $e->getMessage();
@@ -788,6 +917,7 @@ final class ProductAdminService
             'name',
             'type',
             'category',
+            'audience',
             'public_price',
             'catalog_price',
             'cost_price',
@@ -818,6 +948,7 @@ final class ProductAdminService
             'Certificación ejemplo B1',
             'certification',
             'english_adult',
+            'adult',
             '2500',
             '3000',
             '1800',
@@ -858,6 +989,7 @@ final class ProductAdminService
                 (string) ($p['name'] ?? ''),
                 (string) ($p['type'] ?? 'certification'),
                 (string) ($p['category'] ?? 'other'),
+                (string) ($p['audience'] ?? 'any'),
                 (string) ($p['public_price'] ?? ''),
                 (string) ($p['catalog_price'] ?? ''),
                 (string) ($p['cost_price'] ?? ''),
@@ -1000,6 +1132,39 @@ final class ProductAdminService
     }
 
     /**
+     * Vincula la etiqueta de catálogo cuyo slug coincide con products.category.
+     * Sustituye otras etiquetas “de categoría” y conserva el resto.
+     */
+    private function ensureCategoryCatalogFilter(int $productId, string $category): void
+    {
+        if ($productId < 1 || $category === '') {
+            return;
+        }
+        $filters = new CatalogFilterRepository();
+        $filters->ensureDefaults();
+        $wanted = $filters->findBySlug($category);
+        if ($wanted === null) {
+            return;
+        }
+
+        $categorySlugs = array_fill_keys(self::categoryOptions(), true);
+        $kept = [];
+        foreach ($filters->filterIdsForProduct($productId) as $filterId) {
+            $row = $filters->find($filterId);
+            if ($row === null) {
+                continue;
+            }
+            $slug = (string) ($row['slug'] ?? '');
+            if (isset($categorySlugs[$slug])) {
+                continue;
+            }
+            $kept[] = $filterId;
+        }
+        $kept[] = (int) $wanted['id'];
+        $filters->setProductFilters($productId, $kept);
+    }
+
+    /**
      * @param array<string, mixed> $input
      * @param array<string, mixed>|null $existing
      * @return array<string, mixed>
@@ -1030,13 +1195,14 @@ final class ProductAdminService
         if (!in_array($type, self::typeOptions(), true)) {
             $type = 'certification';
         }
-        $category = (string) ($input['category'] ?? ($existing['category'] ?? 'other'));
+        $category = self::normalizeCategory((string) ($input['category'] ?? ($existing['category'] ?? 'other')));
         if (!in_array($category, self::categoryOptions(), true)) {
             $category = 'other';
         }
-        $audience = (string) ($input['audience'] ?? ($existing['audience'] ?? 'any'));
+        $audience = self::normalizeAudience((string) ($input['audience'] ?? ($existing['audience'] ?? 'any')));
         if (!in_array($audience, self::audienceOptions(), true)) {
-            $audience = 'any';
+            $fromCat = self::audienceFromCategory($category);
+            $audience = $fromCat ?? 'any';
         }
         $platform = (string) ($input['platform_type'] ?? ($existing['platform_type'] ?? 'none'));
         if (!in_array($platform, self::platformOptions(), true)) {
