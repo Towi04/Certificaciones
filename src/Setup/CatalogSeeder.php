@@ -44,9 +44,14 @@ final class CatalogSeeder
 
         $certifiers = [
             ['name' => 'Cambridge', 'code' => 'cambridge'],
+            ['name' => 'University of Michigan', 'code' => 'michigan'],
             ['name' => 'TOEFL / IIE', 'code' => 'toefl'],
+            ['name' => 'TOEIC', 'code' => 'toeic'],
             ['name' => 'UKS', 'code' => 'uks'],
             ['name' => 'Microsoft', 'code' => 'microsoft'],
+            ['name' => 'Adobe', 'code' => 'adobe'],
+            ['name' => 'Apple', 'code' => 'apple'],
+            ['name' => 'Certiport', 'code' => 'certiport'],
             ['name' => 'iTEP', 'code' => 'itep'],
             ['name' => 'Oxford', 'code' => 'oxford'],
             ['name' => 'SEP / CENNI', 'code' => 'cenni'],
@@ -62,6 +67,43 @@ final class CatalogSeeder
             }
             $certifierIds[$c['code']] = $cRepo->create($c);
             $log[] = 'Certificador creado: ' . $c['code'];
+        }
+
+        // Proveedor ↔ varias certificadoras (ETC aplica Microsoft/Adobe/…, etc.)
+        $supplierCertifierLinks = [
+            'etc' => ['microsoft', 'adobe', 'apple', 'certiport'],
+            'creative' => ['cambridge', 'michigan'],
+            'linguafranca' => ['toefl', 'toeic'],
+            'uks' => ['uks', 'cenni'],
+            'itep' => ['itep', 'oxford'],
+            'doceo' => ['doceo', 'cenni'],
+        ];
+        $sRepo = new SupplierRepository();
+        foreach ($supplierCertifierLinks as $sCode => $cCodes) {
+            $sid = (int) ($supplierIds[$sCode] ?? 0);
+            if ($sid < 1) {
+                continue;
+            }
+            $ids = [];
+            foreach ($cCodes as $cCode) {
+                $cid = (int) ($certifierIds[$cCode] ?? 0);
+                if ($cid > 0) {
+                    $ids[] = $cid;
+                }
+            }
+            if ($ids === []) {
+                continue;
+            }
+            $current = $sRepo->certifierIds($sid);
+            sort($current);
+            $sorted = $ids;
+            sort($sorted);
+            if ($current !== $sorted) {
+                // Conserva vínculos ya hechos a mano y agrega los del seed.
+                $merged = array_values(array_unique(array_merge($current, $ids)));
+                $sRepo->syncCertifiers($sid, $merged);
+                $log[] = 'Certificadoras vinculadas a proveedor ' . $sCode . ': ' . count($merged);
+            }
         }
 
         $upsertProduct = static function (array $row) use ($pdo): string {
