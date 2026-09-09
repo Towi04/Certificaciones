@@ -380,6 +380,9 @@ final class AdminController
         if (has_old_input() && is_array(old('catalog_filter_ids'))) {
             $data['selectedFilterIds'] = array_map('intval', (array) old('catalog_filter_ids'));
         }
+        if (has_old_input()) {
+            $data['selectedCenniTypes'] = array_values(array_map('strval', (array) (old('cenni_types') ?? [])));
+        }
         view('admin/product_form', $data);
     }
 
@@ -389,7 +392,11 @@ final class AdminController
         csrf_verify();
         try {
             $id = (new ProductAdminService())->createProduct($_POST);
-            (new CatalogFilterService())->syncProductFilters($id, $_POST['catalog_filter_ids'] ?? []);
+            (new CatalogFilterService())->syncProductFilters(
+                $id,
+                $_POST['catalog_filter_ids'] ?? [],
+                array_values((array) ($_POST['cenni_types'] ?? []))
+            );
             flash('success', 'Producto creado. Ya puedes subir logo/galería y asignarlo al catálogo.');
             redirect('/admin/productos/' . $id);
         } catch (\Throwable $e) {
@@ -420,6 +427,9 @@ final class AdminController
         if (has_old_input() && is_array(old('catalog_filter_ids'))) {
             $data['selectedFilterIds'] = array_map('intval', (array) old('catalog_filter_ids'));
         }
+        if (has_old_input()) {
+            $data['selectedCenniTypes'] = array_values(array_map('strval', (array) (old('cenni_types') ?? [])));
+        }
         $data['media'] = $media;
         $data['title'] = 'Editar · ' . ($product['name'] ?? '');
         view('admin/product_form', $data);
@@ -437,7 +447,11 @@ final class AdminController
 
         try {
             (new ProductAdminService())->updateProduct($productId, $_POST);
-            (new CatalogFilterService())->syncProductFilters($productId, $_POST['catalog_filter_ids'] ?? []);
+            (new CatalogFilterService())->syncProductFilters(
+                $productId,
+                $_POST['catalog_filter_ids'] ?? [],
+                array_values((array) ($_POST['cenni_types'] ?? []))
+            );
             flash('success', 'Producto actualizado.');
         } catch (\Throwable $e) {
             $this->formError($e->getMessage());
@@ -787,6 +801,8 @@ final class AdminController
             'supplierCertifiers' => (new SupplierRepository())->certifiersGroupedBySupplier(),
             'catalogFilters' => $filterSvc->adminFilters(),
             'selectedFilterIds' => $productId > 0 ? $filterSvc->productFilterIds($productId) : [],
+            'cenniTypeOptions' => \App\Repositories\CatalogFilterRepository::cenniTypeDefinitions(),
+            'selectedCenniTypes' => $productId > 0 ? $filterSvc->cenniTypeKeysForProduct($productId) : [],
             'typeOptions' => ProductAdminService::typeOptions(),
             'categoryOptions' => ProductAdminService::categoryOptions(),
             'audienceOptions' => ProductAdminService::audienceOptions(),
