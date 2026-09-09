@@ -7,7 +7,7 @@
     <h1 style="margin:0;color:var(--doceo-blue)">Partners</h1>
     <a class="btn btn-accent" href="<?= e(url('/admin/partners/nuevo')) ?>">Nuevo partner</a>
 </div>
-<p class="muted">Crea cuentas de partner y asigna el nivel de precio (CNCM / A / B / C).</p>
+<p class="muted">Crea cuentas de partner y asigna el nivel de precio (CNCM / Bronze / Silver / Gold).</p>
 
 <form method="get" style="margin:1rem 0;display:flex;gap:.5rem;flex-wrap:wrap;max-width:420px">
     <input type="search" name="q" value="<?= e($q) ?>" placeholder="Código, nombre o correo…"

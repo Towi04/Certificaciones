@@ -6,7 +6,7 @@
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">Registrar alumno</h1>
 <p class="muted" style="max-width:48rem">
     Elige el producto en el catálogo (se muestra tu precio de nivel
-    <strong><?= e(strtoupper((string) $partner['tier'])) ?></strong>).
+    <strong><?= e(\App\Services\PartnerAdminService::tierLabel($partner['tier'] ?? null)) ?></strong>).
     Completarás el <strong>mismo proceso</strong> que un alumno cualquiera:
     datos obligatorios, reglamento (firma digital en pantalla o PDF escaneado),
     agenda, combos/paquetes y opciones de pago.

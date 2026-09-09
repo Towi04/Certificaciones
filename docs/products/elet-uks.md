@@ -77,7 +77,7 @@ No se piden otros campos (sin CURP, fecha de nacimiento, etc.).
 | Lista (`catalog_price`) | $1,500 |
 | Público DOCEO (`public_price`) | $1,350 |
 | Costo DOCEO | $846 |
-| Partner A / B / C | $1,300 / $1,250 / $1,200 |
+| Partner Bronze / Silver / Gold | $1,300 / $1,250 / $1,200 |
 | CNCM | $846 |
 
 **Precio al alumno incluye comisión OpenPay** según método (SPEI/OXXO/tarjeta) y meses MSI.
