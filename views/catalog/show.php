@@ -2,6 +2,15 @@
 /** @var array<string,mixed> $product */
 /** @var list<array<string,mixed>> $media */
 $media = $media ?? [];
+$galleryItems = [];
+$documentItems = [];
+foreach ($media as $item) {
+    if ((string) ($item['media_type'] ?? '') === 'document') {
+        $documentItems[] = $item;
+    } else {
+        $galleryItems[] = $item;
+    }
+}
 $youtubeThumb = static function (array $item): ?string {
     $url = (string) ($item['external_url'] ?? '');
     if ($url !== '' && preg_match('#/embed/([A-Za-z0-9_-]+)#', $url, $m)) {
@@ -59,9 +68,10 @@ $youtubeThumb = static function (array $item): ?string {
 
             <?php if ($media !== []): ?>
                 <aside class="product-media-gallery" aria-label="Multimedia del producto">
-                    <h2>Galería</h2>
+                    <h2><?= $galleryItems !== [] ? 'Galería' : 'Documentos' ?></h2>
+                    <?php if ($galleryItems !== []): ?>
                     <div class="product-media-thumb-grid">
-                        <?php foreach ($media as $item): ?>
+                        <?php foreach ($galleryItems as $item): ?>
                             <?php
                             $isVideo = (string) ($item['media_type'] ?? '') === 'video';
                             $externalUrl = (string) ($item['external_url'] ?? '');
@@ -87,13 +97,31 @@ $youtubeThumb = static function (array $item): ?string {
                             </button>
                         <?php endforeach; ?>
                     </div>
+                    <?php endif; ?>
+                    <?php if ($documentItems !== []): ?>
+                        <div class="product-media-docs"<?= $galleryItems === [] ? ' style="margin-top:0"' : '' ?>>
+                            <?php if ($galleryItems !== []): ?><h3>Documentos</h3><?php endif; ?>
+                            <ul>
+                                <?php foreach ($documentItems as $doc): ?>
+                                    <li>
+                                        <a href="<?= e(asset((string) $doc['storage_path'])) ?>" target="_blank" rel="noopener">
+                                            <?= e((string) ($doc['title'] ?: 'Documento')) ?>
+                                        </a>
+                                        <?php if (!empty($doc['caption'])): ?>
+                                            <span class="muted"><?= e((string) $doc['caption']) ?></span>
+                                        <?php endif; ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </div>
+                    <?php endif; ?>
                 </aside>
             <?php endif; ?>
         </div>
     <?php endif; ?>
 </article>
 
-<?php if ($media !== []): ?>
+<?php if (!empty($galleryItems)): ?>
 <div class="product-media-modal" id="product-media-modal" hidden role="dialog" aria-modal="true" aria-label="Multimedia del producto">
     <button type="button" class="product-media-modal-backdrop" data-media-close aria-label="Cerrar"></button>
     <div class="product-media-modal-card">
@@ -133,6 +161,41 @@ $youtubeThumb = static function (array $item): ?string {
     color:var(--doceo-blue);
     font-size:1.05rem;
     margin:0 0 .25rem;
+}
+.product-media-docs {
+    margin-top:1rem;
+}
+.product-media-docs h3 {
+    color:var(--doceo-blue);
+    font-size:.95rem;
+    margin:0 0 .45rem;
+}
+.product-media-docs ul {
+    list-style:none;
+    margin:0;
+    padding:0;
+    display:grid;
+    gap:.45rem;
+}
+.product-media-docs li {
+    background:#fff;
+    border:1px solid #e6ebf2;
+    border-radius:10px;
+    padding:.55rem .7rem;
+    font-size:.88rem;
+}
+.product-media-docs a {
+    font-weight:700;
+    color:var(--doceo-blue);
+    text-decoration:none;
+}
+.product-media-docs a:hover {
+    text-decoration:underline;
+}
+.product-media-docs .muted {
+    display:block;
+    margin-top:.2rem;
+    font-size:.78rem;
 }
 .product-media-thumb-grid {
     display:grid;
@@ -315,7 +378,7 @@ $youtubeThumb = static function (array $item): ?string {
 }
 </style>
 
-<?php if ($media !== []): ?>
+<?php if ($galleryItems !== []): ?>
 <script>
 (function () {
   const modal = document.getElementById('product-media-modal');

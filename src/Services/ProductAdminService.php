@@ -163,14 +163,22 @@ final class ProductAdminService
     {
         $input = $this->storeProviderWorkbookFromInput($input, null);
         $pdfFile = is_array($input['_instruction_pdf_file'] ?? null) ? $input['_instruction_pdf_file'] : null;
-        unset($input['_instruction_pdf_file']);
+        $docFiles = is_array($input['_instruction_doc_files'] ?? null) ? $input['_instruction_doc_files'] : null;
+        unset($input['_instruction_pdf_file'], $input['_instruction_doc_files']);
         $parsed = $this->buildGroupPayload($input, true);
         if ($this->groups->findByCode($parsed['code']) !== null) {
             throw new \InvalidArgumentException('Ya existe un grupo con el código ' . $parsed['code']);
         }
         $id = $this->groups->create($parsed);
-        if ($pdfFile !== null) {
-            $input['_instruction_pdf_file'] = $pdfFile;
+        $hasPdf = $pdfFile !== null;
+        $hasDocs = is_array($docFiles) && $docFiles !== [];
+        if ($hasPdf || $hasDocs) {
+            if ($hasPdf) {
+                $input['_instruction_pdf_file'] = $pdfFile;
+            }
+            if ($docFiles !== null && $docFiles !== []) {
+                $input['_instruction_doc_files'] = $docFiles;
+            }
             $input['_group_id'] = $id;
             $input = $this->storeInstructionPdfFromInput($input, $id);
             $parsedAgain = $this->buildGroupPayload($input, false);
@@ -336,6 +344,7 @@ final class ProductAdminService
             'instruction_pdf_label' => trim((string) ($instr['pdf_label'] ?? '')),
             'instruction_video_url' => trim((string) ($instr['video_url'] ?? '')),
             'instruction_video_label' => trim((string) ($instr['video_label'] ?? '')),
+            'instruction_docs' => ExamInstructionAssets::normalizeDocuments($instr),
             'checkout_fields' => $checkoutFields,
             'checkout_field_required' => $checkoutFieldRequired,
             'pay_transfer' => in_array('transfer_proof', $order, true),
@@ -1109,24 +1118,34 @@ final class ProductAdminService
         $config['exam'] = $exam;
 
         $existingInstr = is_array($config['exam_instructions'] ?? null) ? $config['exam_instructions'] : [];
-        $pdfPath = trim((string) ($existingInstr['pdf_path'] ?? ''));
-        if (!empty($input['instruction_clear_pdf'])) {
-            $pdfPath = '';
+        $documents = $this->parseInstructionDocumentsFromInput($input, $existingInstr);
+
+        $pdfPath = '';
+        $pdfUrl = '';
+        $pdfLabel = '';
+        $videoUrl = '';
+        $videoLabel = '';
+        foreach ($documents as $doc) {
+            $kind = (string) ($doc['kind'] ?? 'file');
+            if ($pdfPath === '' && $pdfUrl === '' && ($kind === 'file' || $kind === 'link')) {
+                $pdfPath = trim((string) ($doc['path'] ?? ''));
+                $pdfUrl = trim((string) ($doc['url'] ?? ''));
+                $pdfLabel = trim((string) ($doc['label'] ?? ''));
+            }
+            if ($videoUrl === '' && $kind === 'video') {
+                $videoUrl = trim((string) ($doc['url'] ?? ''));
+                $videoLabel = trim((string) ($doc['label'] ?? ''));
+            }
         }
-        if (!empty($input['instruction_pdf_path'])) {
-            $pdfPath = trim((string) $input['instruction_pdf_path']);
-        }
-        $pdfUrl = trim((string) ($input['instruction_pdf_url'] ?? ''));
-        $videoUrl = trim((string) ($input['instruction_video_url'] ?? ''));
-        $pdfLabel = trim((string) ($input['instruction_pdf_label'] ?? ''));
-        $videoLabel = trim((string) ($input['instruction_video_label'] ?? ''));
-        if ($pdfPath !== '' || $pdfUrl !== '' || $videoUrl !== '' || $pdfLabel !== '' || $videoLabel !== '') {
+
+        if ($documents !== []) {
             $config['exam_instructions'] = [
-                'pdf_path' => $pdfPath,
-                'pdf_url' => $pdfUrl,
+                'pdf_path' => $pdfPath !== '' ? $pdfPath : null,
+                'pdf_url' => $pdfUrl !== '' ? $pdfUrl : null,
                 'pdf_label' => $pdfLabel !== '' ? mb_substr($pdfLabel, 0, 120) : 'Guía / PDF de instrucciones',
-                'video_url' => $videoUrl,
+                'video_url' => $videoUrl !== '' ? $videoUrl : null,
                 'video_label' => $videoLabel !== '' ? mb_substr($videoLabel, 0, 120) : 'Video de instrucciones',
+                'documents' => $documents,
             ];
         } else {
             unset($config['exam_instructions']);
@@ -1557,7 +1576,7 @@ final class ProductAdminService
     }
 
     /**
-     * Guarda PDF público de instrucciones de examen y deja la ruta en el input.
+     * Guarda archivos de instrucciones (legacy PDF + docs[]) y deja rutas en el input.
      *
      * @param array<string, mixed> $input
      * @return array<string, mixed>
@@ -1565,13 +1584,128 @@ final class ProductAdminService
     private function storeInstructionPdfFromInput(array $input, int $groupId): array
     {
         $file = $input['_instruction_pdf_file'] ?? null;
-        if (!is_array($file) || (int) ($file['error'] ?? \UPLOAD_ERR_NO_FILE) === \UPLOAD_ERR_NO_FILE) {
-            return $input;
+        unset($input['_instruction_pdf_file']);
+        if (is_array($file) && (int) ($file['error'] ?? \UPLOAD_ERR_NO_FILE) !== \UPLOAD_ERR_NO_FILE) {
+            $input['instruction_pdf_path'] = ExamInstructionAssets::storeFileUpload($groupId, $file);
         }
 
-        $input['instruction_pdf_path'] = ExamInstructionAssets::storePdfUpload($groupId, $file);
+        $multi = $input['_instruction_doc_files'] ?? null;
+        unset($input['_instruction_doc_files']);
+        if (is_array($multi)) {
+            $paths = is_array($input['instruction_doc_path'] ?? null) ? $input['instruction_doc_path'] : [];
+            foreach ($multi as $i => $row) {
+                if (!is_array($row) || (int) ($row['error'] ?? \UPLOAD_ERR_NO_FILE) === \UPLOAD_ERR_NO_FILE) {
+                    continue;
+                }
+                $paths[(int) $i] = ExamInstructionAssets::storeFileUpload($groupId, $row);
+            }
+            $input['instruction_doc_path'] = $paths;
+        }
 
         return $input;
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @param array<string, mixed> $prevInstructions
+     * @return list<array{code:string,label:string,kind:string,path:?string,url:?string}>
+     */
+    private function parseInstructionDocumentsFromInput(array $input, array $prevInstructions): array
+    {
+        $prevByCode = [];
+        foreach (ExamInstructionAssets::normalizeDocuments($prevInstructions) as $row) {
+            $c = (string) ($row['code'] ?? '');
+            if ($c !== '') {
+                $prevByCode[$c] = $row;
+            }
+        }
+
+        $codes = $input['instruction_doc_code'] ?? null;
+        if (!is_array($codes)) {
+            // Sin filas en el formulario: conservar documentos previos (p. ej. guardado parcial).
+            return array_values($prevByCode);
+        }
+
+        $labels = is_array($input['instruction_doc_label'] ?? null) ? $input['instruction_doc_label'] : [];
+        $kinds = is_array($input['instruction_doc_kind'] ?? null) ? $input['instruction_doc_kind'] : [];
+        $urls = is_array($input['instruction_doc_url'] ?? null) ? $input['instruction_doc_url'] : [];
+        $paths = is_array($input['instruction_doc_path'] ?? null) ? $input['instruction_doc_path'] : [];
+        $clears = is_array($input['instruction_doc_clear'] ?? null) ? $input['instruction_doc_clear'] : [];
+
+        $out = [];
+        $seen = [];
+        $n = count($codes);
+        for ($i = 0; $i < $n; $i++) {
+            $code = ExamInstructionAssets::sanitizeCode((string) ($codes[$i] ?? ''));
+            $label = trim((string) ($labels[$i] ?? ''));
+            $kind = strtolower(trim((string) ($kinds[$i] ?? 'file')));
+            if (!in_array($kind, ['file', 'link', 'video'], true)) {
+                $kind = 'file';
+            }
+            $url = trim((string) ($urls[$i] ?? ''));
+            $path = trim((string) ($paths[$i] ?? ''));
+            $clear = !empty($clears[$i]);
+            if ($clear) {
+                $path = '';
+            }
+            // Fila vacía del formulario (placeholder).
+            if ($code === '' && $label === '' && $url === '' && $path === '' && !$clear) {
+                $fileWasUploaded = is_array($input['instruction_doc_path'] ?? null)
+                    && trim((string) ($paths[$i] ?? '')) !== '';
+                if (!$fileWasUploaded) {
+                    continue;
+                }
+            }
+            if ($code === '') {
+                $code = ExamInstructionAssets::sanitizeCode($label !== '' ? $label : ($kind === 'video' ? 'video' : 'doc'));
+            }
+            if ($code === '') {
+                continue;
+            }
+            if (isset($seen[$code])) {
+                $base = $code;
+                $suffix = 2;
+                while (isset($seen[$code])) {
+                    $code = $base . '_' . $suffix;
+                    $suffix++;
+                }
+            }
+            $seen[$code] = true;
+            if ($path === '' && $url === '' && !$clear && isset($prevByCode[$code])) {
+                $path = trim((string) ($prevByCode[$code]['path'] ?? ''));
+                if ($url === '') {
+                    $url = trim((string) ($prevByCode[$code]['url'] ?? ''));
+                }
+                if ($label === '') {
+                    $label = trim((string) ($prevByCode[$code]['label'] ?? ''));
+                }
+            }
+            $normalized = ExamInstructionAssets::normalizeOneDocument([
+                'code' => $code,
+                'label' => $label,
+                'kind' => $kind,
+                'path' => $path,
+                'url' => $url,
+            ]);
+            if ($normalized === null) {
+                continue;
+            }
+            if ($normalized['kind'] === 'file' && $normalized['path'] === '' && $normalized['url'] === '') {
+                continue;
+            }
+            if (($normalized['kind'] === 'link' || $normalized['kind'] === 'video') && $normalized['url'] === '') {
+                continue;
+            }
+            $out[] = [
+                'code' => $normalized['code'],
+                'label' => $normalized['label'],
+                'kind' => $normalized['kind'],
+                'path' => $normalized['path'] !== '' ? $normalized['path'] : null,
+                'url' => $normalized['url'] !== '' ? $normalized['url'] : null,
+            ];
+        }
+
+        return $out;
     }
 
     /**

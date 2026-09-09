@@ -11,6 +11,13 @@ final class ProductMediaService
 {
     private const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'];
     private const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml', 'text/plain', 'application/xml', 'text/xml'];
+    private const DOCUMENT_EXTENSIONS = ['pdf', 'doc', 'docx'];
+    private const DOCUMENT_MIMES = [
+        'application/pdf',
+        'application/octet-stream',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
 
     private ProductMediaRepository $media;
     private ProductRepository $products;
@@ -31,7 +38,14 @@ final class ProductMediaService
             throw new \InvalidArgumentException('Producto no encontrado.');
         }
 
-        $stored = $this->storePublicUpload($productId, $file, self::IMAGE_EXTENSIONS, 10 * 1024 * 1024);
+        $stored = $this->storePublicUpload(
+            $productId,
+            $file,
+            self::IMAGE_EXTENSIONS,
+            self::IMAGE_MIMES,
+            10 * 1024 * 1024,
+            true
+        );
         $this->products->update($productId, ['logo_path' => $stored['path']]);
 
         return $stored['path'];
@@ -53,7 +67,43 @@ final class ProductMediaService
             throw new \InvalidArgumentException('Producto no encontrado.');
         }
 
-        $stored = $this->storePublicUpload($productId, $file, self::IMAGE_EXTENSIONS, 10 * 1024 * 1024);
+        $extension = strtolower(pathinfo(basename((string) ($file['name'] ?? '')), PATHINFO_EXTENSION));
+        $isDocument = in_array($extension, self::DOCUMENT_EXTENSIONS, true);
+        if ($isDocument) {
+            $stored = $this->storePublicUpload(
+                $productId,
+                $file,
+                self::DOCUMENT_EXTENSIONS,
+                self::DOCUMENT_MIMES,
+                12 * 1024 * 1024,
+                false
+            );
+            $title = trim($title);
+            if ($title === '') {
+                $title = 'Documento del producto';
+            }
+
+            return $this->media->create([
+                'product_id' => $productId,
+                'media_type' => 'document',
+                'title' => mb_substr($title, 0, 190),
+                'caption' => trim($caption) !== '' ? mb_substr(trim($caption), 0, 255) : null,
+                'storage_path' => $stored['path'],
+                'external_url' => null,
+                'mime_type' => $stored['mime'],
+                'sort_order' => max(0, $sortOrder),
+                'is_active' => $isActive,
+            ]);
+        }
+
+        $stored = $this->storePublicUpload(
+            $productId,
+            $file,
+            self::IMAGE_EXTENSIONS,
+            self::IMAGE_MIMES,
+            10 * 1024 * 1024,
+            true
+        );
         $title = trim($title);
         if ($title === '') {
             $title = 'Imagen del producto';
@@ -132,21 +182,41 @@ final class ProductMediaService
             throw new \InvalidArgumentException('Multimedia no encontrada para este producto.');
         }
 
+        $mediaType = (string) ($media['media_type'] ?? 'image');
         $title = trim($title);
         if ($title === '') {
-            $title = (string) ($media['media_type'] ?? '') === 'video'
-                ? 'Video del producto'
-                : 'Imagen del producto';
+            $title = match ($mediaType) {
+                'video' => 'Video del producto',
+                'document' => 'Documento del producto',
+                default => 'Imagen del producto',
+            };
         }
 
         $replacement = null;
         $hasReplacement = is_array($replacementFile)
             && (($replacementFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE);
         if ($hasReplacement) {
-            if ((string) ($media['media_type'] ?? '') !== 'image') {
-                throw new \InvalidArgumentException('Solo las imágenes pueden reemplazarse con archivo.');
+            if ($mediaType === 'image') {
+                $replacement = $this->storePublicUpload(
+                    $productId,
+                    $replacementFile,
+                    self::IMAGE_EXTENSIONS,
+                    self::IMAGE_MIMES,
+                    10 * 1024 * 1024,
+                    true
+                );
+            } elseif ($mediaType === 'document') {
+                $replacement = $this->storePublicUpload(
+                    $productId,
+                    $replacementFile,
+                    self::DOCUMENT_EXTENSIONS,
+                    self::DOCUMENT_MIMES,
+                    12 * 1024 * 1024,
+                    false
+                );
+            } else {
+                throw new \InvalidArgumentException('Solo las imágenes y documentos pueden reemplazarse con archivo.');
             }
-            $replacement = $this->storePublicUpload($productId, $replacementFile, self::IMAGE_EXTENSIONS, 10 * 1024 * 1024);
         }
 
         $this->media->update($mediaId, [
@@ -169,10 +239,17 @@ final class ProductMediaService
     /**
      * @param array{tmp_name:string,name:string,error:int,size:int,type?:string} $file
      * @param list<string> $allowedExtensions
+     * @param list<string> $allowedMimes
      * @return array{path:string,mime:string,extension:string}
      */
-    private function storePublicUpload(int $productId, array $file, array $allowedExtensions, int $maxBytes): array
-    {
+    private function storePublicUpload(
+        int $productId,
+        array $file,
+        array $allowedExtensions,
+        array $allowedMimes,
+        int $maxBytes,
+        bool $allowSvgSanitize
+    ): array {
         if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
             throw new \InvalidArgumentException('Selecciona un archivo válido.');
         }
@@ -193,10 +270,10 @@ final class ProductMediaService
 
         $finfo = new \finfo(FILEINFO_MIME_TYPE);
         $mime = (string) ($finfo->file((string) $file['tmp_name']) ?: ($file['type'] ?? 'application/octet-stream'));
-        if (!in_array($mime, self::IMAGE_MIMES, true)) {
+        if (!in_array($mime, $allowedMimes, true)) {
             throw new \InvalidArgumentException('Tipo MIME no permitido para multimedia de producto.');
         }
-        if ($extension === 'svg') {
+        if ($allowSvgSanitize && $extension === 'svg') {
             $this->assertSafeSvg((string) $file['tmp_name']);
             $mime = 'image/svg+xml';
         }

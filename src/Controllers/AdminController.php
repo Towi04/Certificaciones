@@ -503,6 +503,10 @@ final class AdminController
             if (isset($_FILES['instruction_pdf_file']) && is_array($_FILES['instruction_pdf_file'])) {
                 $post['_instruction_pdf_file'] = $_FILES['instruction_pdf_file'];
             }
+            $docFiles = $this->normalizeMultiFileUpload($_FILES['instruction_doc_file'] ?? null);
+            if ($docFiles !== []) {
+                $post['_instruction_doc_files'] = $docFiles;
+            }
             $id = (new ProductAdminService())->createGroup($post);
             flash('success', 'Grupo creado. Ya puedes asignarlo a productos.');
             redirect('/admin/grupos/' . $id);
@@ -568,6 +572,10 @@ final class AdminController
             }
             if (isset($_FILES['instruction_pdf_file']) && is_array($_FILES['instruction_pdf_file'])) {
                 $post['_instruction_pdf_file'] = $_FILES['instruction_pdf_file'];
+            }
+            $docFiles = $this->normalizeMultiFileUpload($_FILES['instruction_doc_file'] ?? null);
+            if ($docFiles !== []) {
+                $post['_instruction_doc_files'] = $docFiles;
             }
             (new ProductAdminService())->updateGroup($groupId, $post);
             flash('success', 'Grupo actualizado. Los productos del grupo heredan estos cambios.');
@@ -731,7 +739,7 @@ final class AdminController
 
             $file = $_FILES['media_file'] ?? null;
             if ($file === null || !is_array($file)) {
-                throw new \InvalidArgumentException('Sube una imagen o pega un link de YouTube.');
+                throw new \InvalidArgumentException('Sube una imagen, un documento (PDF/DOC) o pega un link de YouTube.');
             }
             $service->addMedia(
                 $productId,
@@ -741,7 +749,7 @@ final class AdminController
                 (int) ($_POST['sort_order'] ?? 0),
                 !empty($_POST['is_active'])
             );
-            flash('success', 'Imagen agregada al producto.');
+            flash('success', 'Archivo agregado a la galería del producto.');
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
@@ -2742,6 +2750,50 @@ public function promoCode(): void
     private function formError(string $message, ?array $input = null): void
     {
         flash_form_error($message, $input);
+    }
+
+    /**
+     * Normaliza $_FILES['campo'] con índices (campo[0], campo[1], …).
+     *
+     * @param mixed $files
+     * @return array<int, array{name:string,type:string,tmp_name:string,error:int,size:int}>
+     */
+    private function normalizeMultiFileUpload(mixed $files): array
+    {
+        if (!is_array($files) || !isset($files['name'])) {
+            return [];
+        }
+        if (!is_array($files['name'])) {
+            $err = (int) ($files['error'] ?? \UPLOAD_ERR_NO_FILE);
+            if ($err === \UPLOAD_ERR_NO_FILE) {
+                return [];
+            }
+
+            return [0 => [
+                'name' => (string) ($files['name'] ?? ''),
+                'type' => (string) ($files['type'] ?? ''),
+                'tmp_name' => (string) ($files['tmp_name'] ?? ''),
+                'error' => $err,
+                'size' => (int) ($files['size'] ?? 0),
+            ]];
+        }
+
+        $out = [];
+        foreach ($files['name'] as $i => $name) {
+            $err = (int) ($files['error'][$i] ?? \UPLOAD_ERR_NO_FILE);
+            if ($err === \UPLOAD_ERR_NO_FILE) {
+                continue;
+            }
+            $out[(int) $i] = [
+                'name' => (string) $name,
+                'type' => (string) ($files['type'][$i] ?? ''),
+                'tmp_name' => (string) ($files['tmp_name'][$i] ?? ''),
+                'error' => $err,
+                'size' => (int) ($files['size'][$i] ?? 0),
+            ];
+        }
+
+        return $out;
     }
 
     /**
