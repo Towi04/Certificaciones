@@ -573,12 +573,21 @@ final class ProductAdminService
     }
 
     /**
-     * Alta masiva de certificaciones/productos (p.ej. desde un proveedor).
+     * Alta/actualización masiva de certificaciones/productos.
+     * La clave es la columna code.
      *
-     * @return array{created:int,skipped:int,errors:list<string>}
+     * @param 'create'|'update'|'upsert' $mode
+     * @return array{created:int,updated:int,skipped:int,errors:list<string>}
      */
-    public function importProductsFromCsv(string $tmpPath, ?int $defaultGroupId, ?int $defaultSupplierId): array
-    {
+    public function importProductsFromCsv(
+        string $tmpPath,
+        ?int $defaultGroupId,
+        ?int $defaultSupplierId,
+        string $mode = 'create'
+    ): array {
+        if (!in_array($mode, ['create', 'update', 'upsert'], true)) {
+            $mode = 'create';
+        }
         $handle = fopen($tmpPath, 'rb');
         if ($handle === false) {
             throw new \InvalidArgumentException('No se pudo leer el archivo CSV.');
@@ -610,6 +619,7 @@ final class ProductAdminService
         }
 
         $created = 0;
+        $updated = 0;
         $skipped = 0;
         $errors = [];
         $line = 1;
@@ -625,24 +635,69 @@ final class ProductAdminService
 
                 return $data[$map[$col]] ?? $default;
             };
+            $code = self::normalizeProductCode((string) $get('code', ''));
+            if ($code === '') {
+                $errors[] = "Fila {$line}: código vacío.";
+                $skipped++;
+                continue;
+            }
+            $existing = $this->products->findByCode($code);
+            if ($mode === 'create' && $existing !== null) {
+                $errors[] = "Fila {$line}: el código {$code} ya existe (modo solo crear).";
+                $skipped++;
+                continue;
+            }
+            if ($mode === 'update' && $existing === null) {
+                $errors[] = "Fila {$line}: no existe el producto {$code} (modo solo actualizar).";
+                $skipped++;
+                continue;
+            }
+
             $input = [
-                'code' => $get('code', ''),
+                'code' => $code,
                 'name' => $get('name', ''),
-                'type' => $get('type', 'certification'),
-                'category' => $get('category', 'other'),
-                'audience' => $get('audience', 'any'),
-                'public_price' => $get('public_price', 0),
-                'catalog_price' => $get('catalog_price', ''),
-                'cost_price' => $get('cost_price', 0),
-                'price_cncm' => $get('price_cncm', ''),
-                'price_partner_a' => $get('price_partner_a', ''),
-                'price_partner_b' => $get('price_partner_b', ''),
-                'price_partner_c' => $get('price_partner_c', ''),
-                'is_active' => 1,
-                'is_public' => 1,
-                'product_group_id' => $defaultGroupId,
-                'supplier_id' => $defaultSupplierId,
+                'type' => $get('type', $existing['type'] ?? 'certification'),
+                'category' => $get('category', $existing['category'] ?? 'other'),
+                'audience' => $get('audience', $existing['audience'] ?? 'any'),
+                'public_price' => $get('public_price', $existing['public_price'] ?? 0),
+                'catalog_price' => $get('catalog_price', $existing['catalog_price'] ?? ''),
+                'cost_price' => $get('cost_price', $existing['cost_price'] ?? 0),
+                'price_cncm' => $get('price_cncm', $existing['price_cncm'] ?? ''),
+                'price_partner_a' => $get('price_partner_a', $existing['price_partner_a'] ?? ''),
+                'price_partner_b' => $get('price_partner_b', $existing['price_partner_b'] ?? ''),
+                'price_partner_c' => $get('price_partner_c', $existing['price_partner_c'] ?? ''),
+                'product_group_id' => $defaultGroupId ?? ($existing['product_group_id'] ?? null),
+                'supplier_id' => $defaultSupplierId ?? ($existing['supplier_id'] ?? null),
             ];
+            if (isset($map['is_public'])) {
+                $raw = trim((string) $get('is_public', ''));
+                if ($raw !== '') {
+                    $input['is_public'] = in_array(strtolower($raw), ['1', 'si', 'sí', 'yes', 'true'], true) ? 1 : 0;
+                } elseif ($existing !== null) {
+                    $input['is_public'] = (int) ($existing['is_public'] ?? 1);
+                } else {
+                    $input['is_public'] = 1;
+                }
+            } elseif ($existing !== null) {
+                $input['is_public'] = (int) ($existing['is_public'] ?? 1);
+            } else {
+                $input['is_public'] = 1;
+            }
+            if (isset($map['is_star'])) {
+                $raw = trim((string) $get('is_star', ''));
+                if ($raw !== '') {
+                    $input['is_star'] = in_array(strtolower($raw), ['1', 'si', 'sí', 'yes', 'true'], true) ? 1 : 0;
+                } elseif ($existing !== null) {
+                    $input['is_star'] = (int) ($existing['is_star'] ?? 0);
+                }
+            } elseif ($existing !== null) {
+                $input['is_star'] = (int) ($existing['is_star'] ?? 0);
+            }
+            if ($existing !== null) {
+                $input['is_active'] = (int) ($existing['is_active'] ?? 1);
+            } else {
+                $input['is_active'] = 1;
+            }
             if (isset($map['product_group_code'])) {
                 $gCode = self::normalizeGroupCode((string) $get('product_group_code', ''));
                 if ($gCode !== '') {
@@ -653,22 +708,32 @@ final class ProductAdminService
                         continue;
                     }
                     $input['product_group_id'] = (int) $group['id'];
-                    if ($defaultSupplierId === null && !empty($group['supplier_id'])) {
+                    if ($defaultSupplierId === null && empty($existing['supplier_id'] ?? null) && !empty($group['supplier_id'])) {
                         $input['supplier_id'] = (int) $group['supplier_id'];
                     }
                 }
             }
             try {
-                $this->createProduct($input);
-                $created++;
+                if ($existing !== null) {
+                    $this->updateProduct((int) $existing['id'], $input);
+                    $updated++;
+                } else {
+                    $this->createProduct($input);
+                    $created++;
+                }
             } catch (\Throwable $e) {
-                $errors[] = "Fila {$line}: " . $e->getMessage();
+                $errors[] = "Fila {$line} ({$code}): " . $e->getMessage();
                 $skipped++;
             }
         }
         fclose($handle);
 
-        return ['created' => $created, 'skipped' => $skipped, 'errors' => $errors];
+        return [
+            'created' => $created,
+            'updated' => $updated,
+            'skipped' => $skipped,
+            'errors' => $errors,
+        ];
     }
 
     /** @return list<string> */
@@ -687,6 +752,8 @@ final class ProductAdminService
             'price_partner_b',
             'price_partner_c',
             'product_group_code',
+            'is_public',
+            'is_star',
         ];
     }
 
@@ -711,7 +778,46 @@ final class ProductAdminService
             '2400',
             '2450',
             'itep-exams',
+            '1',
+            '0',
         ]);
+        fclose($out);
+        exit;
+    }
+
+    /**
+     * Exporta productos existentes (mismos encabezados de la plantilla) para editar y re-subir.
+     *
+     * @param array<string, mixed> $filters
+     */
+    public function sendProductsExportCsv(?string $q = null, array $filters = [], string $filename = 'productos-export.csv'): void
+    {
+        $rows = $this->products->adminList($q, null, null, $filters);
+        csv_download_headers($filename);
+        $out = fopen('php://output', 'w');
+        if ($out === false) {
+            throw new \RuntimeException('No se pudo generar el CSV.');
+        }
+        $headers = self::productBulkCsvHeaders();
+        csv_put($out, $headers);
+        foreach ($rows as $p) {
+            csv_put($out, [
+                (string) ($p['code'] ?? ''),
+                (string) ($p['name'] ?? ''),
+                (string) ($p['type'] ?? 'certification'),
+                (string) ($p['category'] ?? 'other'),
+                (string) ($p['public_price'] ?? ''),
+                (string) ($p['catalog_price'] ?? ''),
+                (string) ($p['cost_price'] ?? ''),
+                (string) ($p['price_cncm'] ?? ''),
+                (string) ($p['price_partner_a'] ?? ''),
+                (string) ($p['price_partner_b'] ?? ''),
+                (string) ($p['price_partner_c'] ?? ''),
+                (string) ($p['product_group_code'] ?? ''),
+                !empty($p['is_public']) ? '1' : '0',
+                !empty($p['is_star']) ? '1' : '0',
+            ]);
+        }
         fclose($out);
         exit;
     }

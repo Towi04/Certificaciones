@@ -53,6 +53,7 @@ $router->get('/admin/productos', fn () => $admin->products());
 $router->get('/admin/productos/nuevo', fn () => $admin->productCreateForm());
 $router->post('/admin/productos/nuevo', fn () => $admin->productCreate());
 $router->get('/admin/productos/plantilla-certificaciones.csv', fn () => $admin->productsBulkTemplate());
+$router->get('/admin/productos/exportar.csv', fn () => $admin->productsBulkExport());
 $router->post('/admin/productos/importar-csv', fn () => $admin->productsBulkImport());
 $router->get('/admin/productos/{id}', fn (string $id) => $admin->productEdit($id));
 $router->post('/admin/productos/{id}', fn (string $id) => $admin->productUpdate($id));

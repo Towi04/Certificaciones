@@ -474,14 +474,23 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
     <div class="panel" style="margin-top:.75rem;max-width:860px">
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Cargar certificaciones en lote</h2>
         <p class="muted" style="font-size:.85rem">
-            Sube un CSV para crear varios productos. Luego afina cada uno en Productos.
+            Sube un CSV para crear o actualizar productos (clave: <code>code</code>). Luego afina cada uno en Productos.
         </p>
-        <p style="margin:.5rem 0 1rem">
+        <p style="margin:.5rem 0 1rem;display:flex;gap:.5rem;flex-wrap:wrap">
             <a class="btn btn-ghost" href="<?= e(url('/admin/proveedores/' . $sid . '/plantilla-certificaciones.csv')) ?>">Descargar plantilla CSV</a>
+            <a class="btn btn-ghost" href="<?= e(url('/admin/productos/exportar.csv?supplier_id=' . $sid)) ?>">Descargar productos de este proveedor</a>
         </p>
         <form method="post" action="<?= e(url('/admin/proveedores/' . $sid . '/certificaciones')) ?>" enctype="multipart/form-data"
               style="display:grid;gap:.75rem">
             <?= csrf_field() ?>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Modo
+                <select name="import_mode" style="<?= e($inputStyle) ?>">
+                    <option value="upsert" selected>Crear y actualizar (por código)</option>
+                    <option value="update">Solo actualizar existentes</option>
+                    <option value="create">Solo crear nuevos</option>
+                </select>
+            </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
                 Grupo de proceso (recomendado)
                 <select name="product_group_id" style="<?= e($inputStyle) ?>">
@@ -495,7 +504,7 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
                 Archivo CSV
                 <input type="file" name="csv" accept=".csv,text/csv" required>
             </label>
-            <button class="btn btn-accent" type="submit">Crear certificaciones</button>
+            <button class="btn btn-accent" type="submit">Procesar CSV</button>
         </form>
     </div>
 </div>

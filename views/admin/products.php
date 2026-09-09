@@ -3,8 +3,10 @@
 /** @var list<array<string,mixed>> $suppliers */
 /** @var list<array<string,mixed>> $groups */
 /** @var array{supplier_id?:int,product_group_id?:int,is_public?:string,is_star?:string} $filters */
+/** @var string $tab */
 $suppliers = $suppliers ?? [];
 $groups = $groups ?? [];
+$tab = in_array(($tab ?? 'lista'), ['lista', 'csv'], true) ? $tab : 'lista';
 $filters = $filters ?? [
     'supplier_id' => 0,
     'product_group_id' => 0,
@@ -18,6 +20,13 @@ $hasExtraFilters = ((int) ($filters['supplier_id'] ?? 0) > 0)
     || trim((string) ($q ?? '')) !== '';
 $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;width:100%;box-sizing:border-box';
 $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600';
+$exportQs = http_build_query(array_filter([
+    'q' => $q ?? '',
+    'supplier_id' => ((int) ($filters['supplier_id'] ?? 0)) ?: null,
+    'product_group_id' => ((int) ($filters['product_group_id'] ?? 0)) ?: null,
+    'is_public' => ($filters['is_public'] ?? '') !== '' ? $filters['is_public'] : null,
+    'is_star' => ($filters['is_star'] ?? '') !== '' ? $filters['is_star'] : null,
+], static fn ($v) => $v !== null && $v !== ''));
 ?>
 <div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap">
     <div>
@@ -42,8 +51,83 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
     </div>
 <?php endif; ?>
 
+<nav class="group-tabs" style="margin-top:1rem" role="tablist" aria-label="Secciones de productos">
+    <a class="group-tab <?= $tab === 'lista' ? 'active' : '' ?>" href="<?= e(url('/admin/productos?tab=lista')) ?>">Lista</a>
+    <a class="group-tab <?= $tab === 'csv' ? 'active' : '' ?>" href="<?= e(url('/admin/productos?tab=csv')) ?>">CSV (alta / actualización)</a>
+</nav>
+
+<?php if ($tab === 'csv'): ?>
+    <div class="panel" style="margin-top:.75rem;max-width:920px">
+        <h2 style="margin:0 0 .35rem;font-size:1.05rem;color:var(--doceo-blue)">Plantilla y exportación</h2>
+        <p class="muted" style="margin:0 0 .75rem;font-size:.85rem">
+            La clave es la columna <code>code</code>. Descarga los productos actuales, edítalos en Excel y vuelve a subirlos
+            en modo <strong>Actualizar</strong> o <strong>Crear y actualizar</strong>.
+            Los códigos de grupo deben existir en <a href="<?= e(url('/admin/grupos')) ?>">Grupos</a>.
+        </p>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
+            <a class="btn btn-ghost" href="<?= e(url('/admin/productos/plantilla-certificaciones.csv')) ?>">Plantilla vacía (ejemplo)</a>
+            <a class="btn btn-ghost" href="<?= e(url('/admin/productos/exportar.csv' . ($exportQs !== '' ? '?' . $exportQs : ''))) ?>">
+                Descargar productos existentes<?= $hasExtraFilters ? ' (con filtros de la lista)' : '' ?>
+            </a>
+        </div>
+
+        <h2 style="margin:1.25rem 0 .35rem;font-size:1.05rem;color:var(--doceo-blue)">Subir CSV</h2>
+        <form method="post" action="<?= e(url('/admin/productos/importar-csv')) ?>" enctype="multipart/form-data"
+              style="display:grid;gap:.75rem;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));align-items:end">
+            <?= csrf_field() ?>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Modo
+                <select name="import_mode" id="products-import-mode" style="<?= e($inputStyle) ?>">
+                    <option value="upsert" selected>Crear y actualizar (por código)</option>
+                    <option value="update">Solo actualizar existentes</option>
+                    <option value="create">Solo crear nuevos</option>
+                </select>
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Proveedor
+                <select name="supplier_id" id="products-import-supplier" style="<?= e($inputStyle) ?>">
+                    <option value="">— Sin cambiar / del CSV o grupo —</option>
+                    <?php foreach ($suppliers as $s): ?>
+                        <option value="<?= (int) $s['id'] ?>"><?= e((string) $s['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <span class="muted" style="font-weight:400;font-size:.78rem">Obligatorio solo si eliges «Solo crear nuevos».</span>
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Grupo por defecto (opcional)
+                <select name="product_group_id" style="<?= e($inputStyle) ?>">
+                    <option value="">— Usar product_group_code del CSV —</option>
+                    <?php foreach ($groups as $g): ?>
+                        <option value="<?= (int) $g['id'] ?>"><?= e((string) $g['name']) ?> (<?= e((string) $g['code']) ?>)</option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Archivo CSV
+                <input type="file" name="csv" accept=".csv,text/csv" required style="<?= e($inputStyle) ?>">
+            </label>
+            <div>
+                <button class="btn btn-accent" type="submit">Procesar CSV</button>
+            </div>
+        </form>
+    </div>
+    <script>
+    (function () {
+      var mode = document.getElementById('products-import-mode');
+      var supplier = document.getElementById('products-import-supplier');
+      if (!mode || !supplier) return;
+      function sync() {
+        supplier.required = mode.value === 'create';
+      }
+      mode.addEventListener('change', sync);
+      sync();
+    })();
+    </script>
+<?php else: ?>
+
 <form method="get" action="<?= e(url('/admin/productos')) ?>" class="panel"
-      style="margin-top:1rem;display:grid;gap:.75rem;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));align-items:end">
+      style="margin-top:.75rem;display:grid;gap:.75rem;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));align-items:end">
+    <input type="hidden" name="tab" value="lista">
     <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.85rem;font-weight:600">
         Buscar
         <input type="search" name="q" value="<?= e($q ?? '') ?>" placeholder="Código, nombre…"
@@ -90,51 +174,10 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
         <button class="btn btn-primary" type="submit">Filtrar</button>
         <?php if ($hasExtraFilters): ?>
-            <a class="btn btn-ghost" href="<?= e(url('/admin/productos')) ?>">Limpiar</a>
+            <a class="btn btn-ghost" href="<?= e(url('/admin/productos?tab=lista')) ?>">Limpiar</a>
         <?php endif; ?>
     </div>
 </form>
-
-<div class="panel" style="margin-top:1rem;max-width:920px">
-    <h2 style="margin:0 0 .35rem;font-size:1.05rem;color:var(--doceo-blue)">Cargar certificaciones (CSV)</h2>
-    <p class="muted" style="margin:0 0 .75rem;font-size:.85rem">
-        Sube varias certificaciones de un proveedor. También puedes hacerlo desde la ficha del proveedor.
-        Los códigos de grupo del CSV deben existir en
-        <a href="<?= e(url('/admin/grupos')) ?>">Grupos</a>.
-    </p>
-    <p style="margin:0 0 1rem">
-        <a class="btn btn-ghost" href="<?= e(url('/admin/productos/plantilla-certificaciones.csv')) ?>">Descargar plantilla CSV</a>
-    </p>
-    <form method="post" action="<?= e(url('/admin/productos/importar-csv')) ?>" enctype="multipart/form-data"
-          style="display:grid;gap:.75rem;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));align-items:end">
-        <?= csrf_field() ?>
-        <label class="muted" style="<?= e($labelStyle) ?>">
-            Proveedor
-            <select name="supplier_id" required style="<?= e($inputStyle) ?>">
-                <option value="">— Elige proveedor —</option>
-                <?php foreach ($suppliers as $s): ?>
-                    <option value="<?= (int) $s['id'] ?>"><?= e((string) $s['name']) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </label>
-        <label class="muted" style="<?= e($labelStyle) ?>">
-            Grupo por defecto (opcional)
-            <select name="product_group_id" style="<?= e($inputStyle) ?>">
-                <option value="">— Usar product_group_code del CSV —</option>
-                <?php foreach ($groups as $g): ?>
-                    <option value="<?= (int) $g['id'] ?>"><?= e((string) $g['name']) ?> (<?= e((string) $g['code']) ?>)</option>
-                <?php endforeach; ?>
-            </select>
-        </label>
-        <label class="muted" style="<?= e($labelStyle) ?>">
-            Archivo CSV
-            <input type="file" name="csv" accept=".csv,text/csv" required style="<?= e($inputStyle) ?>">
-        </label>
-        <div>
-            <button class="btn btn-accent" type="submit">Crear certificaciones</button>
-        </div>
-    </form>
-</div>
 
 <?php require BASE_PATH . '/views/shared/pagination.php'; ?>
 
@@ -176,3 +219,4 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
         </table>
     </div>
 </div>
+<?php endif; ?>
