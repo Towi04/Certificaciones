@@ -274,6 +274,17 @@ function csv_put($stream, array $fields, string $separator = ',', string $enclos
     return fputcsv($stream, $fields, $separator, $enclosure, $escape);
 }
 
+/**
+ * fgetcsv con $escape explícito (PHP 8.4+).
+ *
+ * @param resource $stream
+ * @return list<null|string>|false
+ */
+function csv_get($stream, ?int $length = null, string $separator = ',', string $enclosure = '"', string $escape = '\\'): array|false
+{
+    return fgetcsv($stream, $length, $separator, $enclosure, $escape);
+}
+
 /** Limpia buffers previos para que descargas CSV no mezclen HTML/warnings. */
 function csv_download_headers(string $filename, string $contentType = 'text/csv; charset=UTF-8'): void
 {

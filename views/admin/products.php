@@ -1,3 +1,12 @@
+<?php
+/** @var list<array<string,mixed>> $products */
+/** @var list<array<string,mixed>> $suppliers */
+/** @var list<array<string,mixed>> $groups */
+$suppliers = $suppliers ?? [];
+$groups = $groups ?? [];
+$inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;width:100%;box-sizing:border-box';
+$labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600';
+?>
 <div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap">
     <div>
         <h1 style="margin:0;color:var(--doceo-blue)">Productos</h1>
@@ -24,6 +33,47 @@
         y pulsa <strong>Cargar grupos sugeridos</strong>.
     </div>
 <?php endif; ?>
+
+<div class="panel" style="margin-top:1rem;max-width:920px">
+    <h2 style="margin:0 0 .35rem;font-size:1.05rem;color:var(--doceo-blue)">Cargar certificaciones (CSV)</h2>
+    <p class="muted" style="margin:0 0 .75rem;font-size:.85rem">
+        Sube varias certificaciones de un proveedor. También puedes hacerlo desde la ficha del proveedor.
+        Los códigos de grupo del CSV deben existir en
+        <a href="<?= e(url('/admin/grupos')) ?>">Grupos</a>.
+    </p>
+    <p style="margin:0 0 1rem">
+        <a class="btn btn-ghost" href="<?= e(url('/admin/productos/plantilla-certificaciones.csv')) ?>">Descargar plantilla CSV</a>
+    </p>
+    <form method="post" action="<?= e(url('/admin/productos/importar-csv')) ?>" enctype="multipart/form-data"
+          style="display:grid;gap:.75rem;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));align-items:end">
+        <?= csrf_field() ?>
+        <label class="muted" style="<?= e($labelStyle) ?>">
+            Proveedor
+            <select name="supplier_id" required style="<?= e($inputStyle) ?>">
+                <option value="">— Elige proveedor —</option>
+                <?php foreach ($suppliers as $s): ?>
+                    <option value="<?= (int) $s['id'] ?>"><?= e((string) $s['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label class="muted" style="<?= e($labelStyle) ?>">
+            Grupo por defecto (opcional)
+            <select name="product_group_id" style="<?= e($inputStyle) ?>">
+                <option value="">— Usar product_group_code del CSV —</option>
+                <?php foreach ($groups as $g): ?>
+                    <option value="<?= (int) $g['id'] ?>"><?= e((string) $g['name']) ?> (<?= e((string) $g['code']) ?>)</option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label class="muted" style="<?= e($labelStyle) ?>">
+            Archivo CSV
+            <input type="file" name="csv" accept=".csv,text/csv" required style="<?= e($inputStyle) ?>">
+        </label>
+        <div>
+            <button class="btn btn-accent" type="submit">Crear certificaciones</button>
+        </div>
+    </form>
+</div>
 
 <?php require BASE_PATH . '/views/shared/pagination.php'; ?>
 

@@ -257,8 +257,16 @@ final class AdminController
         $pagination = Pagination::fromRequest($repo->adminCount($q));
         $products = $repo->adminList($q, $pagination['limit'], $pagination['offset']);
         $groupsCount = 0;
+        $groups = [];
+        $suppliers = [];
         try {
-            $groupsCount = count((new ProductGroupRepository())->all());
+            $groups = (new ProductGroupRepository())->all();
+            $groupsCount = count($groups);
+        } catch (\Throwable $e) {
+            // ignore
+        }
+        try {
+            $suppliers = (new SupplierRepository())->all();
         } catch (\Throwable $e) {
             // ignore
         }
@@ -268,8 +276,67 @@ final class AdminController
             'pagination' => $pagination,
             'q' => $q ?? '',
             'groupsCount' => $groupsCount,
+            'groups' => $groups,
+            'suppliers' => $suppliers,
             'layout' => 'admin',
         ]);
+    }
+
+    public function productsBulkTemplate(): void
+    {
+        Auth::requireRole(['admin']);
+        (new ProductAdminService())->sendProductBulkTemplateCsv();
+    }
+
+    public function productsBulkImport(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $file = $_FILES['csv'] ?? null;
+        if (!is_array($file) || (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            flash('error', 'Selecciona un archivo CSV válido.');
+            redirect('/admin/productos');
+
+            return;
+        }
+        $name = strtolower((string) ($file['name'] ?? ''));
+        if (!str_ends_with($name, '.csv')) {
+            flash('error', 'El archivo debe ser CSV.');
+            redirect('/admin/productos');
+
+            return;
+        }
+        $supplierId = !empty($_POST['supplier_id']) ? (int) $_POST['supplier_id'] : null;
+        if ($supplierId === null || $supplierId < 1) {
+            flash('error', 'Elige el proveedor al que pertenecen las certificaciones.');
+            redirect('/admin/productos');
+
+            return;
+        }
+        if ((new SupplierRepository())->find($supplierId) === null) {
+            flash('error', 'Proveedor no encontrado.');
+            redirect('/admin/productos');
+
+            return;
+        }
+        $groupId = !empty($_POST['product_group_id']) ? (int) $_POST['product_group_id'] : null;
+        try {
+            $result = (new ProductAdminService())->importProductsFromCsv(
+                (string) $file['tmp_name'],
+                $groupId,
+                $supplierId
+            );
+            $msg = 'Certificaciones creadas: ' . $result['created'] . '. Omitidas: ' . $result['skipped'] . '.';
+            if ($result['errors'] !== []) {
+                $msg .= ' ' . implode(' ', array_slice($result['errors'], 0, 8));
+                flash('error', $msg);
+            } else {
+                flash('success', $msg);
+            }
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/productos');
     }
 
     public function productCreateForm(): void
