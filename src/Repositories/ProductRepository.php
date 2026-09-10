@@ -125,9 +125,22 @@ final class ProductRepository
             $sql .= ' AND p.is_star = 1';
         }
         if ($q !== null && trim($q) !== '') {
-            $sql .= ' AND (p.name LIKE ? OR p.code LIKE ? OR c.name LIKE ? OR s.name LIKE ?)';
-            $like = '%' . trim($q) . '%';
-            array_push($params, $like, $like, $like, $like);
+            $tokens = preg_split('/\s+/u', trim($q), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            foreach ($tokens as $token) {
+                $token = trim((string) $token);
+                if ($token === '') {
+                    continue;
+                }
+                // Cada palabra debe aparecer en nombre, código, descripción, certificadora o proveedor.
+                $sql .= ' AND (
+                    p.name LIKE ? OR p.code LIKE ? OR p.slug LIKE ?
+                    OR p.short_description LIKE ? OR p.category LIKE ?
+                    OR c.name LIKE ? OR c.code LIKE ?
+                    OR s.name LIKE ? OR s.code LIKE ?
+                )';
+                $like = '%' . $token . '%';
+                array_push($params, $like, $like, $like, $like, $like, $like, $like, $like, $like);
+            }
         }
 
         return [$sql, $params];
@@ -239,9 +252,21 @@ final class ProductRepository
         $sql = ' WHERE 1=1';
         $params = [];
         if ($q) {
-            $sql .= ' AND (p.name LIKE ? OR p.code LIKE ? OR pg.name LIKE ? OR pg.code LIKE ? OR s.name LIKE ? OR s.code LIKE ?)';
-            $like = '%' . $q . '%';
-            array_push($params, $like, $like, $like, $like, $like, $like);
+            $tokens = preg_split('/\s+/u', trim((string) $q), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            foreach ($tokens as $token) {
+                $token = trim((string) $token);
+                if ($token === '') {
+                    continue;
+                }
+                $sql .= ' AND (
+                    p.name LIKE ? OR p.code LIKE ? OR p.slug LIKE ?
+                    OR p.short_description LIKE ?
+                    OR pg.name LIKE ? OR pg.code LIKE ?
+                    OR s.name LIKE ? OR s.code LIKE ?
+                )';
+                $like = '%' . $token . '%';
+                array_push($params, $like, $like, $like, $like, $like, $like, $like, $like);
+            }
         }
         $supplierId = isset($filters['supplier_id']) ? (int) $filters['supplier_id'] : 0;
         if ($supplierId > 0) {

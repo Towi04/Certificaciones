@@ -107,16 +107,21 @@ require __DIR__ . '/_card_styles.php';
     </aside>
     <section>
         <div class="toolbar">
-            <form class="search" method="get" action="<?= e(url('/catalogo')) ?>">
+            <form class="search" method="get" action="<?= e(url('/catalogo')) ?>" id="catalog-search-form">
                 <input type="hidden" name="seccion" value="<?= e($section) ?>">
                 <input type="hidden" name="filtro" value="<?= e($filter) ?>">
-                <input type="search" name="q" value="<?= e($q) ?>" placeholder="<?= e($searchPlaceholder) ?>">
+                <?php if (($pagination['per_page_param'] ?? 'all') !== 'all'): ?>
+                    <input type="hidden" name="per_page" value="<?= e((string) ($pagination['per_page_param'] ?? 'all')) ?>">
+                <?php endif; ?>
+                <input type="search" name="q" id="catalog-search-input" value="<?= e($q) ?>"
+                       placeholder="<?= e($searchPlaceholder) ?>"
+                       autocomplete="off">
                 <button class="btn btn-primary" type="submit">Buscar</button>
             </form>
-            <div class="muted"><?= (int) $totalShown ?> producto<?= (int) $totalShown === 1 ? '' : 's' ?></div>
+            <div class="muted" id="catalog-result-count"><?= (int) $totalShown ?> producto<?= (int) $totalShown === 1 ? '' : 's' ?></div>
         </div>
         <?php if ($products === []): ?>
-            <div class="empty"><?= $emptyMsg ?></div>
+            <div class="empty" id="catalog-empty-server"><?= $emptyMsg ?></div>
         <?php else: ?>
             <?php
             $remaining = 0;
@@ -131,14 +136,18 @@ require __DIR__ . '/_card_styles.php';
                 'q' => $q !== '' ? $q : null,
                 'per_page' => 'all',
             ], static fn ($v) => $v !== null && $v !== ''));
+            $liveClientSide = $pagination === null
+                || (string) ($pagination['per_page_param'] ?? 'all') === 'all'
+                || (int) ($pagination['total_pages'] ?? 1) <= 1;
             ?>
-            <div class="product-grid">
+            <div class="product-grid" id="catalog-product-grid">
                 <?php foreach ($products as $p): ?>
                     <?php require __DIR__ . '/_card.php'; ?>
                 <?php endforeach; ?>
                 <?php if ($hasMorePages): ?>
                     <a class="product-card product-card-link product-card-more"
-                       href="<?= e(url('/catalogo' . ($seeMoreQs !== '' ? '?' . $seeMoreQs : '?per_page=all'))) ?>">
+                       href="<?= e(url('/catalogo' . ($seeMoreQs !== '' ? '?' . $seeMoreQs : '?per_page=all'))) ?>"
+                       data-catalog-more="1">
                         <div class="body">
                             <div class="product-card-more-icon" aria-hidden="true">＋</div>
                             <h3><?= e($seeMoreLabel) ?></h3>
@@ -156,6 +165,7 @@ require __DIR__ . '/_card_styles.php';
                     </a>
                 <?php endif; ?>
             </div>
+            <div class="empty" id="catalog-empty-filter" hidden>No hay productos que coincidan con tu búsqueda.</div>
             <?php if ($pagination !== null): ?>
                 <?php
                 $basePath = '/catalogo';
@@ -163,6 +173,85 @@ require __DIR__ . '/_card_styles.php';
                 require BASE_PATH . '/views/shared/pagination.php';
                 ?>
             <?php endif; ?>
+            <script>
+            (function () {
+              var input = document.getElementById('catalog-search-input');
+              var form = document.getElementById('catalog-search-form');
+              var grid = document.getElementById('catalog-product-grid');
+              var countEl = document.getElementById('catalog-result-count');
+              var emptyEl = document.getElementById('catalog-empty-filter');
+              if (!input || !form || !grid) return;
+
+              var liveClient = <?= $liveClientSide ? 'true' : 'false' ?>;
+              var totalServer = <?= (int) $totalShown ?>;
+              var timer = null;
+
+              function normalize(text) {
+                return String(text || '')
+                  .toLowerCase()
+                  .normalize('NFD')
+                  .replace(/[\u0300-\u036f]/g, '')
+                  .trim();
+              }
+
+              function updateUrl(q) {
+                try {
+                  var url = new URL(window.location.href);
+                  if (q) url.searchParams.set('q', q);
+                  else url.searchParams.delete('q');
+                  url.searchParams.delete('page');
+                  history.replaceState({}, '', url.pathname + url.search + url.hash);
+                } catch (e) {}
+              }
+
+              function filterClient(raw) {
+                var q = normalize(raw);
+                var tokens = q ? q.split(/\s+/).filter(Boolean) : [];
+                var cards = grid.querySelectorAll('.product-card-link:not([data-catalog-more])');
+                var more = grid.querySelector('[data-catalog-more]');
+                var visible = 0;
+
+                cards.forEach(function (card) {
+                  var hay = normalize(card.getAttribute('data-search') || card.textContent || '');
+                  var ok = tokens.every(function (t) { return hay.indexOf(t) !== -1; });
+                  card.hidden = !ok;
+                  if (ok) visible += 1;
+                });
+
+                if (more) more.hidden = tokens.length > 0;
+                if (emptyEl) emptyEl.hidden = visible > 0;
+                if (countEl) {
+                  countEl.textContent = visible + ' producto' + (visible === 1 ? '' : 's')
+                    + (tokens.length ? ' (filtrados)' : '');
+                }
+              }
+
+              function onType() {
+                var value = input.value;
+                clearTimeout(timer);
+                if (liveClient) {
+                  filterClient(value);
+                  timer = setTimeout(function () {
+                    updateUrl(value.trim());
+                  }, 200);
+                  return;
+                }
+                // Con paginación: recargar en servidor tras una pausa breve.
+                timer = setTimeout(function () {
+                  form.requestSubmit ? form.requestSubmit() : form.submit();
+                }, 350);
+              }
+
+              input.addEventListener('input', onType);
+              input.addEventListener('search', onType); // limpia en algunos navegadores
+
+              if (liveClient && input.value) {
+                filterClient(input.value);
+              } else if (countEl && !liveClient) {
+                countEl.textContent = totalServer + ' producto' + (totalServer === 1 ? '' : 's');
+              }
+            })();
+            </script>
         <?php endif; ?>
     </section>
 </div>
