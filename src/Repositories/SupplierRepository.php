@@ -17,6 +17,7 @@ final class SupplierRepository
         $this->ensureWordmarkColumn();
         $this->ensureNotesColumn();
         $this->ensureSupplierCertifiersTable();
+        $this->ensureSupplierDocumentsTable();
     }
 
     /** Columna de logo con denominación (instalaciones ya existentes). */
@@ -83,6 +84,36 @@ final class SupplierRepository
             );
         } catch (\Throwable $e) {
             error_log('[Doceo] ensureSupplierCertifiersTable: ' . $e->getMessage());
+        }
+    }
+
+    /** Documentos internos del proveedor (instalaciones ya existentes). */
+    private function ensureSupplierDocumentsTable(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        try {
+            $this->pdo->exec(
+                'CREATE TABLE IF NOT EXISTS supplier_documents (
+                  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                  supplier_id BIGINT UNSIGNED NOT NULL,
+                  title VARCHAR(190) NOT NULL DEFAULT \'\',
+                  original_name VARCHAR(255) NOT NULL DEFAULT \'\',
+                  storage_path VARCHAR(255) NOT NULL,
+                  mime_type VARCHAR(120) NOT NULL DEFAULT \'\',
+                  file_size INT UNSIGNED NOT NULL DEFAULT 0,
+                  notes VARCHAR(255) NULL,
+                  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  updated_at DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+                  KEY idx_supplier_documents_supplier (supplier_id, created_at),
+                  CONSTRAINT fk_supplier_documents_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+            );
+        } catch (\Throwable $e) {
+            error_log('[Doceo] ensureSupplierDocumentsTable: ' . $e->getMessage());
         }
     }
 
@@ -400,5 +431,52 @@ final class SupplierRepository
             'INSERT IGNORE INTO supplier_certifiers (supplier_id, certifier_id) VALUES (?, ?)'
         );
         $stmt->execute([$supplierId, $certifierId]);
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function documents(int $supplierId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM supplier_documents WHERE supplier_id = ? ORDER BY created_at DESC, id DESC'
+        );
+        $stmt->execute([$supplierId]);
+
+        return $stmt->fetchAll();
+    }
+
+    public function findDocument(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM supplier_documents WHERE id = ? LIMIT 1');
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    /** @param array<string, mixed> $data */
+    public function createDocument(array $data): int
+    {
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO supplier_documents
+                (supplier_id, title, original_name, storage_path, mime_type, file_size, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([
+            $data['supplier_id'],
+            $data['title'] ?? '',
+            $data['original_name'] ?? '',
+            $data['storage_path'],
+            $data['mime_type'] ?? '',
+            $data['file_size'] ?? 0,
+            $data['notes'] ?? null,
+        ]);
+
+        return (int) $this->pdo->lastInsertId();
+    }
+
+    public function deleteDocument(int $id): void
+    {
+        $stmt = $this->pdo->prepare('DELETE FROM supplier_documents WHERE id = ?');
+        $stmt->execute([$id]);
     }
 }

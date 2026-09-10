@@ -4,6 +4,7 @@
 /** @var list<array<string,mixed>> $products */
 /** @var list<array<string,mixed>> $contacts */
 /** @var list<array<string,mixed>> $accounts */
+/** @var list<array<string,mixed>> $documents */
 /** @var list<array<string,mixed>> $allCertifiers */
 /** @var list<int> $linkedCertifierIds */
 /** @var array<int,string> $revealedPasswords */
@@ -12,6 +13,7 @@
 $sid = (int) $supplier['id'];
 $contacts = $contacts ?? [];
 $accounts = $accounts ?? [];
+$documents = $documents ?? [];
 $allCertifiers = $allCertifiers ?? [];
 $linkedCertifierIds = array_map('intval', $linkedCertifierIds ?? []);
 $revealedPasswords = $revealedPasswords ?? [];
@@ -20,6 +22,16 @@ $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px'
 $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600';
 $logoMark = trim((string) ($supplier['logo_path'] ?? ''));
 $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
+$formatBytes = static function (int $bytes): string {
+    if ($bytes < 1024) {
+        return $bytes . ' B';
+    }
+    if ($bytes < 1024 * 1024) {
+        return round($bytes / 1024, 1) . ' KB';
+    }
+
+    return round($bytes / (1024 * 1024), 1) . ' MB';
+};
 ?>
 <p class="meta"><a href="<?= e(url('/admin/proveedores')) ?>">← Proveedores</a></p>
 <div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap">
@@ -65,6 +77,7 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
     <button type="button" class="group-tab" data-tab="certifiers">Certificadoras</button>
     <button type="button" class="group-tab" data-tab="contacts">Contactos</button>
     <button type="button" class="group-tab" data-tab="accounts">Accesos</button>
+    <button type="button" class="group-tab" data-tab="documents">Documentos</button>
     <button type="button" class="group-tab" data-tab="groups">Grupos</button>
     <button type="button" class="group-tab" data-tab="bulk">Lote CSV</button>
 </nav>
@@ -450,6 +463,102 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
     </form>
 <?php endforeach; ?>
 
+<div class="supplier-panel" data-panel="documents" hidden>
+    <div class="panel" style="margin-top:.75rem;max-width:920px">
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Documentos del proveedor</h2>
+        <p class="muted" style="font-size:.85rem;margin-top:0">
+            Archivos internos (contratos, tarifas, guías, etc.). Solo el equipo admin los ve.
+            En PDF puedes abrir una <strong>vista previa</strong> y decidir si lo descargas.
+        </p>
+
+        <form method="post" action="<?= e(url('/admin/proveedores/' . $sid . '/documentos')) ?>"
+              enctype="multipart/form-data"
+              style="display:grid;gap:.75rem;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));align-items:end;margin-bottom:1.25rem;padding:1rem;border:1px dashed #cfd8e6;border-radius:14px;background:#f8fafc">
+            <?= csrf_field() ?>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Título (opcional)
+                <input type="text" name="title" placeholder="Ej. Contrato 2026" style="<?= e($inputStyle) ?>">
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Nota (opcional)
+                <input type="text" name="notes" placeholder="Breve referencia interna" style="<?= e($inputStyle) ?>">
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Archivo *
+                <input type="file" name="document_file" required
+                       accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,application/pdf">
+            </label>
+            <div>
+                <button class="btn btn-accent" type="submit">Subir documento</button>
+            </div>
+        </form>
+
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                <tr>
+                    <th>Documento</th>
+                    <th>Archivo</th>
+                    <th>Tamaño</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($documents as $doc):
+                    $did = (int) $doc['id'];
+                    $mime = strtolower((string) ($doc['mime_type'] ?? ''));
+                    $orig = (string) ($doc['original_name'] ?? '');
+                    $isPdf = str_contains($mime, 'pdf') || str_ends_with(strtolower($orig), '.pdf');
+                    $viewUrl = url('/admin/proveedores/' . $sid . '/documentos/' . $did . '/ver');
+                    $downloadUrl = url('/admin/proveedores/' . $sid . '/documentos/' . $did . '/descargar');
+                    $title = trim((string) ($doc['title'] ?? '')) !== ''
+                        ? (string) $doc['title']
+                        : ($orig !== '' ? $orig : 'Documento');
+                    ?>
+                    <tr>
+                        <td>
+                            <strong><?= e($title) ?></strong>
+                            <?php if (!empty($doc['notes'])): ?>
+                                <div class="muted" style="font-size:.8rem"><?= e((string) $doc['notes']) ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($doc['created_at'])): ?>
+                                <div class="muted" style="font-size:.75rem">Subido: <?= e((string) $doc['created_at']) ?></div>
+                            <?php endif; ?>
+                        </td>
+                        <td><code style="font-size:.78rem"><?= e($orig !== '' ? $orig : '—') ?></code></td>
+                        <td class="muted"><?= e($formatBytes((int) ($doc['file_size'] ?? 0))) ?></td>
+                        <td>
+                            <span class="row-actions" style="display:flex;gap:.35rem;flex-wrap:wrap;justify-content:flex-end">
+                                <?php if ($isPdf): ?>
+                                    <button type="button"
+                                            class="btn btn-primary btn-sm supplier-doc-preview-btn"
+                                            data-preview-url="<?= e($viewUrl) ?>"
+                                            data-download-url="<?= e($downloadUrl) ?>"
+                                            data-title="<?= e($title) ?>">
+                                        Vista previa
+                                    </button>
+                                <?php else: ?>
+                                    <a class="btn btn-ghost btn-sm" href="<?= e($viewUrl) ?>" target="_blank" rel="noopener">Abrir</a>
+                                <?php endif; ?>
+                                <a class="btn btn-accent btn-sm" href="<?= e($downloadUrl) ?>">Descargar</a>
+                                <form method="post" action="<?= e(url('/admin/proveedores/' . $sid . '/documentos/' . $did . '/eliminar')) ?>"
+                                      onsubmit="return confirm('¿Eliminar este documento?');" style="display:inline">
+                                    <?= csrf_field() ?>
+                                    <button class="btn btn-ghost btn-sm" type="submit" style="color:#b42318">Eliminar</button>
+                                </form>
+                            </span>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                <?php if ($documents === []): ?>
+                    <tr><td colspan="4" class="muted">Aún no hay documentos. Sube el primero arriba.</td></tr>
+                <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <div class="supplier-panel" data-panel="groups" hidden>
     <div class="panel" style="margin-top:.75rem">
         <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center">
@@ -527,6 +636,22 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
     <button class="btn btn-ghost" type="submit" style="color:#b42318">Eliminar proveedor</button>
 </form>
 
+<div class="supplier-doc-modal" id="supplier-doc-modal" hidden>
+    <button type="button" class="supplier-doc-backdrop" id="supplier-doc-backdrop" aria-label="Cerrar"></button>
+    <div class="supplier-doc-dialog" role="dialog" aria-modal="true" aria-labelledby="supplier-doc-title">
+        <div class="supplier-doc-head">
+            <strong id="supplier-doc-title">Documento</strong>
+            <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                <a class="btn btn-accent btn-sm" id="supplier-doc-download" href="#">Descargar</a>
+                <button type="button" class="btn btn-primary btn-sm" id="supplier-doc-close">Cerrar</button>
+            </div>
+        </div>
+        <div class="supplier-doc-body">
+            <iframe class="supplier-doc-frame" id="supplier-doc-frame" title="Vista previa del PDF"></iframe>
+        </div>
+    </div>
+</div>
+
 <style>
 .group-tabs { display:flex; flex-wrap:wrap; gap:.4rem; }
 .group-tab {
@@ -557,6 +682,26 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
   transform: translateY(-50%);
   z-index: 1;
 }
+.supplier-doc-modal[hidden] { display:none !important; }
+.supplier-doc-modal {
+  position:fixed; inset:0; z-index:80; display:flex; align-items:center; justify-content:center;
+  padding:1rem;
+}
+.supplier-doc-backdrop {
+  position:absolute; inset:0; border:0; padding:0; margin:0; cursor:pointer;
+  background:rgba(16,42,86,.55);
+}
+.supplier-doc-dialog {
+  position:relative; z-index:1; width:min(960px,100%); height:min(88vh,900px);
+  background:#fff; border-radius:16px; box-shadow:0 20px 60px rgba(16,42,86,.28);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.supplier-doc-head {
+  display:flex; justify-content:space-between; align-items:center; gap:.75rem; flex-wrap:wrap;
+  padding:.85rem 1rem; border-bottom:1px solid #e6ebf2;
+}
+.supplier-doc-body { flex:1; min-height:0; background:#f4f7fb; }
+.supplier-doc-frame { width:100%; height:100%; border:0; background:#fff; }
 </style>
 <script>
 (function () {
@@ -584,6 +729,42 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
   } else {
     activate('general');
   }
+
+  var docModal = document.getElementById('supplier-doc-modal');
+  var docFrame = document.getElementById('supplier-doc-frame');
+  var docTitle = document.getElementById('supplier-doc-title');
+  var docDownload = document.getElementById('supplier-doc-download');
+  var docClose = document.getElementById('supplier-doc-close');
+  var docBackdrop = document.getElementById('supplier-doc-backdrop');
+  function closeDocPreview() {
+    if (!docModal) return;
+    docModal.hidden = true;
+    if (docFrame) docFrame.src = 'about:blank';
+  }
+  function openDocPreview(url, downloadUrl, title) {
+    if (!docModal || !docFrame) return;
+    if (docTitle) docTitle.textContent = title || 'Documento';
+    if (docDownload) {
+      docDownload.href = downloadUrl || url;
+      docDownload.hidden = !(downloadUrl || url);
+    }
+    docFrame.src = url;
+    docModal.hidden = false;
+  }
+  document.querySelectorAll('.supplier-doc-preview-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      openDocPreview(
+        btn.getAttribute('data-preview-url') || '',
+        btn.getAttribute('data-download-url') || '',
+        btn.getAttribute('data-title') || 'Documento'
+      );
+    });
+  });
+  if (docClose) docClose.addEventListener('click', closeDocPreview);
+  if (docBackdrop) docBackdrop.addEventListener('click', closeDocPreview);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && docModal && !docModal.hidden) closeDocPreview();
+  });
 
   document.querySelectorAll('.pwd-toggle-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {

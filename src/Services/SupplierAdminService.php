@@ -193,6 +193,9 @@ final class SupplierAdminService
         }
         $this->assets->deletePublicFile($supplier['logo_path'] ?? null);
         $this->assets->deletePublicFile($supplier['logo_wordmark_path'] ?? null);
+        foreach ($this->suppliers->documents($id) as $doc) {
+            $this->deleteStoredDocumentFile((string) ($doc['storage_path'] ?? ''));
+        }
         $this->suppliers->delete($id);
     }
 
@@ -531,6 +534,150 @@ final class SupplierAdminService
     {
         if ($this->suppliers->find($id) === null) {
             throw new \InvalidArgumentException('Proveedor no encontrado.');
+        }
+    }
+
+    /**
+     * @param array{tmp_name?:string,name?:string,error?:int,size?:int,type?:string} $file
+     * @return array<string, mixed>
+     */
+    public function uploadDocument(int $supplierId, array $file, string $title = '', string $notes = ''): array
+    {
+        $this->assertSupplier($supplierId);
+        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            throw new \InvalidArgumentException('Selecciona un archivo válido.');
+        }
+        $tmp = (string) ($file['tmp_name'] ?? '');
+        if ($tmp === '' || (!is_uploaded_file($tmp) && !is_readable($tmp))) {
+            throw new \InvalidArgumentException('Archivo de documento inválido.');
+        }
+        $size = (int) ($file['size'] ?? 0);
+        if ($size <= 0 || $size > 12 * 1024 * 1024) {
+            throw new \InvalidArgumentException('El documento no debe superar 12 MB.');
+        }
+
+        $original = basename((string) ($file['name'] ?? 'documento'));
+        $extension = strtolower(pathinfo($original, PATHINFO_EXTENSION));
+        $allowedExt = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'webp'];
+        if (!in_array($extension, $allowedExt, true)) {
+            throw new \InvalidArgumentException('Formato no permitido. Usa PDF, Word, Excel o imagen.');
+        }
+
+        $finfo = new \finfo(FILEINFO_MIME_TYPE);
+        $mime = (string) ($finfo->file($tmp) ?: ($file['type'] ?? 'application/octet-stream'));
+        $allowedMimes = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/octet-stream',
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+        ];
+        if (!in_array($mime, $allowedMimes, true)) {
+            throw new \InvalidArgumentException('Tipo MIME no permitido para el documento.');
+        }
+        if ($extension === 'pdf') {
+            $mime = 'application/pdf';
+        }
+
+        $relativeDir = '/uploads/suppliers/' . $supplierId . '/docs';
+        $targetDir = BASE_PATH . '/public' . $relativeDir;
+        if (!is_dir($targetDir) && !@mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+            throw new \RuntimeException('No se pudo crear el directorio de documentos.');
+        }
+
+        $filename = 'doc-' . bin2hex(random_bytes(12)) . '.' . $extension;
+        $dest = $targetDir . '/' . $filename;
+        if (!@move_uploaded_file($tmp, $dest)) {
+            if (!@rename($tmp, $dest) && !@copy($tmp, $dest)) {
+                throw new \RuntimeException('No se pudo guardar el documento.');
+            }
+            @unlink($tmp);
+        }
+
+        $title = trim($title);
+        if ($title === '') {
+            $title = pathinfo($original, PATHINFO_FILENAME) ?: 'Documento';
+        }
+        $notes = trim($notes);
+
+        $id = $this->suppliers->createDocument([
+            'supplier_id' => $supplierId,
+            'title' => mb_substr($title, 0, 190),
+            'original_name' => mb_substr($original, 0, 255),
+            'storage_path' => $relativeDir . '/' . $filename,
+            'mime_type' => mb_substr($mime, 0, 120),
+            'file_size' => $size,
+            'notes' => $notes !== '' ? mb_substr($notes, 0, 255) : null,
+        ]);
+
+        $doc = $this->suppliers->findDocument($id);
+        if ($doc === null) {
+            throw new \RuntimeException('No se pudo leer el documento recién guardado.');
+        }
+
+        return $doc;
+    }
+
+    public function deleteDocument(int $supplierId, int $documentId): void
+    {
+        $this->assertSupplier($supplierId);
+        $doc = $this->suppliers->findDocument($documentId);
+        if ($doc === null || (int) ($doc['supplier_id'] ?? 0) !== $supplierId) {
+            throw new \InvalidArgumentException('Documento no encontrado.');
+        }
+        $this->deleteStoredDocumentFile((string) ($doc['storage_path'] ?? ''));
+        $this->suppliers->deleteDocument($documentId);
+    }
+
+    /** @return array{absolute:string,mime:string,name:string,is_pdf:bool} */
+    public function documentFileForDownload(int $supplierId, int $documentId): array
+    {
+        $this->assertSupplier($supplierId);
+        $doc = $this->suppliers->findDocument($documentId);
+        if ($doc === null || (int) ($doc['supplier_id'] ?? 0) !== $supplierId) {
+            throw new \InvalidArgumentException('Documento no encontrado.');
+        }
+        $path = trim((string) ($doc['storage_path'] ?? ''));
+        if ($path === '' || !str_starts_with($path, '/uploads/suppliers/')) {
+            throw new \InvalidArgumentException('Ruta de documento inválida.');
+        }
+        $absolute = BASE_PATH . '/public' . $path;
+        if (!is_file($absolute)) {
+            throw new \InvalidArgumentException('Archivo no disponible en el servidor.');
+        }
+        $mime = trim((string) ($doc['mime_type'] ?? ''));
+        if ($mime === '') {
+            $mime = mime_content_type($absolute) ?: 'application/octet-stream';
+        }
+        $name = trim((string) ($doc['original_name'] ?? ''));
+        if ($name === '') {
+            $name = basename($absolute);
+        }
+        $isPdf = str_contains(strtolower($mime), 'pdf')
+            || str_ends_with(strtolower($name), '.pdf');
+
+        return [
+            'absolute' => $absolute,
+            'mime' => $mime,
+            'name' => $name,
+            'is_pdf' => $isPdf,
+            'title' => (string) ($doc['title'] ?? $name),
+        ];
+    }
+
+    private function deleteStoredDocumentFile(string $path): void
+    {
+        $path = trim($path);
+        if ($path === '' || !str_starts_with($path, '/uploads/suppliers/')) {
+            return;
+        }
+        $absolute = BASE_PATH . '/public' . $path;
+        if (is_file($absolute)) {
+            @unlink($absolute);
         }
     }
 }
