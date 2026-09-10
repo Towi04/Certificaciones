@@ -8,8 +8,8 @@ $action = $isEdit ? url('/admin/proveedores/' . $supplier['id']) : url('/admin/p
     <?= $isEdit ? 'Editar proveedor' : 'Nuevo proveedor' ?>
 </h1>
 <p class="muted" style="max-width:40rem">
-    Solo datos básicos. Los accesos a portales (URL, usuario, contraseña y notas)
-    se agregan después en la pestaña <strong>Accesos / plataformas</strong>.
+    Datos básicos del proveedor. Después podrás agregar logos, certificadoras, contactos,
+    notas internas y accesos a portales.
 </p>
 
 <form method="post" action="<?= e($action) ?>" class="panel" style="margin-top:1rem;max-width:640px">
@@ -42,6 +42,12 @@ $action = $isEdit ? url('/admin/proveedores/' . $supplier['id']) : url('/admin/p
                    style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
         </label>
     </div>
+    <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-top:.85rem">
+        Notas
+        <textarea name="notes" rows="4" placeholder="Acuerdos, condiciones, recordatorios internos…"
+                  style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;resize:vertical;min-height:6rem;font:inherit"><?= e((string) ($supplier['notes'] ?? '')) ?></textarea>
+        <span style="font-weight:500;font-size:.78rem">Solo para uso interno del equipo.</span>
+    </label>
     <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;font-weight:600;margin-top:.85rem">
         <input type="checkbox" name="is_active" value="1"
             <?= $isEdit ? (!empty($supplier['is_active']) ? 'checked' : '') : 'checked' ?>>

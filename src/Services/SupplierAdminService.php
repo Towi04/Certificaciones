@@ -429,7 +429,7 @@ final class SupplierAdminService
 
     /**
      * @param array<string, mixed> $input
-     * @return array{name:string,code:string,website:?string,is_active:int}
+     * @return array{name:string,code:string,website:?string,notes:?string,is_active:int}
      */
     private function buildPayload(array $input, bool $requireCode): array
     {
@@ -448,12 +448,13 @@ final class SupplierAdminService
         }
 
         $website = trim((string) ($input['website'] ?? ''));
+        $notes = trim((string) ($input['notes'] ?? ''));
 
-        // Portal y notas viven en Accesos / plataformas (supplier_accounts), no aquí.
         return [
             'name' => $name,
             'code' => $code,
             'website' => $website !== '' ? $website : null,
+            'notes' => $notes !== '' ? $notes : null,
             'is_active' => !empty($input['is_active']) ? 1 : 0,
         ];
     }
