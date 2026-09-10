@@ -117,16 +117,23 @@ img { max-width: 100%; height: auto; }
   position: relative;
   overflow: hidden;
   padding: 0;
+  display: block;
+  min-height: 140px;
 }
 .product-card .thumb img {
-  position: absolute;
-  inset: .45rem;
-  width: calc(100% - .9rem);
-  height: calc(100% - .9rem);
-  max-width: none;
-  max-height: none;
-  object-fit: contain;
-  object-position: center;
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: .35rem !important;
+  box-sizing: border-box !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  transform: scale(1.22);
+  transform-origin: center center;
 }
 .badge-star {
   position: absolute; top: .7rem; left: .7rem;
