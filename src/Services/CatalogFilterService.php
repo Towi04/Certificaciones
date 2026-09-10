@@ -16,14 +16,14 @@ final class CatalogFilterService
     }
 
     /** @return list<array<string, mixed>> */
-    public function catalogFilters(): array
+    public function catalogFilters(string $section = 'all'): array
     {
         try {
             $this->filters->ensureDefaults();
             $this->filters->ensureCenniTypeFilters();
             $this->filters->syncCertifierFilters();
 
-            return $this->filters->catalogVisible();
+            return $this->filters->catalogVisible($section);
         } catch (\Throwable $e) {
             error_log('[Doceo] Catalog filters: ' . $e->getMessage());
 
