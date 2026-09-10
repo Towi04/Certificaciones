@@ -64,7 +64,7 @@ $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;
                     </select>
                 </label>
                 <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-                    Normalización
+                    Normalización (si la columna no tiene fórmula)
                     <select name="normalize" style="<?= e($inputStyle) ?>">
                         <option value="none" <?= $normalize === 'none' ? 'selected' : '' ?>>Ninguna</option>
                         <option value="toefl" <?= $normalize === 'toefl' ? 'selected' : '' ?>>TOEFL (MAYÚSCULAS, sin acentos/Ñ)</option>
