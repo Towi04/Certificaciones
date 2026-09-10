@@ -145,8 +145,10 @@ $extraColHeader = count($extraColLabels) === 1
                     ?>
                     <tr class="<?= e($rowClass) ?>" data-tracking-id="<?= $tid ?>">
                         <td class="ops-actions">
+                            <div class="ops-actions-row">
                             <?php
                             $opsButtons = is_array($r['ops_buttons'] ?? null) ? $r['ops_buttons'] : [];
+                            $opsMetaBits = [];
                             foreach ($opsButtons as $btn):
                                 $action = (string) ($btn['action'] ?? '');
                                 $label = (string) ($btn['label'] ?? 'Acción');
@@ -190,40 +192,44 @@ $extraColHeader = count($extraColLabels) === 1
                                     $examDateVal = (string) ($r['exam_date'] ?? '');
                                     $examTimeVal = !empty($r['exam_time']) ? substr((string) $r['exam_time'], 0, 5) : '';
                                     $rescheduleCount = (int) ($btn['reschedule_count'] ?? 0);
+                                    $rescheduleTitle = ($examMailOn
+                                        ? ($audience === 'provider'
+                                            ? 'Guardar fecha y enviar plantilla al proveedor'
+                                            : ($audience === 'partner'
+                                                ? 'Guardar fecha y enviar plantilla al partner'
+                                                : 'Guardar fecha y enviar plantilla al alumno'))
+                                        : 'Guardar fecha de examen')
+                                        . ($rescheduleCount > 0
+                                            ? ' · Reagendado ' . $rescheduleCount . ' vez' . ($rescheduleCount === 1 ? '' : 'es')
+                                            : '')
+                                        . ' · ' . $label;
+                                    $rescheduleSubmit = $examMailOn
+                                        ? ($audience === 'provider'
+                                            ? 'Guardar y enviar al proveedor'
+                                            : ($audience === 'partner'
+                                                ? 'Guardar y enviar al partner'
+                                                : 'Guardar y enviar al alumno'))
+                                        : 'Guardar fecha';
                                     ?>
-                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/examen')) ?>"
-                                          class="ops-inline-form ops-collect-form">
-                                        <?= csrf_field() ?>
-                                        <input type="hidden" name="return_ops" value="1">
-                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
-                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
-                                        <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
-                                        <input type="hidden" name="notify" value="<?= $examMailOn ? '1' : '0' ?>">
-                                        <div class="ops-collect-fields">
-                                            <input class="ops-input" type="date" name="exam_date" required
-                                                   value="<?= e($examDateVal) ?>" title="Fecha examen">
-                                            <input class="ops-input" type="time" name="exam_time"
-                                                   value="<?= e($examTimeVal) ?>" title="Hora examen">
-                                        </div>
-                                        <button class="<?= e($btnClass) ?>" type="submit"
-                                            title="<?= e(($examMailOn
-                                                ? ($audience === 'provider'
-                                                    ? 'Guardar fecha y enviar plantilla al proveedor'
-                                                    : ($audience === 'partner'
-                                                        ? 'Guardar fecha y enviar plantilla al partner'
-                                                        : 'Guardar fecha y enviar plantilla al alumno'))
-                                                : 'Guardar fecha de examen')
-                                                . ($rescheduleCount > 0
-                                                    ? ' · Reagendado ' . $rescheduleCount . ' vez' . ($rescheduleCount === 1 ? '' : 'es')
-                                                    : '')
-                                                . ' · ' . $label) ?>"
+                                    <button type="button"
+                                            class="<?= e($btnClass) ?> ops-reschedule-btn"
+                                            data-action-url="<?= e(url('/admin/seguimientos/' . $tid . '/examen')) ?>"
+                                            data-csrf="<?= e(csrf_token()) ?>"
+                                            data-return-view="<?= e($view) ?>"
+                                            data-return-q="<?= e($q) ?>"
+                                            data-step-code="<?= e((string) ($btn['code'] ?? '')) ?>"
+                                            data-notify="<?= $examMailOn ? '1' : '0' ?>"
+                                            data-exam-date="<?= e($examDateVal) ?>"
+                                            data-exam-time="<?= e($examTimeVal) ?>"
+                                            data-title="<?= e('Reagendar · ' . (string) ($r['matricula'] ?? '') . ' · ' . $label) ?>"
+                                            data-submit-label="<?= e($rescheduleSubmit) ?>"
+                                            title="<?= e($rescheduleTitle) ?>"
                                             aria-label="<?= e($label) ?>">
-                                            <?= $iconSvg ?>
-                                            <?php if ($rescheduleCount > 0): ?>
-                                                <span class="ops-reschedule-count" aria-label="Reagendado <?= (int) $rescheduleCount ?> veces"><?= (int) $rescheduleCount ?></span>
-                                            <?php endif; ?>
-                                        </button>
-                                    </form>
+                                        <?= $iconSvg ?>
+                                        <?php if ($rescheduleCount > 0): ?>
+                                            <span class="ops-reschedule-count" aria-label="Reagendado <?= (int) $rescheduleCount ?> veces"><?= (int) $rescheduleCount ?></span>
+                                        <?php endif; ?>
+                                    </button>
                                 <?php elseif (
                                     $action === \App\Services\GroupStepConfig::ACTION_CONFIRM_PAYMENT
                                     || $action === \App\Services\GroupStepConfig::ACTION_CONFIRM_PAYMENT_POPUP
@@ -296,7 +302,7 @@ $extraColHeader = count($extraColLabels) === 1
                                         </button>
                                     </form>
                                     <?php if (!empty($r['admin_proof_uploaded'])): ?>
-                                        <span class="ops-mini-ok" title="Comprobante DOCEO→proveedor listo (detalle)"><?= icon('check') ?> comprobante</span>
+                                        <?php $opsMetaBits[] = '<span class="ops-mini-ok" title="Comprobante DOCEO→proveedor listo (detalle)">' . icon('check') . ' comprobante</span>'; ?>
                                     <?php endif; ?>
                                     <?php else: ?>
                                     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/enviar-correo-paso')) ?>" class="ops-inline-form">
@@ -330,13 +336,13 @@ $extraColHeader = count($extraColLabels) === 1
                                         </button>
                                     </form>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_EDIT_STUDENT): ?>
-                                    <details class="ops-collect-details">
+                                    <details class="ops-collect-details ops-collect-details--compact">
                                         <summary class="<?= e($btnClass) ?>" style="list-style:none;cursor:pointer"
                                                  title="<?= e($label) ?>" aria-label="<?= e($label) ?>">
                                             <?= $iconSvg ?>
                                         </summary>
                                         <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/alumno')) ?>"
-                                              class="ops-inline-form ops-collect-form" style="margin-top:.4rem">
+                                              class="ops-inline-form ops-collect-form ops-collect-popover">
                                             <?= csrf_field() ?>
                                             <input type="hidden" name="return_ops" value="1">
                                             <input type="hidden" name="return_view" value="<?= e($view) ?>">
@@ -401,11 +407,18 @@ $extraColHeader = count($extraColLabels) === 1
                                     </form>
                                 <?php endif; ?>
                             <?php endforeach; ?>
+                            </div>
 
                             <?php if (!empty($r['payment_confirm_on_sibling']) && !empty($r['needs_payment'])): ?>
-                                <span class="ops-mini-ok muted" title="El pago se confirma una sola vez en otra fila del mismo paquete">
-                                    Mismo pago · matrícula <?= e((string) ($r['matricula'] ?? '')) ?>
-                                </span>
+                                <?php
+                                $opsMetaBits[] = '<span class="ops-mini-ok muted" title="El pago se confirma una sola vez en otra fila del mismo paquete">'
+                                    . 'Mismo pago · matrícula ' . e((string) ($r['matricula'] ?? ''))
+                                    . '</span>';
+                                ?>
+                            <?php endif; ?>
+
+                            <?php if ($opsMetaBits !== []): ?>
+                                <div class="ops-actions-meta"><?= implode('', $opsMetaBits) ?></div>
                             <?php endif; ?>
 
                             <?php
@@ -551,13 +564,22 @@ $extraColHeader = count($extraColLabels) === 1
 .ops-table th {
   position:sticky; top:0; z-index:2; background:#f7fafc; box-shadow: inset 0 -1px #e6ebf2;
 }
-.ops-table td, .ops-table th { vertical-align:top; }
+.ops-table td, .ops-table th { vertical-align:middle; }
 .ops-check { width:2rem; text-align:center; }
 .ops-input {
   width:7.5rem; max-width:100%; font:inherit; padding:.35rem .45rem;
   border:1px solid #cfd8e6; border-radius:8px;
 }
-.ops-actions { min-width:12.5rem; }
+.ops-actions { min-width:7.5rem; white-space:normal; }
+.ops-actions-row {
+  display:flex; flex-wrap:wrap; align-items:center; gap:.35rem;
+}
+.ops-actions-row > .ops-inline-form {
+  display:inline-flex; flex-wrap:nowrap; margin:0; gap:0;
+}
+.ops-actions-meta {
+  display:flex; flex-wrap:wrap; gap:.25rem; margin-top:.3rem;
+}
 .ops-table th:first-child,
 .ops-table td.ops-actions {
   position: sticky;
@@ -585,6 +607,17 @@ $extraColHeader = count($extraColLabels) === 1
 .ops-collect-fields .ops-input { min-width:7.5rem; }
 .ops-collect-details {
   margin:.15rem 0; padding:.35rem .45rem; border:1px solid #e6ebf2; border-radius:10px; background:#fff;
+}
+.ops-collect-details--compact {
+  position:relative; margin:0; padding:0; border:0; background:transparent;
+  display:inline-flex; align-items:center;
+}
+.ops-collect-details--compact > summary.ops-icon-btn { margin:0; }
+.ops-collect-popover {
+  position:absolute; left:0; top:calc(100% + .35rem); z-index:6;
+  width:min(18rem, 70vw); margin:0; padding:.55rem;
+  border:1px solid #e6ebf2; border-radius:12px; background:#fff;
+  box-shadow:0 12px 28px rgba(16,42,86,.16);
 }
 .ops-collect-details > summary {
   display:inline-flex; align-items:center; gap:.35rem;
@@ -621,7 +654,7 @@ $extraColHeader = count($extraColLabels) === 1
   width:2.05rem; height:2.05rem; padding:0;
   border-radius:10px; border:1px solid transparent;
   vertical-align:middle; cursor:pointer; text-decoration:none;
-  line-height:1; flex-shrink:0;
+  line-height:1; flex-shrink:0; position:relative;
 }
 .ops-icon-btn svg { width:16px; height:16px; display:block; }
 .ops-icon-btn--pending {
@@ -706,6 +739,44 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
 .ops-proof-confirm input[type="text"] {
   padding:.45rem .6rem; border:1px solid #cfd8e6; border-radius:8px; font:inherit;
 }
+.ops-reschedule-modal[hidden] { display:none !important; }
+.ops-reschedule-modal {
+  position:fixed; inset:0; z-index:85; display:flex; align-items:center; justify-content:center;
+  padding:1rem;
+}
+.ops-reschedule-backdrop {
+  position:absolute; inset:0; background:rgba(16,42,86,.55); border:0; padding:0; cursor:pointer;
+}
+.ops-reschedule-dialog {
+  position:relative; z-index:1; width:min(420px, 96vw);
+  background:#fff; border-radius:16px; box-shadow:0 24px 64px rgba(0,0,0,.28);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.ops-reschedule-head {
+  display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+  padding:.85rem 1rem; border-bottom:1px solid #e6ebf2; background:#f7fafc;
+}
+.ops-reschedule-head strong { color:var(--doceo-blue); font-size:.95rem; }
+.ops-reschedule-form {
+  padding:.95rem 1rem 1.05rem; display:flex; flex-direction:column; gap:.75rem;
+}
+.ops-reschedule-fields {
+  display:grid; grid-template-columns:1fr 1fr; gap:.65rem;
+}
+.ops-reschedule-fields label {
+  display:flex; flex-direction:column; gap:.3rem;
+  font-size:.82rem; font-weight:600; color:#5b6b7c;
+}
+.ops-reschedule-fields input {
+  width:100%; box-sizing:border-box; font:inherit; padding:.5rem .6rem;
+  border:1px solid #cfd8e6; border-radius:8px;
+}
+.ops-reschedule-actions {
+  display:flex; justify-content:flex-end; gap:.45rem; flex-wrap:wrap;
+}
+@media (max-width:480px) {
+  .ops-reschedule-fields { grid-template-columns:1fr; }
+}
 </style>
 
 <div class="ops-proof-modal" id="ops-proof-modal" hidden>
@@ -733,6 +804,36 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
                 <input type="text" name="notes" id="ops-proof-notes" placeholder="Ej. Transferencia vista en banco">
             </label>
             <button type="submit" class="btn btn-accent" id="ops-proof-submit">Confirmar pago</button>
+        </form>
+    </div>
+</div>
+
+<div class="ops-reschedule-modal" id="ops-reschedule-modal" hidden>
+    <button type="button" class="ops-reschedule-backdrop" id="ops-reschedule-backdrop" aria-label="Cerrar"></button>
+    <div class="ops-reschedule-dialog" role="dialog" aria-modal="true" aria-labelledby="ops-reschedule-title">
+        <div class="ops-reschedule-head">
+            <strong id="ops-reschedule-title">Reagendar examen</strong>
+            <button type="button" class="btn btn-primary btn-sm" id="ops-reschedule-close">Cerrar</button>
+        </div>
+        <form method="post" id="ops-reschedule-form" class="ops-reschedule-form">
+            <input type="hidden" name="_csrf" id="ops-reschedule-csrf" value="">
+            <input type="hidden" name="return_ops" value="1">
+            <input type="hidden" name="return_view" id="ops-reschedule-return-view" value="">
+            <input type="hidden" name="return_q" id="ops-reschedule-return-q" value="">
+            <input type="hidden" name="step_code" id="ops-reschedule-step-code" value="">
+            <input type="hidden" name="notify" id="ops-reschedule-notify" value="0">
+            <div class="ops-reschedule-fields">
+                <label>Fecha de examen
+                    <input type="date" name="exam_date" id="ops-reschedule-date" required>
+                </label>
+                <label>Hora de examen
+                    <input type="time" name="exam_time" id="ops-reschedule-time">
+                </label>
+            </div>
+            <div class="ops-reschedule-actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="ops-reschedule-cancel">Cancelar</button>
+                <button type="submit" class="btn btn-accent" id="ops-reschedule-submit">Guardar fecha</button>
+            </div>
         </form>
     </div>
 </div>
@@ -825,8 +926,61 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
   });
   proofClose && proofClose.addEventListener('click', closeProof);
   proofBackdrop && proofBackdrop.addEventListener('click', closeProof);
+
+  var rescheduleModal = document.getElementById('ops-reschedule-modal');
+  var rescheduleForm = document.getElementById('ops-reschedule-form');
+  var rescheduleTitle = document.getElementById('ops-reschedule-title');
+  var rescheduleClose = document.getElementById('ops-reschedule-close');
+  var rescheduleCancel = document.getElementById('ops-reschedule-cancel');
+  var rescheduleBackdrop = document.getElementById('ops-reschedule-backdrop');
+  var rescheduleCsrf = document.getElementById('ops-reschedule-csrf');
+  var rescheduleReturnView = document.getElementById('ops-reschedule-return-view');
+  var rescheduleReturnQ = document.getElementById('ops-reschedule-return-q');
+  var rescheduleStepCode = document.getElementById('ops-reschedule-step-code');
+  var rescheduleNotify = document.getElementById('ops-reschedule-notify');
+  var rescheduleDate = document.getElementById('ops-reschedule-date');
+  var rescheduleTime = document.getElementById('ops-reschedule-time');
+  var rescheduleSubmit = document.getElementById('ops-reschedule-submit');
+
+  function closeReschedule() {
+    if (!rescheduleModal) return;
+    rescheduleModal.hidden = true;
+  }
+  function openReschedule(btn) {
+    if (!rescheduleModal || !rescheduleForm || !btn) return;
+    rescheduleForm.action = btn.getAttribute('data-action-url') || '';
+    if (rescheduleCsrf) rescheduleCsrf.value = btn.getAttribute('data-csrf') || '';
+    if (rescheduleReturnView) rescheduleReturnView.value = btn.getAttribute('data-return-view') || '';
+    if (rescheduleReturnQ) rescheduleReturnQ.value = btn.getAttribute('data-return-q') || '';
+    if (rescheduleStepCode) rescheduleStepCode.value = btn.getAttribute('data-step-code') || '';
+    if (rescheduleNotify) rescheduleNotify.value = btn.getAttribute('data-notify') || '0';
+    if (rescheduleDate) rescheduleDate.value = btn.getAttribute('data-exam-date') || '';
+    if (rescheduleTime) rescheduleTime.value = btn.getAttribute('data-exam-time') || '';
+    if (rescheduleTitle) rescheduleTitle.textContent = btn.getAttribute('data-title') || 'Reagendar examen';
+    if (rescheduleSubmit) {
+      rescheduleSubmit.textContent = btn.getAttribute('data-submit-label') || 'Guardar fecha';
+    }
+    rescheduleModal.hidden = false;
+    if (rescheduleDate) {
+      setTimeout(function () { rescheduleDate.focus(); }, 30);
+    }
+  }
+  document.querySelectorAll('.ops-reschedule-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      openReschedule(btn);
+    });
+  });
+  rescheduleClose && rescheduleClose.addEventListener('click', closeReschedule);
+  rescheduleCancel && rescheduleCancel.addEventListener('click', closeReschedule);
+  rescheduleBackdrop && rescheduleBackdrop.addEventListener('click', closeReschedule);
+
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && proofModal && !proofModal.hidden) closeProof();
+    if (e.key !== 'Escape') return;
+    if (rescheduleModal && !rescheduleModal.hidden) {
+      closeReschedule();
+      return;
+    }
+    if (proofModal && !proofModal.hidden) closeProof();
   });
 
   // Sincronizar folio/clave/Zoom visibles → hidden del form de accesos (enviar plantilla).
