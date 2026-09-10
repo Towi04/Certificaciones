@@ -112,10 +112,18 @@ img { max-width: 100%; height: auto; }
   display: flex; flex-direction: column;
 }
 .product-card .thumb {
-  aspect-ratio: 1.2 / 1; background: linear-gradient(160deg, #f7f9fc, #e8eef7);
-  display: grid; place-items: center; padding: 1rem; position: relative;
+  aspect-ratio: 1.15 / 1; background: linear-gradient(160deg, #f7f9fc, #e8eef7);
+  display: grid; place-items: center; padding: .65rem; position: relative;
+  overflow: hidden;
 }
-.product-card .thumb img { max-height: 88px; object-fit: contain; }
+.product-card .thumb img {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
 .badge-star {
   position: absolute; top: .7rem; left: .7rem;
   font-size: .95rem; line-height: 1;
