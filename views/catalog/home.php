@@ -14,6 +14,7 @@ $filter = is_string($filter ?? null) ? $filter : 'all';
 $q = is_string($q ?? null) ? $q : '';
 $totalShown = $pagination['total'] ?? count($products);
 $qsExtra = ($q !== '' ? '&q=' . urlencode($q) : '');
+require __DIR__ . '/_card_styles.php';
 ?>
 <section class="hero">
     <div class="hero-banner">

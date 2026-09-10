@@ -21,6 +21,7 @@
 <?php if ($products === []): ?>
     <div class="empty">No hay productos publicados. Contacta a administración.</div>
 <?php else: ?>
+    <?php require BASE_PATH . '/views/catalog/_card_styles.php'; ?>
     <div class="panel">
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Catálogo para tu nivel</h2>
         <p class="muted" style="font-size:.85rem;margin-top:0">
