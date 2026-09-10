@@ -2012,6 +2012,7 @@ final class AdminController
             'products' => $products,
             'contacts' => $repo->contacts($sid),
             'accounts' => $repo->accounts($sid),
+            'documents' => $repo->documents($sid),
             'allCertifiers' => (new CertifierRepository())->all(),
             'linkedCertifierIds' => $repo->certifierIds($sid),
             'revealedPasswords' => $revealedPasswords,
@@ -2019,6 +2020,72 @@ final class AdminController
             'groupCount' => $repo->countGroups($sid),
             'layout' => 'admin',
         ]);
+    }
+
+    public function supplierDocumentUpload(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $supplierId = (int) $id;
+        $file = $_FILES['document_file'] ?? null;
+        try {
+            if (!is_array($file)) {
+                throw new \InvalidArgumentException('Selecciona un archivo.');
+            }
+            (new \App\Services\SupplierAdminService())->uploadDocument(
+                $supplierId,
+                $file,
+                (string) ($_POST['title'] ?? ''),
+                (string) ($_POST['notes'] ?? '')
+            );
+            flash('success', 'Documento guardado. Puedes previsualizarlo o descargarlo cuando lo necesites.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/proveedores/' . $supplierId . '#documents');
+    }
+
+    public function supplierDocumentDelete(string $id, string $docId): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $supplierId = (int) $id;
+        try {
+            (new \App\Services\SupplierAdminService())->deleteDocument($supplierId, (int) $docId);
+            flash('success', 'Documento eliminado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/proveedores/' . $supplierId . '#documents');
+    }
+
+    public function supplierDocumentView(string $id, string $docId): void
+    {
+        $this->streamSupplierDocument((int) $id, (int) $docId, false);
+    }
+
+    public function supplierDocumentDownload(string $id, string $docId): void
+    {
+        $this->streamSupplierDocument((int) $id, (int) $docId, true);
+    }
+
+    private function streamSupplierDocument(int $supplierId, int $documentId, bool $forceDownload): void
+    {
+        Auth::requireRole(['admin']);
+        try {
+            $file = (new \App\Services\SupplierAdminService())->documentFileForDownload($supplierId, $documentId);
+        } catch (\Throwable $e) {
+            http_response_code(404);
+            exit($e->getMessage());
+        }
+        $disposition = $forceDownload ? 'attachment' : 'inline';
+        $safeName = str_replace(['"', "\r", "\n"], '', $file['name']);
+        header('Content-Type: ' . $file['mime']);
+        header('Content-Disposition: ' . $disposition . '; filename="' . $safeName . '"');
+        header('Content-Length: ' . (string) filesize($file['absolute']));
+        header('X-Content-Type-Options: nosniff');
+        readfile($file['absolute']);
+        exit;
     }
 
     public function supplierUpdate(string $id): void
