@@ -6,7 +6,7 @@ namespace App\Services;
 
 use App\Database\Connection;
 use App\Repositories\PurchaseRepository;
-use App\Support\AsciiUpperNormalizer;
+use App\Support\WorkbookValueResolver;
 use App\Support\XlsxCellFiller;
 use PDO;
 
@@ -80,10 +80,15 @@ final class ProviderRequestService
             }
             $cell = strtoupper(trim((string) ($item['cell'] ?? '')));
             $field = trim((string) ($item['field'] ?? ''));
-            if ($cell === '' || $field === '') {
+            $formula = trim((string) ($item['formula'] ?? ''));
+            if ($cell === '' || ($field === '' && $formula === '')) {
                 continue;
             }
-            $cellMap[] = ['cell' => $cell, 'field' => $field];
+            $row = ['cell' => $cell, 'field' => $field];
+            if ($formula !== '') {
+                $row['formula'] = $formula;
+            }
+            $cellMap[] = $row;
         }
 
         $step = strtolower(trim((string) ($raw['step_code'] ?? 'solicitud_proveedor')));
@@ -576,16 +581,17 @@ final class ProviderRequestService
             if (!is_array($map)) {
                 continue;
             }
-            $cell = (string) ($map['cell'] ?? '');
-            $field = (string) ($map['field'] ?? '');
-            if ($cell === '' || $field === '') {
+            $cell = strtoupper(trim((string) ($map['cell'] ?? '')));
+            if ($cell === '') {
                 continue;
             }
-            $value = (string) ($fields[$field] ?? '');
-            if ($normalize === 'toefl') {
-                $value = AsciiUpperNormalizer::normalize($value);
+            try {
+                $cellValues[$cell] = WorkbookValueResolver::resolve($map, $fields, $normalize);
+            } catch (\Throwable $e) {
+                throw new \RuntimeException(
+                    'Error en fórmula de la celda ' . $cell . ': ' . $e->getMessage()
+                );
             }
-            $cellValues[$cell] = $value;
         }
         if ($cellValues === []) {
             throw new \RuntimeException(

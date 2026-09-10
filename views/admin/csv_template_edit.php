@@ -64,7 +64,7 @@ $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;
                     </select>
                 </label>
                 <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-                    Normalización
+                    Normalización (si la columna no tiene fórmula)
                     <select name="normalize" style="<?= e($inputStyle) ?>">
                         <option value="none" <?= $normalize === 'none' ? 'selected' : '' ?>>Ninguna</option>
                         <option value="toefl" <?= $normalize === 'toefl' ? 'selected' : '' ?>>TOEFL (MAYÚSCULAS, sin acentos/Ñ)</option>
@@ -111,9 +111,10 @@ $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;
                 <table class="data" id="csv-cols-table">
                     <thead>
                     <tr>
-                        <th style="width:40%">Título (fila 1)</th>
-                        <th style="width:50%">Campo de datos</th>
-                        <th style="width:10%"></th>
+                        <th style="width:28%">Título (fila 1)</th>
+                        <th style="width:28%">Campo</th>
+                        <th style="width:36%">Fórmula (opcional)</th>
+                        <th style="width:8%"></th>
                     </tr>
                     </thead>
                     <tbody>
@@ -125,7 +126,7 @@ $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;
                                        style="<?= e($inputStyle) ?>">
                             </td>
                             <td>
-                                <select name="col_field[]" required style="<?= e($inputStyle) ?>">
+                                <select name="col_field[]" style="<?= e($inputStyle) ?>">
                                     <?php foreach ($fieldOptions as $opt): ?>
                                         <?php
                                         $fv = (string) ($opt['value'] ?? '');
@@ -138,6 +139,12 @@ $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;
                                 </select>
                             </td>
                             <td>
+                                <input type="text" name="col_formula[]"
+                                       value="<?= e((string) ($col['formula'] ?? '')) ?>"
+                                       placeholder='=MAYUSC({{first_name}})'
+                                       style="<?= e($inputStyle) ?>;font-family:ui-monospace,monospace;font-size:.8rem">
+                            </td>
+                            <td>
                                 <button type="button" class="btn btn-ghost btn-sm csv-col-del" title="Quitar">✕</button>
                             </td>
                         </tr>
@@ -146,7 +153,12 @@ $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;
                 </table>
             </div>
             <p class="muted" style="margin:.65rem 0 0;font-size:.85rem">
-                La primera fila del archivo usa estos títulos; cada fila siguiente es un alumno con el valor del campo elegido.
+                La fórmula (si existe) se evalúa y se escribe el <strong>valor</strong> en el CSV.
+                Ej.: Cambridge <code>=MAYUSC({{full_name}})</code> (respeta Ñ/acentos);
+                TOEFL <code>=ASCIIMAYUSC({{full_name}})</code>;
+                fechas <code>=TEXTO({{exam_date}};"dd/mm/aaaa")</code>;
+                hora <code>=TEXTO({{exam_time}};"hh:mm")</code>.
+                La normalización global TOEFL solo aplica si la columna no tiene fórmula.
             </p>
         </div>
 
@@ -161,12 +173,16 @@ $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;
     <tr class="csv-col-row">
         <td><input type="text" name="col_header[]" required value="" style="<?= e($inputStyle) ?>"></td>
         <td>
-            <select name="col_field[]" required style="<?= e($inputStyle) ?>">
+            <select name="col_field[]" style="<?= e($inputStyle) ?>">
                 <?php foreach ($fieldOptions as $opt): ?>
                     <?php $fv = (string) ($opt['value'] ?? ''); $fl = (string) ($opt['label'] ?? $fv); ?>
                     <option value="<?= e($fv) ?>"><?= e($fl) ?> (<?= e($fv) ?>)</option>
                 <?php endforeach; ?>
             </select>
+        </td>
+        <td>
+            <input type="text" name="col_formula[]" value="" placeholder='=MAYUSC({{first_name}})'
+                   style="<?= e($inputStyle) ?>;font-family:ui-monospace,monospace;font-size:.8rem">
         </td>
         <td><button type="button" class="btn btn-ghost btn-sm csv-col-del" title="Quitar">✕</button></td>
     </tr>

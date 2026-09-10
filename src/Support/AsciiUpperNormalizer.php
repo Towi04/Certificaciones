@@ -10,7 +10,8 @@ namespace App\Support;
  */
 final class AsciiUpperNormalizer
 {
-    public static function normalize(string $value): string
+    /** Quita acentos y convierte Ñ→N (sin forzar mayúsculas). */
+    public static function stripAccents(string $value): string
     {
         $value = trim($value);
         if ($value === '') {
@@ -26,14 +27,14 @@ final class AsciiUpperNormalizer
             'Ý' => 'Y', 'Ÿ' => 'Y',
             'Ñ' => 'N',
             'Ç' => 'C',
-            'á' => 'A', 'à' => 'A', 'ä' => 'A', 'â' => 'A', 'ã' => 'A', 'å' => 'A',
-            'é' => 'E', 'è' => 'E', 'ë' => 'E', 'ê' => 'E',
-            'í' => 'I', 'ì' => 'I', 'ï' => 'I', 'î' => 'I',
-            'ó' => 'O', 'ò' => 'O', 'ö' => 'O', 'ô' => 'O', 'õ' => 'O',
-            'ú' => 'U', 'ù' => 'U', 'ü' => 'U', 'û' => 'U',
-            'ý' => 'Y', 'ÿ' => 'Y',
-            'ñ' => 'N',
-            'ç' => 'C',
+            'á' => 'a', 'à' => 'a', 'ä' => 'a', 'â' => 'a', 'ã' => 'a', 'å' => 'a',
+            'é' => 'e', 'è' => 'e', 'ë' => 'e', 'ê' => 'e',
+            'í' => 'i', 'ì' => 'i', 'ï' => 'i', 'î' => 'i',
+            'ó' => 'o', 'ò' => 'o', 'ö' => 'o', 'ô' => 'o', 'õ' => 'o',
+            'ú' => 'u', 'ù' => 'u', 'ü' => 'u', 'û' => 'u',
+            'ý' => 'y', 'ÿ' => 'y',
+            'ñ' => 'n',
+            'ç' => 'c',
         ];
         $value = strtr($value, $map);
 
@@ -44,8 +45,20 @@ final class AsciiUpperNormalizer
             }
         }
 
+        return $value;
+    }
+
+    public static function normalize(string $value): string
+    {
+        $value = self::stripAccents($value);
+        if ($value === '') {
+            return '';
+        }
+
         $value = preg_replace('/[^A-Za-z0-9 @._\\-\\/:,]/', '', $value) ?? $value;
 
-        return mb_strtoupper($value, 'UTF-8');
+        return function_exists('mb_strtoupper')
+            ? \mb_strtoupper($value, 'UTF-8')
+            : strtoupper($value);
     }
 }
