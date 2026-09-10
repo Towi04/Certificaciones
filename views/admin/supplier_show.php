@@ -78,8 +78,8 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
         <div class="panel" style="margin-top:.75rem;max-width:860px">
             <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Datos del proveedor</h2>
             <p class="muted" style="font-size:.82rem;margin-top:0">
-                Los enlaces a portales, usuarios y notas van en <strong>Accesos</strong>
-                (solo si el proveedor te da acceso).
+                Datos generales del proveedor. Los enlaces a portales, usuarios y contraseñas van en
+                <strong>Accesos</strong> (solo si el proveedor te da acceso).
             </p>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem">
                 <label class="muted" style="<?= e($labelStyle) ?>">
@@ -97,6 +97,12 @@ $logoWord = trim((string) ($supplier['logo_wordmark_path'] ?? ''));
                            placeholder="https://..." style="<?= e($inputStyle) ?>">
                 </label>
             </div>
+            <label class="muted" style="<?= e($labelStyle) ?>;margin-top:.85rem">
+                Notas
+                <textarea name="notes" rows="5" placeholder="Acuerdos, condiciones, recordatorios internos…"
+                          style="<?= e($inputStyle) ?>;resize:vertical;min-height:7rem;font:inherit"><?= e((string) ($supplier['notes'] ?? '')) ?></textarea>
+                <span style="font-weight:500;font-size:.78rem">Solo para uso interno del equipo. No se muestra en el catálogo.</span>
+            </label>
             <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;font-weight:600;margin-top:.85rem">
                 <input type="checkbox" name="is_active" value="1" <?= !empty($supplier['is_active']) ? 'checked' : '' ?>>
                 Proveedor activo

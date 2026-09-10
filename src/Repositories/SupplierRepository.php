@@ -15,6 +15,7 @@ final class SupplierRepository
     {
         $this->pdo = Connection::get();
         $this->ensureWordmarkColumn();
+        $this->ensureNotesColumn();
         $this->ensureSupplierCertifiersTable();
     }
 
@@ -36,6 +37,27 @@ final class SupplierRepository
             );
         } catch (\Throwable $e) {
             error_log('[Doceo] ensureWordmarkColumn: ' . $e->getMessage());
+        }
+    }
+
+    /** Notas internas del proveedor (instalaciones ya existentes). */
+    private function ensureNotesColumn(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        try {
+            $stmt = $this->pdo->query("SHOW COLUMNS FROM suppliers LIKE 'notes'");
+            if ($stmt && $stmt->fetch()) {
+                return;
+            }
+            $this->pdo->exec(
+                'ALTER TABLE suppliers ADD COLUMN notes TEXT NULL AFTER platform_url'
+            );
+        } catch (\Throwable $e) {
+            error_log('[Doceo] ensureNotesColumn: ' . $e->getMessage());
         }
     }
 
