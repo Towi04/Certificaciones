@@ -372,6 +372,92 @@ final class AdminController
         redirect('/admin/productos?tab=csv');
     }
 
+    public function prepCoursesBulkForm(): void
+    {
+        Auth::requireRole(['admin']);
+        $q = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
+        $supplierId = isset($_GET['supplier_id']) ? (int) $_GET['supplier_id'] : 0;
+        $svc = new \App\Services\PrepCourseBulkService();
+        $candidates = $svc->listCertificationCandidates($q !== '' ? $q : null, $supplierId);
+        $groups = [];
+        $suppliers = [];
+        try {
+            $groups = (new ProductGroupRepository())->all();
+        } catch (\Throwable) {
+        }
+        try {
+            $suppliers = (new SupplierRepository())->all();
+        } catch (\Throwable) {
+        }
+        $counts = ['pending' => 0, 'course_only' => 0, 'has_package' => 0];
+        foreach ($candidates as $row) {
+            $status = (string) ($row['status'] ?? 'pending');
+            if (isset($counts[$status])) {
+                $counts[$status]++;
+            }
+        }
+        view('admin/prep_courses_bulk', [
+            'title' => 'Generar cursos de preparación',
+            'candidates' => $candidates,
+            'counts' => $counts,
+            'q' => $q,
+            'supplierId' => $supplierId,
+            'groups' => $groups,
+            'suppliers' => $suppliers,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function prepCoursesBulkGenerate(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $ids = $_POST['certification_ids'] ?? [];
+        if (!is_array($ids)) {
+            $ids = [];
+        }
+        try {
+            $result = (new \App\Services\PrepCourseBulkService())->generate($ids, [
+                'name_prefix' => isset($_POST['name_prefix']) && is_string($_POST['name_prefix'])
+                    ? $_POST['name_prefix']
+                    : 'Curso de preparación:',
+                'course_public_price' => $_POST['course_public_price'] ?? 0,
+                'course_is_public' => !empty($_POST['course_is_public']),
+                'copy_logo' => !empty($_POST['copy_logo']),
+                'create_combo' => !empty($_POST['create_combo']),
+                'combo_discount_percent' => $_POST['combo_discount_percent'] ?? 0,
+                'product_group_id' => isset($_POST['product_group_id']) ? (int) $_POST['product_group_id'] : 0,
+                'skip_has_package' => empty($_POST['force_recreate']),
+            ]);
+            $msg = sprintf(
+                'Listo: %d curso(s) nuevo(s), %d reutilizado(s), %d combo(s), %d omitida(s).',
+                (int) $result['created_courses'],
+                (int) $result['reused_courses'],
+                (int) $result['created_combos'],
+                (int) $result['skipped']
+            );
+            if (!empty($result['errors'])) {
+                flash('error', $msg . ' Errores: ' . implode(' | ', array_slice($result['errors'], 0, 8)));
+            } else {
+                flash('success', $msg);
+            }
+            if (!empty($result['lines'])) {
+                $preview = implode(' · ', array_slice($result['lines'], 0, 25));
+                if (count($result['lines']) > 25) {
+                    $preview .= ' · … +' . (count($result['lines']) - 25) . ' más';
+                }
+                flash('info', $preview);
+            }
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        $qs = http_build_query(array_filter([
+            'q' => isset($_POST['q']) && is_string($_POST['q']) ? trim($_POST['q']) : '',
+            'supplier_id' => isset($_POST['supplier_id']) ? (int) $_POST['supplier_id'] : 0,
+        ], static fn ($v) => $v !== null && $v !== '' && $v !== 0));
+        redirect('/admin/productos/generar-cursos-prep' . ($qs !== '' ? '?' . $qs : ''));
+    }
+
     public function productCreateForm(): void
     {
         Auth::requireRole(['admin']);
