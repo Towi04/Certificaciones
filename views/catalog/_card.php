@@ -9,8 +9,19 @@ $hasPartnerPrice = $isPartner && array_key_exists('partner_price', $p) && $p['pa
 $displayPrice = $hasPartnerPrice
     ? (float) $p['partner_price']
     : (float) ($p['catalog_price'] ?? $p['public_price'] ?? 0);
+$searchBlob = mb_strtolower(trim(implode(' ', array_filter([
+    (string) ($p['name'] ?? ''),
+    (string) ($p['code'] ?? ''),
+    (string) ($p['slug'] ?? ''),
+    (string) ($p['certifier_name'] ?? ''),
+    (string) ($p['supplier_name'] ?? ''),
+    (string) ($p['category'] ?? ''),
+    category_label((string) ($p['category'] ?? '')),
+    trim(strip_tags((string) ($p['short_description'] ?? ''))),
+]))));
 ?>
-<a class="product-card product-card-link" href="<?= e($productUrl) ?>">
+<a class="product-card product-card-link" href="<?= e($productUrl) ?>"
+   data-search="<?= e($searchBlob) ?>">
     <div class="thumb">
         <?php if (!empty($p['is_star'])): ?><span class="badge-star" aria-label="Producto estrella">⭐</span><?php endif; ?>
         <?php if (!empty($p['logo_path'])): ?>
