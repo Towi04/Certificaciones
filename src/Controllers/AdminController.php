@@ -3319,12 +3319,14 @@ public function promoCode(): void
             }
             $cells = $_POST['workbook_cells'] ?? [];
             $fields = $_POST['workbook_fields'] ?? [];
+            $formulas = $_POST['workbook_formulas'] ?? [];
             $cellMap = [];
-            if (is_array($cells) && is_array($fields)) {
+            if (is_array($cells)) {
                 foreach ($cells as $i => $cell) {
                     $cellMap[] = [
                         'cell' => (string) $cell,
-                        'field' => (string) ($fields[$i] ?? ''),
+                        'field' => is_array($fields) ? (string) ($fields[$i] ?? '') : '',
+                        'formula' => is_array($formulas) ? (string) ($formulas[$i] ?? '') : '',
                     ];
                 }
             }

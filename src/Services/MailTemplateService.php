@@ -289,10 +289,15 @@ final class MailTemplateService
             }
             $cell = strtoupper(trim((string) ($item['cell'] ?? '')));
             $field = trim((string) ($item['field'] ?? ''));
-            if ($cell === '' || $field === '') {
+            $formula = trim((string) ($item['formula'] ?? ''));
+            if ($cell === '' || ($field === '' && $formula === '')) {
                 continue;
             }
-            $cellMap[] = ['cell' => $cell, 'field' => $field];
+            $row = ['cell' => $cell, 'field' => $field];
+            if ($formula !== '') {
+                $row['formula'] = $formula;
+            }
+            $cellMap[] = $row;
         }
 
         return [
@@ -307,7 +312,7 @@ final class MailTemplateService
     }
 
     /**
-     * @param array{enabled?:bool,template_path?:string,sheet?:string,normalize?:string,cell_map?:list<array{cell?:string,field?:string}>} $workbook
+     * @param array{enabled?:bool,template_path?:string,sheet?:string,normalize?:string,cell_map?:list<array{cell?:string,field?:string,formula?:string}>} $workbook
      */
     public static function saveWorkbookConfig(string $code, array $workbook): void
     {
@@ -318,10 +323,15 @@ final class MailTemplateService
             }
             $cell = strtoupper(trim((string) ($item['cell'] ?? '')));
             $field = trim((string) ($item['field'] ?? ''));
-            if ($cell === '' || $field === '') {
+            $formula = trim((string) ($item['formula'] ?? ''));
+            if ($cell === '' || ($field === '' && $formula === '')) {
                 continue;
             }
-            $cellMap[] = ['cell' => $cell, 'field' => $field];
+            $row = ['cell' => $cell, 'field' => $field];
+            if ($formula !== '') {
+                $row['formula'] = mb_substr($formula, 0, 500);
+            }
+            $cellMap[] = $row;
         }
         $normalized = [
             'enabled' => !empty($workbook['enabled']),

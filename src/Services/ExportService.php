@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Database\Connection;
 use App\Repositories\ExportTemplateRepository;
 use App\Support\AsciiUpperNormalizer;
+use App\Support\WorkbookValueResolver;
 use PDO;
 
 final class ExportService
@@ -175,11 +176,26 @@ final class ExportService
                 }
                 $header = trim((string) ($col['header'] ?? ''));
                 $field = trim((string) ($col['field'] ?? ''));
-                if ($header === '' || $field === '') {
+                $formula = trim((string) ($col['formula'] ?? ''));
+                if ($header === '' || ($field === '' && $formula === '')) {
                     continue;
                 }
-                $value = $this->fieldValue($row, $field);
-                if ($normalize === 'toefl') {
+                $value = $field !== '' ? $this->fieldValue($row, $field) : '';
+                if ($formula !== '') {
+                    // Campos disponibles para la fórmula de esta fila
+                    $fieldsBag = $this->fieldsBagForRow($row);
+                    try {
+                        $value = WorkbookValueResolver::resolve(
+                            ['field' => $field, 'formula' => $formula],
+                            $fieldsBag,
+                            'none'
+                        );
+                    } catch (\Throwable $e) {
+                        throw new \RuntimeException(
+                            'Error en fórmula de columna «' . $header . '»: ' . $e->getMessage()
+                        );
+                    }
+                } elseif ($normalize === 'toefl') {
                     $value = AsciiUpperNormalizer::normalize($value);
                 }
                 $mapped[$header] = $value;
@@ -324,18 +340,24 @@ final class ExportService
 
         $headers = is_array($input['col_header'] ?? null) ? $input['col_header'] : [];
         $fields = is_array($input['col_field'] ?? null) ? $input['col_field'] : [];
+        $formulas = is_array($input['col_formula'] ?? null) ? $input['col_formula'] : [];
         $columns = [];
-        $n = max(count($headers), count($fields));
+        $n = max(count($headers), count($fields), count($formulas));
         for ($i = 0; $i < $n; $i++) {
             $header = trim((string) ($headers[$i] ?? ''));
             $field = trim((string) ($fields[$i] ?? ''));
-            if ($header === '' && $field === '') {
+            $formula = trim((string) ($formulas[$i] ?? ''));
+            if ($header === '' && $field === '' && $formula === '') {
                 continue;
             }
-            if ($header === '' || $field === '') {
-                throw new \InvalidArgumentException('Cada columna necesita título y dato.');
+            if ($header === '' || ($field === '' && $formula === '')) {
+                throw new \InvalidArgumentException('Cada columna necesita título y un campo o fórmula.');
             }
-            $columns[] = ['header' => mb_substr($header, 0, 120), 'field' => mb_substr($field, 0, 80)];
+            $col = ['header' => mb_substr($header, 0, 120), 'field' => mb_substr($field !== '' ? $field : 'full_name', 0, 80)];
+            if ($formula !== '') {
+                $col['formula'] = mb_substr($formula, 0, 500);
+            }
+            $columns[] = $col;
         }
         if ($columns === []) {
             throw new \InvalidArgumentException('Agrega al menos una columna al CSV.');
@@ -505,6 +527,45 @@ final class ExportService
         };
 
         return trim($base);
+    }
+
+    /**
+     * Mapa de campos para fórmulas CSV (misma fila del alumno).
+     *
+     * @param array<string, mixed> $row
+     * @return array<string, string>
+     */
+    private function fieldsBagForRow(array $row): array
+    {
+        $keys = [
+            'matricula', 'first_name', 'last_name_p', 'last_name_m', 'full_name', 'email', 'phone',
+            'exam_date', 'exam_time', 'product_name', 'product_code', 'product_group_code',
+            'partner_code', 'folio', 'access_key', 'zoom_url', 'extra',
+            'curp', 'birth_date', 'sex', 'nationality', 'passport', 'address', 'city', 'state',
+        ];
+        $out = [];
+        foreach ($keys as $key) {
+            $out[$key] = $this->fieldValue($row, $key);
+        }
+        // También expone checkout extras
+        $rawCheckout = $row['checkout_json'] ?? null;
+        $checkout = [];
+        if (is_string($rawCheckout) && $rawCheckout !== '') {
+            $decoded = json_decode($rawCheckout, true);
+            if (is_array($decoded)) {
+                $checkout = $decoded;
+            }
+        } elseif (is_array($rawCheckout)) {
+            $checkout = $rawCheckout;
+        }
+        foreach ($checkout as $k => $v) {
+            if (!is_string($k) || $k === '' || array_key_exists($k, $out) || !is_scalar($v)) {
+                continue;
+            }
+            $out[$k] = (string) $v;
+        }
+
+        return $out;
     }
 
     /** @return list<array{header:string,field:string}> */

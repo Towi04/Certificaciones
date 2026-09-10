@@ -335,13 +335,13 @@ HTML;
                 'template_path' => '',
                 'attach' => false,
                 'sheet' => '1',
-                'normalize' => 'toefl',
+                'normalize' => 'none',
                 'cell_map' => [
-                    ['cell' => 'B2', 'field' => 'full_name'],
-                    ['cell' => 'B3', 'field' => 'email'],
+                    ['cell' => 'B2', 'field' => 'full_name', 'formula' => '=ASCIIMAYUSC({{full_name}})'],
+                    ['cell' => 'B3', 'field' => 'email', 'formula' => '=MINUSC({{email}})'],
                     ['cell' => 'B4', 'field' => 'matricula'],
-                    ['cell' => 'B5', 'field' => 'exam_date'],
-                    ['cell' => 'B6', 'field' => 'exam_time'],
+                    ['cell' => 'B5', 'field' => 'exam_date', 'formula' => '=TEXTO({{exam_date}};"dd/mm/aaaa")'],
+                    ['cell' => 'B6', 'field' => 'exam_time', 'formula' => '=TEXTO({{exam_time}};"hh:mm")'],
                 ],
             ],
         ];

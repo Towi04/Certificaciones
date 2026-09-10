@@ -245,17 +245,26 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
                                style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
                     </label>
                     <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.85rem;font-weight:600">
-                        Normalización
+                        Normalización (si no hay fórmula)
                         <select name="workbook_normalize" style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
                             <option value="none" <?= $wb['normalize'] === 'none' ? 'selected' : '' ?>>Ninguna</option>
-                            <option value="toefl" <?= $wb['normalize'] === 'toefl' ? 'selected' : '' ?>>TOEFL</option>
+                            <option value="toefl" <?= $wb['normalize'] === 'toefl' ? 'selected' : '' ?>>TOEFL (MAYÚSCULAS sin acentos/Ñ)</option>
                         </select>
                     </label>
                 </div>
-                <p style="margin:0 0 .35rem;font-weight:700;font-size:.85rem;color:var(--doceo-blue)">Celdas → campos</p>
+                <p style="margin:0 0 .35rem;font-weight:700;font-size:.85rem;color:var(--doceo-blue)">Celdas → campo / fórmula</p>
+                <p class="muted" style="font-size:.8rem;margin:0 0 .65rem">
+                    Si pones una <strong>fórmula</strong>, el sistema la evalúa y escribe el <em>valor</em> (no la fórmula) en el Excel.
+                    Ejemplos:
+                    <code>=MAYUSC({{full_name}})</code>,
+                    <code>=ASCIIMAYUSC({{full_name}})</code> (estilo TOEFL),
+                    <code>=TEXTO({{exam_date}};"dd/mm/aaaa")</code>,
+                    <code>=TEXTO({{exam_time}};"hh:mm")</code>.
+                    Funciones: MAYUSC, MINUSC, SUSTITUIR, SINACENTOS, ASCIIMAYUSC, TEXTO, CONCATENAR, RECORTAR.
+                </p>
                 <div id="workbook-cells">
                     <?php foreach ($wbCells as $i => $cell): ?>
-                        <div style="display:grid;grid-template-columns:7rem 1fr auto;gap:.4rem;margin-bottom:.35rem" class="workbook-cell-row">
+                        <div style="display:grid;grid-template-columns:6rem minmax(9rem,1fr) minmax(14rem,1.4fr) auto;gap:.4rem;margin-bottom:.35rem" class="workbook-cell-row">
                             <input type="text" name="workbook_cells[]" value="<?= e((string) ($cell['cell'] ?? '')) ?>" placeholder="B2"
                                    style="padding:.4rem .5rem;border:1px solid #cfd8e6;border-radius:8px">
                             <select name="workbook_fields[]" style="padding:.4rem .5rem;border:1px solid #cfd8e6;border-radius:8px">
@@ -266,6 +275,9 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                            <input type="text" name="workbook_formulas[]" value="<?= e((string) ($cell['formula'] ?? '')) ?>"
+                                   placeholder='=MAYUSC({{full_name}})'
+                                   style="padding:.4rem .5rem;border:1px solid #cfd8e6;border-radius:8px;font-family:ui-monospace,monospace;font-size:.78rem">
                             <button type="button" class="btn btn-ghost btn-sm workbook-cell-remove">✕</button>
                         </div>
                     <?php endforeach; ?>

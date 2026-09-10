@@ -444,6 +444,7 @@ final class ProductAdminService
             $cellMap[] = [
                 'cell' => strtoupper(trim((string) ($item['cell'] ?? ''))),
                 'field' => trim((string) ($item['field'] ?? '')),
+                'formula' => trim((string) ($item['formula'] ?? '')),
             ];
         }
 
