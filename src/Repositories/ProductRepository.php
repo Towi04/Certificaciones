@@ -286,6 +286,11 @@ final class ProductRepository
             $sql .= ' AND p.is_star = ?';
             $params[] = ((int) $filters['is_star']) === 1 ? 1 : 0;
         }
+        $type = isset($filters['type']) ? trim((string) $filters['type']) : '';
+        if ($type !== '') {
+            $sql .= ' AND p.type = ?';
+            $params[] = $type;
+        }
 
         return [$sql, $params];
     }

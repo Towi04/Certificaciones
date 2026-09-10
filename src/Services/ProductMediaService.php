@@ -52,6 +52,51 @@ final class ProductMediaService
     }
 
     /**
+     * Copia el logo de un producto a otro (archivo nuevo bajo /uploads/products/{toId}/).
+     * No reutiliza la misma ruta para que borrar uno no afecte al otro.
+     */
+    public function copyLogoFromProduct(int $fromProductId, int $toProductId): ?string
+    {
+        $from = $this->products->find($fromProductId);
+        $to = $this->products->find($toProductId);
+        if ($from === null || $to === null) {
+            throw new \InvalidArgumentException('Producto no encontrado.');
+        }
+
+        $sourcePath = trim((string) ($from['logo_path'] ?? ''));
+        if ($sourcePath === '') {
+            return null;
+        }
+
+        $absolute = $this->absolutePublicPath($sourcePath);
+        if (!is_file($absolute) || !is_readable($absolute)) {
+            return null;
+        }
+
+        $extension = strtolower(pathinfo($absolute, PATHINFO_EXTENSION));
+        if (!in_array($extension, self::IMAGE_EXTENSIONS, true)) {
+            $extension = 'png';
+        }
+
+        $relativeDir = '/uploads/products/' . $toProductId;
+        $targetDir = BASE_PATH . '/public' . $relativeDir;
+        if (!is_dir($targetDir) && !@mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+            throw new \RuntimeException('No se pudo crear el directorio de multimedia.');
+        }
+
+        $filename = bin2hex(random_bytes(16)) . '.' . $extension;
+        $dest = $targetDir . '/' . $filename;
+        if (!@copy($absolute, $dest)) {
+            throw new \RuntimeException('No se pudo copiar el logo del producto.');
+        }
+
+        $newPath = $relativeDir . '/' . $filename;
+        $this->products->update($toProductId, ['logo_path' => $newPath]);
+
+        return $newPath;
+    }
+
+    /**
      * @param array{tmp_name:string,name:string,error:int,size:int,type?:string} $file
      */
     public function addMedia(

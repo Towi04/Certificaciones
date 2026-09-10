@@ -69,6 +69,46 @@ final class ComboRepository
         return $stmt->fetchAll();
     }
 
+    /** ¿La certificación ya está en un combo activo que incluye algún curso? */
+    public function hasActiveComboWithCourse(int $productId): bool
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT 1
+             FROM combo_items ci
+             INNER JOIN combos c ON c.id = ci.combo_id AND c.is_active = 1
+             INNER JOIN combo_items ci2 ON ci2.combo_id = c.id
+             INNER JOIN products p2 ON p2.id = ci2.product_id AND p2.type = ?
+             WHERE ci.product_id = ?
+             LIMIT 1'
+        );
+        $stmt->execute(['course', $productId]);
+
+        return (bool) $stmt->fetchColumn();
+    }
+
+    /**
+     * Primer combo activo de la certificación que también incluye un curso.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function activeCourseComboForProduct(int $productId): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT c.*
+             FROM combos c
+             INNER JOIN combo_items ci ON ci.combo_id = c.id
+             INNER JOIN combo_items ci2 ON ci2.combo_id = c.id
+             INNER JOIN products p2 ON p2.id = ci2.product_id AND p2.type = ?
+             WHERE c.is_active = 1 AND ci.product_id = ?
+             ORDER BY c.is_star DESC, c.public_price ASC, c.name ASC
+             LIMIT 1'
+        );
+        $stmt->execute(['course', $productId]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
     /** @return list<array<string, mixed>> */
     public function items(int $comboId): array
     {

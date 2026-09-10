@@ -38,6 +38,7 @@ $exportQs = http_build_query(array_filter([
         </p>
     </div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <a class="btn btn-ghost" href="<?= e(url('/admin/productos/generar-cursos-prep')) ?>">Cursos prep (lote)</a>
         <a class="btn btn-ghost" href="<?= e(url('/admin/grupos')) ?>">Grupos</a>
         <a class="btn btn-accent" href="<?= e(url('/admin/productos/nuevo')) ?>">Nuevo producto</a>
     </div>
