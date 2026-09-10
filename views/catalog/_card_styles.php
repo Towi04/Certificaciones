@@ -1,13 +1,14 @@
 <style>
 /* Estilos críticos de tarjetas: van en la página para no depender de un app.css cacheado. */
 .product-grid .product-card > .thumb {
-  aspect-ratio: 4 / 3 !important;
+  /* Más apaisado: mejor para logos rectangulares sin recortar */
+  aspect-ratio: 16 / 10 !important;
   background: linear-gradient(160deg, #f7f9fc, #e8eef7) !important;
   position: relative !important;
   overflow: hidden !important;
   padding: 0 !important;
   display: block !important;
-  min-height: 140px !important;
+  min-height: 0 !important;
 }
 .product-grid .product-card > .thumb > img {
   position: absolute !important;
@@ -20,12 +21,10 @@
   max-width: none !important;
   max-height: none !important;
   margin: 0 !important;
-  padding: .35rem !important;
+  padding: .55rem !important;
   box-sizing: border-box !important;
   object-fit: contain !important;
   object-position: center !important;
-  /* Compensa logos con mucho margen transparente interno */
-  transform: scale(1.22) !important;
-  transform-origin: center center !important;
+  transform: none !important;
 }
 </style>
