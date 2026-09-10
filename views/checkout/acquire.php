@@ -392,11 +392,21 @@ $stepLabels = [
             <?php endif; ?>
             <?php if (!$isPartnerCheckout): ?>
             <div class="sidebar-promo">
-                <label for="promo_code">Código promocional o de partner</label>
+                <label for="promo_code">Código promocional</label>
                 <div class="sidebar-promo-row">
-                    <input type="text" name="promo_code" id="promo_code" placeholder="DOCEO26 o código partner" form="checkout-form" style="text-transform:uppercase">
+                    <input type="text" name="promo_code" id="promo_code" placeholder="CÓDIGO PROMOCIONAL" form="checkout-form" style="text-transform:uppercase" autocomplete="off">
                     <button type="button" class="btn btn-primary btn-sm" id="apply-promo">Aplicar</button>
                 </div>
+                <?php
+                $whatsappUrl = \App\Support\Settings::schoolWhatsappPromoUrl((string) ($product['name'] ?? ''));
+                if ($whatsappUrl !== null):
+                    ?>
+                    <p class="combo-advisor-once" style="margin:.55rem 0 0">
+                        <a class="combo-advisor-link" href="<?= e($whatsappUrl) ?>" target="_blank" rel="noopener noreferrer">
+                            Contacta a un asesor por WhatsApp para ver si existe algún código promocional vigente
+                        </a>
+                    </p>
+                <?php endif; ?>
                 <p class="muted" style="font-size:.78rem;margin:.35rem 0 0">
                     Un código partner baja el precio al público; la diferencia se abona como crédito al partner.
                 </p>

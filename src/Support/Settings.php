@@ -97,10 +97,10 @@ final class Settings
 
         $name = trim((string) ($productName ?? ''));
         if ($name !== '') {
-            $msg = 'Hola, quisiera adquirir la certificación ' . $name
+            $msg = 'Hola, quisiera adquirir ' . $name
                 . ' y me gustaría saber si hay un código promocional vigente.';
         } else {
-            $msg = 'Hola, quisiera adquirir una certificación y me gustaría saber si hay un código promocional vigente.';
+            $msg = 'Hola, quisiera adquirir un producto y me gustaría saber si hay un código promocional vigente.';
         }
 
         return 'https://wa.me/' . $phone . '?text=' . rawurlencode($msg);
