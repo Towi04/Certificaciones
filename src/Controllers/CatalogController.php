@@ -24,13 +24,24 @@ final class CatalogController
         $products = [];
         $pagination = null;
         $dbOk = true;
+        $sectionCounts = ['certificaciones' => 0, 'cursos' => 0];
         try {
-            $stars = $repo->starProducts();
+            $section = ProductRepository::normalizeCatalogSection(
+                is_string($_GET['seccion'] ?? null) ? (string) $_GET['seccion'] : 'certificaciones'
+            );
+            if ($section === 'all') {
+                $section = 'certificaciones';
+            }
             $filter = $_GET['filtro'] ?? $_GET['categoria'] ?? 'all';
             $filter = is_string($filter) ? $filter : 'all';
             $q = $_GET['q'] ?? null;
             $q = is_string($q) ? $q : null;
-            $total = $repo->publicCatalogCount($filter, $q);
+
+            $sectionCounts['certificaciones'] = $repo->publicCatalogCount('all', null, false, 'certificaciones');
+            $sectionCounts['cursos'] = $repo->publicCatalogCount('all', null, false, 'cursos');
+
+            $stars = $repo->starProducts(null, $section);
+            $total = $repo->publicCatalogCount($filter, $q, false, $section);
             // Por defecto mostrar todas: si solo salen 20 parece que no hay más.
             $pagination = Pagination::fromRequest($total, 'all');
             $products = $repo->publicCatalog(
@@ -38,12 +49,14 @@ final class CatalogController
                 $q,
                 false,
                 $pagination['limit'],
-                $pagination['offset']
+                $pagination['offset'],
+                $section
             );
-            $catalogFilters = (new CatalogFilterService())->catalogFilters();
+            $catalogFilters = (new CatalogFilterService())->catalogFilters($section);
         } catch (\Throwable $e) {
             $dbOk = false;
             $catalogFilters = [];
+            $section = 'certificaciones';
             error_log('[Doceo] Catalog: ' . $e->getMessage());
         }
 
@@ -69,7 +82,7 @@ final class CatalogController
         }
 
         view('catalog/home', [
-            'title' => 'Catálogo',
+            'title' => $section === 'cursos' ? 'Cursos' : 'Certificaciones',
             'stars' => $stars,
             'products' => $products,
             'pagination' => $pagination,
@@ -77,6 +90,8 @@ final class CatalogController
             'catalogFilters' => $catalogFilters ?? [],
             'filter' => $_GET['filtro'] ?? $_GET['categoria'] ?? 'all',
             'q' => $_GET['q'] ?? '',
+            'section' => $section ?? 'certificaciones',
+            'sectionCounts' => $sectionCounts,
             'dbOk' => $dbOk,
             'user' => $user,
             'partner' => $partner,

@@ -44,7 +44,7 @@ final class PartnerController
         }
 
         // Catálogo público (mismo que ve un alumno), con precio del nivel partner.
-        $products = (new ProductRepository())->publicCatalog('all', null);
+        $products = (new ProductRepository())->publicCatalog('all', null, false, null, null, 'all');
         $pricing = new PricingService();
         $priced = [];
         foreach ($products as $p) {

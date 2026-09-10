@@ -60,9 +60,10 @@ final class ProductRepository
         ?string $q = null,
         bool $starsOnly = false,
         ?int $limit = null,
-        ?int $offset = null
+        ?int $offset = null,
+        string $section = 'certificaciones'
     ): array {
-        [$sql, $params] = $this->publicCatalogWhere($filterSlug, $q, $starsOnly);
+        [$sql, $params] = $this->publicCatalogWhere($filterSlug, $q, $starsOnly, $section);
         $sql = self::SELECT_WITH_RELATIONS . $sql
             . ' ORDER BY p.is_star DESC, p.sort_order ASC, p.name ASC';
         if ($limit !== null) {
@@ -74,9 +75,13 @@ final class ProductRepository
         return $stmt->fetchAll();
     }
 
-    public function publicCatalogCount(?string $filterSlug = null, ?string $q = null, bool $starsOnly = false): int
-    {
-        [$where, $params] = $this->publicCatalogWhere($filterSlug, $q, $starsOnly);
+    public function publicCatalogCount(
+        ?string $filterSlug = null,
+        ?string $q = null,
+        bool $starsOnly = false,
+        string $section = 'certificaciones'
+    ): int {
+        [$where, $params] = $this->publicCatalogWhere($filterSlug, $q, $starsOnly, $section);
         $sql = 'SELECT COUNT(*) FROM products p
                 LEFT JOIN certifiers c ON c.id = p.certifier_id
                 LEFT JOIN suppliers s ON s.id = p.supplier_id'
@@ -90,10 +95,24 @@ final class ProductRepository
     /**
      * @return array{0:string,1:list<mixed>}
      */
-    private function publicCatalogWhere(?string $filterSlug, ?string $q, bool $starsOnly): array
-    {
+    private function publicCatalogWhere(
+        ?string $filterSlug,
+        ?string $q,
+        bool $starsOnly,
+        string $section = 'certificaciones'
+    ): array {
         $sql = ' WHERE p.is_active = 1 AND p.is_public = 1';
         $params = [];
+        $section = self::normalizeCatalogSection($section);
+        if ($section === 'cursos') {
+            $sql .= ' AND p.type = ?';
+            $params[] = 'course';
+        } elseif ($section === 'certificaciones') {
+            // Certificaciones y trámites relacionados (todo lo que no es curso).
+            $sql .= ' AND p.type <> ?';
+            $params[] = 'course';
+        }
+        // section === 'all': sin filtro por tipo
         if ($filterSlug !== null && $filterSlug !== '' && $filterSlug !== 'all') {
             $sql .= ' AND EXISTS (
                 SELECT 1 FROM product_catalog_filters pcf
@@ -127,16 +146,39 @@ final class ProductRepository
         return [$sql, $params];
     }
 
-    /** @return list<array<string, mixed>> */
-    public function starProducts(?int $limit = null): array
+    public static function normalizeCatalogSection(string $section): string
     {
+        $section = strtolower(trim($section));
+        if ($section === 'cursos') {
+            return 'cursos';
+        }
+        if ($section === 'all' || $section === 'todos') {
+            return 'all';
+        }
+
+        return 'certificaciones';
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function starProducts(?int $limit = null, string $section = 'certificaciones'): array
+    {
+        $section = self::normalizeCatalogSection($section);
         $sql = self::SELECT_WITH_RELATIONS . '
-             WHERE p.is_active = 1 AND p.is_public = 1 AND p.is_star = 1
-             ORDER BY p.sort_order ASC, p.name ASC';
+             WHERE p.is_active = 1 AND p.is_public = 1 AND p.is_star = 1';
+        $params = [];
+        if ($section === 'cursos') {
+            $sql .= ' AND p.type = ?';
+            $params[] = 'course';
+        } elseif ($section === 'certificaciones') {
+            $sql .= ' AND p.type <> ?';
+            $params[] = 'course';
+        }
+        $sql .= ' ORDER BY p.sort_order ASC, p.name ASC';
         if ($limit !== null && $limit > 0) {
             $sql .= ' LIMIT ' . (int) $limit;
         }
-        $stmt = $this->pdo->query($sql);
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }

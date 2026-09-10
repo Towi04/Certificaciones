@@ -17,11 +17,10 @@ final class CatalogFilterRepository
     }
 
     /** @return list<array<string, mixed>> */
-    public function catalogVisible(): array
+    public function catalogVisible(string $section = 'all'): array
     {
-        // Solo filtros con al menos un producto público y activo asignado.
-        $stmt = $this->pdo->query(
-            'SELECT cf.*
+        $section = \App\Repositories\ProductRepository::normalizeCatalogSection($section);
+        $sql = 'SELECT cf.*
              FROM catalog_filters cf
              WHERE cf.is_active = 1
                AND cf.show_in_catalog = 1
@@ -31,10 +30,20 @@ final class CatalogFilterRepository
                     INNER JOIN products p ON p.id = pcf.product_id
                     WHERE pcf.filter_id = cf.id
                       AND p.is_active = 1
-                      AND p.is_public = 1
+                      AND p.is_public = 1';
+        $params = [];
+        if ($section === 'cursos') {
+            $sql .= ' AND p.type = ?';
+            $params[] = 'course';
+        } elseif ($section === 'certificaciones') {
+            $sql .= ' AND p.type <> ?';
+            $params[] = 'course';
+        }
+        $sql .= '
                )
-             ORDER BY cf.sort_order ASC, cf.label ASC'
-        );
+             ORDER BY cf.sort_order ASC, cf.label ASC';
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
 
         return $stmt->fetchAll();
     }

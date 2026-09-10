@@ -71,6 +71,35 @@ img { max-width: 100%; height: auto; }
 .hero-banner h1 { margin: 0 0 .4rem; font-size: clamp(1.5rem, 3vw, 2.1rem); }
 .hero-banner p { margin: 0; opacity: .92; max-width: 40rem; }
 
+.catalog-section-tabs {
+  display: flex; flex-wrap: wrap; gap: .5rem;
+  margin: 0 0 1.25rem; padding: 0;
+}
+.catalog-section-tab {
+  display: inline-flex; align-items: center; gap: .45rem;
+  padding: .65rem 1.15rem; border-radius: 999px;
+  background: #fff; color: var(--doceo-text);
+  border: 1px solid rgba(196,196,196,.85);
+  font-weight: 700; font-size: .92rem;
+  box-shadow: 0 4px 14px rgba(49, 82, 133, 0.06);
+  text-decoration: none !important;
+}
+.catalog-section-tab:hover {
+  border-color: var(--doceo-blue); color: var(--doceo-blue);
+}
+.catalog-section-tab.active {
+  background: var(--doceo-blue); border-color: var(--doceo-blue); color: #fff;
+}
+.catalog-section-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 1.55rem; height: 1.55rem; padding: 0 .4rem;
+  border-radius: 999px; font-size: .75rem; font-weight: 800;
+  background: rgba(49, 82, 133, 0.12); color: inherit;
+}
+.catalog-section-tab.active .catalog-section-count {
+  background: rgba(255,255,255,.22);
+}
+
 .layout-catalog {
   display: grid; grid-template-columns: 240px 1fr; gap: 1.25rem; padding-bottom: 3rem;
 }
