@@ -564,15 +564,21 @@ final class MailTemplateService
             $bodyHtml = MailBranding::wrapIfNeeded($bodyHtml);
         }
 
+        $subject = (string) $rendered['subject'];
+        $bodyText = (string) $rendered['body_text'];
         (new Mailer())->send(
             $to,
-            $rendered['subject'],
-            $rendered['body_text'],
+            $subject,
+            $bodyText,
             array_merge($options, [
                 'html' => true,
                 'body_html' => $bodyHtml,
             ])
         );
+
+        if (!empty($options['log_outbound'])) {
+            $this->logOutboundMail($to, $subject, $bodyText, $bodyHtml);
+        }
     }
 
     /**

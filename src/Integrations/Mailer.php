@@ -265,7 +265,9 @@ final class Mailer
     }
 
     /**
-     * Pocos endpoints (auto ya prioriza mail()). Evita timeouts en salud.
+     * Endpoints SMTP reales del hosting.
+     * No usar localhost: en Neubox/cPanel a veces acepta el DATA con 250
+     * sin retransmitir a dominios externos → «éxito» falso y el correo no llega.
      *
      * @return list<array{host: string, port: int, encryption: string}>
      */
@@ -280,9 +282,20 @@ final class Mailer
 
         $candidates = [
             ['host' => $host, 'port' => $port, 'encryption' => $encryption],
-            ['host' => 'localhost', 'port' => 465, 'encryption' => 'ssl'],
-            ['host' => $host, 'port' => 587, 'encryption' => 'tls'],
         ];
+        // Alternativa TLS 587 del mismo host (no localhost).
+        if (!($port === 587 && $encryption === 'tls')) {
+            $candidates[] = ['host' => $host, 'port' => 587, 'encryption' => 'tls'];
+        }
+        if (!($port === 465 && $encryption === 'ssl')) {
+            $candidates[] = ['host' => $host, 'port' => 465, 'encryption' => 'ssl'];
+        }
+
+        // Solo si se fuerza explícitamente (debug local).
+        if (filter_var(Env::get('SMTP_ALLOW_LOCALHOST', '0') ?? '0', FILTER_VALIDATE_BOOLEAN)) {
+            $candidates[] = ['host' => 'localhost', 'port' => 465, 'encryption' => 'ssl'];
+            $candidates[] = ['host' => '127.0.0.1', 'port' => 25, 'encryption' => 'none'];
+        }
 
         $seen = [];
         $out = [];

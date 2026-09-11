@@ -401,6 +401,9 @@ final class ProviderRequestService
             $transport = is_array($endpoint)
                 ? (string) ($endpoint['transport'] ?? 'desconocido')
                 : 'desconocido';
+            $smtpHost = is_array($endpoint)
+                ? trim((string) ($endpoint['host'] ?? ''))
+                : '';
             $smtpFallback = is_array($endpoint) && !empty($endpoint['fallback']);
             $smtpErrors = '';
             if ($smtpFallback && is_array($endpoint['smtp_errors'] ?? null)) {
@@ -424,7 +427,9 @@ final class ProviderRequestService
             $this->markSent($trackingId, $to, $actorUserId);
             $workbookSkip = trim((string) ($vars['_workbook_skip'] ?? ''));
             $note = 'Solicitud enviada a ' . $to
-                . ' (solo enlaces, sin adjuntos · transporte ' . $transport . ')';
+                . ' (solo enlaces, sin adjuntos · transporte ' . $transport
+                . ($smtpHost !== '' ? ' @ ' . $smtpHost : '')
+                . ')';
             if ($smtpFallback) {
                 $note .= ' · aviso: SMTP falló y se usó mail() local';
             }
@@ -447,6 +452,7 @@ final class ProviderRequestService
                 'workbook_url' => (string) ($vars['workbook_url'] ?? ''),
                 'workbook_skip' => $workbookSkip,
                 'transport' => $transport,
+                'smtp_host' => $smtpHost,
                 'smtp_fallback' => $smtpFallback,
                 'smtp_errors' => $smtpErrors,
                 'comprobante_url' => (string) ($vars['comprobante_url'] ?? ''),
@@ -846,40 +852,61 @@ final class ProviderRequestService
             error_log('[Doceo] Solicitud proveedor: se ignoraron ' . count($attachments) . ' adjunto(s); solo enlaces.');
         }
 
-        $options = [];
+        $options = [
+            // Proveedor = dominio externo. mail() en Neubox suele «aceptar» y no entregar.
+            // Exigir SMTP real: si AUTH/relay falla, el admin verá error (no éxito falso).
+            'prefer_smtp' => true,
+            'force_smtp' => true,
+            'smtp_only' => true,
+            'log_outbound' => true,
+        ];
         if ($cc !== '') {
             $options['cc'] = $cc;
         }
-        // Sin adjuntos: intentar SMTP primero (mejor hacia dominios externos del proveedor).
-        // Si SMTP falla, Mailer hace fallback a mail() y el flash avisará (smtp_fallback).
-        $options['prefer_smtp'] = true;
 
         $mailTpl = new MailTemplateService();
-        if ($templateCode !== '') {
-            if (MailTemplateService::isUksSolicitudCode($templateCode)) {
+        try {
+            if ($templateCode !== '') {
+                if (MailTemplateService::isUksSolicitudCode($templateCode)) {
+                    $mailTpl->sendUksSolicitud($to, $vars, $options);
+                } elseif ($mailTpl->render($templateCode, $vars) !== null) {
+                    $mailTpl->send($templateCode, $to, $vars, $options);
+                } else {
+                    throw new \RuntimeException(
+                        'Configura la plantilla de solicitud al proveedor en el paso del grupo '
+                        . '(Progreso → Enviar correo + plantilla). Código no encontrado: '
+                        . $templateCode
+                    );
+                }
+            } else {
                 $mailTpl->sendUksSolicitud($to, $vars, $options);
-
-                return;
             }
-            if ($mailTpl->render($templateCode, $vars) !== null) {
-                $mailTpl->send($templateCode, $to, $vars, $options);
-
-                return;
+        } catch (\Throwable $e) {
+            $endpoint = Mailer::lastEndpoint();
+            $errors = Mailer::lastErrors();
+            $hint = ' El correo NO se marcó como enviado. '
+                . 'Revisa en Neubox: SMTP_HOST/USER/PASS (mismo buzón que SMTP_FROM), '
+                . 'cPHulk desbloqueado, y prueba Admin → Correos → Enviar prueba a tu bandeja. '
+                . 'Destino: ' . $to . '.';
+            if ($errors !== []) {
+                $hint .= ' Detalle: ' . implode(' | ', $errors);
             }
+            if (is_array($endpoint)) {
+                $hint .= ' Último intento: ' . json_encode($endpoint, JSON_UNESCAPED_UNICODE);
+            }
+            throw new \RuntimeException(rtrim($e->getMessage(), '.') . '.' . $hint, 0, $e);
         }
 
-        // Solicitud pesada sin código: usar plantilla UKS de solicitud.
-        if ($templateCode === '' || MailTemplateService::isUksSolicitudCode($templateCode)) {
-            $mailTpl->sendUksSolicitud($to, $vars, $options);
-
-            return;
+        $endpoint = Mailer::lastEndpoint();
+        $transport = is_array($endpoint) ? (string) ($endpoint['transport'] ?? '') : '';
+        if ($transport !== 'smtp') {
+            throw new \RuntimeException(
+                'El correo al proveedor no usó SMTP autenticado (transporte: '
+                . ($transport !== '' ? $transport : 'desconocido')
+                . '). No se confirma entrega a ' . $to . '. '
+                . 'Configura SMTP en el .env (SMTP_HOST, SMTP_USER, SMTP_PASS, SMTP_FROM) y reintenta.'
+            );
         }
-
-        throw new \RuntimeException(
-            'Configura la plantilla de solicitud al proveedor en el paso del grupo '
-            . '(Progreso → Enviar correo + plantilla). Código no encontrado: '
-            . $templateCode
-        );
     }
 
     private function documentosHtml(string $reglamentoUrl, string $comprobanteUrl, string $workbookUrl = ''): string

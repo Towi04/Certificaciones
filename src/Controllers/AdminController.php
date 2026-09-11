@@ -1569,13 +1569,24 @@ final class AdminController
             } elseif ($includeProof) {
                 $msg .= ' · sin enlace de comprobante (no hay archivo admin)';
             }
-            if (($result['transport'] ?? '') !== '') {
-                $msg .= ' · transporte ' . $result['transport'];
+            $transport = (string) ($result['transport'] ?? '');
+            if ($transport !== '') {
+                $msg .= ' · transporte ' . $transport;
+            }
+            if (!empty($result['smtp_host'])) {
+                $msg .= ' @ ' . $result['smtp_host'];
             }
             if (($result['workbook_skip'] ?? '') !== '') {
                 $msg .= '. Excel no incluido: ' . $result['workbook_skip'];
             }
-            if (!empty($result['smtp_fallback'])) {
+            // Con smtp_only ya no debería haber fallback silencioso a mail().
+            if ($transport !== 'smtp') {
+                flash(
+                    'error',
+                    $msg . '. ERROR: el transporte no fue SMTP autenticado. '
+                    . 'El correo puede no haber llegado. Revisa SMTP en Neubox y reintenta.'
+                );
+            } elseif (!empty($result['smtp_fallback'])) {
                 flash(
                     'warning',
                     $msg . '. Atención: SMTP falló y se usó mail() local'
