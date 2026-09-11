@@ -134,6 +134,9 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
             Asunto
             <input type="text" name="subject" id="mail-subject" required value="<?= e($template['subject']) ?>"
                 style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;width:100%">
+            <span style="font-weight:400;font-size:.8rem;color:#6b7280">
+                Neubox/MailChannels: no dejes el asunto vacío ni en TODO MAYÚSCULAS; evita textos tipo phishing.
+            </span>
         </label>
 
         <div style="margin-bottom:1rem">
