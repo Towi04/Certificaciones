@@ -375,10 +375,12 @@ final class AdminController
     public function prepCoursesBulkForm(): void
     {
         Auth::requireRole(['admin']);
+        // La búsqueda por nombre/código se hace en el navegador para no perder
+        // los checks al filtrar; aquí solo se acota por proveedor (si aplica).
         $q = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
         $supplierId = isset($_GET['supplier_id']) ? (int) $_GET['supplier_id'] : 0;
         $svc = new \App\Services\PrepCourseBulkService();
-        $candidates = $svc->listCertificationCandidates($q !== '' ? $q : null, $supplierId);
+        $candidates = $svc->listCertificationCandidates(null, $supplierId);
         $groups = [];
         $suppliers = [];
         try {

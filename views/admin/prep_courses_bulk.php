@@ -48,12 +48,8 @@ $statusColor = [
 <form method="get" action="<?= e(url('/admin/productos/generar-cursos-prep')) ?>" class="panel"
       style="margin-top:.75rem;display:grid;gap:.75rem;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));align-items:end">
     <label class="muted" style="<?= e($labelStyle) ?>">
-        Buscar
-        <input type="search" name="q" value="<?= e($q) ?>" placeholder="Código o nombre…" style="<?= e($inputStyle) ?>">
-    </label>
-    <label class="muted" style="<?= e($labelStyle) ?>">
         Proveedor
-        <select name="supplier_id" style="<?= e($inputStyle) ?>">
+        <select name="supplier_id" id="prep-supplier-filter" style="<?= e($inputStyle) ?>">
             <option value="">— Todos —</option>
             <?php foreach ($suppliers as $s): ?>
                 <option value="<?= (int) $s['id'] ?>" <?= $supplierId === (int) $s['id'] ? 'selected' : '' ?>>
@@ -63,13 +59,12 @@ $statusColor = [
         </select>
     </label>
     <div>
-        <button class="btn btn-primary" type="submit">Filtrar</button>
+        <button class="btn btn-primary" type="submit">Aplicar proveedor</button>
     </div>
 </form>
 
 <form method="post" action="<?= e(url('/admin/productos/generar-cursos-prep')) ?>" id="prep-bulk-form" class="panel" style="margin-top:.75rem">
     <?= csrf_field() ?>
-    <input type="hidden" name="q" value="<?= e($q) ?>">
     <input type="hidden" name="supplier_id" value="<?= $supplierId > 0 ? (int) $supplierId : '' ?>">
 
     <h2 style="margin:0 0 .75rem;font-size:1.05rem;color:var(--doceo-blue)">Opciones</h2>
@@ -114,10 +109,11 @@ $statusColor = [
     </p>
 
     <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem">
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
             <button type="button" class="btn btn-ghost btn-sm" id="prep-select-pending">Seleccionar pendientes</button>
             <button type="button" class="btn btn-ghost btn-sm" id="prep-select-actionable">Pendientes + sin combo</button>
             <button type="button" class="btn btn-ghost btn-sm" id="prep-select-none">Ninguna</button>
+            <span class="muted" id="prep-selected-count" style="font-size:.85rem;margin-left:.25rem"></span>
         </div>
         <button class="btn btn-accent" type="submit"
                 onclick="return confirm('¿Generar cursos/combos para las certificaciones seleccionadas?');">
@@ -125,11 +121,28 @@ $statusColor = [
         </button>
     </div>
 
+    <div class="panel" style="margin:0 0 .75rem;padding:.75rem 1rem;background:#f8fafc;display:grid;gap:.55rem;grid-template-columns:minmax(220px,1fr) auto;align-items:end">
+        <label class="muted" style="<?= e($labelStyle) ?>">
+            Buscar en la lista
+            <input type="search" id="prep-live-search" value="<?= e($q) ?>"
+                   placeholder="Escribe código o nombre…" autocomplete="off"
+                   style="<?= e($inputStyle) ?>">
+        </label>
+        <p class="muted" style="margin:0;font-size:.8rem;max-width:22rem">
+            El filtro solo oculta filas: <strong>tus checks se conservan</strong> mientras marcas la lista.
+            El proveedor sí recarga la página.
+        </p>
+    </div>
+
     <div class="table-wrap">
-        <table class="data">
+        <table class="data" id="prep-certs-table">
             <thead>
             <tr>
-                <th style="width:2.5rem"></th>
+                <th style="width:2.5rem">
+                    <input type="checkbox" id="prep-master-check"
+                           title="Marcar / desmarcar todas (o solo las visibles si hay búsqueda)"
+                           aria-label="Marcar o desmarcar todas las certificaciones">
+                </th>
                 <th>Estado</th>
                 <th>Certificación</th>
                 <th>Proveedor</th>
@@ -141,9 +154,14 @@ $statusColor = [
             <?php foreach ($candidates as $row):
                 $p = $row['product'];
                 $status = (string) $row['status'];
-                $checked = $status === 'pending' || $status === 'course_only';
+                // Empieza sin selección: marca solo las certificaciones que sí quieres generar.
+                $checked = false;
+                $searchHaystack = mb_strtolower(
+                    trim((string) ($p['code'] ?? '') . ' ' . (string) ($p['name'] ?? '') . ' ' . (string) ($p['supplier_name'] ?? '')),
+                    'UTF-8'
+                );
                 ?>
-                <tr>
+                <tr class="prep-cert-row" data-search="<?= e($searchHaystack) ?>">
                     <td>
                         <input type="checkbox"
                                class="prep-cert-check"
@@ -180,8 +198,9 @@ $statusColor = [
                 </tr>
             <?php endforeach; ?>
             <?php if ($candidates === []): ?>
-                <tr><td colspan="6" class="muted">No hay certificaciones con esos filtros.</td></tr>
+                <tr id="prep-empty-server"><td colspan="6" class="muted">No hay certificaciones con esos filtros.</td></tr>
             <?php endif; ?>
+                <tr id="prep-empty-filter" hidden><td colspan="6" class="muted">Ninguna certificación coincide con la búsqueda.</td></tr>
             </tbody>
         </table>
     </div>
@@ -189,21 +208,113 @@ $statusColor = [
 
 <script>
 (function () {
+  var rows = Array.prototype.slice.call(document.querySelectorAll('.prep-cert-row'));
   var checks = Array.prototype.slice.call(document.querySelectorAll('.prep-cert-check'));
-  function selectBy(fn) {
-    checks.forEach(function (el) { el.checked = !!fn(el.getAttribute('data-status')); });
+  var searchInput = document.getElementById('prep-live-search');
+  var master = document.getElementById('prep-master-check');
+  var emptyFilter = document.getElementById('prep-empty-filter');
+  var countEl = document.getElementById('prep-selected-count');
+  var syncingMaster = false;
+
+  function visibleRows() {
+    return rows.filter(function (row) { return row.style.display !== 'none'; });
   }
+
+  function updateSelectedCount() {
+    if (!countEl) return;
+    var selected = checks.filter(function (el) { return el.checked; }).length;
+    var visible = visibleRows().length;
+    countEl.textContent = selected + ' seleccionada' + (selected === 1 ? '' : 's')
+      + (searchInput && searchInput.value.trim() !== ''
+        ? ' · ' + visible + ' visible' + (visible === 1 ? '' : 's')
+        : '');
+  }
+
+  function syncMasterFromChecks() {
+    if (!master || syncingMaster) return;
+    var vis = visibleRows();
+    var visChecks = vis.map(function (row) {
+      return row.querySelector('.prep-cert-check');
+    }).filter(Boolean);
+    if (visChecks.length === 0) {
+      master.checked = false;
+      master.indeterminate = false;
+      return;
+    }
+    var checkedCount = visChecks.filter(function (el) { return el.checked; }).length;
+    master.checked = checkedCount === visChecks.length;
+    master.indeterminate = checkedCount > 0 && checkedCount < visChecks.length;
+  }
+
+  function applyFilter() {
+    var q = (searchInput ? searchInput.value : '').trim().toLowerCase();
+    var visible = 0;
+    rows.forEach(function (row) {
+      var hay = row.getAttribute('data-search') || '';
+      var show = q === '' || hay.indexOf(q) !== -1;
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    if (emptyFilter) {
+      emptyFilter.hidden = !(rows.length > 0 && visible === 0);
+    }
+    syncMasterFromChecks();
+    updateSelectedCount();
+  }
+
+  function selectBy(fn, onlyVisible) {
+    var list = onlyVisible ? visibleRows() : rows;
+    list.forEach(function (row) {
+      var el = row.querySelector('.prep-cert-check');
+      if (!el) return;
+      el.checked = !!fn(el.getAttribute('data-status'));
+    });
+    syncMasterFromChecks();
+    updateSelectedCount();
+  }
+
   var pendingBtn = document.getElementById('prep-select-pending');
   var actionableBtn = document.getElementById('prep-select-actionable');
   var noneBtn = document.getElementById('prep-select-none');
   if (pendingBtn) pendingBtn.addEventListener('click', function () {
-    selectBy(function (s) { return s === 'pending'; });
+    selectBy(function (s) { return s === 'pending'; }, false);
   });
   if (actionableBtn) actionableBtn.addEventListener('click', function () {
-    selectBy(function (s) { return s === 'pending' || s === 'course_only'; });
+    selectBy(function (s) { return s === 'pending' || s === 'course_only'; }, false);
   });
   if (noneBtn) noneBtn.addEventListener('click', function () {
-    selectBy(function () { return false; });
+    selectBy(function () { return false; }, false);
   });
+
+  if (master) {
+    master.addEventListener('change', function () {
+      syncingMaster = true;
+      var on = master.checked;
+      // Sin búsqueda: marca/desmarca TODAS. Con filtro: solo las visibles.
+      var filtering = !!(searchInput && searchInput.value.trim() !== '');
+      var targets = filtering ? visibleRows() : rows;
+      targets.forEach(function (row) {
+        var el = row.querySelector('.prep-cert-check');
+        if (el) el.checked = on;
+      });
+      master.indeterminate = false;
+      syncingMaster = false;
+      updateSelectedCount();
+    });
+  }
+
+  checks.forEach(function (el) {
+    el.addEventListener('change', function () {
+      syncMasterFromChecks();
+      updateSelectedCount();
+    });
+  });
+
+  if (searchInput) {
+    searchInput.addEventListener('input', applyFilter);
+    searchInput.addEventListener('search', applyFilter);
+  }
+
+  applyFilter();
 })();
 </script>
