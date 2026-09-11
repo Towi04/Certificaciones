@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Auth\Auth;
 use App\Repositories\ProductRepository;
 use App\Repositories\TrackingRepository;
+use App\Services\CatalogFilterService;
 use App\Services\PartnerRegistrationService;
 use App\Services\PricingService;
 use App\Services\TrackingService;
@@ -43,8 +44,25 @@ final class PartnerController
             redirect('/partner');
         }
 
-        // Catálogo público (mismo que ve un alumno), con precio del nivel partner.
-        $products = (new ProductRepository())->publicCatalog('all', null, false, null, null, 'all');
+        $repo = new ProductRepository();
+        $section = ProductRepository::normalizeCatalogSection(
+            is_string($_GET['seccion'] ?? null) ? (string) $_GET['seccion'] : 'certificaciones'
+        );
+        if ($section === 'all') {
+            $section = 'certificaciones';
+        }
+        $filter = $_GET['filtro'] ?? $_GET['categoria'] ?? 'all';
+        $filter = is_string($filter) ? $filter : 'all';
+        $q = $_GET['q'] ?? '';
+        $q = is_string($q) ? trim($q) : '';
+
+        $sectionCounts = [
+            'certificaciones' => $repo->publicCatalogCount('all', null, false, 'certificaciones'),
+            'cursos' => $repo->publicCatalogCount('all', null, false, 'cursos'),
+        ];
+        $catalogFilters = (new CatalogFilterService())->catalogFilters($section);
+        // Sin paginación: el partner ve todo el listado filtrado y puede refinar en vivo.
+        $products = $repo->publicCatalog($filter, $q !== '' ? $q : null, false, null, null, $section);
         $pricing = new PricingService();
         $priced = [];
         foreach ($products as $p) {
@@ -55,7 +73,13 @@ final class PartnerController
         view('partner/register', [
             'title' => 'Registrar alumno',
             'partner' => $partner,
+            'user' => Auth::user(),
             'products' => $priced,
+            'catalogFilters' => $catalogFilters,
+            'filter' => $filter,
+            'q' => $q,
+            'section' => $section,
+            'sectionCounts' => $sectionCounts,
             'layout' => 'partner',
         ]);
     }
