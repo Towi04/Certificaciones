@@ -64,7 +64,33 @@ final class ProviderRequestService
     public static function configForProduct(array $product): ?array
     {
         $cfg = CheckoutRequirements::config($product);
-        $raw = $cfg['provider_request'] ?? null;
+        $raw = is_array($cfg['provider_request'] ?? null) ? $cfg['provider_request'] : null;
+        $fromSteps = self::providerRequestFromStepDefs($cfg);
+
+        // El botón de Operación nace de Progreso (step_defs). Si provider_request
+        // no está sincronizado o le falta plantilla/to, completar desde el paso.
+        if (!is_array($raw) || empty($raw['enabled'])) {
+            $raw = $fromSteps;
+        } elseif ($fromSteps !== null) {
+            if (trim((string) ($raw['mail_template_code'] ?? '')) === ''
+                && trim((string) ($fromSteps['mail_template_code'] ?? '')) !== ''
+            ) {
+                $raw['mail_template_code'] = $fromSteps['mail_template_code'];
+            }
+            if (trim((string) ($raw['to'] ?? '')) === '' && trim((string) ($fromSteps['to'] ?? '')) !== '') {
+                $raw['to'] = $fromSteps['to'];
+            }
+            if (trim((string) ($raw['cc'] ?? '')) === '' && trim((string) ($fromSteps['cc'] ?? '')) !== '') {
+                $raw['cc'] = $fromSteps['cc'];
+            }
+            if (trim((string) ($raw['step_code'] ?? '')) === ''
+                && trim((string) ($fromSteps['step_code'] ?? '')) !== ''
+            ) {
+                $raw['step_code'] = $fromSteps['step_code'];
+            }
+            $raw['enabled'] = true;
+        }
+
         if (!is_array($raw) || empty($raw['enabled'])) {
             return null;
         }
@@ -152,6 +178,76 @@ final class ProviderRequestService
         return $out;
     }
 
+    /**
+     * Arma provider_request desde Progreso (step_defs con Enviar correo → proveedor).
+     * Prefiere plantillas UKS/solicitud cuando hay varias.
+     *
+     * @param array<string, mixed> $cfg
+     * @return array<string, mixed>|null
+     */
+    public static function providerRequestFromStepDefs(array $cfg): ?array
+    {
+        // Leer step_defs en crudo para no depender de heurísticas de audiencia
+        // (y evitar fallos si falta la extensión mbstring en CLI).
+        $rawDefs = $cfg['step_defs'] ?? null;
+        if (!is_array($rawDefs)) {
+            $rawDefs = GroupStepConfig::defsFromConfig($cfg);
+        }
+
+        $fallback = null;
+        foreach ($rawDefs as $code => $def) {
+            if (!is_array($def)) {
+                continue;
+            }
+            $email = is_array($def['email'] ?? null) ? $def['email'] : [];
+            $action = (string) ($def['action'] ?? '');
+            if ($action !== GroupStepConfig::ACTION_SEND_MAIL && $action !== 'send_mail') {
+                continue;
+            }
+            if (array_key_exists('enabled', $email) && empty($email['enabled'])) {
+                continue;
+            }
+            $audience = strtolower(trim((string) ($email['audience'] ?? '')));
+            $tpl = trim((string) ($email['template_code'] ?? ''));
+            // audience explícita alumno/partner → no es solicitud a proveedor.
+            if ($audience !== '' && $audience !== 'provider') {
+                continue;
+            }
+            $isProvider = $audience === 'provider'
+                || ($tpl !== '' && MailTemplateService::isUksSolicitudCode($tpl))
+                || $tpl === '';
+            if (!$isProvider) {
+                continue;
+            }
+            $stepCode = trim((string) ($def['code'] ?? (is_string($code) ? $code : '')));
+            if ($stepCode === '') {
+                $stepCode = 'solicitud_proveedor';
+            }
+            $candidate = [
+                'enabled' => true,
+                'step_code' => $stepCode,
+                'mail_template_code' => $tpl,
+                'to' => trim((string) ($email['to'] ?? '')),
+                'cc' => trim((string) ($email['cc'] ?? '')),
+                'auto_send_on_payment' => ($email['trigger'] ?? '') === 'auto',
+                'include_reglamento' => true,
+                'include_payment_proof' => true,
+                'require_reglamento' => true,
+                'require_admin_payment_proof' => true,
+            ];
+            if ($tpl !== '' && MailTemplateService::isUksSolicitudCode($tpl)) {
+                return $candidate;
+            }
+            if ($tpl === '') {
+                // Solicitud pesada sin código explícito (ops la trata como UKS).
+                return $candidate;
+            }
+            $fallback ??= $candidate;
+        }
+
+        return $fallback;
+    }
+
     /** @param array<string, mixed> $tracking */
     public function isPendingSend(array $tracking): bool
     {
@@ -200,12 +296,16 @@ final class ProviderRequestService
         // (trigger=auto en Progreso). No reenviar aquí para evitar duplicados.
     }
 
+    /**
+     * @param array{mail_template_code?:string,step_code?:string,to?:string,cc?:string} $overrides
+     */
     public function send(
         int $trackingId,
         int $purchaseId,
         ?int $actorUserId = null,
         bool $forceIncludePaymentProof = false,
-        bool $allowSkipAdminProof = false
+        bool $allowSkipAdminProof = false,
+        array $overrides = []
     ): void {
         $tracking = $this->tracking->find($trackingId);
         if ($tracking === null) {
@@ -220,7 +320,16 @@ final class ProviderRequestService
         $product = $this->productRowForTracking($tracking);
         $config = self::configForProduct($product);
         if ($config === null) {
-            throw new \RuntimeException('Este producto no tiene solicitud a proveedor habilitada.');
+            throw new \RuntimeException(
+                'Este producto no tiene solicitud a proveedor habilitada. '
+                . 'Revisa Progreso del grupo: un paso con «Enviar correo» y audiencia proveedor.'
+            );
+        }
+
+        foreach (['mail_template_code', 'step_code', 'to', 'cc'] as $key) {
+            if (isset($overrides[$key]) && trim((string) $overrides[$key]) !== '') {
+                $config[$key] = trim((string) $overrides[$key]);
+            }
         }
 
         $to = $this->resolveRecipient($config);
@@ -390,7 +499,13 @@ final class ProviderRequestService
         }
 
         if (!empty($config['workbook']['enabled'])) {
-            $workbookUrl = $this->prepareWorkbookLink($tracking, $purchase, $product, $config, $tmpFiles);
+            try {
+                $workbookUrl = $this->prepareWorkbookLink($tracking, $purchase, $product, $config, $tmpFiles);
+            } catch (\Throwable $e) {
+                // No tumbar el correo entero si falla el Excel; el admin puede reenviar luego.
+                error_log('[Doceo] Excel solicitud proveedor: ' . $e->getMessage());
+                $workbookUrl = '';
+            }
         }
 
         $workbookNote = $workbookUrl !== ''
@@ -682,9 +797,17 @@ final class ProviderRequestService
             }
         }
 
+        // Solicitud pesada sin código: usar plantilla UKS de solicitud.
+        if ($templateCode === '' || MailTemplateService::isUksSolicitudCode($templateCode)) {
+            $mailTpl->sendUksSolicitud($to, $vars, $options);
+
+            return;
+        }
+
         throw new \RuntimeException(
             'Configura la plantilla de solicitud al proveedor en el paso del grupo '
-            . '(Progreso → Enviar correo + plantilla). No hay correo hardcodeado de respaldo.'
+            . '(Progreso → Enviar correo + plantilla). Código no encontrado: '
+            . $templateCode
         );
     }
 
