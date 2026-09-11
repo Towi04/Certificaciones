@@ -1535,12 +1535,21 @@ final class AdminController
             redirect('/admin');
         }
         try {
-            $includeProof = !empty($_POST['include_payment_proof']);
-            (new ProviderRequestService())->send(
+            $providerSvc = new ProviderRequestService();
+            $file = $_FILES['provider_payment_proof'] ?? null;
+            if (is_array($file) && (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                $providerSvc->uploadAdminPaymentProof($trackingId, $file, (int) Auth::id());
+            }
+            $includeProof = !empty($_POST['include_payment_proof'])
+                || (is_array($file) && (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK);
+            $allowSkip = !empty($_POST['skip_admin_proof'])
+                || (string) ($_POST['provider_send_mode'] ?? '') === 'omit';
+            $providerSvc->send(
                 $trackingId,
                 (int) $tracking['purchase_id'],
                 (int) Auth::id(),
-                $includeProof
+                $includeProof,
+                $allowSkip
             );
             flash('success', 'Solicitud enviada al proveedor.');
         } catch (\Throwable $e) {
@@ -1559,6 +1568,14 @@ final class AdminController
         $trackingId = (int) $id;
         $stepCode = trim((string) ($_POST['step_code'] ?? ''));
         try {
+            $file = $_FILES['provider_payment_proof'] ?? null;
+            if (is_array($file) && (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                (new ProviderRequestService())->uploadAdminPaymentProof(
+                    $trackingId,
+                    $file,
+                    (int) Auth::id()
+                );
+            }
             $result = (new StepMailService())->sendForStep($trackingId, $stepCode, (int) Auth::id());
             $who = match ($result['audience']) {
                 'partner' => 'partner',

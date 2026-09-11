@@ -283,7 +283,10 @@ $extraColHeader = count($extraColLabels) === 1
                                         : ($resultsBlocked !== '' ? $resultsBlocked : $label);
                                     ?>
                                     <?php if ($isHeavyProviderRequest): ?>
-                                    <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/solicitud-proveedor')) ?>" class="ops-inline-form">
+                                    <form method="post"
+                                          action="<?= e(url('/admin/seguimientos/' . $tid . '/solicitud-proveedor')) ?>"
+                                          class="ops-inline-form ops-provider-mail-form"
+                                          data-has-admin-proof="<?= !empty($r['admin_proof_uploaded']) ? '1' : '0' ?>">
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="return_ops" value="1">
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">
@@ -294,9 +297,7 @@ $extraColHeader = count($extraColLabels) === 1
                                             <?= $resultsReady ? '' : 'disabled' ?>
                                             title="<?= e(!$resultsReady
                                                 ? $mailTitle
-                                                : (empty($r['admin_proof_uploaded'])
-                                                    ? 'Sube el comprobante DOCEO en Detalle si el grupo lo exige'
-                                                    : $label)) ?>"
+                                                : ('Enviar al proveedor · puedes adjuntar comprobante DOCEO en el popup · ' . $label)) ?>"
                                             aria-label="<?= e($label) ?>">
                                             <?= $iconSvg ?>
                                         </button>
@@ -304,6 +305,25 @@ $extraColHeader = count($extraColLabels) === 1
                                     <?php if (!empty($r['admin_proof_uploaded'])): ?>
                                         <?php $opsMetaBits[] = '<span class="ops-mini-ok" title="Comprobante DOCEO→proveedor listo (detalle)">' . icon('check') . ' comprobante</span>'; ?>
                                     <?php endif; ?>
+                                    <?php elseif ($audience === 'provider'): ?>
+                                    <form method="post"
+                                          action="<?= e(url('/admin/seguimientos/' . $tid . '/enviar-correo-paso')) ?>"
+                                          class="ops-inline-form ops-provider-mail-form"
+                                          data-has-admin-proof="<?= !empty($r['admin_proof_uploaded']) ? '1' : '0' ?>">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="return_ops" value="1">
+                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                        <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
+                                        <button class="<?= e($mailBtnClass) ?>" type="submit"
+                                            <?= $resultsReady ? '' : 'disabled' ?>
+                                            title="<?= e(!$resultsReady
+                                                ? $mailTitle
+                                                : ('Enviar al proveedor · puedes adjuntar comprobante DOCEO en el popup · ' . $label)) ?>"
+                                            aria-label="<?= e($label) ?>">
+                                            <?= $iconSvg ?>
+                                        </button>
+                                    </form>
                                     <?php else: ?>
                                     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/enviar-correo-paso')) ?>" class="ops-inline-form">
                                         <?= csrf_field() ?>
@@ -777,6 +797,41 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
 @media (max-width:480px) {
   .ops-reschedule-fields { grid-template-columns:1fr; }
 }
+.ops-provider-proof-modal[hidden] { display:none !important; }
+.ops-provider-proof-modal {
+  position:fixed; inset:0; z-index:90; display:flex; align-items:center; justify-content:center;
+  padding:1rem;
+}
+.ops-provider-proof-backdrop {
+  position:absolute; inset:0; background:rgba(16,42,86,.55); border:0; padding:0; cursor:pointer;
+}
+.ops-provider-proof-dialog {
+  position:relative; z-index:1; width:min(460px, 96vw);
+  background:#fff; border-radius:16px; box-shadow:0 24px 64px rgba(0,0,0,.28);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.ops-provider-proof-head {
+  display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+  padding:.85rem 1rem; border-bottom:1px solid #e6ebf2; background:#f7fafc;
+}
+.ops-provider-proof-head strong { color:var(--doceo-blue); font-size:.95rem; }
+.ops-provider-proof-body {
+  padding:.95rem 1rem 1.05rem; display:flex; flex-direction:column; gap:.75rem;
+}
+.ops-provider-proof-body p { margin:0; font-size:.88rem; color:#5b6b7c; line-height:1.45; }
+.ops-provider-proof-body label {
+  display:flex; flex-direction:column; gap:.35rem;
+  font-size:.82rem; font-weight:600; color:#5b6b7c;
+}
+.ops-provider-proof-body input[type="file"] {
+  font:inherit; padding:.45rem; border:1px solid #cfd8e6; border-radius:8px; background:#fff;
+}
+.ops-provider-proof-hint {
+  font-size:.8rem; color:#15803d; background:#e8f7ee; border-radius:8px; padding:.45rem .65rem;
+}
+.ops-provider-proof-actions {
+  display:flex; justify-content:flex-end; gap:.45rem; flex-wrap:wrap;
+}
 </style>
 
 <div class="ops-proof-modal" id="ops-proof-modal" hidden>
@@ -833,6 +888,39 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
             <div class="ops-reschedule-actions">
                 <button type="button" class="btn btn-ghost btn-sm" id="ops-reschedule-cancel">Cancelar</button>
                 <button type="submit" class="btn btn-accent" id="ops-reschedule-submit">Guardar fecha</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="ops-provider-proof-modal" id="ops-provider-proof-modal" hidden>
+    <button type="button" class="ops-provider-proof-backdrop" id="ops-provider-proof-backdrop" aria-label="Cerrar"></button>
+    <div class="ops-provider-proof-dialog" role="dialog" aria-modal="true" aria-labelledby="ops-provider-proof-title">
+        <div class="ops-provider-proof-head">
+            <strong id="ops-provider-proof-title">Comprobante al proveedor</strong>
+            <button type="button" class="btn btn-primary btn-sm" id="ops-provider-proof-close">Cerrar</button>
+        </div>
+        <form method="post" id="ops-provider-proof-form" class="ops-provider-proof-body" enctype="multipart/form-data">
+            <div id="ops-provider-proof-fields"></div>
+            <p>
+                Antes de enviar el correo al proveedor puedes subir el comprobante de pago
+                <strong>DOCEO → proveedor</strong>. Si no aplica, omite y se envía igual.
+            </p>
+            <div class="ops-provider-proof-hint" id="ops-provider-proof-ready" hidden>
+                Ya hay un comprobante admin cargado para este caso. Puedes reemplazarlo o omitir.
+            </div>
+            <label>Comprobante (PDF o imagen)
+                <input type="file" name="provider_payment_proof" id="ops-provider-proof-file"
+                       accept=".pdf,.jpg,.jpeg,.png,.webp">
+            </label>
+            <input type="hidden" name="skip_admin_proof" id="ops-provider-proof-skip" value="0">
+            <input type="hidden" name="include_payment_proof" id="ops-provider-proof-include" value="1">
+            <div class="ops-provider-proof-actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="ops-provider-proof-cancel">Cancelar</button>
+                <button type="submit" class="btn btn-ghost btn-sm" id="ops-provider-proof-omit"
+                        data-mode="omit">Omitir y enviar</button>
+                <button type="submit" class="btn btn-accent btn-sm" id="ops-provider-proof-send"
+                        data-mode="upload">Subir y enviar</button>
             </div>
         </form>
     </div>
@@ -974,8 +1062,93 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
   rescheduleCancel && rescheduleCancel.addEventListener('click', closeReschedule);
   rescheduleBackdrop && rescheduleBackdrop.addEventListener('click', closeReschedule);
 
+
+  var providerProofModal = document.getElementById('ops-provider-proof-modal');
+  var providerProofForm = document.getElementById('ops-provider-proof-form');
+  var providerProofFields = document.getElementById('ops-provider-proof-fields');
+  var providerProofFile = document.getElementById('ops-provider-proof-file');
+  var providerProofSkip = document.getElementById('ops-provider-proof-skip');
+  var providerProofInclude = document.getElementById('ops-provider-proof-include');
+  var providerProofReady = document.getElementById('ops-provider-proof-ready');
+  var providerProofClose = document.getElementById('ops-provider-proof-close');
+  var providerProofCancel = document.getElementById('ops-provider-proof-cancel');
+  var providerProofBackdrop = document.getElementById('ops-provider-proof-backdrop');
+  var providerProofMode = 'upload';
+
+  function closeProviderProof() {
+    if (!providerProofModal) return;
+    providerProofModal.hidden = true;
+    if (providerProofFields) providerProofFields.innerHTML = '';
+    if (providerProofFile) providerProofFile.value = '';
+    if (providerProofSkip) providerProofSkip.value = '0';
+  }
+
+  function openProviderProof(sourceForm) {
+    if (!providerProofModal || !providerProofForm || !sourceForm) return;
+    providerProofForm.action = sourceForm.getAttribute('action') || '';
+    if (providerProofFields) {
+      providerProofFields.innerHTML = '';
+      Array.prototype.slice.call(sourceForm.querySelectorAll('input[type="hidden"]')).forEach(function (input) {
+        var name = input.getAttribute('name') || '';
+        if (!name || name === 'skip_admin_proof') return;
+        if (name === 'include_payment_proof') {
+          if (providerProofInclude) providerProofInclude.value = input.value || '1';
+          return;
+        }
+        var clone = input.cloneNode(true);
+        providerProofFields.appendChild(clone);
+      });
+    }
+    if (providerProofReady) {
+      providerProofReady.hidden = sourceForm.getAttribute('data-has-admin-proof') !== '1';
+    }
+    if (providerProofSkip) providerProofSkip.value = '0';
+    if (providerProofFile) providerProofFile.value = '';
+    providerProofMode = 'upload';
+    providerProofModal.hidden = false;
+  }
+
+  document.querySelectorAll('form.ops-provider-mail-form').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      openProviderProof(form);
+    });
+  });
+
+  if (providerProofForm) {
+    providerProofForm.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-mode]');
+      if (!btn) return;
+      providerProofMode = btn.getAttribute('data-mode') || 'upload';
+    });
+    providerProofForm.addEventListener('submit', function (e) {
+      if (providerProofMode === 'omit') {
+        if (providerProofSkip) providerProofSkip.value = '1';
+        if (providerProofFile) providerProofFile.value = '';
+        return;
+      }
+      // Subir y enviar: si no eligió archivo y ya hay comprobante, permitir; si no hay, pedir archivo o usar omitir.
+      var hasFile = providerProofFile && providerProofFile.files && providerProofFile.files.length > 0;
+      var already = providerProofReady && !providerProofReady.hidden;
+      if (!hasFile && !already) {
+        e.preventDefault();
+        alert('Selecciona el comprobante, o pulsa «Omitir y enviar» si no se requiere.');
+        return false;
+      }
+      if (providerProofSkip) providerProofSkip.value = already && !hasFile ? '0' : '0';
+      if (providerProofInclude) providerProofInclude.value = '1';
+    });
+  }
+  providerProofClose && providerProofClose.addEventListener('click', closeProviderProof);
+  providerProofCancel && providerProofCancel.addEventListener('click', closeProviderProof);
+  providerProofBackdrop && providerProofBackdrop.addEventListener('click', closeProviderProof);
+
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
+    if (providerProofModal && !providerProofModal.hidden) {
+      closeProviderProof();
+      return;
+    }
     if (rescheduleModal && !rescheduleModal.hidden) {
       closeReschedule();
       return;

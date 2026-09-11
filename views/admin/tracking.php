@@ -329,17 +329,33 @@ $needsAdminProof = $providerCfg && !empty($providerCfg['require_admin_payment_pr
     </div>
 
     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/solicitud-proveedor')) ?>"
-          style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:center">
+          class="tracking-provider-mail-form"
+          data-has-admin-proof="<?= $adminProof ? '1' : '0' ?>"
+          enctype="multipart/form-data"
+          style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end">
         <?= csrf_field() ?>
+        <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+            Comprobante DOCEO → proveedor (opcional)
+            <input type="file" name="provider_payment_proof" accept=".pdf,.jpg,.jpeg,.png,.webp"
+                   style="padding:.4rem;border:1px solid #cfd8e6;border-radius:8px;background:#fff;font-weight:500">
+        </label>
         <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
             <input type="checkbox" name="include_payment_proof" value="1" checked>
-            Incluir comprobante de pago al proveedor
+            Incluir comprobante en el correo
         </label>
-        <button type="submit" class="btn btn-accent btn-sm"
-            <?= ($needsAdminProof && !$adminProof) ? 'disabled title="Sube el comprobante admin primero"' : '' ?>>
-            <?= $providerPending ? 'Enviar solicitud ahora' : 'Reenviar solicitud' ?>
+        <input type="hidden" name="skip_admin_proof" id="tracking-skip-admin-proof" value="0">
+        <button type="submit" class="btn btn-accent btn-sm" name="provider_send_mode" value="upload"
+                onclick="document.getElementById('tracking-skip-admin-proof').value='0'">
+            <?= $providerPending ? 'Subir (si hay) y enviar' : 'Reenviar solicitud' ?>
+        </button>
+        <button type="submit" class="btn btn-ghost btn-sm" name="provider_send_mode" value="omit"
+                onclick="document.getElementById('tracking-skip-admin-proof').value='1'">
+            Omitir comprobante y enviar
         </button>
     </form>
+    <p class="muted" style="font-size:.8rem;margin:.55rem 0 0">
+        Si el grupo exige comprobante y aún no hay uno, usa «Omitir…» solo cuando realmente no aplique.
+    </p>
 </div>
 <?php endif; ?>
 
