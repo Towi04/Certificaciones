@@ -1534,26 +1534,45 @@ final class AdminController
             flash('error', 'Seguimiento no encontrado.');
             redirect('/admin');
         }
+        $proofUploaded = false;
         try {
             $providerSvc = new ProviderRequestService();
             $file = $_FILES['provider_payment_proof'] ?? null;
             if (is_array($file) && (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
                 $providerSvc->uploadAdminPaymentProof($trackingId, $file, (int) Auth::id());
+                $proofUploaded = true;
             }
             $includeProof = !empty($_POST['include_payment_proof'])
                 || (is_array($file) && (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK);
             $allowSkip = !empty($_POST['skip_admin_proof'])
                 || (string) ($_POST['provider_send_mode'] ?? '') === 'omit';
+            $overrides = [];
+            $stepCode = trim((string) ($_POST['step_code'] ?? ''));
+            if ($stepCode !== '') {
+                $overrides['step_code'] = $stepCode;
+            }
             $providerSvc->send(
                 $trackingId,
                 (int) $tracking['purchase_id'],
                 (int) Auth::id(),
                 $includeProof,
-                $allowSkip
+                $allowSkip,
+                $overrides
             );
-            flash('success', 'Solicitud enviada al proveedor.');
+            flash(
+                'success',
+                $proofUploaded
+                    ? 'Comprobante guardado y solicitud enviada al proveedor.'
+                    : 'Solicitud enviada al proveedor.'
+            );
         } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
+            flash(
+                'error',
+                ($proofUploaded
+                    ? 'Comprobante guardado, pero el correo al proveedor no se envió: '
+                    : '')
+                . $e->getMessage()
+            );
         }
         if (!empty($_POST['return_ops'])) {
             redirect('/admin' . $this->opsReturnQuery());
