@@ -20,6 +20,8 @@ final class GroupEmailAutomation
 {
     public const KEY_REGISTRATION = 'student_registration';
     public const KEY_PAYMENT = 'student_payment_confirmed';
+    /** Confirmación de pago cuando el partner registró / pagó su tarifa (no al alumno). */
+    public const KEY_PAYMENT_PARTNER = 'partner_payment_confirmed';
     public const KEY_EXAM_ACCESS = 'student_exam_access';
 
     /**
@@ -282,5 +284,132 @@ final class GroupEmailAutomation
         }
 
         return $out;
+    }
+
+    /**
+     * ¿La compra la pagó/registró el partner (precio de nivel), no el alumno?
+     * - Partner portal o partner logueado en checkout → partner_credit_earned ≈ 0
+     * - Alumno con código de partner → partner_credit_earned > 0 (crédito al partner)
+     *
+     * @param array<string, mixed> $purchase
+     */
+    public static function isPartnerPaidPurchase(array $purchase): bool
+    {
+        if (empty($purchase['partner_id'])) {
+            return false;
+        }
+
+        return (float) ($purchase['partner_credit_earned'] ?? 0) < 0.005;
+    }
+
+    /**
+     * Envía confirmación de pago tras CheckoutService::confirmPayment.
+     * - Compra partner (tarifa de nivel) → plantilla partner (el alumno no ve el monto partner)
+     * - Compra alumno → plantilla alumno
+     * Un solo correo por compra (aunque haya varios productos/paquete).
+     */
+    public static function sendPaymentConfirmedEmails(int $purchaseId): void
+    {
+        if ($purchaseId < 1) {
+            return;
+        }
+
+        $pdo = \App\Database\Connection::get();
+        $stmt = $pdo->prepare('SELECT * FROM purchases WHERE id = ? LIMIT 1');
+        $stmt->execute([$purchaseId]);
+        $purchase = $stmt->fetch();
+        if (!is_array($purchase)) {
+            return;
+        }
+
+        $trackStmt = $pdo->prepare('SELECT id FROM trackings WHERE purchase_id = ? ORDER BY id ASC');
+        $trackStmt->execute([$purchaseId]);
+        $trackingIds = array_map('intval', $trackStmt->fetchAll(\PDO::FETCH_COLUMN));
+        if ($trackingIds === []) {
+            return;
+        }
+
+        $trackingSvc = new TrackingService();
+        $tracking = $trackingSvc->find($trackingIds[0]);
+        if ($tracking === null) {
+            return;
+        }
+
+        $productNames = [];
+        foreach ($trackingIds as $tid) {
+            $row = $trackingSvc->find($tid);
+            if ($row !== null) {
+                $name = trim((string) ($row['product_name'] ?? ''));
+                if ($name !== '' && !in_array($name, $productNames, true)) {
+                    $productNames[] = $name;
+                }
+            }
+        }
+        $productLabel = $productNames !== []
+            ? implode(', ', $productNames)
+            : (string) ($tracking['product_name'] ?? '');
+
+        $amount = money($purchase['charged_amount'] ?? 0);
+        $partnerPaid = self::isPartnerPaidPurchase($purchase);
+        $templateCode = $partnerPaid ? self::KEY_PAYMENT_PARTNER : self::KEY_PAYMENT;
+
+        $mail = new MailTemplateService();
+        $mail->ensureDefaults();
+        $stepMail = new StepMailService();
+        $audience = MailTemplateService::audienceForTemplate($templateCode);
+        // Forzar audiencia coherente con el tipo de confirmación.
+        if ($partnerPaid) {
+            $audience = 'partner';
+        } elseif ($audience === 'partner') {
+            $audience = 'student';
+        }
+
+        try {
+            $to = $stepMail->resolveRecipient($tracking, $audience, $templateCode, $mail);
+            if (trim($to) === '') {
+                throw new \RuntimeException(
+                    $partnerPaid
+                        ? 'No hay correo del partner para la confirmación de pago.'
+                        : 'No hay correo del alumno para la confirmación de pago.'
+                );
+            }
+            if (self::shouldSkipDuplicateAuto($purchaseId, $templateCode, $to)) {
+                return;
+            }
+
+            $vars = array_merge($stepMail->buildVars($tracking), [
+                'product_name' => $productLabel,
+                'certificacion' => $productLabel,
+                'amount' => $amount,
+                'charged_amount' => $amount,
+            ]);
+
+            if ($mail->render($templateCode, $vars) === null) {
+                throw new \RuntimeException('Plantilla de confirmación de pago no encontrada: ' . $templateCode);
+            }
+            $mail->send($templateCode, $to, $vars);
+            self::markAutoSent($purchaseId, $templateCode, $to);
+
+            $trackingSvc->addLog(
+                (int) $tracking['id'],
+                (string) ($tracking['current_step_code'] ?? 'confirm_pago'),
+                'Confirmación de pago enviada a '
+                    . ($partnerPaid ? 'partner' : 'alumno')
+                    . ' (' . $to . ') · plantilla ' . $templateCode,
+                null
+            );
+        } catch (\Throwable $e) {
+            error_log('[Doceo] Confirmación de pago compra ' . $purchaseId . ': ' . $e->getMessage());
+            try {
+                $trackingSvc->addLog(
+                    (int) $tracking['id'],
+                    (string) ($tracking['current_step_code'] ?? 'confirm_pago'),
+                    'Confirmación de pago NO enviada: ' . $e->getMessage(),
+                    null
+                );
+            } catch (\Throwable) {
+                // ignore secondary log failure
+            }
+        }
     }
 }

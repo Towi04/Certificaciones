@@ -461,7 +461,10 @@ final class MailTemplateService
                 'full_name', 'matricula', 'product_name', 'amount', 'pay_instructions_html',
                 'password_block_html', 'login_url',
             ],
-            'student_payment_confirmed' => ['name', 'matricula', 'product_name'],
+            'student_payment_confirmed' => ['name', 'matricula', 'product_name', 'amount'],
+            'partner_payment_confirmed' => [
+                'partner_name', 'partner_code', 'name', 'matricula', 'product_name', 'amount',
+            ],
             default => [],
         };
     }
@@ -671,6 +674,15 @@ final class MailTemplateService
                 'name' => 'María Ejemplo',
                 'matricula' => '9999',
                 'product_name' => 'ELeT',
+                'amount' => '$1,350.00',
+            ],
+            'partner_payment_confirmed' => [
+                'partner_name' => 'Partner Ejemplo',
+                'partner_code' => 'PARTNER01',
+                'name' => 'María Ejemplo',
+                'matricula' => '9999',
+                'product_name' => 'ELeT',
+                'amount' => '$980.00',
             ],
             default => [],
         };
@@ -882,8 +894,14 @@ final class MailTemplateService
     /**
      * @param list<string>|null $placeholders
      */
-    public function update(string $code, string $subject, string $bodyHtml, bool $isActive, ?array $placeholders = null): void
-    {
+    public function update(
+        string $code,
+        string $subject,
+        string $bodyHtml,
+        bool $isActive,
+        ?array $placeholders = null,
+        ?string $name = null
+    ): void {
         if ($this->repo->findByCode($code) === null) {
             throw new \InvalidArgumentException('Plantilla no encontrada.');
         }
@@ -894,11 +912,20 @@ final class MailTemplateService
         if (trim($bodyHtml) === '') {
             throw new \InvalidArgumentException('Indica el contenido HTML de la plantilla.');
         }
+        if ($name !== null) {
+            $name = trim($name);
+            if ($name === '') {
+                throw new \InvalidArgumentException('Indica el nombre de la plantilla.');
+            }
+            if (mb_strlen($name) > 120) {
+                throw new \InvalidArgumentException('El nombre de la plantilla es demasiado largo.');
+            }
+        }
         if ($placeholders !== null) {
             $placeholders = self::mergeUsedPlaceholders($subject, $bodyHtml, $placeholders);
         }
 
-        $this->repo->update($code, $subject, $bodyHtml, $isActive, $placeholders);
+        $this->repo->update($code, $subject, $bodyHtml, $isActive, $placeholders, $name);
     }
 
     /**
@@ -1068,14 +1095,31 @@ final class MailTemplateService
                 'subject' => 'Pago confirmado — caso {{matricula}}',
                 'body' => '<p>Hola {{name}},</p>'
                     . '<p>Confirmamos el pago de tu caso <strong>{{matricula}}</strong> ({{product_name}}).</p>'
+                    . '<p><strong>Monto:</strong> {{amount}} MXN</p>'
                     . '<p>Ya puedes dar seguimiento desde tu portal.</p>'
                     . '<p>— Instituto DOCEO</p>',
+                'audience' => 'student',
+            ],
+            [
+                'code' => 'partner_payment_confirmed',
+                'name' => 'Partner · Pago confirmado',
+                'subject' => 'Pago confirmado — caso {{matricula}} (partner)',
+                'body' => '<p>Hola {{partner_name}},</p>'
+                    . '<p>Confirmamos el pago del caso <strong>{{matricula}}</strong> '
+                    . '(alumno: {{name}}, producto: {{product_name}}).</p>'
+                    . '<p><strong>Monto cobrado (tarifa partner):</strong> {{amount}} MXN</p>'
+                    . '<p>Este correo es solo para el partner; el alumno no recibe este monto.</p>'
+                    . '<p>— Instituto DOCEO</p>',
+                'audience' => 'partner',
             ],
         ];
 
         foreach ($defaults as $tpl) {
             if ($this->repo->findByCode($tpl['code']) === null) {
                 $this->repo->upsert($tpl['code'], $tpl['name'], $tpl['subject'], $tpl['body'], 'automatic');
+                if (!empty($tpl['audience'])) {
+                    $this->saveAudience($tpl['code'], (string) $tpl['audience']);
+                }
             }
         }
     }

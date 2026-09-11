@@ -195,7 +195,9 @@ final class StepMailService
             'partner_email' => (string) ($partner['email'] ?? ''),
             'partner_name' => (string) ($partner['display_name'] ?? ''),
             'partner_code' => (string) ($partner['code'] ?? ''),
-            'amount' => '',
+            'amount' => isset($tracking['charged_amount']) && $tracking['charged_amount'] !== '' && $tracking['charged_amount'] !== null
+                ? money($tracking['charged_amount'])
+                : '',
             'pay_instructions_html' => '',
             'password_block_html' => '',
             'temp_password' => '',

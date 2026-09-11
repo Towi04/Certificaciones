@@ -57,6 +57,22 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
                 </label>
             </div>
         </div>
+        <?php else: ?>
+        <div style="margin-bottom:1.25rem;padding:1rem;background:#f4f7fb;border-radius:12px;border:1px solid #dbeafe">
+            <h2 style="margin:0 0 .75rem;font-size:1rem;color:var(--doceo-blue)">Identificación</h2>
+            <div style="display:grid;gap:.75rem">
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    Nombre *
+                    <input type="text" name="name" required maxlength="120" value="<?= e((string) ($template['name'] ?? '')) ?>"
+                        placeholder="Alumno · Recordatorio de examen"
+                        style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                    <span style="font-size:.78rem">Solo el nombre visible. El código técnico no se puede cambiar.</span>
+                </label>
+                <div class="muted" style="font-size:.88rem">
+                    Código: <code><?= e((string) ($template['code'] ?? '')) ?></code>
+                </div>
+            </div>
+        </div>
         <?php endif; ?>
 
         <?php
