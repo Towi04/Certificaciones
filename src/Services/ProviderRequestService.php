@@ -404,6 +404,12 @@ final class ProviderRequestService
             $smtpHost = is_array($endpoint)
                 ? trim((string) ($endpoint['host'] ?? ''))
                 : '';
+            $messageId = is_array($endpoint)
+                ? trim((string) ($endpoint['message_id'] ?? ''))
+                : '';
+            $smtpDataResponse = is_array($endpoint)
+                ? trim((string) ($endpoint['smtp_data_response'] ?? ''))
+                : '';
             $smtpFallback = is_array($endpoint) && !empty($endpoint['fallback']);
             $smtpErrors = '';
             if ($smtpFallback && is_array($endpoint['smtp_errors'] ?? null)) {
@@ -455,6 +461,8 @@ final class ProviderRequestService
                 'smtp_host' => $smtpHost,
                 'smtp_fallback' => $smtpFallback,
                 'smtp_errors' => $smtpErrors,
+                'message_id' => $messageId,
+                'smtp_data_response' => $smtpDataResponse,
                 'comprobante_url' => (string) ($vars['comprobante_url'] ?? ''),
                 'attachments' => false,
             ];

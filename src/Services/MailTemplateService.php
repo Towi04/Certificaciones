@@ -658,16 +658,30 @@ final class MailTemplateService
             if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
                 return null;
             }
-            $path = $dir . '/test-' . date('Ymd-His') . '-' . bin2hex(random_bytes(3)) . '.json';
+            $stamp = date('Ymd-His') . '-' . bin2hex(random_bytes(3));
+            $path = $dir . '/outbound-' . $stamp . '.json';
+            $eml = Mailer::lastRawEml();
+            $emlPath = null;
+            if (is_string($eml) && $eml !== '') {
+                $emlFile = $dir . '/outbound-' . $stamp . '.eml';
+                if (@file_put_contents($emlFile, $eml) !== false) {
+                    $emlPath = $emlFile;
+                }
+            }
             $json = json_encode([
                 'to' => $to,
                 'subject' => $subject,
                 'body_text' => $text,
                 'body_html' => $html,
+                'message_id' => Mailer::lastMessageId(),
                 'transport' => Mailer::lastEndpoint(),
+                'smtp_transcript' => Mailer::lastTranscript(),
+                'eml_path' => $emlPath,
                 'smtp_transport_env' => Env::get('SMTP_TRANSPORT', 'auto'),
                 'delivery_errors' => Mailer::lastErrors(),
                 'created_at' => date('c'),
+                'note' => 'SMTP 250 = aceptado por Neubox/Exim; no garantiza bandeja del destinatario. '
+                    . 'Revisa cPanel → Track Delivery / Email Deliverability y rebotes en SMTP_FROM.',
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             if ($json !== false && file_put_contents($path, $json) !== false) {
                 return $path;
