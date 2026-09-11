@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Integrations;
 
 use App\Config\Env;
+use App\Mail\MailSpamHygiene;
 
 /**
  * Envío de correo para Neubox/cPanel.
@@ -105,8 +106,20 @@ final class Mailer
             $to = $override;
         }
 
-        if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
-            throw new \RuntimeException('Destinatario inválido: ' . ($to !== '' ? $to : '(vacío)'));
+        MailSpamHygiene::assertRecipient($to);
+        // Neubox/MailChannels: asunto vacío o TODO MAYÚSCULAS → spam / nuevo bloqueo.
+        $subject = MailSpamHygiene::normalizeSubject($subject);
+        if (!empty($options['attachments']) && is_array($options['attachments'])) {
+            $clean = [];
+            $i = 0;
+            foreach ($options['attachments'] as $att) {
+                if (!is_array($att)) {
+                    continue;
+                }
+                $clean[] = MailSpamHygiene::sanitizeAttachment($att, $i);
+                $i++;
+            }
+            $options['attachments'] = $clean;
         }
 
         $transport = strtolower(trim(Env::get('SMTP_TRANSPORT', 'auto') ?? 'auto'));

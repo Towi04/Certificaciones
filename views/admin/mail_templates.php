@@ -13,6 +13,9 @@ $brandingPreviewHtml = (string) ($brandingPreviewHtml ?? \App\Mail\MailBranding:
         <p class="muted" style="margin:.35rem 0 0;max-width:48rem">
             Edita asunto, contenido y destinatarios en cada plantilla. Variables con doble llave,
             por ejemplo <code>{{matricula}}</code> o <code>{{certificacion}}</code>.
+            <br>Para no volver a ser bloqueados por MailChannels (Neubox): asunto claro (no vacío ni
+            TODO MAYÚSCULAS), destinatarios reales, y la solicitud a proveedor <strong>sin adjuntos</strong>
+            (solo enlaces).
         </p>
     </div>
     <a class="btn btn-accent" href="<?= e(url('/admin/correos/nueva')) ?>" id="mail-new-template-btn">
