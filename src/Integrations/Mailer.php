@@ -478,6 +478,7 @@ final class Mailer
             }
 
             $raw = implode("\r\n", $headers) . "\r\n\r\n" . $payload['body'];
+            $this->assertSmtpLineLengths($raw);
             self::$lastRawEml = $raw;
             $data = $this->dotStuff($raw) . "\r\n.";
             $dataResponse = $this->command($fp, $data, 250);
@@ -541,8 +542,10 @@ final class Mailer
                     . $this->qp($text) . "\r\n"
                     . '--' . $altBoundary . "\r\n"
                     . "Content-Type: text/html; charset=UTF-8\r\n"
-                    . "Content-Transfer-Encoding: quoted-printable\r\n\r\n"
-                    . $this->qp($html) . "\r\n"
+                    // base64: el HTML de marca DOCEO suele ir en UNA sola línea >2048 chars;
+                    // Exim/Gmail rechazan eso ("message has lines too long for transport").
+                    . "Content-Transfer-Encoding: base64\r\n\r\n"
+                    . $this->b64($html) . "\r\n"
                     . '--' . $altBoundary . "--\r\n";
 
                 return [
@@ -571,8 +574,8 @@ final class Mailer
                 . $this->qp($text) . "\r\n"
                 . '--' . $altBoundary . "\r\n"
                 . "Content-Type: text/html; charset=UTF-8\r\n"
-                . "Content-Transfer-Encoding: quoted-printable\r\n\r\n"
-                . $this->qp($html) . "\r\n"
+                . "Content-Transfer-Encoding: base64\r\n\r\n"
+                . $this->b64($html) . "\r\n"
                 . '--' . $altBoundary . '--';
             $parts[] = '--' . $boundary
                 . "\r\nContent-Type: multipart/alternative; boundary=\"{$altBoundary}\"\r\n\r\n"
@@ -623,6 +626,32 @@ final class Mailer
     private function qp(string $value): string
     {
         return $this->normalizeEol(quoted_printable_encode($this->normalizeEol($value)));
+    }
+
+    /** HTML/binario en base64 con líneas de 76 chars (límite Exim Neubox ~2048). */
+    private function b64(string $value): string
+    {
+        return trim(chunk_split(base64_encode($value), 76, "\r\n"));
+    }
+
+    /**
+     * Exim en Neubox: "message has lines too long for transport (received N, limit 2048)".
+     * RFC 5321 recomienda ≤998; fallamos antes de marcar el envío como aceptado.
+     */
+    private function assertSmtpLineLengths(string $raw): void
+    {
+        $max = 998;
+        foreach (explode("\n", str_replace("\r", '', $raw)) as $i => $line) {
+            $len = strlen($line);
+            if ($len > $max) {
+                throw new \RuntimeException(
+                    'MIME inválido para SMTP: línea ' . ($i + 1) . ' tiene ' . $len
+                    . ' caracteres (máx. ' . $max . '). '
+                    . 'Neubox/Exim rechaza el correo después (p. ej. Gmail: lines too long). '
+                    . 'Revisa plantilla/marca HTML sin saltos de línea.'
+                );
+            }
+        }
     }
 
     private function normalizeEol(string $body): string
