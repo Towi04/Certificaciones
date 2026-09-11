@@ -885,9 +885,9 @@ final class ProviderRequestService
             $endpoint = Mailer::lastEndpoint();
             $errors = Mailer::lastErrors();
             $hint = ' El correo NO se marcó como enviado. '
-                . 'Revisa en Neubox: SMTP_HOST/USER/PASS (mismo buzón que SMTP_FROM), '
-                . 'cPHulk desbloqueado, y prueba Admin → Correos → Enviar prueba a tu bandeja. '
-                . 'Destino: ' . $to . '.';
+                . 'La bienvenida puede llegar con mail() aunque SMTP AUTH falle (535). '
+                . 'Revisa SMTP_PASS, restablece la clave del buzón, o pide a Neubox desbloquear AUTH SMTP '
+                . '(cPHulk a veces no aparece en el panel). Destino: ' . $to . '. ';
             if ($errors !== []) {
                 $hint .= ' Detalle: ' . implode(' | ', $errors);
             }
@@ -899,12 +899,14 @@ final class ProviderRequestService
 
         $endpoint = Mailer::lastEndpoint();
         $transport = is_array($endpoint) ? (string) ($endpoint['transport'] ?? '') : '';
-        if ($transport !== 'smtp') {
+        // smtp = AUTH remoto OK; smtp_local = Exim local sin AUTH (respaldo Neubox tras 535).
+        if (!in_array($transport, ['smtp', 'smtp_local'], true)) {
             throw new \RuntimeException(
-                'El correo al proveedor no usó SMTP autenticado (transporte: '
+                'El correo al proveedor no usó un transporte SMTP válido (transporte: '
                 . ($transport !== '' ? $transport : 'desconocido')
                 . '). No se confirma entrega a ' . $to . '. '
-                . 'Configura SMTP en el .env (SMTP_HOST, SMTP_USER, SMTP_PASS, SMTP_FROM) y reintenta.'
+                . 'Nota: el correo de bienvenida usa mail() local y puede llegar aunque SMTP AUTH falle (535). '
+                . 'Revisa SMTP_PASS o pide a Neubox desbloquear AUTH SMTP / crear un buzón nuevo.'
             );
         }
     }
