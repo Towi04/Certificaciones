@@ -297,7 +297,7 @@ $extraColHeader = count($extraColLabels) === 1
                                             <?= $resultsReady ? '' : 'disabled' ?>
                                             title="<?= e(!$resultsReady
                                                 ? $mailTitle
-                                                : ('Enviar al proveedor · puedes adjuntar comprobante DOCEO en el popup · ' . $label)) ?>"
+                                                : ('Enviar al proveedor · comprobante por enlace (sin adjuntos) · ' . $label)) ?>"
                                             aria-label="<?= e($label) ?>">
                                             <?= $iconSvg ?>
                                         </button>
@@ -319,7 +319,7 @@ $extraColHeader = count($extraColLabels) === 1
                                             <?= $resultsReady ? '' : 'disabled' ?>
                                             title="<?= e(!$resultsReady
                                                 ? $mailTitle
-                                                : ('Enviar al proveedor · puedes adjuntar comprobante DOCEO en el popup · ' . $label)) ?>"
+                                                : ('Enviar al proveedor · comprobante por enlace (sin adjuntos) · ' . $label)) ?>"
                                             aria-label="<?= e($label) ?>">
                                             <?= $iconSvg ?>
                                         </button>
@@ -904,7 +904,9 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
             <div id="ops-provider-proof-fields"></div>
             <p>
                 Antes de enviar el correo al proveedor puedes subir el comprobante de pago
-                <strong>DOCEO → proveedor</strong>. Si no aplica, omite y se envía igual.
+                <strong>DOCEO → proveedor</strong>. El archivo <strong>no se adjunta</strong>:
+                solo se usa el enlace <code>{{comprobante_url}}</code> en la plantilla.
+                Si no aplica, omite y se envía igual.
             </p>
             <div class="ops-provider-proof-hint" id="ops-provider-proof-ready" hidden>
                 Ya hay un comprobante admin cargado para este caso. Puedes reemplazarlo o omitir.

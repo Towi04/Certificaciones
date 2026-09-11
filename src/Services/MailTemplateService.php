@@ -852,7 +852,8 @@ final class MailTemplateService
         $interpolated = self::interpolate($raw, $vars);
         // Quitar placeholders no resueltos (p. ej. {{partner_email}} sin partner).
         $interpolated = (string) preg_replace('/\{\{\s*[^}]+\s*\}\}/u', '', $interpolated);
-        $parts = preg_split('/\s*,\s*/', $interpolated) ?: [];
+        // Separar por coma, punto y coma o la palabra «o» (p. ej. "{{partner_email}} o copia@dominio.com").
+        $parts = preg_split('/\s*(?:,|;|\bo\b)\s*/iu', $interpolated) ?: [];
         $valid = [];
         foreach ($parts as $part) {
             $part = trim($part);
