@@ -320,6 +320,10 @@ final class AdminOpsBoardService
      */
     public static function extraFieldLabelFromExamConfig(array $examCfg): string
     {
+        $fields = GroupExtraFields::fromExamConfig($examCfg);
+        if ($fields !== []) {
+            return $fields[0]['label'];
+        }
         $label = trim((string) ($examCfg['extra_field_label'] ?? ''));
         if ($label === '') {
             $label = 'Zoom';

@@ -148,6 +148,9 @@ final class StepMailService
 
         $delivery = ResultsDeliveryService::fromConfig($cfg);
         $mailResultVars = ResultsDeliveryService::mailVars($tracking, $delivery);
+        $extraFields = GroupExtraFields::fromGroupConfig(is_array($cfg) ? $cfg : []);
+        $extraValues = GroupExtraFields::valuesFromTracking($tracking);
+        $extraMailVars = GroupExtraFields::mailVars($extraFields, $extraValues);
 
         $vars = [
             'name' => $name,
@@ -198,7 +201,7 @@ final class StepMailService
             'temp_password' => '',
         ];
 
-        $vars = array_merge($vars, $mailResultVars);
+        $vars = array_merge($vars, $extraMailVars, $mailResultVars);
 
         return array_merge($vars, ExamInstructionAssets::mailVars($cfg));
     }

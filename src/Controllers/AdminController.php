@@ -1243,6 +1243,9 @@ final class AdminController
             if (array_key_exists('zoom_url', $_POST)) {
                 $examData['zoom_url'] = $_POST['zoom_url'];
             }
+            if (isset($_POST['access_field']) && is_array($_POST['access_field'])) {
+                $examData['access_fields'] = $_POST['access_field'];
+            }
             (new TrackingService())->saveExamSchedule($trackingId, $examData, (int) Auth::id());
             // No usar step_done para bloquear reagendas: la fecha se puede cambiar N veces.
 
