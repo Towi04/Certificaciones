@@ -4,9 +4,10 @@
         <?= e($partner['display_name'] ?? 'Partner') ?>
     </h1>
     <?php if ($partner): ?>
-        <a class="btn btn-accent" href="<?= e(url('/partner/registrar')) ?>">Registrar alumno</a>
-        <a class="btn btn-ghost" href="<?= e(url('/catalogo')) ?>">Ver catálogo</a>
-        <a class="btn btn-ghost" href="<?= e(url('/catalogo')) ?>">Ver catálogo</a>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center">
+            <a class="btn btn-accent" href="<?= e(url('/partner/registrar')) ?>">Registrar alumno</a>
+            <a class="btn btn-ghost" href="<?= e(url('/catalogo')) ?>">Ver catálogo</a>
+        </div>
     <?php endif; ?>
 </div>
 <?php if ($partner): ?>
