@@ -305,7 +305,17 @@ final class ProviderRequestService
 
     /**
      * @param array{mail_template_code?:string,step_code?:string,to?:string,cc?:string} $overrides
-     * @return array{to:string,template:string,workbook_url:string,workbook_skip:string,transport:string}
+     * @return array{
+     *   to:string,
+     *   template:string,
+     *   workbook_url:string,
+     *   workbook_skip:string,
+     *   transport:string,
+     *   smtp_fallback:bool,
+     *   smtp_errors:string,
+     *   comprobante_url:string,
+     *   attachments:bool
+     * }
      */
     public function send(
         int $trackingId,
