@@ -341,8 +341,12 @@ $needsAdminProof = $providerCfg && !empty($providerCfg['require_admin_payment_pr
         </label>
         <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem">
             <input type="checkbox" name="include_payment_proof" value="1" checked>
-            Incluir comprobante en el correo
+            Incluir <strong>enlace</strong> al comprobante en el correo
         </label>
+        <p class="muted" style="flex-basis:100%;margin:0;font-size:.78rem;color:#64748b">
+            No se adjunta el archivo (Neubox bloquea adjuntos). Si está marcado, se rellena
+            <code>{{comprobante_url}}</code> en la plantilla.
+        </p>
         <input type="hidden" name="skip_admin_proof" id="tracking-skip-admin-proof" value="0">
         <button type="submit" class="btn btn-accent btn-sm" name="provider_send_mode" value="upload"
                 onclick="document.getElementById('tracking-skip-admin-proof').value='0'">

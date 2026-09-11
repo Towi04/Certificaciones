@@ -1563,10 +1563,28 @@ final class AdminController
                 ? 'Comprobante guardado y solicitud enviada al proveedor'
                 : 'Solicitud enviada al proveedor';
             $msg .= ' (' . ($result['to'] ?? '') . ')';
+            $msg .= ' · sin adjuntos';
+            if (($result['comprobante_url'] ?? '') !== '') {
+                $msg .= ' · comprobante por enlace';
+            } elseif ($includeProof) {
+                $msg .= ' · sin enlace de comprobante (no hay archivo admin)';
+            }
+            if (($result['transport'] ?? '') !== '') {
+                $msg .= ' · transporte ' . $result['transport'];
+            }
             if (($result['workbook_skip'] ?? '') !== '') {
                 $msg .= '. Excel no incluido: ' . $result['workbook_skip'];
             }
-            flash('success', $msg . '.');
+            if (!empty($result['smtp_fallback'])) {
+                flash(
+                    'warning',
+                    $msg . '. Atención: SMTP falló y se usó mail() local'
+                    . (($result['smtp_errors'] ?? '') !== '' ? ' (' . $result['smtp_errors'] . ')' : '')
+                    . '. Si el proveedor no lo recibe, revisa SMTP en el hosting.'
+                );
+            } else {
+                flash('success', $msg . '.');
+            }
         } catch (\Throwable $e) {
             flash(
                 'error',

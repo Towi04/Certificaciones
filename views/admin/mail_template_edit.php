@@ -122,6 +122,8 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
                         style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
                     <span style="font-size:.78rem">
                         Puedes poner <code>{{partner_email}}</code>: si el alumno no tiene partner, <strong>no se envía copia a nadie</strong>.
+                        Usa comas (o la palabra «o») entre varios correos, p. ej.
+                        <code>{{partner_email}}, copia@institutodoceo.com</code>.
                         También acepta correos fijos separados por coma.
                     </span>
                 </label>

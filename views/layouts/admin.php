@@ -146,6 +146,7 @@ if (!$configOpen && str_contains($path, '/certificadoras')) {
     </aside>
     <div class="app-main">
         <?php if ($msg = flash('error')): ?><div class="flash flash-error"><?= e($msg) ?></div><?php endif; ?>
+        <?php if ($msg = flash('warning')): ?><div class="flash flash-warning"><?= e($msg) ?></div><?php endif; ?>
         <?php if ($msg = flash('success')): ?><div class="flash flash-success"><?= e($msg) ?></div><?php endif; ?>
         <?php if ($msg = flash('info')): ?><div class="flash flash-info"><?= e($msg) ?></div><?php endif; ?>
         <?php require $contentFile; ?>

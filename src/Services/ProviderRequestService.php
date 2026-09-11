@@ -305,7 +305,17 @@ final class ProviderRequestService
 
     /**
      * @param array{mail_template_code?:string,step_code?:string,to?:string,cc?:string} $overrides
-     * @return array{to:string,template:string,workbook_url:string,workbook_skip:string,transport:string}
+     * @return array{
+     *   to:string,
+     *   template:string,
+     *   workbook_url:string,
+     *   workbook_skip:string,
+     *   transport:string,
+     *   smtp_fallback:bool,
+     *   smtp_errors:string,
+     *   comprobante_url:string,
+     *   attachments:bool
+     * }
      */
     public function send(
         int $trackingId,
@@ -391,6 +401,11 @@ final class ProviderRequestService
             $transport = is_array($endpoint)
                 ? (string) ($endpoint['transport'] ?? 'desconocido')
                 : 'desconocido';
+            $smtpFallback = is_array($endpoint) && !empty($endpoint['fallback']);
+            $smtpErrors = '';
+            if ($smtpFallback && is_array($endpoint['smtp_errors'] ?? null)) {
+                $smtpErrors = implode('; ', array_map('strval', $endpoint['smtp_errors']));
+            }
 
             $step = (string) $config['step_code'];
             if ((string) ($tracking['current_step_code'] ?? '') !== $step) {
@@ -408,7 +423,11 @@ final class ProviderRequestService
 
             $this->markSent($trackingId, $to, $actorUserId);
             $workbookSkip = trim((string) ($vars['_workbook_skip'] ?? ''));
-            $note = 'Solicitud enviada a ' . $to . ' (documentos por enlace · transporte ' . $transport . ')';
+            $note = 'Solicitud enviada a ' . $to
+                . ' (solo enlaces, sin adjuntos · transporte ' . $transport . ')';
+            if ($smtpFallback) {
+                $note .= ' · aviso: SMTP falló y se usó mail() local';
+            }
             if (($vars['workbook_url'] ?? '') !== '') {
                 $note .= ' · Excel';
             } elseif ($workbookSkip !== '') {
@@ -418,7 +437,7 @@ final class ProviderRequestService
                 $note .= ' · reglamento';
             }
             if (($vars['comprobante_url'] ?? '') !== '') {
-                $note .= ' · comprobante';
+                $note .= ' · comprobante (enlace)';
             }
             $this->tracking->addLog($trackingId, $step, $note, $actorUserId);
 
@@ -428,6 +447,10 @@ final class ProviderRequestService
                 'workbook_url' => (string) ($vars['workbook_url'] ?? ''),
                 'workbook_skip' => $workbookSkip,
                 'transport' => $transport,
+                'smtp_fallback' => $smtpFallback,
+                'smtp_errors' => $smtpErrors,
+                'comprobante_url' => (string) ($vars['comprobante_url'] ?? ''),
+                'attachments' => false,
             ];
         } finally {
             foreach ($tmpFiles as $tmp) {
@@ -633,6 +656,9 @@ final class ProviderRequestService
     }
 
     /**
+     * LEGACY / no usar: Neubox bloquea SMTP con adjuntos.
+     * La solicitud a proveedor envía solo enlaces ({{comprobante_url}}, etc.).
+     *
      * @param array<string, mixed> $tracking
      * @param array<string, mixed> $purchase
      * @param array<string, mixed> $product
@@ -805,28 +831,28 @@ final class ProviderRequestService
 
     /**
      * @param array<string, string> $vars
-     * @param list<array{path:string,name?:string,mime?:string}> $attachments
+     * @param list<array{path:string,name?:string,mime?:string}> $attachments Ignorado: Neubox bloquea adjuntos.
      */
     private function dispatchMail(
         string $to,
         string $cc,
         string $templateCode,
         array $vars,
-        array $attachments
+        array $attachments = []
     ): void {
+        // Política fija: solicitud a proveedor NUNCA lleva adjuntos (Neubox/SMTP los bloquea).
+        // El comprobante/reglamento/Excel van solo como {{comprobante_url}} / enlaces en la plantilla.
+        if ($attachments !== []) {
+            error_log('[Doceo] Solicitud proveedor: se ignoraron ' . count($attachments) . ' adjunto(s); solo enlaces.');
+        }
+
         $options = [];
         if ($cc !== '') {
             $options['cc'] = $cc;
         }
-        if ($attachments !== []) {
-            $options['attachments'] = $attachments;
-            // Neubox bloquea SMTP con adjuntos; forzar mail() en ese caso.
-            $options['prefer_smtp'] = false;
-        } else {
-            // Sin adjuntos: preferir SMTP hacia correos externos del proveedor
-            // (mail() local a veces "acepta" y no entrega fuera del dominio).
-            $options['prefer_smtp'] = true;
-        }
+        // Sin adjuntos: intentar SMTP primero (mejor hacia dominios externos del proveedor).
+        // Si SMTP falla, Mailer hace fallback a mail() y el flash avisará (smtp_fallback).
+        $options['prefer_smtp'] = true;
 
         $mailTpl = new MailTemplateService();
         if ($templateCode !== '') {
