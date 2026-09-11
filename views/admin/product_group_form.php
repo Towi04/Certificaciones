@@ -912,6 +912,12 @@ $renderMailTemplateField = static function (
 
         <div class="panel" style="margin:0 0 1rem;padding:.85rem 1rem;background:#f8fafc">
             <strong style="color:var(--doceo-blue);font-size:.92rem">Resumen de correos</strong>
+            <p class="muted" style="font-size:.78rem;margin:.35rem 0 0;line-height:1.4">
+                En <strong>paquetes/combos</strong>, si varios productos disparan la misma plantilla
+                automática al mismo destinatario, el sistema solo envía <strong>un</strong> correo
+                (evita 2–3 bienvenidas idénticas). Plantillas distintas sí se envían todas.
+                Las solicitudes a proveedor/UKS no se deduplican.
+            </p>
             <div id="step-emails-summary" class="muted" style="font-size:.82rem;margin:.45rem 0 0"></div>
         </div>
 

@@ -23,6 +23,22 @@ final class GroupEmailAutomation
     public const KEY_EXAM_ACCESS = 'student_exam_access';
 
     /**
+     * Evita correos auto duplicados en la misma petición HTTP.
+     * Clave: purchase_id|template_code|destinatario
+     * Sirve para paquetes/combos: varios productos con la misma bienvenida
+     * no deben mandar 2–3 mails idénticos al alumno.
+     *
+     * @var array<string, true>
+     */
+    private static array $autoSentInRequest = [];
+
+    /** Limpia el dedupe (útil en tests o jobs largos). */
+    public static function resetAutoDedupe(): void
+    {
+        self::$autoSentInRequest = [];
+    }
+
+    /**
      * @param array<string, mixed> $product
      * @return array{
      *   student_registration: array{enabled:bool,template_code:string},
@@ -111,6 +127,11 @@ final class GroupEmailAutomation
     /**
      * Envía plantillas mode=auto al entrar a un paso.
      *
+     * En paquetes/combos (varios trackings de la misma compra), la misma plantilla
+     * al mismo destinatario solo se envía una vez por petición. Así un paquete con
+     * 3 productos y bienvenida auto no dispara 3 correos idénticos.
+     * Las solicitudes UKS/proveedor no se deduplican (van por producto).
+     *
      * @param array<string, mixed> $tracking
      * @param array<string, string> $vars
      */
@@ -136,6 +157,7 @@ final class GroupEmailAutomation
             $code = $rule['template_code'];
             try {
                 // Solicitud UKS inicial: enlaces reglamento/pago/Excel.
+                // No deduplicar: cada producto del paquete puede requerir su solicitud.
                 if (MailTemplateService::isUksSolicitudCode($code) && $trackingId > 0 && $purchaseId > 0) {
                     (new ProviderRequestService())->send($trackingId, $purchaseId, null, true);
                     continue;
@@ -143,14 +165,49 @@ final class GroupEmailAutomation
 
                 $audience = MailTemplateService::audienceForTemplate($code);
                 $to = $stepMail->resolveRecipient($tracking, $audience, $code, $mail);
+                if (self::shouldSkipDuplicateAuto($purchaseId, $code, $to)) {
+                    continue;
+                }
                 $mergedVars = array_merge($stepMail->buildVars($tracking), $vars);
                 if ($mail->render($code, $mergedVars) !== null) {
                     $mail->send($code, $to, $mergedVars);
+                    self::markAutoSent($purchaseId, $code, $to);
                 }
             } catch (\Throwable $e) {
                 error_log('[Doceo] Correo automático paso ' . $stepCode . '/' . $code . ': ' . $e->getMessage());
             }
         }
+    }
+
+    private static function autoDedupeKey(int $purchaseId, string $templateCode, string $to): string
+    {
+        return $purchaseId . '|' . strtolower(trim($templateCode)) . '|' . strtolower(trim($to));
+    }
+
+    private static function shouldSkipDuplicateAuto(int $purchaseId, string $templateCode, string $to): bool
+    {
+        if ($purchaseId < 1 || trim($to) === '' || trim($templateCode) === '') {
+            return false;
+        }
+        $key = self::autoDedupeKey($purchaseId, $templateCode, $to);
+        if (isset(self::$autoSentInRequest[$key])) {
+            error_log(
+                '[Doceo] Correo auto omitido (paquete/duplicado): compra '
+                . $purchaseId . ' plantilla ' . $templateCode . ' → ' . $to
+            );
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static function markAutoSent(int $purchaseId, string $templateCode, string $to): void
+    {
+        if ($purchaseId < 1 || trim($to) === '' || trim($templateCode) === '') {
+            return;
+        }
+        self::$autoSentInRequest[self::autoDedupeKey($purchaseId, $templateCode, $to)] = true;
     }
 
     /**
