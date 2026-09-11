@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Config\Env;
 use App\Integrations\Mailer;
 use App\Mail\MailBranding;
+use App\Mail\MailSpamHygiene;
 use App\Repositories\MailTemplateRepository;
 use App\Support\Settings;
 
@@ -930,9 +931,7 @@ final class MailTemplateService
         if ($name === '') {
             throw new \InvalidArgumentException('Indica el nombre de la plantilla.');
         }
-        if ($subject === '') {
-            throw new \InvalidArgumentException('Indica el asunto de la plantilla.');
-        }
+        MailSpamHygiene::assertTemplateSubject($subject);
         if (trim($bodyHtml) === '') {
             throw new \InvalidArgumentException('Indica el contenido HTML de la plantilla.');
         }
@@ -961,9 +960,7 @@ final class MailTemplateService
             throw new \InvalidArgumentException('Plantilla no encontrada.');
         }
         $subject = trim($subject);
-        if ($subject === '') {
-            throw new \InvalidArgumentException('Indica el asunto de la plantilla.');
-        }
+        MailSpamHygiene::assertTemplateSubject($subject);
         if (trim($bodyHtml) === '') {
             throw new \InvalidArgumentException('Indica el contenido HTML de la plantilla.');
         }
