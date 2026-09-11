@@ -1579,12 +1579,19 @@ final class AdminController
             if (($result['workbook_skip'] ?? '') !== '') {
                 $msg .= '. Excel no incluido: ' . $result['workbook_skip'];
             }
-            // Con smtp_only ya no debería haber fallback silencioso a mail().
-            if ($transport !== 'smtp') {
+            if (!in_array($transport, ['smtp', 'smtp_local'], true)) {
                 flash(
                     'error',
-                    $msg . '. ERROR: el transporte no fue SMTP autenticado. '
+                    $msg . '. ERROR: el transporte no fue SMTP. '
                     . 'El correo puede no haber llegado. Revisa SMTP en Neubox y reintenta.'
+                );
+            } elseif ($transport === 'smtp_local') {
+                flash(
+                    'warning',
+                    $msg . '. Aviso: SMTP AUTH remoto falló (535) y se envió por el MTA local del servidor '
+                    . '(mismo camino técnico que la bienvenida, pero por Exim :25). '
+                    . 'Si CNCM no lo recibe, pide a Neubox desbloquear SMTP AUTH o restablecer la clave del buzón '
+                    . '(cPHulk a veces no aparece en el panel: soporte Neubox puede desbloquearlo).'
                 );
             } elseif (!empty($result['smtp_fallback'])) {
                 flash(

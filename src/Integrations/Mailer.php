@@ -143,8 +143,9 @@ final class Mailer
         return new \RuntimeException(
             'Correo: no se pudo enviar. '
             . 'Webmail (IMAP) ≠ SMTP AUTH: clave válida en webmail no garantiza 465/587 desde PHP. '
-            . 'Tras muchos 535, revisa cPanel → cPHulk (desbloquea IP/cuenta) o restablece la clave del buzón. '
-            . 'Puedes forzar envío local con SMTP_TRANSPORT=mail. '
+            . 'Tras muchos 535: restablece la clave del buzón o pide a Neubox desbloquear SMTP AUTH '
+            . '(cPHulk a veces no aparece en tu cPanel). '
+            . 'La bienvenida puede llegar con mail() aunque AUTH falle. '
             . 'Fingerprint: len=' . $fp['pass_len']
             . ', first_ord=' . ($fp['pass_first_ord'] ?? '-')
             . ', last_ord=' . ($fp['pass_last_ord'] ?? '-')
@@ -202,7 +203,53 @@ final class Mailer
             }
         }
 
-        throw new \RuntimeException('SMTP AUTH falló en todos los endpoints.');
+        // Neubox/cPanel: si AUTH remoto falla (535 / cPHulk), Exim local en :25
+        // suele aceptar sin clave (igual que el correo de bienvenida vía mail()).
+        // Esto NO es el mail() de PHP: es SMTP al MTA local del servidor.
+        $allowLocal = Env::getBool('SMTP_LOCAL_FALLBACK', true);
+        if ($allowLocal) {
+            foreach (
+                [
+                    ['host' => '127.0.0.1', 'port' => 25, 'encryption' => 'none'],
+                    ['host' => 'localhost', 'port' => 25, 'encryption' => 'none'],
+                ] as $local
+            ) {
+                $label = $local['host'] . ':' . $local['port'] . '/none (sin AUTH)';
+                try {
+                    $this->sendViaSocket(
+                        $local['host'],
+                        $local['port'],
+                        $local['encryption'],
+                        '',
+                        '',
+                        $from,
+                        $fromName,
+                        $to,
+                        $subject,
+                        $bodyText,
+                        array_merge($options, ['skip_auth' => true])
+                    );
+                    self::$lastEndpoint = [
+                        'transport' => 'smtp_local',
+                        'host' => $local['host'],
+                        'port' => $local['port'],
+                        'encryption' => 'none',
+                        'auth' => false,
+                        'note' => 'MTA local sin AUTH (Neubox/Exim); AUTH remoto falló antes',
+                    ];
+
+                    return;
+                } catch (\Throwable $e) {
+                    $errors[] = $label . ' → ' . $e->getMessage();
+                }
+            }
+        }
+
+        throw new \RuntimeException(
+            'SMTP AUTH falló en todos los endpoints'
+            . ($allowLocal ? ' y el MTA local (:25 sin AUTH) tampoco aceptó el correo' : '')
+            . '. La bienvenida puede funcionar con mail() aunque SMTP AUTH esté mal o bloqueado.'
+        );
     }
 
     /** @param array<string, mixed> $options */
@@ -328,7 +375,9 @@ final class Mailer
         $fp = $this->connect($host, $port, $encryption);
 
         try {
-            $fp = $this->authenticate($fp, $user, $pass, $host, $port, $encryption);
+            if (empty($options['skip_auth']) && $user !== '') {
+                $fp = $this->authenticate($fp, $user, $pass, $host, $port, $encryption);
+            }
             $payload = $this->buildMimePayload($to, $from, $fromName, $subject, $bodyText, $options);
 
             $this->command($fp, 'MAIL FROM:<' . $from . '>', 250);
