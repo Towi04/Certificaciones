@@ -369,6 +369,7 @@ final class ProductAdminService
             'exam_validity_months' => max(1, (int) ($exam['validity_months'] ?? 6)),
             'exam_capture_zoom' => !empty($exam['capture_zoom']),
             'exam_extra_field_label' => trim((string) ($exam['extra_field_label'] ?? '')),
+            'exam_extra_fields' => GroupExtraFields::fromExamConfig($exam),
             'schedule_mode' => ExamScheduleService::normalizeMode((string) ($schedule['mode'] ?? ExamScheduleService::MODE_WINDOW)),
             'schedule_min_advance_days' => max(0, (int) ($schedule['min_advance_days'] ?? 2)),
             'schedule_available_365' => (bool) ($schedule['available_365'] ?? false),
@@ -1620,11 +1621,30 @@ final class ProductAdminService
         $validity = (int) ($input['exam_validity_months'] ?? ($exam['validity_months'] ?? 6));
         $exam['validity_months'] = max(1, min(36, $validity));
         $exam['capture_zoom'] = !empty($input['exam_capture_zoom']);
-        $extraLabel = trim((string) ($input['exam_extra_field_label'] ?? ''));
-        if ($extraLabel !== '') {
-            $exam['extra_field_label'] = mb_substr($extraLabel, 0, 60);
+        $extraRows = [];
+        $labelIn = $input['exam_extra_field_label'] ?? null;
+        $codeIn = $input['exam_extra_field_code'] ?? null;
+        if (is_array($labelIn)) {
+            $codes = is_array($codeIn) ? $codeIn : [];
+            foreach ($labelIn as $i => $lab) {
+                $extraRows[] = [
+                    'code' => (string) ($codes[$i] ?? ''),
+                    'label' => (string) $lab,
+                ];
+            }
+        } elseif (is_string($labelIn) && trim($labelIn) !== '') {
+            $extraRows[] = [
+                'code' => GroupExtraFields::LEGACY_CODE,
+                'label' => trim($labelIn),
+            ];
+        }
+        $extraFields = GroupExtraFields::normalizeInputRows($extraRows);
+        if ($extraFields !== []) {
+            $exam['extra_fields'] = $extraFields;
+            $exam['extra_field_label'] = $extraFields[0]['label'];
+            $exam['capture_zoom'] = true;
         } else {
-            unset($exam['extra_field_label']);
+            unset($exam['extra_fields'], $exam['extra_field_label']);
         }
         $config['exam'] = $exam;
 

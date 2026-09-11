@@ -754,6 +754,7 @@ final class TrackingService
      *   exam_date_2?:?string,
      *   exam_time_2?:?string,
      *   zoom_url?:?string,
+     *   access_fields?:array<string,mixed>,
      *   notify?:bool
      * } $data
      */
@@ -777,6 +778,19 @@ final class TrackingService
         $examTime2 = array_key_exists('exam_time_2', $data)
             ? $this->normalizeTime($data['exam_time_2'])
             : $this->normalizeTime($tracking['exam_time_2'] ?? null);
+
+        $accessFieldsIn = is_array($data['access_fields'] ?? null) ? $data['access_fields'] : null;
+        $normalizedAccess = [];
+        if ($accessFieldsIn !== null) {
+            foreach ($accessFieldsIn as $code => $value) {
+                $c = GroupExtraFields::normalizeCode((string) $code);
+                if ($c === '') {
+                    continue;
+                }
+                $normalizedAccess[$c] = AdminOpsBoardService::normalizeExtraValue(trim((string) $value));
+            }
+        }
+
         // Campo extra (Zoom / ID escuela / código…): no borrar si el partner solo actualiza fecha
         if (array_key_exists('zoom_url', $data)) {
             $zoom = trim((string) ($data['zoom_url'] ?? ''));
@@ -785,6 +799,9 @@ final class TrackingService
             } else {
                 $zoom = AdminOpsBoardService::normalizeExtraValue($zoom);
             }
+        } elseif ($normalizedAccess !== []) {
+            $first = reset($normalizedAccess);
+            $zoom = $first !== false && $first !== '' ? (string) $first : null;
         } else {
             $zoom = isset($tracking['zoom_url']) && $tracking['zoom_url'] !== ''
                 ? (string) $tracking['zoom_url']
@@ -806,6 +823,19 @@ final class TrackingService
              WHERE id = ?'
         )->execute([$examDate, $examTime, $examDate2, $examTime2, $zoom, $trackingId]);
 
+        if ($accessFieldsIn !== null) {
+            $extra = [];
+            if (!empty($tracking['extra_json']) && is_string($tracking['extra_json'])) {
+                $decoded = json_decode($tracking['extra_json'], true);
+                $extra = is_array($decoded) ? $decoded : [];
+            } elseif (is_array($tracking['extra_json'] ?? null)) {
+                $extra = $tracking['extra_json'];
+            }
+            $extra['access_fields'] = $normalizedAccess;
+            $this->pdo->prepare('UPDATE trackings SET extra_json = ? WHERE id = ?')
+                ->execute([json_encode($extra, JSON_UNESCAPED_UNICODE), $trackingId]);
+        }
+
         if ($scheduleChanged) {
             $this->bumpExamRescheduleCount($trackingId, $tracking);
         }
@@ -814,12 +844,8 @@ final class TrackingService
         if ($examDate2) {
             $note .= ' · reagenda: ' . $examDate2 . ($examTime2 ? ' ' . substr($examTime2, 0, 5) : '');
         }
-        if ($zoom && array_key_exists('zoom_url', $data)) {
-            $note .= ' · dato extra asignado';
-        }
-        if ($scheduleChanged) {
-            $count = $this->bumpExamRescheduleCount($trackingId, $tracking);
-            $note .= ' · #' . $count;
+        if (($zoom && array_key_exists('zoom_url', $data)) || $normalizedAccess !== []) {
+            $note .= ' · dato(s) extra asignado(s)';
         }
         $this->log($trackingId, 'examen', $note, $actorUserId);
 

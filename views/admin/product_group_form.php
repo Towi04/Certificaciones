@@ -591,6 +591,8 @@ $renderMailTemplateField = static function (
             <?php endif; ?>
         </div>
         <button type="button" class="btn btn-ghost btn-sm" id="results-field-add">+ Agregar campo</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="results-field-preset-itep"
+                title="Certificado + score report">+ Preset iTEP (certificado + score report)</button>
         <div style="margin-top:1rem;max-width:28rem">
             <label class="muted" style="<?= e($labelStyle) ?>">
                 Plantilla de cancelación
@@ -639,6 +641,7 @@ $renderMailTemplateField = static function (
         (function () {
           var list = document.getElementById('results-fields-list');
           var addBtn = document.getElementById('results-field-add');
+          var presetBtn = document.getElementById('results-field-preset-itep');
           var tpl = document.getElementById('results-field-row-tpl');
           if (!list || !addBtn || !tpl) return;
           function reindexRequired() {
@@ -649,12 +652,27 @@ $renderMailTemplateField = static function (
             var empty = document.getElementById('results-fields-empty');
             if (empty) empty.style.display = list.querySelectorAll('.results-field-row').length ? 'none' : '';
           }
-          addBtn.addEventListener('click', function () {
+          function appendField(label, type, placeholder) {
             var empty = document.getElementById('results-fields-empty');
             if (empty) empty.remove();
             var node = tpl.content.cloneNode(true);
+            var labelEl = node.querySelector('[name="results_field_label[]"]');
+            var typeEl = node.querySelector('[name="results_field_type[]"]');
+            var phEl = node.querySelector('[name="results_field_placeholder[]"]');
+            var reqEl = node.querySelector('input[type="checkbox"]');
+            if (labelEl) labelEl.value = label || '';
+            if (typeEl && type) typeEl.value = type;
+            if (phEl) phEl.value = placeholder || '';
+            if (reqEl) reqEl.checked = true;
             list.appendChild(node);
             reindexRequired();
+          }
+          addBtn.addEventListener('click', function () {
+            appendField('', 'url', '');
+          });
+          if (presetBtn) presetBtn.addEventListener('click', function () {
+            appendField('Certificado', 'url', 'results_url');
+            appendField('Score report', 'url', 'score_report_url');
           });
           list.addEventListener('click', function (e) {
             var btn = e.target.closest('.results-field-remove');
@@ -677,24 +695,122 @@ $renderMailTemplateField = static function (
     </div>
 
     <div class="group-panel" data-panel="extra" hidden>
-        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Campo extra de acceso</h2>
+        <?php
+        $extraFieldsCfg = is_array($extras['exam_extra_fields'] ?? null) ? $extras['exam_extra_fields'] : [];
+        if ($extraFieldsCfg === [] && trim((string) ($extras['exam_extra_field_label'] ?? '')) !== '') {
+            $extraFieldsCfg = [[
+                'code' => 'extra',
+                'label' => (string) $extras['exam_extra_field_label'],
+            ]];
+        }
+        if ($extraFieldsCfg === [] && !empty($extras['exam_capture_zoom'])) {
+            $extraFieldsCfg = [['code' => 'extra', 'label' => 'Zoom']];
+        }
+        ?>
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Campos extra</h2>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .75rem;max-width:44rem">
+            Datos libres por alumno (Zoom, ID escuela, enlaces, etc.).
+            Cada fila tiene un <strong>código</strong> usable en plantillas como
+            <code>{{score_report}}</code> o <code>{{certificado}}</code>.
+            El primero también llena <code>{{extra}}</code> / <code>{{zoom}}</code>.
+            <br>Para <strong>score report + certificado de resultados</strong> (iTEP, etc.)
+            conviene la pestaña <strong>Resultados</strong>: ahí se capturan al entregar resultados
+            y puedes usar <code>{{score_report_url}}</code> y <code>{{results_url}}</code>.
+        </p>
         <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:1rem">
             <input type="checkbox" name="exam_capture_zoom" id="exam-extra-toggle" value="1" style="margin-top:.2rem"
-                <?= !empty($extras['exam_capture_zoom']) ? 'checked' : '' ?>>
-            <span>Mostrar esta columna en Operación (junto a folio/clave)</span>
+                <?= !empty($extras['exam_capture_zoom']) || $extraFieldsCfg !== [] ? 'checked' : '' ?>>
+            <span>Mostrar estos campos en Operación / detalle del caso</span>
         </label>
         <div id="exam-extra-controls">
-            <label class="muted" style="<?= e($labelStyle) ?>;max-width:28rem">
-                Etiqueta de la columna / dato
-                <input type="text" name="exam_extra_field_label"
-                       value="<?= e((string) ($extras['exam_extra_field_label'] ?? '')) ?>"
-                       placeholder="Ej. Zoom, ID escuela, Código de acceso…"
-                       style="<?= e($inputStyle) ?>">
-                <span class="muted" style="font-weight:500;font-size:.75rem;margin-top:.25rem;display:block">
-                    Si la dejas vacía se usa «Zoom».
-                </span>
-            </label>
+            <div id="extra-fields-list" style="display:flex;flex-direction:column;gap:.65rem;max-width:40rem;margin-bottom:.65rem">
+                <?php if ($extraFieldsCfg === []): ?>
+                    <p class="muted" id="extra-fields-empty" style="margin:0;font-size:.85rem">Sin campos. Agrega uno o más.</p>
+                <?php else: ?>
+                    <?php foreach ($extraFieldsCfg as $ef): ?>
+                        <div class="extra-field-row" style="display:grid;grid-template-columns:1fr 1.4fr auto;gap:.5rem;align-items:end">
+                            <label class="muted" style="<?= e($labelStyle) ?>">
+                                Código (plantilla)
+                                <input type="text" name="exam_extra_field_code[]"
+                                       value="<?= e((string) ($ef['code'] ?? '')) ?>"
+                                       placeholder="score_report" pattern="[a-z0-9_]*"
+                                       style="<?= e($inputStyle) ?>">
+                            </label>
+                            <label class="muted" style="<?= e($labelStyle) ?>">
+                                Etiqueta
+                                <input type="text" name="exam_extra_field_label[]"
+                                       value="<?= e((string) ($ef['label'] ?? '')) ?>"
+                                       placeholder="Score report" style="<?= e($inputStyle) ?>">
+                            </label>
+                            <button type="button" class="btn btn-ghost btn-sm extra-field-remove" title="Quitar">✕</button>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+                <button type="button" class="btn btn-ghost btn-sm" id="extra-field-add">+ Agregar campo</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="extra-field-preset-itep"
+                        title="Score report + certificado">+ Preset iTEP (2 campos)</button>
+            </div>
+            <template id="extra-field-row-tpl">
+                <div class="extra-field-row" style="display:grid;grid-template-columns:1fr 1.4fr auto;gap:.5rem;align-items:end">
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Código (plantilla)
+                        <input type="text" name="exam_extra_field_code[]" value="" placeholder="score_report"
+                               pattern="[a-z0-9_]*" style="<?= e($inputStyle) ?>">
+                    </label>
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Etiqueta
+                        <input type="text" name="exam_extra_field_label[]" value="" placeholder="Score report"
+                               style="<?= e($inputStyle) ?>">
+                    </label>
+                    <button type="button" class="btn btn-ghost btn-sm extra-field-remove" title="Quitar">✕</button>
+                </div>
+            </template>
         </div>
+        <script>
+        (function () {
+          var list = document.getElementById('extra-fields-list');
+          var addBtn = document.getElementById('extra-field-add');
+          var presetBtn = document.getElementById('extra-field-preset-itep');
+          var tpl = document.getElementById('extra-field-row-tpl');
+          var toggle = document.getElementById('exam-extra-toggle');
+          if (!list || !tpl) return;
+          function ensureToggle() {
+            if (toggle && list.querySelectorAll('.extra-field-row').length) toggle.checked = true;
+          }
+          function appendRow(code, label) {
+            var empty = document.getElementById('extra-fields-empty');
+            if (empty) empty.remove();
+            var node = tpl.content.cloneNode(true);
+            var codeEl = node.querySelector('[name="exam_extra_field_code[]"]');
+            var labelEl = node.querySelector('[name="exam_extra_field_label[]"]');
+            if (codeEl && code) codeEl.value = code;
+            if (labelEl && label) labelEl.value = label;
+            list.appendChild(node);
+            ensureToggle();
+          }
+          if (addBtn) addBtn.addEventListener('click', function () { appendRow('', ''); });
+          if (presetBtn) presetBtn.addEventListener('click', function () {
+            appendRow('score_report', 'Score report');
+            appendRow('certificado', 'Certificado');
+          });
+          list.addEventListener('click', function (e) {
+            var btn = e.target.closest('.extra-field-remove');
+            if (!btn) return;
+            var row = btn.closest('.extra-field-row');
+            if (row) row.remove();
+            if (!list.querySelector('.extra-field-row')) {
+              var p = document.createElement('p');
+              p.className = 'muted';
+              p.id = 'extra-fields-empty';
+              p.style.cssText = 'margin:0;font-size:.85rem';
+              p.textContent = 'Sin campos. Agrega uno o más.';
+              list.appendChild(p);
+            }
+          });
+        })();
+        </script>
     </div>
 
     <div class="group-panel" data-panel="docs" hidden>
@@ -1311,10 +1427,23 @@ $renderMailTemplateField = static function (
       validity_months: Math.max(1, Math.min(36, intVal('exam_validity_months', 6))),
       capture_zoom: checked('exam_capture_zoom')
     });
-    var extraLabel = val('exam_extra_field_label', '');
-    if (extraLabel) {
-      base.exam.extra_field_label = extraLabel;
+    var extraFields = [];
+    document.querySelectorAll('#extra-fields-list .extra-field-row').forEach(function (row) {
+      var codeEl = row.querySelector('[name="exam_extra_field_code[]"]');
+      var labelEl = row.querySelector('[name="exam_extra_field_label[]"]');
+      var code = codeEl ? String(codeEl.value || '').trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_|_$/g, '') : '';
+      var label = labelEl ? String(labelEl.value || '').trim() : '';
+      if (!code && !label) return;
+      if (!code) code = (label || 'extra').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_|_$/g, '') || 'extra';
+      if (!label) label = code;
+      extraFields.push({ code: code, label: label });
+    });
+    if (extraFields.length) {
+      base.exam.extra_fields = extraFields;
+      base.exam.extra_field_label = extraFields[0].label;
+      base.exam.capture_zoom = true;
     } else {
+      delete base.exam.extra_fields;
       delete base.exam.extra_field_label;
     }
     var instrDocs = [];

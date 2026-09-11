@@ -158,21 +158,61 @@ $statusLabels = [
             </label>
         </div>
 
-        <h3 style="margin:1rem 0 .35rem;font-size:.95rem;color:var(--doceo-blue)">Campo extra (<?= e($extraLabel) ?>)</h3>
+        <h3 style="margin:1rem 0 .35rem;font-size:.95rem;color:var(--doceo-blue)">Campos extra</h3>
         <p class="muted" style="font-size:.82rem;margin:0 0 .5rem">
-            Texto libre según el grupo: Zoom, ID de escuela, código de acceso al curso, etc.
-            En correos usa <code>{{zoom}}</code> / <code>{{extra}}</code> (la plantilla define si va en enlace o en negrita).
+            Valores según el grupo. En correos usa <code>{{codigo}}</code> de cada campo
+            (y <code>{{extra}}</code> / <code>{{zoom}}</code> para el primero).
         </p>
-        <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-            <?= e($extraLabel) ?>
-            <input type="text" name="zoom_url" value="<?= e($extraVal) ?>" placeholder="<?= e($extraLabel) ?>" style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-        </label>
+        <?php
+        $extraFieldsList = \App\Services\GroupExtraFields::fromGroupConfig($extraCfg);
+        $extraValuesMap = \App\Services\GroupExtraFields::valuesFromTracking($tracking);
+        if ($extraFieldsList === []) {
+            $extraFieldsList = [['code' => 'extra', 'label' => $extraLabel]];
+        }
+        ?>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem">
+            <?php foreach ($extraFieldsList as $i => $ef):
+                $efCode = (string) ($ef['code'] ?? 'extra');
+                $efLabel = (string) ($ef['label'] ?? $efCode);
+                $efVal = (string) ($extraValuesMap[$efCode] ?? '');
+                if ($efVal === '' && $i === 0) {
+                    $efVal = $extraVal;
+                }
+                ?>
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    <?= e($efLabel) ?>
+                    <span class="muted" style="font-weight:500;font-size:.72rem"><code>{{<?= e($efCode) ?>}}</code></span>
+                    <input type="text"
+                           name="access_field[<?= e($efCode) ?>]"
+                           value="<?= e($efVal) ?>"
+                           placeholder="<?= e($efLabel) ?>"
+                           style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                </label>
+            <?php endforeach; ?>
+        </div>
+        <input type="hidden" name="zoom_url" id="tracking-zoom-mirror" value="<?= e($extraVal) ?>">
 
         <label class="muted" style="display:flex;gap:.4rem;align-items:center;margin:.85rem 0;font-size:.88rem">
-            <input type="checkbox" name="notify" value="1" checked> Avisar al alumno por correo (fecha y/o dato extra)
+            <input type="checkbox" name="notify" value="1" checked> Avisar al alumno por correo (fecha y/o datos extra)
         </label>
         <button class="btn btn-accent" type="submit">Guardar examen / accesos</button>
     </form>
+    <script>
+    (function () {
+      var form = document.querySelector('form[action*="examen"]');
+      if (!form) return;
+      var mirror = document.getElementById('tracking-zoom-mirror');
+      form.addEventListener('input', function (e) {
+        var t = e.target;
+        if (!t || !t.name || t.name.indexOf('access_field[') !== 0) return;
+        var first = form.querySelector('[name^="access_field["]');
+        if (mirror && first) mirror.value = first.value;
+      });
+      // Sincronizar al cargar por si solo hay un campo.
+      var first = form.querySelector('[name^="access_field["]');
+      if (mirror && first) mirror.value = first.value;
+    })();
+    </script>
 
     <?php
     $examSchedMeta = [];

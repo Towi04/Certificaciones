@@ -49,8 +49,9 @@ final class MailTemplateService
             'zoom' => 'Campo extra (texto libre: Zoom, ID escuela, código…)',
             'zoom_url' => 'Alias de {{zoom}} (compatibilidad)',
             'extra' => 'Alias de {{zoom}}',
-            'extra_label' => 'Etiqueta del campo extra (config del grupo)',
+            'extra_label' => 'Etiqueta del primer campo extra (config del grupo)',
             'zoom_label' => 'Alias de {{extra_label}}',
+            '(código del campo extra)' => 'Valor de un campo extra del grupo, ej. {{score_report}} o {{certificado}}',
         ],
         'Instrucciones de examen' => [
             'instruction_pdf_url' => 'URL del PDF de instrucciones (primer archivo/enlace)',
