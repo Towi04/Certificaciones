@@ -206,8 +206,18 @@ final class MailTemplateService
         }
 
         $routing = $this->routing($this->uksSolicitudCode());
-        if ($routing['to'] !== '') {
+        // Destinatario explícito (grupo / resolución previa) gana; el "Para" de la
+        // plantilla solo se usa como respaldo. Antes se pisaba siempre y el log
+        // podía decir un correo distinto al que realmente salió.
+        $to = trim($to);
+        if ($to === '' && $routing['to'] !== '') {
             $to = $routing['to'];
+        }
+        if ($to === '') {
+            throw new \RuntimeException(
+                'No hay destinatario para la solicitud UKS. Configura «Para» en la plantilla '
+                . 'o el correo del proveedor en el grupo / paso.'
+            );
         }
         $ccSource = trim((string) ($options['cc'] ?? ''));
         if ($ccSource === '') {
@@ -221,6 +231,30 @@ final class MailTemplateService
         }
 
         $this->deliver($to, $rendered, $options);
+    }
+
+    /**
+     * ¿La plantilla usa placeholders de Excel en asunto o cuerpo?
+     * Sirve para no arrastrar config Excel de otra plantilla/solicitud.
+     */
+    public static function templateUsesWorkbookPlaceholders(string $code): bool
+    {
+        $code = trim($code);
+        if ($code === '') {
+            return false;
+        }
+        $row = (new self())->find($code);
+        if ($row === null) {
+            return false;
+        }
+        $haystack = strtolower(
+            (string) ($row['subject'] ?? '') . "\n" . (string) ($row['body_html'] ?? '')
+        );
+
+        return str_contains($haystack, '{{workbook_url}}')
+            || str_contains($haystack, '{{workbook_note}}')
+            || str_contains($haystack, 'workbook_url')
+            || str_contains($haystack, 'workbook_note');
     }
 
     /** Destinatario UKS configurado en la plantilla (producción). */

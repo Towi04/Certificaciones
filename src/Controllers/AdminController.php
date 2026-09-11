@@ -1551,7 +1551,7 @@ final class AdminController
             if ($stepCode !== '') {
                 $overrides['step_code'] = $stepCode;
             }
-            $providerSvc->send(
+            $result = $providerSvc->send(
                 $trackingId,
                 (int) $tracking['purchase_id'],
                 (int) Auth::id(),
@@ -1559,12 +1559,14 @@ final class AdminController
                 $allowSkip,
                 $overrides
             );
-            flash(
-                'success',
-                $proofUploaded
-                    ? 'Comprobante guardado y solicitud enviada al proveedor.'
-                    : 'Solicitud enviada al proveedor.'
-            );
+            $msg = $proofUploaded
+                ? 'Comprobante guardado y solicitud enviada al proveedor'
+                : 'Solicitud enviada al proveedor';
+            $msg .= ' (' . ($result['to'] ?? '') . ')';
+            if (($result['workbook_skip'] ?? '') !== '') {
+                $msg .= '. Excel no incluido: ' . $result['workbook_skip'];
+            }
+            flash('success', $msg . '.');
         } catch (\Throwable $e) {
             flash(
                 'error',

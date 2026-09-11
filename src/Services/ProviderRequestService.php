@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Database\Connection;
+use App\Integrations\Mailer;
 use App\Repositories\PurchaseRepository;
 use App\Support\WorkbookValueResolver;
 use App\Support\XlsxCellFiller;
@@ -166,11 +167,17 @@ final class ProviderRequestService
             ],
         ];
 
-        // Si el grupo no tiene Excel, usar el de la plantilla de correo.
-        $mailCode = (string) ($out['mail_template_code'] ?? '');
+        // Heredar Excel de la plantilla de correo SOLO si esa plantilla realmente
+        // usa placeholders de Excel. Evita forzar Excel (y fallos) cuando el paso
+        // apunta a un correo sin plantilla Excel.
+        $mailCode = trim((string) ($out['mail_template_code'] ?? ''));
         if ($mailCode !== '' && empty($out['workbook']['enabled'])) {
             $fromMail = MailTemplateService::workbookConfig($mailCode);
-            if (!empty($fromMail['enabled']) && $fromMail['template_path'] !== '') {
+            if (
+                !empty($fromMail['enabled'])
+                && trim((string) ($fromMail['template_path'] ?? '')) !== ''
+                && MailTemplateService::templateUsesWorkbookPlaceholders($mailCode)
+            ) {
                 $out['workbook'] = array_merge($out['workbook'], $fromMail, ['attach' => false]);
             }
         }
@@ -298,6 +305,7 @@ final class ProviderRequestService
 
     /**
      * @param array{mail_template_code?:string,step_code?:string,to?:string,cc?:string} $overrides
+     * @return array{to:string,template:string,workbook_url:string,workbook_skip:string,transport:string}
      */
     public function send(
         int $trackingId,
@@ -306,7 +314,7 @@ final class ProviderRequestService
         bool $forceIncludePaymentProof = false,
         bool $allowSkipAdminProof = false,
         array $overrides = []
-    ): void {
+    ): array {
         $tracking = $this->tracking->find($trackingId);
         if ($tracking === null) {
             throw new \InvalidArgumentException('Seguimiento no encontrado.');
@@ -370,13 +378,19 @@ final class ProviderRequestService
                     $cc = trim((string) $routingCc);
                 }
             }
+            $templateCode = (string) $config['mail_template_code'];
             $this->dispatchMail(
                 $to,
                 $cc,
-                (string) $config['mail_template_code'],
+                $templateCode,
                 $vars,
                 []
             );
+
+            $endpoint = Mailer::lastEndpoint();
+            $transport = is_array($endpoint)
+                ? (string) ($endpoint['transport'] ?? 'desconocido')
+                : 'desconocido';
 
             $step = (string) $config['step_code'];
             if ((string) ($tracking['current_step_code'] ?? '') !== $step) {
@@ -393,9 +407,12 @@ final class ProviderRequestService
             }
 
             $this->markSent($trackingId, $to, $actorUserId);
-            $note = 'Solicitud enviada a ' . $to . ' (documentos por enlace)';
+            $workbookSkip = trim((string) ($vars['_workbook_skip'] ?? ''));
+            $note = 'Solicitud enviada a ' . $to . ' (documentos por enlace · transporte ' . $transport . ')';
             if (($vars['workbook_url'] ?? '') !== '') {
                 $note .= ' · Excel';
+            } elseif ($workbookSkip !== '') {
+                $note .= ' · Excel omitido: ' . $workbookSkip;
             }
             if (($vars['reglamento_url'] ?? '') !== '') {
                 $note .= ' · reglamento';
@@ -404,6 +421,14 @@ final class ProviderRequestService
                 $note .= ' · comprobante';
             }
             $this->tracking->addLog($trackingId, $step, $note, $actorUserId);
+
+            return [
+                'to' => $to,
+                'template' => $templateCode,
+                'workbook_url' => (string) ($vars['workbook_url'] ?? ''),
+                'workbook_skip' => $workbookSkip,
+                'transport' => $transport,
+            ];
         } finally {
             foreach ($tmpFiles as $tmp) {
                 if (is_string($tmp) && is_file($tmp)) {
@@ -499,13 +524,27 @@ final class ProviderRequestService
         }
 
         if (!empty($config['workbook']['enabled'])) {
-            try {
-                $workbookUrl = $this->prepareWorkbookLink($tracking, $purchase, $product, $config, $tmpFiles);
-            } catch (\Throwable $e) {
-                // No tumbar el correo entero si falla el Excel; el admin puede reenviar luego.
-                error_log('[Doceo] Excel solicitud proveedor: ' . $e->getMessage());
+            $mailCode = trim((string) ($config['mail_template_code'] ?? ''));
+            $templateWantsWorkbook = $mailCode === ''
+                || MailTemplateService::isUksSolicitudCode($mailCode)
+                || MailTemplateService::templateUsesWorkbookPlaceholders($mailCode);
+            if (!$templateWantsWorkbook) {
+                // El grupo/plantilla tenía Excel, pero el correo del paso no lo usa.
                 $workbookUrl = '';
+                $varsWorkbookSkip = 'la plantilla de correo no incluye Excel';
+            } else {
+                try {
+                    $workbookUrl = $this->prepareWorkbookLink($tracking, $purchase, $product, $config, $tmpFiles);
+                    $varsWorkbookSkip = '';
+                } catch (\Throwable $e) {
+                    // No tumbar el correo entero si falla el Excel; el admin puede reenviar luego.
+                    error_log('[Doceo] Excel solicitud proveedor: ' . $e->getMessage());
+                    $workbookUrl = '';
+                    $varsWorkbookSkip = $e->getMessage();
+                }
             }
+        } else {
+            $varsWorkbookSkip = '';
         }
 
         $workbookNote = $workbookUrl !== ''
@@ -531,6 +570,7 @@ final class ProviderRequestService
             'first_name' => $fields['first_name'],
             'last_name_p' => $fields['last_name_p'],
             'last_name_m' => $fields['last_name_m'],
+            '_workbook_skip' => $varsWorkbookSkip,
         ];
     }
 
@@ -780,6 +820,11 @@ final class ProviderRequestService
         }
         if ($attachments !== []) {
             $options['attachments'] = $attachments;
+            // Neubox bloquea SMTP con adjuntos; forzar mail() en ese caso.
+            $options['prefer_smtp'] = false;
+        } else {
+            // Sin adjuntos: preferir SMTP hacia correos externos del proveedor
+            // (mail() local a veces "acepta" y no entrega fuera del dominio).
             $options['prefer_smtp'] = true;
         }
 
