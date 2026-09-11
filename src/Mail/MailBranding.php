@@ -342,23 +342,25 @@ final class MailBranding
         $headerHtml = self::resolvedHeaderHtml();
         $footerHtml = self::resolvedFooterHtml();
 
-        // Encabezado · cuerpo · pie (colores y HTML editables desde admin).
-        return self::BRANDING_MARKER
-            . '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;background:#f4f6fa;">'
-            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fa;padding:24px 12px;">'
-            . '<tr><td align="center">'
-            . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #C4C4C4;">'
-            . '<tr><td style="background:' . $headerBg . ';padding:20px;text-align:center;">'
-            . $headerHtml
-            . '</td></tr>'
-            . '<tr><td style="padding:28px 32px;font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#333;">'
-            . $innerHtml
-            . '</td></tr>'
+        // Saltos de línea: sin ellos el HTML queda en 1 sola línea >2048 chars y
+        // Exim/Neubox falla con "message has lines too long for transport" (Gmail).
+        return self::BRANDING_MARKER . "\n"
+            . "<!DOCTYPE html>\n<html lang=\"es\"><head><meta charset=\"UTF-8\"></head>\n"
+            . "<body style=\"margin:0;padding:0;background:#f4f6fa;\">\n"
+            . "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f4f6fa;padding:24px 12px;\">\n"
+            . "<tr><td align=\"center\">\n"
+            . "<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #C4C4C4;\">\n"
+            . '<tr><td style="background:' . $headerBg . ';padding:20px;text-align:center;">' . "\n"
+            . $headerHtml . "\n"
+            . "</td></tr>\n"
+            . "<tr><td style=\"padding:28px 32px;font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#333;\">\n"
+            . $innerHtml . "\n"
+            . "</td></tr>\n"
             . '<tr><td style="padding:16px 32px;background:' . $footerBg . ';font-family:Arial,sans-serif;font-size:12px;color:'
-            . $footerColor . ';text-align:center;">'
-            . $footerHtml
-            . '</td></tr>'
-            . '</table></td></tr></table></body></html>';
+            . $footerColor . ";text-align:center;\">\n"
+            . $footerHtml . "\n"
+            . "</td></tr>\n"
+            . "</table></td></tr></table>\n</body></html>";
     }
 
     public static function defaultHeaderBg(): string

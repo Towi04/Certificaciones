@@ -15,11 +15,20 @@ use App\Config\Env;
  */
 final class Mailer
 {
-    /** @var array{transport: string, host?: string, port?: int, encryption?: string, auth_user?: string}|null */
+    /** @var array{transport: string, host?: string, port?: int, encryption?: string, auth_user?: string, message_id?: string, smtp_data_response?: string, envelope_to?: string, override_to?: string}|null */
     private static ?array $lastEndpoint = null;
 
     /** @var list<string> */
     private static array $lastErrors = [];
+
+    /** @var list<string> */
+    private static array $lastTranscript = [];
+
+    private static ?string $lastMessageId = null;
+
+    private static ?string $lastRawEml = null;
+
+    private static ?string $lastDataResponse = null;
 
     /** @return list<string> */
     public static function lastErrors(): array
@@ -27,10 +36,26 @@ final class Mailer
         return self::$lastErrors;
     }
 
-    /** @return array{transport: string, host?: string, port?: int, encryption?: string, auth_user?: string}|null */
+    /** @return array{transport: string, host?: string, port?: int, encryption?: string, auth_user?: string, message_id?: string, smtp_data_response?: string, envelope_to?: string, override_to?: string}|null */
     public static function lastEndpoint(): ?array
     {
         return self::$lastEndpoint;
+    }
+
+    /** @return list<string> */
+    public static function lastTranscript(): array
+    {
+        return self::$lastTranscript;
+    }
+
+    public static function lastMessageId(): ?string
+    {
+        return self::$lastMessageId;
+    }
+
+    public static function lastRawEml(): ?string
+    {
+        return self::$lastRawEml;
     }
 
     /** Huella segura de SMTP_PASS (sin revelar la clave). */
@@ -66,6 +91,23 @@ final class Mailer
     {
         self::$lastErrors = [];
         self::$lastEndpoint = null;
+        self::$lastTranscript = [];
+        self::$lastMessageId = null;
+        self::$lastRawEml = null;
+        self::$lastDataResponse = null;
+
+        $to = trim($to);
+        $originalTo = $to;
+        $override = trim((string) (Env::get('MAIL_OVERRIDE_TO', '') ?? ''));
+        if ($override !== '' && filter_var($override, FILTER_VALIDATE_EMAIL)) {
+            $options['x_original_to'] = $originalTo;
+            $options['override_to'] = $override;
+            $to = $override;
+        }
+
+        if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            throw new \RuntimeException('Destinatario inválido: ' . ($to !== '' ? $to : '(vacío)'));
+        }
 
         $transport = strtolower(trim(Env::get('SMTP_TRANSPORT', 'auto') ?? 'auto'));
         if (!in_array($transport, ['auto', 'smtp', 'mail', 'log'], true)) {
@@ -81,7 +123,11 @@ final class Mailer
 
         if ($transport === 'log') {
             $this->sendViaLog($to, $subject, $bodyText, $options);
-            self::$lastEndpoint = ['transport' => 'log'];
+            self::$lastEndpoint = [
+                'transport' => 'log',
+                'envelope_to' => $to,
+                'override_to' => (string) ($options['override_to'] ?? ''),
+            ];
 
             return;
         }
@@ -89,7 +135,12 @@ final class Mailer
         if (($transport === 'mail' || $transport === 'auto') && !$preferSmtp) {
             try {
                 $this->sendViaPhpMail($to, $subject, $bodyText, $options);
-                self::$lastEndpoint = ['transport' => 'mail'];
+                self::$lastEndpoint = [
+                    'transport' => 'mail',
+                    'envelope_to' => $to,
+                    'message_id' => self::$lastMessageId,
+                    'override_to' => (string) ($options['override_to'] ?? ''),
+                ];
 
                 return;
             } catch (\Throwable $e) {
@@ -122,6 +173,9 @@ final class Mailer
                     'transport' => 'mail',
                     'fallback' => true,
                     'smtp_errors' => $errors,
+                    'envelope_to' => $to,
+                    'message_id' => self::$lastMessageId,
+                    'override_to' => (string) ($options['override_to'] ?? ''),
                 ];
                 self::$lastErrors = $errors;
 
@@ -194,6 +248,10 @@ final class Mailer
                         'port' => $endpoint['port'],
                         'encryption' => $endpoint['encryption'],
                         'auth_user' => $authUser,
+                        'message_id' => self::$lastMessageId,
+                        'smtp_data_response' => self::$lastDataResponse,
+                        'envelope_to' => $to,
+                        'override_to' => (string) ($options['override_to'] ?? ''),
                     ];
 
                     return;
@@ -236,6 +294,10 @@ final class Mailer
                         'encryption' => 'none',
                         'auth' => false,
                         'note' => 'MTA local sin AUTH (Neubox/Exim); AUTH remoto falló antes',
+                        'message_id' => self::$lastMessageId,
+                        'smtp_data_response' => self::$lastDataResponse,
+                        'envelope_to' => $to,
+                        'override_to' => (string) ($options['override_to'] ?? ''),
                     ];
 
                     return;
@@ -258,6 +320,8 @@ final class Mailer
         $user = trim((string) Env::get('SMTP_USER', ''));
         $from = trim((string) (Env::get('SMTP_FROM', $user !== '' ? $user : null) ?? 'certificaciones@institutodoceo.com'));
         $fromName = (string) (Env::get('SMTP_FROM_NAME', 'Instituto Doceo') ?? 'Instituto Doceo');
+        $messageId = $this->makeMessageId($from);
+        self::$lastMessageId = $messageId;
 
         $encodedSubject = '=?UTF-8?B?' . base64_encode($subject) . '?=';
         $encodedFrom = '=?UTF-8?B?' . base64_encode($fromName) . '?= <' . $from . '>';
@@ -266,13 +330,18 @@ final class Mailer
         $headers = [
             'MIME-Version: 1.0',
             'From: ' . $encodedFrom,
+            'To: <' . $to . '>',
             'Reply-To: ' . $from,
+            'Message-ID: <' . $messageId . '>',
+            'Date: ' . date('r'),
             'X-Mailer: Instituto-Doceo-PDV',
         ];
         if ($payload['cc'] !== '') {
             $headers[] = 'Cc: ' . $payload['cc'];
         }
         $headers[] = $payload['content_type_header'];
+
+        self::$lastRawEml = implode("\r\n", $headers) . "\r\n\r\n" . $payload['body'];
 
         $params = '-f' . $from;
         $ok = @mail($to, $encodedSubject, $payload['body'], implode("\r\n", $headers), $params);
@@ -379,6 +448,8 @@ final class Mailer
                 $fp = $this->authenticate($fp, $user, $pass, $host, $port, $encryption);
             }
             $payload = $this->buildMimePayload($to, $from, $fromName, $subject, $bodyText, $options);
+            $messageId = $this->makeMessageId($from);
+            self::$lastMessageId = $messageId;
 
             $this->command($fp, 'MAIL FROM:<' . $from . '>', 250);
             $this->command($fp, 'RCPT TO:<' . $to . '>', 250);
@@ -391,16 +462,27 @@ final class Mailer
                 'From: ' . $this->encodeAddress($fromName, $from),
                 'To: <' . $to . '>',
                 'Subject: =?UTF-8?B?' . base64_encode($subject) . '?=',
-                'MIME-Version: 1.0',
+                'Message-ID: <' . $messageId . '>',
                 'Date: ' . date('r'),
+                'MIME-Version: 1.0',
+                'Reply-To: ' . $from,
+                'X-Mailer: Instituto-Doceo-PDV',
                 $payload['content_type_header'],
             ];
             if ($payload['cc'] !== '') {
                 $headers[] = 'Cc: ' . $payload['cc'];
             }
+            $originalTo = trim((string) ($options['x_original_to'] ?? ''));
+            if ($originalTo !== '' && strcasecmp($originalTo, $to) !== 0) {
+                $headers[] = 'X-Original-To: <' . $originalTo . '>';
+            }
 
-            $data = implode("\r\n", $headers) . "\r\n\r\n" . $this->dotStuff($payload['body']) . "\r\n.";
-            $this->command($fp, $data, 250);
+            $raw = implode("\r\n", $headers) . "\r\n\r\n" . $payload['body'];
+            $this->assertSmtpLineLengths($raw);
+            self::$lastRawEml = $raw;
+            $data = $this->dotStuff($raw) . "\r\n.";
+            $dataResponse = $this->command($fp, $data, 250);
+            self::$lastDataResponse = trim($dataResponse);
             $this->command($fp, 'QUIT', 221);
         } finally {
             if (is_resource($fp)) {
@@ -453,17 +535,30 @@ final class Mailer
 
         if ($validAttachments === []) {
             if ($isHtml) {
+                $altBoundary = 'alt_' . bin2hex(random_bytes(8));
+                $body = '--' . $altBoundary . "\r\n"
+                    . "Content-Type: text/plain; charset=UTF-8\r\n"
+                    . "Content-Transfer-Encoding: quoted-printable\r\n\r\n"
+                    . $this->qp($text) . "\r\n"
+                    . '--' . $altBoundary . "\r\n"
+                    . "Content-Type: text/html; charset=UTF-8\r\n"
+                    // base64: el HTML de marca DOCEO suele ir en UNA sola línea >2048 chars;
+                    // Exim/Gmail rechazan eso ("message has lines too long for transport").
+                    . "Content-Transfer-Encoding: base64\r\n\r\n"
+                    . $this->b64($html) . "\r\n"
+                    . '--' . $altBoundary . "--\r\n";
+
                 return [
-                    'body' => $this->normalizeEol($html),
-                    'content_type_header' => 'Content-Type: text/html; charset=UTF-8',
+                    'body' => $body,
+                    'content_type_header' => 'Content-Type: multipart/alternative; boundary="' . $altBoundary . '"',
                     'cc' => $ccHeader,
                     'cc_list' => $ccList,
                 ];
             }
 
             return [
-                'body' => $this->normalizeEol($text),
-                'content_type_header' => 'Content-Type: text/plain; charset=UTF-8',
+                'body' => $this->qp($text),
+                'content_type_header' => "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: quoted-printable",
                 'cc' => $ccHeader,
                 'cc_list' => $ccList,
             ];
@@ -472,13 +567,24 @@ final class Mailer
         $boundary = 'pdv_' . bin2hex(random_bytes(12));
         $parts = [];
         if ($isHtml) {
+            $altBoundary = 'alt_' . bin2hex(random_bytes(8));
+            $alt = '--' . $altBoundary . "\r\n"
+                . "Content-Type: text/plain; charset=UTF-8\r\n"
+                . "Content-Transfer-Encoding: quoted-printable\r\n\r\n"
+                . $this->qp($text) . "\r\n"
+                . '--' . $altBoundary . "\r\n"
+                . "Content-Type: text/html; charset=UTF-8\r\n"
+                . "Content-Transfer-Encoding: base64\r\n\r\n"
+                . $this->b64($html) . "\r\n"
+                . '--' . $altBoundary . '--';
             $parts[] = '--' . $boundary
-                . "\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n"
-                . $this->normalizeEol($html);
+                . "\r\nContent-Type: multipart/alternative; boundary=\"{$altBoundary}\"\r\n\r\n"
+                . $alt;
         } else {
             $parts[] = '--' . $boundary
-                . "\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n"
-                . $this->normalizeEol($text);
+                . "\r\nContent-Type: text/plain; charset=UTF-8\r\n"
+                . "Content-Transfer-Encoding: quoted-printable\r\n\r\n"
+                . $this->qp($text);
         }
 
         foreach ($validAttachments as $att) {
@@ -487,10 +593,11 @@ final class Mailer
             $mime = (string) ($att['mime'] ?? 'application/octet-stream');
             $data = base64_encode((string) file_get_contents($path));
             $data = chunk_split($data, 76, "\r\n");
+            $safeName = addcslashes($name, '"\\');
             $parts[] = '--' . $boundary
-                . "\r\nContent-Type: {$mime}; name=\"{$name}\""
+                . "\r\nContent-Type: {$mime}; name=\"{$safeName}\""
                 . "\r\nContent-Transfer-Encoding: base64"
-                . "\r\nContent-Disposition: attachment; filename=\"{$name}\"\r\n\r\n"
+                . "\r\nContent-Disposition: attachment; filename=\"{$safeName}\"\r\n\r\n"
                 . $data;
         }
         $parts[] = '--' . $boundary . '--';
@@ -501,6 +608,50 @@ final class Mailer
             'cc' => $ccHeader,
             'cc_list' => $ccList,
         ];
+    }
+
+    private function makeMessageId(string $from): string
+    {
+        $domain = 'institutodoceo.com';
+        if (str_contains($from, '@')) {
+            $parsed = strtolower(substr(strrchr($from, '@') ?: '@institutodoceo.com', 1));
+            if ($parsed !== '') {
+                $domain = $parsed;
+            }
+        }
+
+        return bin2hex(random_bytes(8)) . '.' . time() . '@' . $domain;
+    }
+
+    private function qp(string $value): string
+    {
+        return $this->normalizeEol(quoted_printable_encode($this->normalizeEol($value)));
+    }
+
+    /** HTML/binario en base64 con líneas de 76 chars (límite Exim Neubox ~2048). */
+    private function b64(string $value): string
+    {
+        return trim(chunk_split(base64_encode($value), 76, "\r\n"));
+    }
+
+    /**
+     * Exim en Neubox: "message has lines too long for transport (received N, limit 2048)".
+     * RFC 5321 recomienda ≤998; fallamos antes de marcar el envío como aceptado.
+     */
+    private function assertSmtpLineLengths(string $raw): void
+    {
+        $max = 998;
+        foreach (explode("\n", str_replace("\r", '', $raw)) as $i => $line) {
+            $len = strlen($line);
+            if ($len > $max) {
+                throw new \RuntimeException(
+                    'MIME inválido para SMTP: línea ' . ($i + 1) . ' tiene ' . $len
+                    . ' caracteres (máx. ' . $max . '). '
+                    . 'Neubox/Exim rechaza el correo después (p. ej. Gmail: lines too long). '
+                    . 'Revisa plantilla/marca HTML sin saltos de línea.'
+                );
+            }
+        }
     }
 
     private function normalizeEol(string $body): string
@@ -604,14 +755,22 @@ final class Mailer
     }
 
     /** @param resource $fp */
-    private function command($fp, string $command, int $expectCode): void
+    private function command($fp, string $command, int $expectCode): string
     {
+        $preview = strlen($command) > 180 ? (substr($command, 0, 180) . '…') : $command;
+        if (!str_starts_with($command, 'AUTH ')) {
+            self::$lastTranscript[] = '>>> ' . str_replace(["\r", "\n"], ['', '\\n'], $preview);
+        } else {
+            self::$lastTranscript[] = '>>> AUTH ***';
+        }
         fwrite($fp, $command . "\r\n");
-        $this->expect($fp, $expectCode);
+        fflush($fp);
+
+        return $this->expect($fp, $expectCode);
     }
 
     /** @param resource $fp */
-    private function expect($fp, int $expectCode): void
+    private function expect($fp, int $expectCode): string
     {
         $response = '';
         while (($line = fgets($fp, 515)) !== false) {
@@ -625,9 +784,13 @@ final class Mailer
             throw new \RuntimeException("SMTP esperaba {$expectCode}, recibió: (sin respuesta / timeout)");
         }
 
+        self::$lastTranscript[] = '<<< ' . trim(str_replace("\r", '', $response));
+
         $code = (int) substr($response, 0, 3);
         if ($code !== $expectCode) {
             throw new \RuntimeException("SMTP esperaba {$expectCode}, recibió: " . trim($response));
         }
+
+        return $response;
     }
 }

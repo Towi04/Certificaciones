@@ -1576,6 +1576,12 @@ final class AdminController
             if (!empty($result['smtp_host'])) {
                 $msg .= ' @ ' . $result['smtp_host'];
             }
+            if (!empty($result['message_id'])) {
+                $msg .= ' · Message-ID ' . $result['message_id'];
+            }
+            if (!empty($result['smtp_data_response'])) {
+                $msg .= ' · servidor: ' . $result['smtp_data_response'];
+            }
             if (($result['workbook_skip'] ?? '') !== '') {
                 $msg .= '. Excel no incluido: ' . $result['workbook_skip'];
             }
@@ -1601,7 +1607,14 @@ final class AdminController
                     . '. Si el proveedor no lo recibe, revisa SMTP en el hosting.'
                 );
             } else {
-                flash('success', $msg . '.');
+                flash(
+                    'warning',
+                    $msg . '. Importante: “transporte smtp” solo significa que Neubox/Exim ACEPTÓ el mensaje (código 250). '
+                    . 'No confirma que Gmail/CNCM lo hayan recibido. '
+                    . 'Si no llega: 1) revisa spam y rebotes en certificaciones@ 2) cPanel → Email → Track Delivery '
+                    . 'con el Message-ID 3) Email Deliverability (SPF/DKIM/DMARC). '
+                    . 'Compara enviando el mismo To desde Roundcube/webmail del mismo buzón.'
+                );
             }
         } catch (\Throwable $e) {
             flash(
