@@ -262,7 +262,19 @@ final class MailBranding
         return $name . ' · 🐝';
     }
 
-    /** Plantilla HTML completa (p. ej. pegada desde Outlook) — no volver a envolver. */
+    /** Marcador interno para no envolver dos veces el mismo HTML. */
+    public const BRANDING_MARKER = '<!--doceo-mail-branding-->';
+
+    /** ¿Ya lleva la envoltura global de encabezado/pie? */
+    public static function isAlreadyBranded(string $html): bool
+    {
+        return str_contains($html, 'doceo-mail-branding');
+    }
+
+    /**
+     * Plantilla HTML completa (p. ej. pegada desde Outlook).
+     * Sigue recibiendo encabezado/pie: se extrae el cuerpo y se envuelve.
+     */
     public static function isStandaloneHtml(string $html): bool
     {
         $lower = strtolower($html);
@@ -276,11 +288,33 @@ final class MailBranding
             && (str_contains($lower, '<table') || str_contains($lower, 'instituto doceo'));
     }
 
-    /** Envuelve solo fragmentos; respeta plantillas HTML completas. */
+    /** Extrae el contenido interior de un HTML completo (body o sin wrappers). */
+    public static function extractInnerHtml(string $html): string
+    {
+        if (preg_match('/<body\b[^>]*>(.*)<\/body>/is', $html, $m) === 1) {
+            return trim((string) $m[1]);
+        }
+
+        $stripped = preg_replace('/<!DOCTYPE[^>]*>/i', '', $html) ?? $html;
+        $stripped = preg_replace('/<head\b[^>]*>.*?<\/head>/is', '', $stripped) ?? $stripped;
+        $stripped = preg_replace('/<\/?html\b[^>]*>/i', '', $stripped) ?? $stripped;
+
+        return trim($stripped);
+    }
+
+    /**
+     * Asegura encabezado y pie globales en todos los correos.
+     * Si la plantilla ya es HTML completo (Outlook, etc.), se toma el cuerpo interior
+     * y se vuelve a envolver con la marca DOCEO.
+     */
     public static function wrapIfNeeded(string $innerHtml): string
     {
-        if (self::isStandaloneHtml($innerHtml)) {
+        if (self::isAlreadyBranded($innerHtml)) {
             return $innerHtml;
+        }
+
+        if (self::isStandaloneHtml($innerHtml)) {
+            $innerHtml = self::extractInnerHtml($innerHtml);
         }
 
         return self::wrap($innerHtml);
@@ -309,7 +343,8 @@ final class MailBranding
         $footerHtml = self::resolvedFooterHtml();
 
         // Encabezado · cuerpo · pie (colores y HTML editables desde admin).
-        return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;background:#f4f6fa;">'
+        return self::BRANDING_MARKER
+            . '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;background:#f4f6fa;">'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fa;padding:24px 12px;">'
             . '<tr><td align="center">'
             . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #C4C4C4;">'

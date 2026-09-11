@@ -204,7 +204,8 @@ final class ProviderRequestService
         int $trackingId,
         int $purchaseId,
         ?int $actorUserId = null,
-        bool $forceIncludePaymentProof = false
+        bool $forceIncludePaymentProof = false,
+        bool $allowSkipAdminProof = false
     ): void {
         $tracking = $this->tracking->find($trackingId);
         if ($tracking === null) {
@@ -230,7 +231,11 @@ final class ProviderRequestService
             );
         }
 
-        if (!empty($config['require_admin_payment_proof']) && $this->findAdminPaymentProof($trackingId) === null) {
+        if (
+            !empty($config['require_admin_payment_proof'])
+            && !$allowSkipAdminProof
+            && $this->findAdminPaymentProof($trackingId) === null
+        ) {
             throw new \RuntimeException(
                 'Debes subir el comprobante de pago (DOCEO → proveedor) antes de enviar la solicitud.'
             );
@@ -870,8 +875,13 @@ final class ProviderRequestService
 
         $product = $this->productRowForTracking($tracking);
         $config = self::configForProduct($product);
-        if ($config === null) {
-            throw new \RuntimeException('Este producto no tiene solicitud a proveedor habilitada.');
+        // Permitir subir comprobante aunque el grupo aún no tenga provider_request
+        // (p. ej. desde el popup al enviar otro correo al proveedor).
+        $stepCode = is_array($config)
+            ? (string) ($config['step_code'] ?? 'solicitud_proveedor')
+            : (string) ($tracking['current_step_code'] ?? 'solicitud_proveedor');
+        if ($stepCode === '') {
+            $stepCode = 'solicitud_proveedor';
         }
 
         $stored = $this->documents->storeUploaded($file, 'provider_payment_proofs', '.pdf,.jpg,.jpeg,.png,.webp');
@@ -907,7 +917,7 @@ final class ProviderRequestService
 
         $this->tracking->addLog(
             $trackingId,
-            (string) $config['step_code'],
+            $stepCode,
             'Comprobante de pago al proveedor subido por admin',
             $adminUserId
         );
