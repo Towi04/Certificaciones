@@ -511,6 +511,8 @@ final class CheckoutService
         }
 
         (new TrackingService())->onPaymentConfirmed($purchaseId, $adminUserId, $notes);
+        // Confirmación de pago: alumno o partner (precio de nivel), no ambos.
+        GroupEmailAutomation::sendPaymentConfirmedEmails($purchaseId);
     }
 
     /**

@@ -3312,7 +3312,8 @@ public function promoCode(): void
                 trim((string) ($_POST['subject'] ?? '')),
                 (string) ($_POST['body_html'] ?? ''),
                 !empty($_POST['is_active']),
-                $placeholders
+                $placeholders,
+                trim((string) ($_POST['name'] ?? ''))
             );
             $svc->saveAudience($effectiveCode, $audience);
 

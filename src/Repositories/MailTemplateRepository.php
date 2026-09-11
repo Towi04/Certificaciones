@@ -94,20 +94,38 @@ final class MailTemplateRepository
         string $subject,
         string $bodyHtml,
         bool $isActive,
-        ?array $requiredFields = null
+        ?array $requiredFields = null,
+        ?string $name = null
     ): void {
+        $name = $name !== null ? trim($name) : null;
+        if ($name === '') {
+            $name = null;
+        }
+
         if ($requiredFields === null) {
-            $this->pdo->prepare(
-                'UPDATE mail_templates SET subject = ?, body_html = ?, is_active = ? WHERE code = ?'
-            )->execute([$subject, $bodyHtml, $isActive ? 1 : 0, $code]);
+            if ($name !== null) {
+                $this->pdo->prepare(
+                    'UPDATE mail_templates SET name = ?, subject = ?, body_html = ?, is_active = ? WHERE code = ?'
+                )->execute([$name, $subject, $bodyHtml, $isActive ? 1 : 0, $code]);
+            } else {
+                $this->pdo->prepare(
+                    'UPDATE mail_templates SET subject = ?, body_html = ?, is_active = ? WHERE code = ?'
+                )->execute([$subject, $bodyHtml, $isActive ? 1 : 0, $code]);
+            }
 
             return;
         }
 
         $fieldsJson = $requiredFields !== [] ? json_encode(array_values($requiredFields), JSON_UNESCAPED_UNICODE) : null;
-        $this->pdo->prepare(
-            'UPDATE mail_templates SET subject = ?, body_html = ?, is_active = ?, required_fields_json = ? WHERE code = ?'
-        )->execute([$subject, $bodyHtml, $isActive ? 1 : 0, $fieldsJson, $code]);
+        if ($name !== null) {
+            $this->pdo->prepare(
+                'UPDATE mail_templates SET name = ?, subject = ?, body_html = ?, is_active = ?, required_fields_json = ? WHERE code = ?'
+            )->execute([$name, $subject, $bodyHtml, $isActive ? 1 : 0, $fieldsJson, $code]);
+        } else {
+            $this->pdo->prepare(
+                'UPDATE mail_templates SET subject = ?, body_html = ?, is_active = ?, required_fields_json = ? WHERE code = ?'
+            )->execute([$subject, $bodyHtml, $isActive ? 1 : 0, $fieldsJson, $code]);
+        }
     }
 
     public function renameCode(string $fromCode, string $toCode, string $newName): void
