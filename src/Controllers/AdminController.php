@@ -1559,69 +1559,20 @@ final class AdminController
                 $allowSkip,
                 $overrides
             );
+            $to = trim((string) ($result['to'] ?? ''));
             $msg = $proofUploaded
-                ? 'Comprobante guardado y solicitud enviada al proveedor'
-                : 'Solicitud enviada al proveedor';
-            $msg .= ' (' . ($result['to'] ?? '') . ')';
-            $msg .= ' · sin adjuntos';
-            if (($result['comprobante_url'] ?? '') !== '') {
-                $msg .= ' · comprobante por enlace';
-            } elseif ($includeProof) {
-                $msg .= ' · sin enlace de comprobante (no hay archivo admin)';
+                ? 'Comprobante guardado y solicitud enviada'
+                : 'Solicitud enviada';
+            if ($to !== '') {
+                $msg .= ' a ' . $to;
             }
-            $transport = (string) ($result['transport'] ?? '');
-            if ($transport !== '') {
-                $msg .= ' · transporte ' . $transport;
-            }
-            if (!empty($result['smtp_host'])) {
-                $msg .= ' @ ' . $result['smtp_host'];
-            }
-            if (!empty($result['message_id'])) {
-                $msg .= ' · Message-ID ' . $result['message_id'];
-            }
-            if (!empty($result['smtp_data_response'])) {
-                $msg .= ' · servidor: ' . $result['smtp_data_response'];
-            }
-            if (($result['workbook_skip'] ?? '') !== '') {
-                $msg .= '. Excel no incluido: ' . $result['workbook_skip'];
-            }
-            if (!in_array($transport, ['smtp', 'smtp_local'], true)) {
-                flash(
-                    'error',
-                    $msg . '. ERROR: el transporte no fue SMTP. '
-                    . 'El correo puede no haber llegado. Revisa SMTP en Neubox y reintenta.'
-                );
-            } elseif ($transport === 'smtp_local') {
-                flash(
-                    'warning',
-                    $msg . '. Aviso: SMTP AUTH remoto falló (535) y se envió por el MTA local del servidor '
-                    . '(mismo camino técnico que la bienvenida, pero por Exim :25). '
-                    . 'Si CNCM no lo recibe, pide a Neubox desbloquear SMTP AUTH o restablecer la clave del buzón '
-                    . '(cPHulk a veces no aparece en el panel: soporte Neubox puede desbloquearlo).'
-                );
-            } elseif (!empty($result['smtp_fallback'])) {
-                flash(
-                    'warning',
-                    $msg . '. Atención: SMTP falló y se usó mail() local'
-                    . (($result['smtp_errors'] ?? '') !== '' ? ' (' . $result['smtp_errors'] . ')' : '')
-                    . '. Si el proveedor no lo recibe, revisa SMTP en el hosting.'
-                );
-            } else {
-                flash(
-                    'warning',
-                    $msg . '. Importante: “transporte smtp” solo significa que Neubox/Exim ACEPTÓ el mensaje (código 250). '
-                    . 'No confirma que Gmail/CNCM lo hayan recibido. '
-                    . 'Si no llega: 1) revisa spam y rebotes en certificaciones@ 2) cPanel → Email → Track Delivery '
-                    . 'con el Message-ID 3) Email Deliverability (SPF/DKIM/DMARC). '
-                    . 'Compara enviando el mismo To desde Roundcube/webmail del mismo buzón.'
-                );
-            }
+            flash('success', $msg . '.');
         } catch (\Throwable $e) {
             flash(
                 'error',
                 ($proofUploaded
-                    ? 'Comprobante guardado, pero el correo al proveedor no se envió: '
-                    : '')
+                    ? 'Comprobante guardado, pero el correo no se envió: '
+                    : 'No se pudo enviar la solicitud: ')
                 . $e->getMessage()
             );
         }
