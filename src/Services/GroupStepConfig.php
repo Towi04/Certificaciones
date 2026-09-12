@@ -598,23 +598,61 @@ final class GroupStepConfig
     }
 
     /**
+     * Pasos visibles para alumno (y partner en la ficha del alumno).
+     * Oculta los marcados «Solo admin (oculto al alumno)».
+     *
      * @param list<array<string, mixed>> $steps
      * @param array<string, array<string, mixed>> $defs
      * @return list<array<string, mixed>>
      */
     public static function visibleToStudent(array $steps, array $defs): array
     {
+        $merged = self::mergePipelineSteps($steps, $defs);
         $out = [];
-        foreach ($steps as $step) {
-            $code = self::normalizeCode((string) ($step['code'] ?? ''));
-            $def = $defs[$code] ?? [];
-            if (!empty($def['admin_only'])) {
+        foreach ($merged as $step) {
+            if (self::isAdminOnlyStep($step, $defs)) {
                 continue;
             }
-            $out[] = $step;
+            $out[] = [
+                'code' => (string) ($step['code'] ?? ''),
+                'label' => (string) ($step['label'] ?? $step['code'] ?? ''),
+                'actor' => (string) ($step['actor'] ?? 'admin'),
+                'is_terminal' => !empty($step['is_terminal']),
+                'sort_order' => (int) ($step['sort_order'] ?? 0),
+            ];
         }
 
         return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $step
+     * @param array<string, array<string, mixed>> $defs
+     */
+    public static function isAdminOnlyStep(array $step, array $defs = []): bool
+    {
+        if (!empty($step['admin_only'])) {
+            return true;
+        }
+        $code = self::normalizeCode((string) ($step['code'] ?? ''));
+        if ($code !== '' && !empty($defs[$code]['admin_only'])) {
+            return true;
+        }
+        // Respaldo: misma etiqueta que un def admin_only (códigos desfasados).
+        $label = mb_strtolower(trim((string) ($step['label'] ?? '')));
+        if ($label === '' || $defs === []) {
+            return false;
+        }
+        foreach ($defs as $def) {
+            if (empty($def['admin_only'])) {
+                continue;
+            }
+            if (mb_strtolower(trim((string) ($def['label'] ?? ''))) === $label) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

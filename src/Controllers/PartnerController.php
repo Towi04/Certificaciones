@@ -110,11 +110,16 @@ final class PartnerController
             return;
         }
         $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
+        $steps = $pipelineId > 0 ? $svc->steps($pipelineId) : [];
+        $cfg = \App\Services\CheckoutRequirements::config($tracking);
+        $defs = \App\Services\GroupStepConfig::defsFromConfig($cfg);
+        // Ocultar pasos marcados «Solo admin (oculto al alumno)» también en la ficha partner.
+        $steps = \App\Services\GroupStepConfig::visibleToStudent($steps, $defs);
         view('partner/case', [
             'title' => 'Caso ' . $tracking['matricula'],
             'partner' => $partner,
             'tracking' => $tracking,
-            'steps' => $pipelineId > 0 ? $svc->steps($pipelineId) : [],
+            'steps' => $steps,
             'layout' => 'partner',
         ]);
     }

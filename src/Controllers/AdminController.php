@@ -1115,10 +1115,15 @@ final class AdminController
         if ($isEletUks && !empty($tracking['exam_date'])) {
             $accessKeyHint = $uksElet->accessKeyHintForDate((string) $tracking['exam_date'], (int) $tracking['id']);
         }
+        $rawSteps = $pipelineId > 0 ? $svc->steps($pipelineId) : [];
+        $stepDefs = GroupStepConfig::defsFromConfig($productCfg);
+        $steps = $rawSteps !== []
+            ? GroupStepConfig::mergePipelineSteps($rawSteps, $stepDefs)
+            : array_values($stepDefs);
         view('admin/tracking', [
             'title' => 'Caso ' . $tracking['matricula'],
             'tracking' => $tracking,
-            'steps' => $pipelineId > 0 ? $svc->steps($pipelineId) : [],
+            'steps' => $steps,
             'logs' => $svc->logs((int) $tracking['id']),
             'documents' => $svc->documentsForTracking((int) $tracking['id']),
             'moodleConfigured' => \App\Services\MoodleEnrolmentService::isConfigured(),

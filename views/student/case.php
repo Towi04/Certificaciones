@@ -55,20 +55,25 @@ $portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($track
     <?php if ($steps === []): ?>
         <p class="muted">Paso actual: <?= e($current !== '' ? $current : '—') ?></p>
     <?php else: ?>
+        <?php
+        $codes = array_column($steps, 'code');
+        $curIdx = array_search($current, $codes, true);
+        $currentIsHidden = $current !== '' && $curIdx === false;
+        ?>
         <ol style="margin:0;padding-left:1.2rem">
-            <?php foreach ($steps as $s): ?>
+            <?php foreach ($steps as $i => $s): ?>
                 <?php
-                $codes = array_column($steps, 'code');
-                $curIdx = array_search($current, $codes, true);
-                $thisIdx = array_search((string) $s['code'], $codes, true);
-                $done = is_int($curIdx) && is_int($thisIdx) && $thisIdx < $curIdx;
-                $active = (string) $s['code'] === $current;
+                $done = is_int($curIdx) && $i < $curIdx;
+                $active = is_int($curIdx) && $i === $curIdx;
                 ?>
                 <li style="<?= $active ? 'font-weight:700;color:var(--doceo-blue)' : ($done ? 'opacity:.65' : '') ?>">
                     <?= e($s['label']) ?><?php if ($active): ?> ← aquí vas<?php endif; ?>
                 </li>
             <?php endforeach; ?>
         </ol>
+        <?php if ($currentIsHidden): ?>
+            <p class="muted" style="margin:.5rem 0 0;font-size:.85rem">Tu caso está en revisión interna por DOCEO.</p>
+        <?php endif; ?>
     <?php endif; ?>
 </div>
 
