@@ -340,10 +340,12 @@ final class Mailer
         $encodedFrom = '=?UTF-8?B?' . base64_encode($fromName) . '?= <' . $from . '>';
         $payload = $this->buildMimePayload($to, $from, $fromName, $subject, $bodyText, $options);
 
+        // Importante: PHP mail($to, ...) YA inserta el encabezado To.
+        // Si también lo ponemos aquí, Gmail/MailChannels rechazan con:
+        // "550 5.7.1 ... There are multiple To headers" (RFC 5322).
         $headers = [
             'MIME-Version: 1.0',
             'From: ' . $encodedFrom,
-            'To: <' . $to . '>',
             'Reply-To: ' . $from,
             'Message-ID: <' . $messageId . '>',
             'Date: ' . date('r'),
@@ -352,9 +354,13 @@ final class Mailer
         if ($payload['cc'] !== '') {
             $headers[] = 'Cc: ' . $payload['cc'];
         }
+        $originalTo = trim((string) ($options['x_original_to'] ?? ''));
+        if ($originalTo !== '' && strcasecmp($originalTo, $to) !== 0) {
+            $headers[] = 'X-Original-To: <' . $originalTo . '>';
+        }
         $headers[] = $payload['content_type_header'];
 
-        self::$lastRawEml = implode("\r\n", $headers) . "\r\n\r\n" . $payload['body'];
+        self::$lastRawEml = 'To: <' . $to . ">\r\n" . implode("\r\n", $headers) . "\r\n\r\n" . $payload['body'];
 
         $params = '-f' . $from;
         $ok = @mail($to, $encodedSubject, $payload['body'], implode("\r\n", $headers), $params);
