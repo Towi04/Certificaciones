@@ -24,13 +24,22 @@ $current = (string) ($tracking['current_step_code'] ?? '');
 <?php if ($steps !== []): ?>
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Progreso</h2>
+    <?php
+    $codes = array_column($steps, 'code');
+    $curIdx = array_search($current, $codes, true);
+    $currentIsHidden = $current !== '' && $curIdx === false;
+    ?>
     <ol style="margin:0;padding-left:1.2rem">
-        <?php foreach ($steps as $s): ?>
-            <li style="<?= (string) $s['code'] === $current ? 'font-weight:700;color:var(--doceo-blue)' : '' ?>">
-                <?= e($s['label']) ?><?= (string) $s['code'] === $current ? ' ← actual' : '' ?>
+        <?php foreach ($steps as $i => $s): ?>
+            <?php $active = is_int($curIdx) && $i === $curIdx; ?>
+            <li style="<?= $active ? 'font-weight:700;color:var(--doceo-blue)' : '' ?>">
+                <?= e($s['label']) ?><?= $active ? ' ← actual' : '' ?>
             </li>
         <?php endforeach; ?>
     </ol>
+    <?php if ($currentIsHidden): ?>
+        <p class="muted" style="margin:.5rem 0 0;font-size:.85rem">El caso está en un paso interno de DOCEO.</p>
+    <?php endif; ?>
 </div>
 <?php endif; ?>
 

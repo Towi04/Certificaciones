@@ -1545,6 +1545,42 @@ $renderMailTemplateField = static function (
     else delete base.pipeline_code;
     delete base.initial_step_code;
 
+    // Persistir step_defs desde las tarjetas de Progreso (incluye admin_only).
+    if (typeof currentStepsFromDom === 'function') {
+      var stepDefsOut = {};
+      currentStepsFromDom().forEach(function (s) {
+        var code = String(s.code || '').trim();
+        if (!code && s.label) code = slugStepCode(s.label);
+        if (!code) return;
+        stepDefsOut[code] = {
+          code: code,
+          label: String(s.label || code),
+          actor: String(s.actor || 'admin'),
+          admin_only: !!s.admin_only,
+          ops_button: !!s.ops_button,
+          ops_label: String(s.ops_label || ''),
+          ops_icon: String(s.ops_icon || ''),
+          action: String(s.action || 'none'),
+          requires_results: !!s.requires_results,
+          email: {
+            enabled: !!s.email_enabled,
+            trigger: String(s.email_trigger || 'admin'),
+            template_code: String(s.email_template || ''),
+            audience: '',
+            to: '',
+            cc: ''
+          },
+          csv: {
+            template_code: String(s.csv_template || ''),
+            scope: String(s.csv_scope || 'student')
+          }
+        };
+      });
+      if (Object.keys(stepDefsOut).length) {
+        base.step_defs = stepDefsOut;
+      }
+    }
+
     if (document.getElementById('provider-request-enabled') && document.getElementById('provider-request-enabled').checked) {
       var cellMap = [];
       document.querySelectorAll('#provider-cell-map .provider-cell-row').forEach(function (row) {

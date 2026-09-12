@@ -65,14 +65,23 @@ $statusLabels = [
     <?php else: ?>
         <ol class="pipeline-list" style="margin:0;padding-left:1.2rem">
             <?php foreach ($steps as $s): ?>
-                <?php $active = (string) $s['code'] === $current; ?>
-                <li style="<?= $active ? 'font-weight:700;color:var(--doceo-blue)' : '' ?>">
+                <?php
+                $active = (string) $s['code'] === $current;
+                $adminOnly = !empty($s['admin_only']);
+                ?>
+                <li style="<?= $active ? 'font-weight:700;color:var(--doceo-blue)' : ($adminOnly ? 'opacity:.78' : '') ?>">
                     <?= e($s['label']) ?>
                     <span class="muted" style="font-weight:500">(<?= e($s['code']) ?> · <?= e($s['actor']) ?>)</span>
+                    <?php if ($adminOnly): ?>
+                        <span class="pill" style="font-size:.72rem;background:#eef2ff;color:#3730a3" title="No se muestra al alumno ni al partner">solo admin</span>
+                    <?php endif; ?>
                     <?php if ($active): ?> ← actual<?php endif; ?>
                 </li>
             <?php endforeach; ?>
         </ol>
+        <p class="muted" style="margin:.65rem 0 0;font-size:.82rem">
+            Los pasos con la etiqueta <strong>solo admin</strong> no aparecen en el progreso del alumno (ni del partner).
+        </p>
     <?php endif; ?>
 
     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tracking['id'] . '/avanzar')) ?>" style="margin-top:1rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end">
