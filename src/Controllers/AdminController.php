@@ -1568,6 +1568,11 @@ final class AdminController
             }
             flash('success', $msg . '.');
         } catch (\Throwable $e) {
+            try {
+                (new ProviderRequestService())->recordSendFailure($trackingId, $e->getMessage());
+            } catch (\Throwable) {
+                // ignore persistence errors
+            }
             flash(
                 'error',
                 ($proofUploaded
@@ -1608,6 +1613,11 @@ final class AdminController
                 'Correo «' . $result['template'] . '» enviado al ' . $who . ' (' . $result['to'] . ').'
             );
         } catch (\Throwable $e) {
+            try {
+                (new StepMailService())->recordSendFailure($trackingId, $stepCode, $e->getMessage());
+            } catch (\Throwable) {
+                // ignore
+            }
             flash('error', $e->getMessage());
         }
         if (!empty($_POST['return_ops'])) {

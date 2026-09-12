@@ -53,8 +53,9 @@ $extraColHeader = count($extraColLabels) === 1
     </div>
 
     <div class="ops-legend" aria-label="Leyenda">
-        <span class="ops-legend-item"><span class="ops-swatch ops-swatch--pending"></span> Amarillo = pendiente <?= icon('clock') ?></span>
-        <span class="ops-legend-item"><span class="ops-swatch ops-swatch--done"></span> Verde = ya hecho (clic = reenviar) <?= icon('check') ?></span>
+        <span class="ops-legend-item"><span class="ops-status-badge ops-status-badge--pending" style="position:static"><?= icon('clock') ?></span> Pendiente</span>
+        <span class="ops-legend-item"><span class="ops-status-badge ops-status-badge--ok" style="position:static"><?= icon('check') ?></span> Enviado / hecho</span>
+        <span class="ops-legend-item"><span class="ops-status-badge ops-status-badge--error" style="position:static"><?= icon('x') ?></span> Error / rebote</span>
         <span class="ops-legend-item"><span class="ops-reschedule-count" style="position:static">2</span> Número = veces reagendado</span>
         <span class="ops-legend-item"><span class="ops-exam-pill ops-exam-pill--today">Hoy</span></span>
         <span class="ops-legend-item"><span class="ops-exam-pill ops-exam-pill--tomorrow">Mañana</span></span>
@@ -149,6 +150,25 @@ $extraColHeader = count($extraColLabels) === 1
                             <?php
                             $opsButtons = is_array($r['ops_buttons'] ?? null) ? $r['ops_buttons'] : [];
                             $opsMetaBits = [];
+                            $renderOpsStatusBadge = static function (array $btn): string {
+                                $status = (string) ($btn['status'] ?? '');
+                                if ($status === '' || $status === 'none') {
+                                    return '';
+                                }
+                                $detail = trim((string) ($btn['status_detail'] ?? ''));
+                                $map = [
+                                    'ok' => ['check', 'Enviado / listo', 'ops-status-badge--ok'],
+                                    'pending' => ['clock', 'Pendiente de ejecutar', 'ops-status-badge--pending'],
+                                    'error' => ['x', $detail !== '' ? $detail : 'Error al enviar', 'ops-status-badge--error'],
+                                ];
+                                if (!isset($map[$status])) {
+                                    return '';
+                                }
+                                [$ico, $title, $cls] = $map[$status];
+
+                                return '<span class="ops-status-badge ' . $cls . '" title="' . e($title)
+                                    . '" aria-label="' . e($title) . '">' . icon($ico) . '</span>';
+                            };
                             foreach ($opsButtons as $btn):
                                 $action = (string) ($btn['action'] ?? '');
                                 $label = (string) ($btn['label'] ?? 'Acción');
@@ -160,7 +180,9 @@ $extraColHeader = count($extraColLabels) === 1
                                 if ($iconSvg === '') {
                                     $iconSvg = icon($done ? 'check' : 'clock');
                                 }
-                                $btnClass = 'ops-icon-btn' . ($done ? ' ops-icon-btn--done' : ' ops-icon-btn--pending');
+                                $status = (string) ($btn['status'] ?? ($done ? 'ok' : 'pending'));
+                                $btnClass = 'ops-icon-btn'
+                                    . ($status === 'error' ? ' ops-icon-btn--error' : ($done ? ' ops-icon-btn--done' : ' ops-icon-btn--pending'));
                                 ?>
                                 <?php
                                 $collectExam = !empty($btn['collect_exam'])
@@ -179,6 +201,7 @@ $extraColHeader = count($extraColLabels) === 1
                                 ) {
                                     $collectExam = true;
                                 }
+                                $statusBadgeHtml = $collectExam ? '' : $renderOpsStatusBadge($btn);
                                 ?>
                                 <?php if (
                                     $collectExam
@@ -256,6 +279,7 @@ $extraColHeader = count($extraColLabels) === 1
                                                 : 'Confirmar pago (ver comprobante)') . ' · ' . $label) ?>"
                                             aria-label="<?= e($label) ?>">
                                         <?= $iconSvg ?>
+                                        <?= $statusBadgeHtml ?>
                                     </button>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_SEND_MAIL): ?>
                                     <?php
@@ -300,11 +324,9 @@ $extraColHeader = count($extraColLabels) === 1
                                                 : ('Enviar al proveedor · comprobante por enlace (sin adjuntos) · ' . $label)) ?>"
                                             aria-label="<?= e($label) ?>">
                                             <?= $iconSvg ?>
+                                            <?= $statusBadgeHtml ?>
                                         </button>
                                     </form>
-                                    <?php if (!empty($r['admin_proof_uploaded'])): ?>
-                                        <?php $opsMetaBits[] = '<span class="ops-mini-ok" title="Comprobante DOCEO→proveedor listo (detalle)">' . icon('check') . ' comprobante</span>'; ?>
-                                    <?php endif; ?>
                                     <?php elseif ($audience === 'provider'): ?>
                                     <form method="post"
                                           action="<?= e(url('/admin/seguimientos/' . $tid . '/enviar-correo-paso')) ?>"
@@ -322,6 +344,7 @@ $extraColHeader = count($extraColLabels) === 1
                                                 : ('Enviar al proveedor · comprobante por enlace (sin adjuntos) · ' . $label)) ?>"
                                             aria-label="<?= e($label) ?>">
                                             <?= $iconSvg ?>
+                                            <?= $statusBadgeHtml ?>
                                         </button>
                                     </form>
                                     <?php else: ?>
@@ -336,6 +359,7 @@ $extraColHeader = count($extraColLabels) === 1
                                             title="<?= e($mailTitle) ?>"
                                             aria-label="<?= e($label) ?>">
                                             <?= $iconSvg ?>
+                                            <?= $statusBadgeHtml ?>
                                         </button>
                                     </form>
                                     <?php endif; ?>
@@ -353,6 +377,7 @@ $extraColHeader = count($extraColLabels) === 1
                                                 title="<?= e('Guarda y envía la plantilla de accesos al alumno · ' . $label) ?>"
                                                 aria-label="<?= e($label) ?>">
                                             <?= $iconSvg ?>
+                                            <?= $statusBadgeHtml ?>
                                         </button>
                                     </form>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_EDIT_STUDENT): ?>
@@ -360,6 +385,7 @@ $extraColHeader = count($extraColLabels) === 1
                                         <summary class="<?= e($btnClass) ?>" style="list-style:none;cursor:pointer"
                                                  title="<?= e($label) ?>" aria-label="<?= e($label) ?>">
                                             <?= $iconSvg ?>
+                                            <?= $statusBadgeHtml ?>
                                         </summary>
                                         <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/alumno')) ?>"
                                               class="ops-inline-form ops-collect-form ops-collect-popover">
@@ -409,6 +435,7 @@ $extraColHeader = count($extraColLabels) === 1
                                            title="<?= e($csvTitle . ' · ' . $label) ?>"
                                            aria-label="<?= e($label) ?>">
                                             <?= $iconSvg !== '' ? $iconSvg : icon('download') ?>
+                                            <?= $statusBadgeHtml ?>
                                         </a>
                                     <?php else: ?>
                                         <span class="muted" title="Configura la plantilla CSV en el grupo">CSV sin plantilla</span>
@@ -423,6 +450,7 @@ $extraColHeader = count($extraColLabels) === 1
                                         <button class="<?= e($btnClass) ?>" type="submit"
                                             title="<?= e($label) ?>" aria-label="<?= e($label) ?>">
                                             <?= $iconSvg ?>
+                                            <?= $statusBadgeHtml ?>
                                         </button>
                                     </form>
                                 <?php endif; ?>
@@ -683,22 +711,45 @@ $extraColHeader = count($extraColLabels) === 1
 .ops-icon-btn--done {
   background:#16a34a; color:#fff; border-color:#15803d;
 }
+.ops-icon-btn--error {
+  box-shadow:0 0 0 2px rgba(220,38,38,.28);
+}
 .ops-icon-btn--disabled,
 .ops-icon-btn:disabled {
   opacity:.45; cursor:not-allowed; filter:grayscale(.25);
 }
 details.ops-collect-details > summary.ops-icon-btn {
-  display:inline-flex; list-style:none;
+  display:inline-flex; list-style:none; position:relative;
 }
 details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { display:none; }
-.ops-icon-btn .ops-reschedule-count {
+.ops-icon-btn .ops-reschedule-count,
+.ops-icon-btn .ops-status-badge {
   position:absolute; top:-.35rem; right:-.35rem;
-  min-width:1rem; height:1rem; font-size:.65rem;
 }
 .ops-inline-form .ops-icon-btn { position:relative; }
 .ops-btn-ico {
   display:inline-flex; align-items:center; gap:.2rem; margin-right:.35rem; vertical-align:-2px;
 }
+.ops-status-badge {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:1.05rem; height:1.05rem; border-radius:999px;
+  border:1px solid transparent; line-height:1; pointer-events:none;
+  box-shadow:0 1px 2px rgba(15,23,42,.18);
+}
+.ops-status-badge svg { width:10px; height:10px; display:block; }
+.ops-status-badge--ok {
+  background:#16a34a; color:#fff; border-color:#15803d;
+}
+.ops-status-badge--pending {
+  background:#fef3c7; color:#92400e; border-color:#f59e0b;
+}
+.ops-status-badge--error {
+  background:#dc2626; color:#fff; border-color:#b91c1c;
+}
+.ops-legend .ops-status-badge {
+  width:1.15rem; height:1.15rem; vertical-align:middle;
+}
+.ops-legend .ops-status-badge svg { width:11px; height:11px; }
 .ops-reschedule-count {
   display:inline-flex; align-items:center; justify-content:center;
   min-width:1.15rem; height:1.15rem; padding:0 .28rem;

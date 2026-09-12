@@ -309,6 +309,7 @@ final class GroupStepConfig
                 'results_ready' => $resultsReady,
                 'results_blocked' => $resultsBlocked,
                 'requires_results' => !empty($step['requires_results']),
+                ...self::opsStatusForButton($row, $step, $action, $done, $collectExam, $audience),
             ];
         }
 
@@ -432,6 +433,19 @@ final class GroupStepConfig
             $seenActions[$key] = true;
             if (!array_key_exists('done', $btn)) {
                 $btn['done'] = false;
+            }
+            if (!isset($btn['status'])) {
+                $btn = array_merge(
+                    $btn,
+                    self::opsStatusForButton(
+                        $row,
+                        ['code' => (string) ($btn['code'] ?? ''), 'email' => $btn['email'] ?? []],
+                        (string) ($btn['action'] ?? ''),
+                        !empty($btn['done']),
+                        !empty($btn['collect_exam']),
+                        (string) ($btn['audience'] ?? 'student')
+                    )
+                );
             }
             $unique[] = $btn;
         }
@@ -858,6 +872,64 @@ final class GroupStepConfig
         $code = preg_replace('/[^a-z0-9_-]+/', '_', $code) ?? '';
 
         return trim($code, '_');
+    }
+
+    /**
+     * Estado visual del botón en Operación (excepto reagendar, que usa contador).
+     *
+     * @param array<string, mixed> $row
+     * @param array<string, mixed> $step
+     * @return array{status:string,status_detail:string}
+     */
+    private static function opsStatusForButton(
+        array $row,
+        array $step,
+        string $action,
+        bool $done,
+        bool $collectExam,
+        string $audience
+    ): array {
+        if ($collectExam || $action === self::ACTION_EDIT_EXAM) {
+            return ['status' => 'none', 'status_detail' => ''];
+        }
+
+        $extra = self::decodeExtra($row);
+        $code = (string) ($step['code'] ?? '');
+        $error = '';
+
+        if ($action === self::ACTION_SEND_MAIL || $action === self::ACTION_SEND_RESULTS) {
+            if ($audience === 'provider') {
+                $pr = is_array($extra['provider_request'] ?? null) ? $extra['provider_request'] : [];
+                $error = trim((string) ($pr['last_error'] ?? ''));
+            }
+            // También errores de StepMailService (alumno/partner/plantillas ligeras de proveedor).
+            if ($error === '') {
+                $sentMap = is_array($extra['step_mail_sent'] ?? null) ? $extra['step_mail_sent'] : [];
+                $entry = is_array($sentMap[$code] ?? null) ? $sentMap[$code] : [];
+                $error = trim((string) ($entry['error'] ?? $entry['last_error'] ?? ''));
+            }
+            if ($error === '') {
+                $errMap = is_array($extra['step_mail_errors'] ?? null) ? $extra['step_mail_errors'] : [];
+                if (is_array($errMap[$code] ?? null)) {
+                    $error = trim((string) ($errMap[$code]['error'] ?? ''));
+                } elseif (is_string($errMap[$code] ?? null)) {
+                    $error = trim((string) $errMap[$code]);
+                }
+            }
+        }
+
+        if ($error !== '' && !$done) {
+            return [
+                'status' => 'error',
+                'status_detail' => mb_substr($error, 0, 180),
+            ];
+        }
+
+        if ($done) {
+            return ['status' => 'ok', 'status_detail' => 'Enviado / completado'];
+        }
+
+        return ['status' => 'pending', 'status_detail' => 'Pendiente'];
     }
 
     /**

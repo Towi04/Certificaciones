@@ -299,8 +299,40 @@ final class StepMailService
             'to' => $to,
             'template' => $templateCode,
             'audience' => $audience,
+            'error' => null,
         ];
         $extra['step_mail_sent'] = $sentMap;
+        unset($extra['step_mail_errors'][$stepCode]);
+        if (isset($extra['step_mail_errors']) && $extra['step_mail_errors'] === []) {
+            unset($extra['step_mail_errors']);
+        }
+        $this->pdo->prepare('UPDATE trackings SET extra_json = ? WHERE id = ?')
+            ->execute([json_encode($extra, JSON_UNESCAPED_UNICODE), $trackingId]);
+    }
+
+    public function recordSendFailure(int $trackingId, string $stepCode, string $message): void
+    {
+        $stepCode = trim($stepCode);
+        if ($stepCode === '') {
+            return;
+        }
+        $tracking = $this->tracking->find($trackingId);
+        if ($tracking === null) {
+            return;
+        }
+        $extra = [];
+        if (!empty($tracking['extra_json']) && is_string($tracking['extra_json'])) {
+            $decoded = json_decode($tracking['extra_json'], true);
+            $extra = is_array($decoded) ? $decoded : [];
+        } elseif (is_array($tracking['extra_json'] ?? null)) {
+            $extra = $tracking['extra_json'];
+        }
+        $errMap = is_array($extra['step_mail_errors'] ?? null) ? $extra['step_mail_errors'] : [];
+        $errMap[$stepCode] = [
+            'error' => mb_substr($message, 0, 500),
+            'at' => date('c'),
+        ];
+        $extra['step_mail_errors'] = $errMap;
         $this->pdo->prepare('UPDATE trackings SET extra_json = ? WHERE id = ?')
             ->execute([json_encode($extra, JSON_UNESCAPED_UNICODE), $trackingId]);
     }
