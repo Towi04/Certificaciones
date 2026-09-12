@@ -2835,6 +2835,8 @@ final class AdminController
         try {
             if ($trackingId > 0) {
                 $svc->sendDownloadForTracking($code, $trackingId, ['scope' => $scope]);
+
+                return;
             }
 
             $options = [];
@@ -2846,7 +2848,7 @@ final class AdminController
             }
             $svc->sendDownload($code, $options);
         } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
+            flash('error', 'No se pudo descargar el CSV: ' . $e->getMessage());
             redirect($returnTo);
         }
     }
