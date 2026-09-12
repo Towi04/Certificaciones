@@ -620,7 +620,7 @@ final class ProviderRequestService
     public function fieldValues(array $tracking, array $purchase, array $product): array
     {
         $checkout = [];
-        $raw = $tracking['checkout_json'] ?? $purchase['checkout_json'] ?? null;
+        $raw = $tracking['checkout_json'] ?? $purchase['checkout_json'] ?? $tracking['extra_fields_json'] ?? null;
         if (is_string($raw) && $raw !== '') {
             $decoded = json_decode($raw, true);
             if (is_array($decoded)) {
@@ -628,6 +628,25 @@ final class ProviderRequestService
             }
         } elseif (is_array($raw)) {
             $checkout = $raw;
+        }
+
+        // Datos de students (no existe trackings.checkout_json).
+        foreach (
+            [
+                'curp' => $tracking['curp'] ?? null,
+                'birth_date' => $tracking['birth_date'] ?? null,
+                'sex' => $tracking['sex'] ?? null,
+                'nationality' => $tracking['nationality'] ?? null,
+                'address' => $tracking['address_street'] ?? null,
+                'city' => $tracking['address_city'] ?? null,
+                'state' => $tracking['address_state'] ?? null,
+                'zip' => $tracking['address_zip'] ?? null,
+            ] as $key => $val
+        ) {
+            $val = trim((string) ($val ?? ''));
+            if ($val !== '' && (!isset($checkout[$key]) || trim((string) $checkout[$key]) === '')) {
+                $checkout[$key] = $val;
+            }
         }
 
         $first = (string) ($tracking['first_name'] ?? $checkout['first_name'] ?? '');

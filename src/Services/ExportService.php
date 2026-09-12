@@ -88,7 +88,12 @@ final class ExportService
 
         $sql = 'SELECT pu.matricula, u.first_name, u.last_name_p, u.last_name_m, u.email, u.phone,
                        t.id AS tracking_id, t.exam_date, t.exam_time, t.folio, t.access_key, t.zoom_url,
-                       t.checkout_json, t.current_step_code, t.extra_json,
+                       t.current_step_code, t.extra_json,
+                       st.curp AS student_curp, st.birth_date AS student_birth_date, st.sex AS student_sex,
+                       st.nationality AS student_nationality, st.extra_fields_json AS student_extra_fields_json,
+                       st.address_street AS student_address_street, st.address_city AS student_address_city,
+                       st.address_state AS student_address_state, st.address_zip AS student_address_zip,
+                       st.address_colony AS student_address_colony, st.address_country AS student_address_country,
                        pr.id AS product_id, pr.code AS product_code, pr.name AS product_name,
                        pg.id AS product_group_id, pg.code AS product_group_code,
                        pa.code AS partner_code
@@ -98,6 +103,7 @@ final class ExportService
                 JOIN products pr ON pr.id = t.product_id
                 LEFT JOIN product_groups pg ON pg.id = pr.product_group_id
                 LEFT JOIN partners pa ON pa.id = t.partner_id
+                LEFT JOIN students st ON st.user_id = t.student_user_id
                 WHERE t.status <> ?';
         $params = ['cancelled'];
 
@@ -169,6 +175,7 @@ final class ExportService
         $columns = $mapping['columns'] ?? $this->defaultUksColumns();
         $out = [];
         foreach ($rows as $row) {
+            $row = $this->hydrateCheckoutFromStudent($row);
             $mapped = [];
             foreach ($columns as $col) {
                 if (!is_array($col)) {
@@ -478,6 +485,54 @@ final class ExportService
         }
 
         return is_array($raw) ? $raw : [];
+    }
+
+    /**
+     * Los datos de checkout viven en students (+ extra_fields_json), no en trackings.checkout_json
+     * (esa columna no existe). Armamos un mapa compatible con fieldValue().
+     *
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function hydrateCheckoutFromStudent(array $row): array
+    {
+        $checkout = [];
+        $extraRaw = $row['student_extra_fields_json'] ?? null;
+        if (is_string($extraRaw) && $extraRaw !== '') {
+            $decoded = json_decode($extraRaw, true);
+            if (is_array($decoded)) {
+                $checkout = $decoded;
+            }
+        } elseif (is_array($extraRaw)) {
+            $checkout = $extraRaw;
+        }
+
+        $map = [
+            'curp' => 'student_curp',
+            'birth_date' => 'student_birth_date',
+            'sex' => 'student_sex',
+            'nationality' => 'student_nationality',
+            'address' => 'student_address_street',
+            'street' => 'student_address_street',
+            'city' => 'student_address_city',
+            'state' => 'student_address_state',
+            'zip' => 'student_address_zip',
+            'colony' => 'student_address_colony',
+            'country' => 'student_address_country',
+        ];
+        foreach ($map as $field => $col) {
+            $val = trim((string) ($row[$col] ?? ''));
+            if ($val === '') {
+                continue;
+            }
+            if (!isset($checkout[$field]) || trim((string) $checkout[$field]) === '') {
+                $checkout[$field] = $val;
+            }
+        }
+
+        $row['checkout_json'] = $checkout;
+
+        return $row;
     }
 
     /** @param array<string, mixed> $row */

@@ -47,11 +47,14 @@ final class TrackingService
                     pu.matricula, pu.status AS purchase_status, pu.charged_amount, pu.payment_method,
                     pu.payment_proof_path, pu.student_user_id AS purchase_student_id,
                     u.first_name, u.last_name_p, u.last_name_m, u.email AS student_email, u.phone AS student_phone,
+                    st.curp, st.birth_date, st.sex, st.nationality, st.extra_fields_json,
+                    st.address_street, st.address_city, st.address_state, st.address_zip,
                     pt.code AS pipeline_code, pt.name AS pipeline_name
              FROM trackings t
              JOIN products pr ON pr.id = t.product_id
              JOIN purchases pu ON pu.id = t.purchase_id
              JOIN users u ON u.id = t.student_user_id
+             LEFT JOIN students st ON st.user_id = t.student_user_id
              LEFT JOIN product_groups pg ON pg.id = pr.product_group_id
              LEFT JOIN pipeline_templates pt ON pt.id = t.pipeline_template_id
              WHERE t.id = ?
