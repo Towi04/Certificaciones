@@ -1059,6 +1059,11 @@ final class ProviderRequestService
         $this->saveExtra($trackingId, $extra);
     }
 
+    public function recordSendFailure(int $trackingId, string $message): void
+    {
+        $this->storeSendError($trackingId, $message);
+    }
+
     private function storeSendError(int $trackingId, string $message): void
     {
         $tracking = $this->tracking->find($trackingId);
