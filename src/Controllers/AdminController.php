@@ -2844,6 +2844,17 @@ final class AdminController
 
         try {
             if ($trackingId > 0) {
+                $stepCode = trim((string) ($_GET['step_code'] ?? ''));
+                try {
+                    (new TrackingService())->markCsvDownloaded(
+                        $trackingId,
+                        $stepCode,
+                        $code,
+                        (int) Auth::id()
+                    );
+                } catch (\Throwable) {
+                    // La marca de estado no debe bloquear la descarga.
+                }
                 $svc->sendDownloadForTracking($code, $trackingId, ['scope' => $scope]);
 
                 return;

@@ -419,6 +419,7 @@ $extraColHeader = count($extraColLabels) === 1
                                     }
                                     $csvQs = http_build_query([
                                         'tracking_id' => $tid,
+                                        'step_code' => (string) ($btn['code'] ?? ''),
                                         'scope' => $csvScope,
                                         'return' => '/admin/operacion?' . http_build_query(array_filter([
                                             'view' => $view !== '' ? $view : null,
