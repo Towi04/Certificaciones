@@ -588,7 +588,7 @@ final class GroupStepConfig
             ),
             self::ACTION_SEND_MAIL,
             self::ACTION_SEND_RESULTS => self::isMailStepDone($row, $step),
-            self::ACTION_DOWNLOAD_CSV => false,
+            self::ACTION_DOWNLOAD_CSV => self::isCsvDownloaded($row, $step),
             self::ACTION_EXAM_ACCESS => trim((string) ($row['folio'] ?? '')) !== ''
                 && trim((string) ($row['access_key'] ?? '')) !== '',
             self::ACTION_EDIT_STUDENT => self::isAdvanceDone($row, $step),
@@ -930,6 +930,38 @@ final class GroupStepConfig
         }
 
         return ['status' => 'pending', 'status_detail' => 'Pendiente'];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @param array<string, mixed> $step
+     */
+    private static function isCsvDownloaded(array $row, array $step): bool
+    {
+        $extra = self::decodeExtra($row);
+        $map = is_array($extra['csv_downloads'] ?? null) ? $extra['csv_downloads'] : [];
+        if ($map === []) {
+            return false;
+        }
+        $code = trim((string) ($step['code'] ?? ''));
+        if ($code !== '' && !empty($map[$code]['at'])) {
+            return true;
+        }
+        $csv = is_array($step['csv'] ?? null) ? $step['csv'] : [];
+        $tpl = trim((string) ($csv['template_code'] ?? ''));
+        if ($tpl === '') {
+            return false;
+        }
+        foreach ($map as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            if (trim((string) ($entry['template'] ?? '')) === $tpl && trim((string) ($entry['at'] ?? '')) !== '') {
+                return true;
+            }
+        }
+
+        return !empty($map['tpl:' . $tpl]['at']);
     }
 
     /**

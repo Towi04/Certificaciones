@@ -839,7 +839,8 @@ final class TrackingService
                 ->execute([json_encode($extra, JSON_UNESCAPED_UNICODE), $trackingId]);
         }
 
-        if ($scheduleChanged) {
+        // Solo contar reagendas (cambio sobre una fecha ya existente), no la primera agenda.
+        if ($scheduleChanged && $prevDate !== null) {
             $this->bumpExamRescheduleCount($trackingId, $tracking);
         }
 
@@ -887,7 +888,7 @@ final class TrackingService
     }
 
     /**
-     * Cuántas veces se ha programado/reagendado la fecha de examen.
+     * Cuántas veces se ha reagendado la fecha de examen (no cuenta la primera agenda).
      *
      * @param array<string, mixed> $tracking
      */
@@ -901,9 +902,9 @@ final class TrackingService
             $extra = is_array($decoded) ? $decoded : [];
         }
         $count = (int) ($extra['exam_reschedule_count'] ?? 0);
-        if ($count < 1 && trim((string) ($tracking['exam_date'] ?? '')) !== '') {
-            // Casos previos: ya tenían fecha pero sin contador.
-            return 1;
+        // Legacy: el contador incluía la primera agenda. v2 solo cuenta reagendas.
+        if ($count > 0 && empty($extra['exam_reschedule_count_v2'])) {
+            $count = max(0, $count - 1);
         }
 
         return max(0, $count);
@@ -922,16 +923,49 @@ final class TrackingService
             $extra = $tracking['extra_json'];
         }
         $current = (int) ($extra['exam_reschedule_count'] ?? 0);
-        if ($current < 1 && trim((string) ($tracking['exam_date'] ?? '')) !== '') {
-            // Primera reagenda sobre un caso que ya tenía fecha sin contador.
-            $current = 1;
+        if (empty($extra['exam_reschedule_count_v2'])) {
+            // Convertir contador viejo (incluía 1ª agenda) a solo reagendas.
+            $current = max(0, $current - 1);
+            $extra['exam_reschedule_count_v2'] = true;
         }
         $next = $current + 1;
         $extra['exam_reschedule_count'] = $next;
+        $extra['exam_reschedule_count_v2'] = true;
         $this->pdo->prepare('UPDATE trackings SET extra_json = ? WHERE id = ?')
             ->execute([json_encode($extra, JSON_UNESCAPED_UNICODE), $trackingId]);
 
         return $next;
+    }
+
+    /**
+     * Marca que se descargó el CSV de un paso de Operación para este caso.
+     */
+    public function markCsvDownloaded(int $trackingId, string $stepCode, string $templateCode, ?int $actorUserId = null): void
+    {
+        $tracking = $this->find($trackingId);
+        if ($tracking === null) {
+            return;
+        }
+        $extra = [];
+        if (!empty($tracking['extra_json']) && is_string($tracking['extra_json'])) {
+            $decoded = json_decode($tracking['extra_json'], true);
+            $extra = is_array($decoded) ? $decoded : [];
+        } elseif (is_array($tracking['extra_json'] ?? null)) {
+            $extra = $tracking['extra_json'];
+        }
+        $map = is_array($extra['csv_downloads'] ?? null) ? $extra['csv_downloads'] : [];
+        $key = trim($stepCode) !== '' ? trim($stepCode) : ('tpl:' . trim($templateCode));
+        if ($key === '' || $key === 'tpl:') {
+            $key = 'default';
+        }
+        $map[$key] = [
+            'at' => date('c'),
+            'template' => trim($templateCode),
+            'by' => $actorUserId,
+        ];
+        $extra['csv_downloads'] = $map;
+        $this->pdo->prepare('UPDATE trackings SET extra_json = ? WHERE id = ?')
+            ->execute([json_encode($extra, JSON_UNESCAPED_UNICODE), $trackingId]);
     }
 
     /**
