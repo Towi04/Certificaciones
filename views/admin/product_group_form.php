@@ -1966,20 +1966,49 @@ $renderMailTemplateField = static function (
 
   function mergeStepDef(s) {
     var def = stepDefs[s.code] || {};
+    // Si el objeto ya viene del DOM (tras quitar/reordenar/agregar), respetar esos
+    // valores y no pisarlos con stepDefs guardados del servidor.
+    var has = function (key) {
+      return Object.prototype.hasOwnProperty.call(s, key);
+    };
+    var flag = function (key, fallback) {
+      if (has(key)) return s[key] ? 1 : 0;
+      return fallback ? 1 : 0;
+    };
+    var text = function (key, fallback) {
+      if (has(key)) return s[key] == null ? '' : String(s[key]);
+      return fallback == null ? '' : String(fallback);
+    };
     return Object.assign({}, s, {
-      admin_only: def.admin_only ? 1 : 0,
-      ops_button: def.ops_button ? 1 : 0,
-      ops_label: def.ops_label || '',
-      ops_icon: def.ops_icon || s.ops_icon || '',
-      action: def.action || 'none',
-      requires_results: def.requires_results ? 1 : 0,
-      email_enabled: def.email && def.email.enabled ? 1 : 0,
-      email_trigger: (def.email && def.email.trigger) || 'admin',
-      email_template: (def.email && def.email.template_code) || '',
-      email_to: (def.email && def.email.to) || '',
-      email_cc: (def.email && def.email.cc) || '',
-      csv_template: (def.csv && def.csv.template_code) || s.csv_template || '',
-      csv_scope: (def.csv && def.csv.scope) || s.csv_scope || 'student'
+      admin_only: flag('admin_only', !!def.admin_only),
+      ops_button: flag('ops_button', !!def.ops_button),
+      ops_label: text('ops_label', def.ops_label || ''),
+      ops_icon: text('ops_icon', def.ops_icon || s.ops_icon || ''),
+      action: text('action', def.action || 'none') || 'none',
+      requires_results: flag('requires_results', !!def.requires_results),
+      email_enabled: flag('email_enabled', !!(def.email && def.email.enabled)),
+      email_trigger: text('email_trigger', (def.email && def.email.trigger) || 'admin') || 'admin',
+      email_template: text('email_template', (def.email && def.email.template_code) || ''),
+      email_to: text('email_to', (def.email && def.email.to) || ''),
+      email_cc: text('email_cc', (def.email && def.email.cc) || ''),
+      csv_template: text('csv_template', (def.csv && def.csv.template_code) || s.csv_template || ''),
+      csv_scope: text('csv_scope', (def.csv && def.csv.scope) || s.csv_scope || 'student') || 'student'
+    });
+  }
+
+  /** Renumerar #N y name="pipeline_steps[i][…]" sin reconstruir las tarjetas. */
+  function reindexStepCards() {
+    if (!stepsBody) return;
+    var cards = stepsBody.querySelectorAll('.progress-step-card');
+    if (stepsEmpty) {
+      stepsEmpty.style.display = cards.length ? 'none' : 'block';
+    }
+    cards.forEach(function (card, idx) {
+      var numEl = card.querySelector('.progress-step-head-left strong');
+      if (numEl) numEl.textContent = '#' + (idx + 1);
+      card.querySelectorAll('[name^="pipeline_steps["]').forEach(function (el) {
+        el.name = String(el.name || '').replace(/pipeline_steps\[\d+\]/, 'pipeline_steps[' + idx + ']');
+      });
     });
   }
 
@@ -2388,7 +2417,9 @@ $renderMailTemplateField = static function (
         } else {
           card.parentNode.insertBefore(dragSrc, card);
         }
-        renderSteps(currentStepsFromDom());
+        // Solo reordenar el DOM; no reconstruir (preserva checks/plantillas sin guardar).
+        reindexStepCards();
+        refreshStepEmailsSummary();
       });
     });
   }
@@ -2430,9 +2461,13 @@ $renderMailTemplateField = static function (
     stepsBody.addEventListener('click', function (e) {
       var btn = e.target.closest('.pipeline-remove-step');
       if (!btn) return;
+      e.preventDefault();
       var card = btn.closest('.progress-step-card');
-      if (card) card.remove();
-      renderSteps(currentStepsFromDom());
+      if (!card) return;
+      // Quitar solo esa tarjeta; no reconstruir todo (evita perder checks/plantillas sin guardar).
+      card.remove();
+      reindexStepCards();
+      refreshStepEmailsSummary();
     });
   }
 
