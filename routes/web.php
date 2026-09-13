@@ -103,6 +103,7 @@ $router->post('/admin/compras/{id}/confirmar-pago', fn (string $id) => $admin->c
 $router->get('/admin/compras/{id}/comprobante', fn (string $id) => $admin->paymentProof($id));
 $router->get('/admin/seguimientos/{id}', fn (string $id) => $admin->trackingShow($id));
 $router->post('/admin/seguimientos/{id}/avanzar', fn (string $id) => $admin->trackingAdvance($id));
+$router->post('/admin/seguimientos/{id}/examen-asistencia', fn (string $id) => $admin->trackingConfirmExam($id));
 $router->post('/admin/seguimientos/{id}/enviar-correo-paso', fn (string $id) => $admin->trackingSendStepMail($id));
 $router->post('/admin/seguimientos/{id}/moodle', fn (string $id) => $admin->trackingSyncMoodle($id));
 $router->post('/admin/seguimientos/{id}/examen', fn (string $id) => $admin->trackingUpdateExam($id));

@@ -21,6 +21,8 @@ final class GroupStepConfig
     public const ACTION_EDIT_EXAM = 'edit_exam';
     public const ACTION_EDIT_STUDENT = 'edit_student';
     public const ACTION_DOWNLOAD_CSV = 'download_csv';
+    /** Confirmar si el alumno presentó el examen (sí → siguiente paso / no → reagendar). */
+    public const ACTION_CONFIRM_EXAM = 'confirm_exam';
     /** @deprecated Migración lazy → send_mail + requires_results */
     public const ACTION_SEND_RESULTS = 'send_results';
 
@@ -29,6 +31,7 @@ final class GroupStepConfig
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
         self::ACTION_DOWNLOAD_CSV => 'Descargar CSV (plantilla)',
         self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
+        self::ACTION_CONFIRM_EXAM => 'Confirmar aplicación del examen',
         self::ACTION_CONFIRM_PAYMENT_POPUP => 'Confirmar pago (ver comprobante)',
         // Legado (ya no se eligen en el editor; se siguen ejecutando si existen).
         self::ACTION_SEND_RESULTS => 'Enviar resultados / cancelación',
@@ -47,6 +50,7 @@ final class GroupStepConfig
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
         self::ACTION_DOWNLOAD_CSV => 'Descargar CSV (plantilla)',
         self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
+        self::ACTION_CONFIRM_EXAM => 'Confirmar aplicación del examen',
         self::ACTION_CONFIRM_PAYMENT_POPUP => 'Confirmar pago (ver comprobante)',
     ];
 
@@ -244,8 +248,9 @@ final class GroupStepConfig
                     self::ACTION_DOWNLOAD_CSV => 2,
                     self::ACTION_EXAM_ACCESS => 3,
                     self::ACTION_EDIT_EXAM => 4,
-                    self::ACTION_EDIT_STUDENT => 5,
-                    self::ACTION_ADVANCE => 6,
+                    self::ACTION_CONFIRM_EXAM => 5,
+                    self::ACTION_EDIT_STUDENT => 6,
+                    self::ACTION_ADVANCE => 7,
                     default => 9,
                 };
             };
@@ -593,8 +598,29 @@ final class GroupStepConfig
                 && trim((string) ($row['access_key'] ?? '')) !== '',
             self::ACTION_EDIT_STUDENT => self::isAdvanceDone($row, $step),
             self::ACTION_ADVANCE => self::isAdvanceDone($row, $step),
+            self::ACTION_CONFIRM_EXAM => self::isExamAttendancePresent($row),
             default => false,
         };
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    public static function examAttendanceStatus(array $row): string
+    {
+        $extra = self::decodeExtra($row);
+        $att = is_array($extra['exam_attendance'] ?? null) ? $extra['exam_attendance'] : [];
+        $status = strtolower(trim((string) ($att['status'] ?? '')));
+
+        return in_array($status, ['present', 'absent'], true) ? $status : '';
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    public static function isExamAttendancePresent(array $row): bool
+    {
+        return self::examAttendanceStatus($row) === 'present';
     }
 
     /**
@@ -843,7 +869,8 @@ final class GroupStepConfig
                 ? (string) ($row['actor'] ?? 'admin')
                 : 'admin',
             'admin_only' => !empty($row['admin_only']),
-            'ops_button' => !empty($row['ops_button']),
+            // Confirmación de examen siempre visible en Operación (✓ / ✗).
+            'ops_button' => !empty($row['ops_button']) || $action === self::ACTION_CONFIRM_EXAM,
             'ops_label' => trim((string) ($row['ops_label'] ?? '')),
             'ops_icon' => $opsIcon,
             'action' => $action,
@@ -898,6 +925,7 @@ final class GroupStepConfig
             self::ACTION_DOWNLOAD_CSV => 'download',
             self::ACTION_EXAM_ACCESS => 'key',
             self::ACTION_EDIT_EXAM => 'calendar',
+            self::ACTION_CONFIRM_EXAM => 'check',
             self::ACTION_EDIT_STUDENT => 'user',
             self::ACTION_ADVANCE => 'advance',
             default => 'check',
@@ -954,6 +982,18 @@ final class GroupStepConfig
                     $error = trim((string) $errMap[$code]);
                 }
             }
+        }
+
+        if ($action === self::ACTION_CONFIRM_EXAM) {
+            $att = self::examAttendanceStatus($row);
+            if ($att === 'present') {
+                return ['status' => 'ok', 'status_detail' => 'Se presentó'];
+            }
+            if ($att === 'absent') {
+                return ['status' => 'error', 'status_detail' => 'No se presentó — reagendar'];
+            }
+
+            return ['status' => 'pending', 'status_detail' => 'Pendiente de confirmar aplicación'];
         }
 
         if ($error !== '' && !$done) {

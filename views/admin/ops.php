@@ -60,6 +60,7 @@ $extraColHeader = count($extraColLabels) === 1
         <span class="ops-legend-item"><span class="ops-exam-pill ops-exam-pill--today">Hoy</span></span>
         <span class="ops-legend-item"><span class="ops-exam-pill ops-exam-pill--tomorrow">Mañana</span></span>
         <span class="ops-legend-item"><span class="ops-exam-pill ops-exam-pill--future">Futuro</span></span>
+        <span class="ops-legend-item"><span class="ops-exam-pill ops-exam-pill--overdue">Vencido / sin presentar</span></span>
     </div>
 
     <form method="get" class="ops-toolbar" action="<?= e(url('/admin')) ?>">
@@ -133,7 +134,20 @@ $extraColHeader = count($extraColLabels) === 1
                     }
                     $examTone = '';
                     if ($examDateOnly !== '') {
-                        if ($examDateOnly === $todayYmd) {
+                        $examTimeOnly = !empty($r['exam_time'])
+                            ? substr((string) $r['exam_time'], 0, 5)
+                            : '23:59';
+                        $examTs = strtotime($examDateOnly . ' ' . $examTimeOnly);
+                        $presented = \App\Services\GroupStepConfig::isExamAttendancePresent($r);
+                        $hasResults = trim((string) ($r['results_level'] ?? '')) !== ''
+                            || trim((string) ($r['results_url'] ?? '')) !== '';
+                        $examOverdue = !$presented && !$hasResults
+                            && $examTs !== false
+                            && $examTs < time();
+                        if ($examOverdue) {
+                            // Fecha/hora ya pasó y aún no confirman presentación.
+                            $examTone = 'overdue';
+                        } elseif ($examDateOnly === $todayYmd) {
                             $examTone = 'today';
                         } elseif ($examDateOnly === $tomorrowYmd) {
                             $examTone = 'tomorrow';
@@ -441,6 +455,52 @@ $extraColHeader = count($extraColLabels) === 1
                                     <?php else: ?>
                                         <span class="muted" title="Configura la plantilla CSV en el grupo">CSV sin plantilla</span>
                                     <?php endif; ?>
+                                <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_CONFIRM_EXAM): ?>
+                                    <?php
+                                    $attStatus = \App\Services\GroupStepConfig::examAttendanceStatus($r);
+                                    $confirmWrapClass = $btnClass;
+                                    if ($attStatus === 'present') {
+                                        $confirmWrapClass = 'ops-icon-btn ops-icon-btn--done';
+                                    } elseif ($attStatus === 'absent') {
+                                        $confirmWrapClass = 'ops-icon-btn ops-icon-btn--error';
+                                    }
+                                    ?>
+                                    <div class="ops-confirm-exam" title="<?= e($label) ?>">
+                                        <?php if ($attStatus === 'present'): ?>
+                                            <span class="<?= e($confirmWrapClass) ?>" title="Se presentó · <?= e($label) ?>" aria-label="Se presentó">
+                                                <?= icon('check') ?>
+                                                <?= $statusBadgeHtml ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/examen-asistencia')) ?>" class="ops-inline-form">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="return_ops" value="1">
+                                                <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                                <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                                <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
+                                                <input type="hidden" name="outcome" value="present">
+                                                <button class="ops-icon-btn ops-icon-btn--pending" type="submit"
+                                                        title="Se presentó · <?= e($label) ?>" aria-label="Se presentó">
+                                                    <?= icon('check') ?>
+                                                </button>
+                                            </form>
+                                            <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/examen-asistencia')) ?>" class="ops-inline-form">
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="return_ops" value="1">
+                                                <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                                <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                                <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
+                                                <input type="hidden" name="outcome" value="absent">
+                                                <button class="ops-icon-btn <?= $attStatus === 'absent' ? 'ops-icon-btn--error' : 'ops-icon-btn--pending' ?>" type="submit"
+                                                        title="No se presentó · reagendar · <?= e($label) ?>" aria-label="No se presentó">
+                                                    <?= icon('x') ?>
+                                                    <?php if ($attStatus === 'absent'): ?>
+                                                        <?= $statusBadgeHtml ?>
+                                                    <?php endif; ?>
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
+                                    </div>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_ADVANCE): ?>
                                     <form method="post" action="<?= e(url('/admin/seguimientos/' . $tid . '/avanzar')) ?>" class="ops-inline-form">
                                         <?= csrf_field() ?>
@@ -529,8 +589,14 @@ $extraColHeader = count($extraColLabels) === 1
                                 <span class="ops-exam-pill ops-exam-pill--<?= e($examTone) ?>"
                                       title="<?= $examTone === 'today' ? 'Examen hoy'
                                           : ($examTone === 'tomorrow' ? 'Examen mañana'
-                                          : ($examTone === 'future' ? 'Examen futuro' : 'Fecha pasada')) ?>">
+                                          : ($examTone === 'future' ? 'Examen futuro'
+                                          : ($examTone === 'overdue'
+                                              ? 'Fecha/hora pasada sin confirmar presentación'
+                                              : 'Fecha pasada'))) ?>">
                                     <?= e($exam) ?>
+                                    <?php if ($examTone === 'overdue'): ?>
+                                        <span style="margin-left:.2rem">· vencido</span>
+                                    <?php endif; ?>
                                 </span>
                             <?php endif; ?>
                         </td>
@@ -650,6 +716,10 @@ $extraColHeader = count($extraColLabels) === 1
 .ops-exam-pill--tomorrow { background:#ffedd5; color:#9a3412; border-color:#fed7aa; }
 .ops-exam-pill--future { background:#dcfce7; color:#166534; border-color:#bbf7d0; }
 .ops-exam-pill--past { background:#f1f5f9; color:#64748b; border-color:#e2e8f0; }
+.ops-exam-pill--overdue { background:#fce7f3; color:#9d174d; border-color:#fbcfe8; font-weight:700; }
+.ops-confirm-exam {
+  display:inline-flex; align-items:center; gap:.2rem; vertical-align:middle;
+}
 .ops-inline-form { display:flex; flex-wrap:wrap; gap:.3rem; margin:.15rem 0; align-items:center; }
 .ops-collect-fields { display:flex; flex-wrap:wrap; gap:.3rem; align-items:center; }
 .ops-collect-fields--stack { flex-direction:column; align-items:stretch; width:100%; }

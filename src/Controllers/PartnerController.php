@@ -129,22 +129,8 @@ final class PartnerController
         Auth::requireRole(['partner']);
         csrf_verify();
         $trackingId = (int) $id;
-        try {
-            $partner = (new PartnerRegistrationService())->partnerForUser((int) Auth::id());
-            $tracking = (new TrackingService())->find($trackingId);
-            if ($tracking === null || (int) ($tracking['partner_id'] ?? 0) !== (int) $partner['id']) {
-                throw new \InvalidArgumentException('No puedes editar este caso.');
-            }
-            // Partner solo define fecha/hora principal; reagenda y Zoom los maneja admin.
-            (new TrackingService())->saveExamSchedule($trackingId, [
-                'exam_date' => $_POST['exam_date'] ?? null,
-                'exam_time' => $_POST['exam_time'] ?? null,
-                'notify' => !empty($_POST['notify']),
-            ], (int) Auth::id());
-            flash('success', 'Fecha de examen guardada.');
-        } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
-        }
+        // Reagenda / cambio de fecha solo por administración.
+        flash('error', 'Solo DOCEO puede asignar o reagendar la fecha de examen. Contáctanos para el cambio.');
         redirect('/partner/caso/' . $trackingId);
     }
 }

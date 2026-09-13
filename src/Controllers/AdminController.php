@@ -1183,6 +1183,41 @@ final class AdminController
         redirect('/admin/seguimientos/' . $trackingId);
     }
 
+    public function trackingConfirmExam(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        $outcome = (string) ($_POST['outcome'] ?? '');
+        $stepCode = trim((string) ($_POST['step_code'] ?? ''));
+        try {
+            $result = (new TrackingService())->confirmExamAttendance(
+                $trackingId,
+                $outcome,
+                $stepCode,
+                (int) Auth::id()
+            );
+            if (($result['status'] ?? '') === 'present') {
+                $msg = 'Examen marcado como presentado.';
+                if (!empty($result['next_step'])) {
+                    $msg .= ' Avanzó a «' . $result['next_step'] . '».';
+                }
+                flash('success', $msg);
+            } else {
+                flash(
+                    'warning',
+                    'Marcado como no presentado. Reagenda la fecha con el botón de calendario.'
+                );
+            }
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        if (!empty($_POST['return_ops'])) {
+            redirect('/admin' . $this->opsReturnQuery());
+        }
+        redirect('/admin/seguimientos/' . $trackingId);
+    }
+
     public function trackingSyncMoodle(string $id): void
     {
         Auth::requireRole(['admin']);
