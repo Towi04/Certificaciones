@@ -303,6 +303,12 @@ $extraColHeader = count($extraColLabels) === 1
                                         ? !empty($btn['results_ready'])
                                         : true;
                                     $resultsBlocked = trim((string) ($btn['results_blocked'] ?? ''));
+                                    $opsResultsPdfUpload = !empty($btn['ops_results_pdf_upload']);
+                                    $resultsHasPdf = !empty($btn['results_has_pdf']);
+                                    $resultsPdfFields = is_array($btn['results_pdf_fields'] ?? null)
+                                        ? $btn['results_pdf_fields']
+                                        : [];
+                                    $mailClickable = $resultsReady || $opsResultsPdfUpload;
                                     // Solo la solicitud inicial UKS usa ProviderRequestService
                                     // (reglamento / pago / Excel). Otras plantillas de proveedor
                                     // (p. ej. reagendar_uks) van por enviar-correo-paso.
@@ -311,13 +317,15 @@ $extraColHeader = count($extraColLabels) === 1
                                             $sendTpl === ''
                                             || \App\Services\MailTemplateService::isUksSolicitudCode($sendTpl)
                                         );
-                                    $mailBtnClass = $btnClass . ($resultsReady ? '' : ' ops-icon-btn--disabled');
-                                    $mailTitle = $resultsReady
-                                        ? (($audience === 'partner'
-                                            ? 'Enviar al partner del caso'
-                                            : ($audience === 'provider'
-                                                ? 'Enviar plantilla al proveedor'
-                                                : 'Enviar plantilla al alumno')) . ' · ' . $label)
+                                    $mailBtnClass = $btnClass . ($mailClickable ? '' : ' ops-icon-btn--disabled');
+                                    $mailTitle = $mailClickable
+                                        ? (($opsResultsPdfUpload
+                                            ? 'Enviar resultados · subir PDF y plantilla al alumno'
+                                            : ($audience === 'partner'
+                                                ? 'Enviar al partner del caso'
+                                                : ($audience === 'provider'
+                                                    ? 'Enviar plantilla al proveedor'
+                                                    : 'Enviar plantilla al alumno'))) . ' · ' . $label)
                                         : ($resultsBlocked !== '' ? $resultsBlocked : $label);
                                     ?>
                                     <?php if ($isHeavyProviderRequest): ?>
@@ -332,8 +340,8 @@ $extraColHeader = count($extraColLabels) === 1
                                         <input type="hidden" name="include_payment_proof" value="1">
                                         <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
                                         <button class="<?= e($mailBtnClass) ?>" type="submit"
-                                            <?= $resultsReady ? '' : 'disabled' ?>
-                                            title="<?= e(!$resultsReady
+                                            <?= $mailClickable ? '' : 'disabled' ?>
+                                            title="<?= e(!$mailClickable
                                                 ? $mailTitle
                                                 : ('Enviar al proveedor · comprobante por enlace (sin adjuntos) · ' . $label)) ?>"
                                             aria-label="<?= e($label) ?>">
@@ -352,10 +360,28 @@ $extraColHeader = count($extraColLabels) === 1
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                         <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
                                         <button class="<?= e($mailBtnClass) ?>" type="submit"
-                                            <?= $resultsReady ? '' : 'disabled' ?>
-                                            title="<?= e(!$resultsReady
+                                            <?= $mailClickable ? '' : 'disabled' ?>
+                                            title="<?= e(!$mailClickable
                                                 ? $mailTitle
                                                 : ('Enviar al proveedor · comprobante por enlace (sin adjuntos) · ' . $label)) ?>"
+                                            aria-label="<?= e($label) ?>">
+                                            <?= $iconSvg ?>
+                                            <?= $statusBadgeHtml ?>
+                                        </button>
+                                    </form>
+                                    <?php elseif ($opsResultsPdfUpload): ?>
+                                    <form method="post"
+                                          action="<?= e(url('/admin/seguimientos/' . $tid . '/enviar-correo-paso')) ?>"
+                                          class="ops-inline-form ops-results-mail-form"
+                                          data-has-results-pdf="<?= $resultsHasPdf ? '1' : '0' ?>"
+                                          data-pdf-fields="<?= e(json_encode($resultsPdfFields, JSON_UNESCAPED_UNICODE)) ?>">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="return_ops" value="1">
+                                        <input type="hidden" name="return_view" value="<?= e($view) ?>">
+                                        <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                        <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
+                                        <button class="<?= e($mailBtnClass) ?>" type="submit"
+                                            title="<?= e($mailTitle) ?>"
                                             aria-label="<?= e($label) ?>">
                                             <?= $iconSvg ?>
                                             <?= $statusBadgeHtml ?>
@@ -369,7 +395,7 @@ $extraColHeader = count($extraColLabels) === 1
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
                                         <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
                                         <button class="<?= e($mailBtnClass) ?>" type="submit"
-                                            <?= $resultsReady ? '' : 'disabled' ?>
+                                            <?= $mailClickable ? '' : 'disabled' ?>
                                             title="<?= e($mailTitle) ?>"
                                             aria-label="<?= e($label) ?>">
                                             <?= $iconSvg ?>
@@ -1050,6 +1076,36 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
     </div>
 </div>
 
+<div class="ops-provider-proof-modal" id="ops-results-pdf-modal" hidden>
+    <button type="button" class="ops-provider-proof-backdrop" id="ops-results-pdf-backdrop" aria-label="Cerrar"></button>
+    <div class="ops-provider-proof-dialog" role="dialog" aria-modal="true" aria-labelledby="ops-results-pdf-title">
+        <div class="ops-provider-proof-head">
+            <strong id="ops-results-pdf-title">Resultados del alumno</strong>
+            <button type="button" class="btn btn-primary btn-sm" id="ops-results-pdf-close">Cerrar</button>
+        </div>
+        <form method="post" id="ops-results-pdf-form" class="ops-provider-proof-body" enctype="multipart/form-data">
+            <div id="ops-results-pdf-fields"></div>
+            <p>
+                Antes de enviar la plantilla de resultados al alumno, sube el PDF.
+                El archivo se guarda en el caso y se incluye en el correo
+                (adjunto y/o <code>{{results_pdf_url}}</code> según la plantilla del paso).
+            </p>
+            <div class="ops-provider-proof-hint" id="ops-results-pdf-ready" hidden>
+                Ya hay un PDF de resultados cargado. Puedes reemplazarlo o omitir y reenviar.
+            </div>
+            <div id="ops-results-pdf-inputs"></div>
+            <input type="hidden" name="skip_results_pdf" id="ops-results-pdf-skip" value="0">
+            <div class="ops-provider-proof-actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="ops-results-pdf-cancel">Cancelar</button>
+                <button type="submit" class="btn btn-ghost btn-sm" id="ops-results-pdf-omit"
+                        data-mode="omit">Omitir y enviar</button>
+                <button type="submit" class="btn btn-accent btn-sm" id="ops-results-pdf-send"
+                        data-mode="upload">Subir y enviar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 (function () {
   var proofModal = document.getElementById('ops-proof-modal');
@@ -1267,8 +1323,142 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
   providerProofCancel && providerProofCancel.addEventListener('click', closeProviderProof);
   providerProofBackdrop && providerProofBackdrop.addEventListener('click', closeProviderProof);
 
+  var resultsPdfModal = document.getElementById('ops-results-pdf-modal');
+  var resultsPdfForm = document.getElementById('ops-results-pdf-form');
+  var resultsPdfFields = document.getElementById('ops-results-pdf-fields');
+  var resultsPdfInputs = document.getElementById('ops-results-pdf-inputs');
+  var resultsPdfSkip = document.getElementById('ops-results-pdf-skip');
+  var resultsPdfReady = document.getElementById('ops-results-pdf-ready');
+  var resultsPdfClose = document.getElementById('ops-results-pdf-close');
+  var resultsPdfCancel = document.getElementById('ops-results-pdf-cancel');
+  var resultsPdfBackdrop = document.getElementById('ops-results-pdf-backdrop');
+  var resultsPdfMode = 'upload';
+  var resultsPdfMeta = [];
+
+  function closeResultsPdf() {
+    if (!resultsPdfModal) return;
+    resultsPdfModal.hidden = true;
+    if (resultsPdfFields) resultsPdfFields.innerHTML = '';
+    if (resultsPdfInputs) resultsPdfInputs.innerHTML = '';
+    if (resultsPdfSkip) resultsPdfSkip.value = '0';
+    resultsPdfMeta = [];
+  }
+
+  function openResultsPdf(sourceForm) {
+    if (!resultsPdfModal || !resultsPdfForm || !sourceForm) return;
+    resultsPdfForm.action = sourceForm.getAttribute('action') || '';
+    if (resultsPdfFields) {
+      resultsPdfFields.innerHTML = '';
+      Array.prototype.slice.call(sourceForm.querySelectorAll('input[type="hidden"]')).forEach(function (input) {
+        var name = input.getAttribute('name') || '';
+        if (!name || name === 'skip_results_pdf') return;
+        resultsPdfFields.appendChild(input.cloneNode(true));
+      });
+    }
+    resultsPdfMeta = [];
+    try {
+      resultsPdfMeta = JSON.parse(sourceForm.getAttribute('data-pdf-fields') || '[]') || [];
+    } catch (err) {
+      resultsPdfMeta = [];
+    }
+    if (!Array.isArray(resultsPdfMeta) || resultsPdfMeta.length === 0) {
+      resultsPdfMeta = [{ code: 'results_pdf', label: 'PDF de resultados', required: true, has_file: sourceForm.getAttribute('data-has-results-pdf') === '1' }];
+    }
+    if (resultsPdfInputs) {
+      resultsPdfInputs.innerHTML = '';
+      resultsPdfMeta.forEach(function (field) {
+        var code = String(field.code || 'results_pdf');
+        var label = String(field.label || code);
+        var wrap = document.createElement('label');
+        wrap.textContent = label + ' (PDF)';
+        var file = document.createElement('input');
+        file.type = 'file';
+        file.name = 'results_file[' + code + ']';
+        file.accept = '.pdf,application/pdf';
+        file.setAttribute('data-pdf-code', code);
+        if (field.required) file.setAttribute('data-pdf-required', '1');
+        if (field.has_file) file.setAttribute('data-pdf-has-file', '1');
+        wrap.appendChild(file);
+        resultsPdfInputs.appendChild(wrap);
+      });
+    }
+    if (resultsPdfReady) {
+      resultsPdfReady.hidden = sourceForm.getAttribute('data-has-results-pdf') !== '1';
+    }
+    if (resultsPdfSkip) resultsPdfSkip.value = '0';
+    resultsPdfMode = 'upload';
+    resultsPdfModal.hidden = false;
+  }
+
+  document.querySelectorAll('form.ops-results-mail-form').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      openResultsPdf(form);
+    });
+  });
+
+  if (resultsPdfForm) {
+    resultsPdfForm.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-mode]');
+      if (!btn) return;
+      resultsPdfMode = btn.getAttribute('data-mode') || 'upload';
+    });
+    resultsPdfForm.addEventListener('submit', function (e) {
+      var already = resultsPdfReady && !resultsPdfReady.hidden;
+      var anyRequired = false;
+      var missingRequired = [];
+      var anyNew = false;
+      if (resultsPdfInputs) {
+        resultsPdfInputs.querySelectorAll('input[type="file"]').forEach(function (input) {
+          var hasNew = input.files && input.files.length > 0;
+          var hasOld = input.getAttribute('data-pdf-has-file') === '1';
+          var required = input.getAttribute('data-pdf-required') === '1';
+          if (hasNew) anyNew = true;
+          if (required) {
+            anyRequired = true;
+            if (!hasNew && !hasOld) {
+              missingRequired.push(input.getAttribute('data-pdf-code') || 'PDF');
+            }
+          }
+        });
+      }
+      if (resultsPdfMode === 'omit') {
+        if (resultsPdfSkip) resultsPdfSkip.value = '1';
+        if (resultsPdfInputs) {
+          resultsPdfInputs.querySelectorAll('input[type="file"]').forEach(function (input) {
+            input.value = '';
+          });
+        }
+        if (anyRequired && !already) {
+          e.preventDefault();
+          alert('No hay PDF cargado. Selecciona el archivo o pulsa «Subir y enviar».');
+          return false;
+        }
+        return;
+      }
+      if (missingRequired.length > 0) {
+        e.preventDefault();
+        alert('Selecciona el PDF de resultados, o pulsa «Omitir y enviar» si ya está cargado.');
+        return false;
+      }
+      if (anyRequired && !anyNew && !already) {
+        e.preventDefault();
+        alert('Selecciona el PDF de resultados, o pulsa «Omitir y enviar» si ya está cargado.');
+        return false;
+      }
+      if (resultsPdfSkip) resultsPdfSkip.value = '0';
+    });
+  }
+  resultsPdfClose && resultsPdfClose.addEventListener('click', closeResultsPdf);
+  resultsPdfCancel && resultsPdfCancel.addEventListener('click', closeResultsPdf);
+  resultsPdfBackdrop && resultsPdfBackdrop.addEventListener('click', closeResultsPdf);
+
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
+    if (resultsPdfModal && !resultsPdfModal.hidden) {
+      closeResultsPdf();
+      return;
+    }
     if (providerProofModal && !providerProofModal.hidden) {
       closeProviderProof();
       return;

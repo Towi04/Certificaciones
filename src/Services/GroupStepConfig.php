@@ -291,12 +291,28 @@ final class GroupStepConfig
             $opsIcon = self::resolveOpsIcon($step, $action);
             $resultsReady = true;
             $resultsBlocked = '';
+            $opsResultsPdfUpload = false;
+            $resultsPdfFields = [];
+            $resultsHasPdf = false;
             if ($action === self::ACTION_SEND_MAIL) {
                 $delivery = ResultsDeliveryService::fromConfig($config);
                 $tpl = trim((string) ($email['template_code'] ?? ''));
                 if (ResultsDeliveryService::stepRequiresResults($step, $delivery, $tpl)) {
                     $resultsReady = ResultsDeliveryService::isReady($row, $delivery);
                     $resultsBlocked = $resultsReady ? '' : ResultsDeliveryService::blockedReason($row, $delivery);
+                    $resultsPdfFields = ResultsDeliveryService::pdfFieldsForOps($row, $delivery);
+                    $opsResultsPdfUpload = $resultsPdfFields !== []
+                        && $audience !== 'provider'
+                        && (
+                            $resultsReady
+                            || ResultsDeliveryService::onlyPdfRequiredMissing($row, $delivery)
+                        );
+                    foreach ($resultsPdfFields as $pdfField) {
+                        if (!empty($pdfField['has_file'])) {
+                            $resultsHasPdf = true;
+                            break;
+                        }
+                    }
                 }
             }
             $buttons[] = [
@@ -314,6 +330,9 @@ final class GroupStepConfig
                 'results_ready' => $resultsReady,
                 'results_blocked' => $resultsBlocked,
                 'requires_results' => !empty($step['requires_results']),
+                'ops_results_pdf_upload' => $opsResultsPdfUpload,
+                'results_pdf_fields' => $resultsPdfFields,
+                'results_has_pdf' => $resultsHasPdf,
                 ...self::opsStatusForButton($row, $step, $action, $done, $collectExam, $audience),
             ];
         }
