@@ -232,6 +232,85 @@ final class ResultsDeliveryService
     }
 
     /**
+     * Campos PDF configurados en la entrega de resultados del grupo.
+     *
+     * @param array{fields?:list<array<string,mixed>>} $delivery
+     * @return list<array{code:string,label:string,type:string,placeholder:string,required:bool}>
+     */
+    public static function pdfFields(array $delivery): array
+    {
+        $out = [];
+        foreach (is_array($delivery['fields'] ?? null) ? $delivery['fields'] : [] as $field) {
+            if (!is_array($field) || ($field['type'] ?? '') !== self::TYPE_PDF) {
+                continue;
+            }
+            $code = trim((string) ($field['code'] ?? ''));
+            if ($code === '') {
+                continue;
+            }
+            $out[] = $field;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $tracking
+     * @param array{fields?:list<array<string,mixed>>} $delivery
+     * @return list<array{code:string,label:string,required:bool,has_file:bool}>
+     */
+    public static function pdfFieldsForOps(array $tracking, array $delivery): array
+    {
+        $state = self::stateFromTracking($tracking);
+        $values = is_array($state['values'] ?? null) ? $state['values'] : [];
+        $out = [];
+        foreach (self::pdfFields($delivery) as $field) {
+            $code = (string) ($field['code'] ?? '');
+            $out[] = [
+                'code' => $code,
+                'label' => (string) ($field['label'] ?? $code),
+                'required' => !empty($field['required']),
+                'has_file' => self::pdfPath($field, $values) !== '',
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * ¿Solo faltan PDFs requeridos? (el popup de Ops puede completarlos).
+     *
+     * @param array<string, mixed> $tracking
+     * @param array{fields?:list<array<string,mixed>>,enabled?:bool} $delivery
+     */
+    public static function onlyPdfRequiredMissing(array $tracking, array $delivery): bool
+    {
+        if (self::isReady($tracking, $delivery)) {
+            return true;
+        }
+        $state = self::stateFromTracking($tracking);
+        if ($state['cancelled']) {
+            return false;
+        }
+        $fields = is_array($delivery['fields'] ?? null) ? $delivery['fields'] : [];
+        $missingPdf = false;
+        foreach ($fields as $field) {
+            if (!is_array($field) || empty($field['required'])) {
+                continue;
+            }
+            if (self::fieldHasValue($field, $state['values'], $tracking)) {
+                continue;
+            }
+            if (($field['type'] ?? '') !== self::TYPE_PDF) {
+                return false;
+            }
+            $missingPdf = true;
+        }
+
+        return $missingPdf;
+    }
+
+    /**
      * ¿Este envío de correo debe exigir datos de resultados?
      *
      * @param array<string, mixed> $stepDef

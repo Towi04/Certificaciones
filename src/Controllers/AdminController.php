@@ -1642,15 +1642,56 @@ final class AdminController
                     (int) Auth::id()
                 );
             }
+
+            $resultsUploaded = false;
+            $skipResultsPdf = !empty($_POST['skip_results_pdf']);
+            $resultsFiles = $_FILES['results_file'] ?? null;
+            $hasResultsUpload = false;
+            if (is_array($resultsFiles)) {
+                // Mapa code => meta (multipart PHP) o un solo archivo.
+                if (isset($resultsFiles['tmp_name']) && is_array($resultsFiles['tmp_name'])) {
+                    foreach ($resultsFiles['tmp_name'] as $code => $tmp) {
+                        $err = (int) ($resultsFiles['error'][$code] ?? UPLOAD_ERR_NO_FILE);
+                        if ($err !== UPLOAD_ERR_NO_FILE) {
+                            $hasResultsUpload = true;
+                            break;
+                        }
+                    }
+                } elseif (isset($resultsFiles['error']) && (int) $resultsFiles['error'] !== UPLOAD_ERR_NO_FILE) {
+                    $hasResultsUpload = true;
+                } else {
+                    foreach ($resultsFiles as $fileMeta) {
+                        if (is_array($fileMeta)
+                            && (int) ($fileMeta['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE
+                        ) {
+                            $hasResultsUpload = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if ($hasResultsUpload && !$skipResultsPdf) {
+                (new TrackingService())->saveResults($trackingId, [
+                    'results_file' => $resultsFiles,
+                    'results_value' => is_array($_POST['results_value'] ?? null)
+                        ? $_POST['results_value']
+                        : [],
+                    'notify' => false,
+                    'results_step_code' => $stepCode,
+                ], (int) Auth::id());
+                $resultsUploaded = true;
+            }
+
             $result = (new StepMailService())->sendForStep($trackingId, $stepCode, (int) Auth::id());
             $who = match ($result['audience']) {
                 'partner' => 'partner',
                 'provider' => 'proveedor',
                 default => 'alumno',
             };
+            $prefix = $resultsUploaded ? 'PDF de resultados guardado y correo «' : 'Correo «';
             flash(
                 'success',
-                'Correo «' . $result['template'] . '» enviado al ' . $who . ' (' . $result['to'] . ').'
+                $prefix . $result['template'] . '» enviado al ' . $who . ' (' . $result['to'] . ').'
             );
         } catch (\Throwable $e) {
             try {
