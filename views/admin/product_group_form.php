@@ -1024,6 +1024,9 @@ $renderMailTemplateField = static function (
             En el tablero solo aparecen los pasos con «Mostrar en Operación» (más Confirmar pago
             si el caso aún no está pagado). El comprobante DOCEO→proveedor se sube en el detalle del caso.
             El destinatario del correo lo define la <strong>plantilla</strong> (alumno o proveedor/UKS).
+            Para el paso de <strong>aplicación del examen</strong> elige la acción
+            «Confirmar aplicación del examen» (✓ se presentó / ✗ no se presentó) y actívalo en Operación;
+            no envía correo: solo confirma asistencia y avanza o deja pendiente reagendar.
         </p>
 
         <div class="panel" style="margin:0 0 1rem;padding:.85rem 1rem;background:#f8fafc">

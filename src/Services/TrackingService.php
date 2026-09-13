@@ -532,27 +532,8 @@ final class TrackingService
     /** @param array<string, mixed> $tracking */
     public function canStudentRequestReschedule(array $tracking): bool
     {
-        if ((string) ($tracking['purchase_status'] ?? '') !== 'paid') {
-            return false;
-        }
-        if (empty($tracking['exam_date']) || !empty($tracking['exam_date_2'])) {
-            return false;
-        }
-        if (!empty($tracking['results_level']) || !empty($tracking['results_url']) || !empty($tracking['cenni_folio'])) {
-            return false;
-        }
-        if (in_array((string) ($tracking['current_step_code'] ?? ''), ['resultados', 'fin'], true)) {
-            return false;
-        }
-
-        $cfg = CheckoutRequirements::config([
-            'type' => $tracking['product_type'] ?? '',
-            'config_json' => $tracking['config_json'] ?? null,
-            'group_config_json' => $tracking['group_config_json'] ?? null,
-        ]);
-        $exam = is_array($cfg['exam'] ?? null) ? $cfg['exam'] : [];
-
-        return (bool) ($exam['allow_reschedule'] ?? false);
+        // Reagenda solo por administración: alumno y partner deben contactar a DOCEO.
+        return false;
     }
 
     public function requestStudentReschedule(
@@ -864,6 +845,21 @@ final class TrackingService
         }
 
         if ($scheduleChanged) {
+            // Nueva fecha: limpiar confirmación previa de aplicación del examen.
+            $freshForAtt = $this->find($trackingId) ?? $tracking;
+            $extraAtt = [];
+            if (!empty($freshForAtt['extra_json']) && is_string($freshForAtt['extra_json'])) {
+                $decodedAtt = json_decode($freshForAtt['extra_json'], true);
+                $extraAtt = is_array($decodedAtt) ? $decodedAtt : [];
+            } elseif (is_array($freshForAtt['extra_json'] ?? null)) {
+                $extraAtt = $freshForAtt['extra_json'];
+            }
+            if (isset($extraAtt['exam_attendance'])) {
+                unset($extraAtt['exam_attendance']);
+                $this->pdo->prepare('UPDATE trackings SET extra_json = ? WHERE id = ?')
+                    ->execute([json_encode($extraAtt, JSON_UNESCAPED_UNICODE), $trackingId]);
+            }
+
             $fresh = $this->find($trackingId);
             if ($fresh !== null) {
                 $product = [
@@ -885,6 +881,96 @@ final class TrackingService
                 }
             }
         }
+    }
+
+    /**
+     * Confirma si el alumno presentó el examen.
+     * present → marca el paso hecho y avanza al siguiente.
+     * absent → queda pendiente de reagendar (no avanza).
+     *
+     * @return array{status:string,next_step:?string}
+     */
+    public function confirmExamAttendance(
+        int $trackingId,
+        string $outcome,
+        string $stepCode,
+        ?int $actorUserId = null
+    ): array {
+        $outcome = strtolower(trim($outcome));
+        if (!in_array($outcome, ['present', 'absent'], true)) {
+            throw new \InvalidArgumentException('Indica si el alumno se presentó o no.');
+        }
+        $tracking = $this->find($trackingId);
+        if ($tracking === null) {
+            throw new \InvalidArgumentException('Seguimiento no encontrado.');
+        }
+        $stepCode = trim($stepCode);
+        $extra = [];
+        if (!empty($tracking['extra_json']) && is_string($tracking['extra_json'])) {
+            $decoded = json_decode($tracking['extra_json'], true);
+            $extra = is_array($decoded) ? $decoded : [];
+        } elseif (is_array($tracking['extra_json'] ?? null)) {
+            $extra = $tracking['extra_json'];
+        }
+        $extra['exam_attendance'] = [
+            'status' => $outcome,
+            'at' => date('c'),
+            'by' => $actorUserId,
+            'step_code' => $stepCode,
+        ];
+        $this->pdo->prepare('UPDATE trackings SET extra_json = ? WHERE id = ?')
+            ->execute([json_encode($extra, JSON_UNESCAPED_UNICODE), $trackingId]);
+
+        $nextStep = null;
+        if ($outcome === 'present') {
+            if ($stepCode !== '') {
+                $this->markStepDone($trackingId, $stepCode, $actorUserId, 'Examen presentado');
+            }
+            $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
+            if ($pipelineId > 0 && $stepCode !== '') {
+                $steps = $this->steps($pipelineId);
+                foreach ($steps as $i => $s) {
+                    if ((string) ($s['code'] ?? '') !== $stepCode) {
+                        continue;
+                    }
+                    $nextCode = trim((string) ($steps[$i + 1]['code'] ?? ''));
+                    if ($nextCode !== '') {
+                        $this->setStep(
+                            $trackingId,
+                            $nextCode,
+                            $actorUserId,
+                            'Examen presentado · avance a ' . $nextCode,
+                            null
+                        );
+                        $nextStep = $nextCode;
+                    }
+                    break;
+                }
+            }
+            $this->log($trackingId, 'examen_asistencia', 'Se presentó al examen', $actorUserId);
+        } else {
+            if ($stepCode !== '' && (string) ($tracking['current_step_code'] ?? '') !== $stepCode) {
+                try {
+                    $this->setStep(
+                        $trackingId,
+                        $stepCode,
+                        $actorUserId,
+                        'No se presentó · pendiente reagendar',
+                        'waiting_admin'
+                    );
+                } catch (\Throwable) {
+                    // Si el código no está en el pipeline, solo queda el flag.
+                }
+            }
+            $this->log(
+                $trackingId,
+                'examen_asistencia',
+                'No se presentó al examen · pendiente reagendar',
+                $actorUserId
+            );
+        }
+
+        return ['status' => $outcome, 'next_step' => $nextStep];
     }
 
     /**
