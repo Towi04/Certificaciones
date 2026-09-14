@@ -82,9 +82,15 @@ $renderMailTemplateField = static function (
         . ' style="' . e($inputStyle) . '">';
 };
 ?>
+<?php
+$groupName = trim((string) ($group['name'] ?? ''));
+$pageHeading = $isEdit
+    ? ('Editar grupo' . ($groupName !== '' ? ' · ' . $groupName : ''))
+    : 'Nuevo grupo de producto';
+?>
 <p class="meta"><a href="<?= e(url('/admin/grupos')) ?>">← Grupos de proceso</a></p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">
-    <?= $isEdit ? 'Editar grupo' : 'Nuevo grupo de producto' ?>
+    <?= e($pageHeading) ?>
 </h1>
 
 <nav class="group-tabs" role="tablist" aria-label="Secciones del grupo">
