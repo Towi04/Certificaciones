@@ -81,10 +81,34 @@ final class StepMailService
             throw new \InvalidArgumentException('El paso no tiene «Enviar correo» activado.');
         }
 
-        if (MailTemplateService::isUksSolicitudCode($tplCode)) {
-            throw new \InvalidArgumentException(
-                'La plantilla de solicitud UKS se envía con el botón de solicitud a proveedor.'
+        if (
+            MailTemplateService::isUksSolicitudCode($tplCode)
+            || MailTemplateService::templateNeedsProviderDocumentLinks($tplCode)
+        ) {
+            // Debe generar workbook_url / pago_proveedor / reglamento_url.
+            $purchaseId = (int) ($tracking['purchase_id'] ?? 0);
+            if ($purchaseId < 1) {
+                throw new \InvalidArgumentException(
+                    'No se pudo determinar la compra para la solicitud al proveedor.'
+                );
+            }
+
+            $providerResult = (new ProviderRequestService())->send(
+                $trackingId,
+                $purchaseId,
+                $actorUserId,
+                false,
+                false,
+                ['step_code' => $stepCode, 'mail_template_code' => $tplCode]
             );
+
+            return [
+                'to' => (string) ($providerResult['to'] ?? ''),
+                'template' => (string) ($providerResult['template'] ?? $tplCode),
+                'audience' => 'provider',
+                'workbook_url' => (string) ($providerResult['workbook_url'] ?? ''),
+                'comprobante_url' => (string) ($providerResult['comprobante_url'] ?? ''),
+            ];
         }
 
         $attachments = ResultsDeliveryService::pdfAttachments($tracking, $delivery);
