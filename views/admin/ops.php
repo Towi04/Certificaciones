@@ -1334,21 +1334,32 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
       providerProofMode = btn.getAttribute('data-mode') || 'upload';
     });
     providerProofForm.addEventListener('submit', function (e) {
+      if (providerProofForm.getAttribute('data-sending') === '1') {
+        e.preventDefault();
+        return false;
+      }
       if (providerProofMode === 'omit') {
         if (providerProofSkip) providerProofSkip.value = '1';
         if (providerProofFile) providerProofFile.value = '';
-        return;
+      } else {
+        // Subir y enviar: si no eligió archivo y ya hay comprobante, permitir; si no hay, pedir archivo o usar omitir.
+        var hasFile = providerProofFile && providerProofFile.files && providerProofFile.files.length > 0;
+        var already = providerProofReady && !providerProofReady.hidden;
+        if (!hasFile && !already) {
+          e.preventDefault();
+          alert('Selecciona el comprobante, o pulsa «Omitir y enviar» si no se requiere.');
+          return false;
+        }
+        if (providerProofSkip) providerProofSkip.value = already && !hasFile ? '0' : '0';
+        if (providerProofInclude) providerProofInclude.value = '1';
       }
-      // Subir y enviar: si no eligió archivo y ya hay comprobante, permitir; si no hay, pedir archivo o usar omitir.
-      var hasFile = providerProofFile && providerProofFile.files && providerProofFile.files.length > 0;
-      var already = providerProofReady && !providerProofReady.hidden;
-      if (!hasFile && !already) {
-        e.preventDefault();
-        alert('Selecciona el comprobante, o pulsa «Omitir y enviar» si no se requiere.');
-        return false;
-      }
-      if (providerProofSkip) providerProofSkip.value = already && !hasFile ? '0' : '0';
-      if (providerProofInclude) providerProofInclude.value = '1';
+      providerProofForm.setAttribute('data-sending', '1');
+      providerProofForm.querySelectorAll('button').forEach(function (b) {
+        b.disabled = true;
+        if (b.type === 'submit' || b.getAttribute('data-mode')) {
+          b.textContent = 'Enviando… (un solo intento SMTP)';
+        }
+      });
     });
   }
   providerProofClose && providerProofClose.addEventListener('click', closeProviderProof);

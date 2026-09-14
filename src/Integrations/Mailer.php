@@ -31,6 +31,9 @@ final class Mailer
 
     private static ?string $lastDataResponse = null;
 
+    /** Timeout de conexión/lectura SMTP (segundos). */
+    private static int $socketTimeout = 12;
+
     /** @return list<string> */
     public static function lastErrors(): array
     {
@@ -232,14 +235,41 @@ final class Mailer
         $from = trim(Env::get('SMTP_FROM', $user) ?? $user);
         $fromName = Env::get('SMTP_FROM_NAME', 'Instituto Doceo') ?? 'Instituto Doceo';
 
-        $userVariants = array_values(array_unique(array_filter([
-            $user,
-            str_contains($user, '@') ? explode('@', $user, 2)[0] : null,
-        ])));
+        $timeout = (int) ($options['smtp_timeout'] ?? 8);
+        self::$socketTimeout = $timeout >= 3 && $timeout <= 30 ? $timeout : 8;
 
-        foreach ($this->endpoints() as $endpoint) {
+        // Evitar "loop" de intentos: Neubox/cPHulk bloquea tras muchos 535.
+        // Antes: varios puertos × 2 usuarios × AUTH PLAIN+LOGIN ≈ muchas conexiones.
+        $userVariants = [$user];
+        if (!empty($options['smtp_try_user_variants']) && str_contains($user, '@')) {
+            $local = explode('@', $user, 2)[0];
+            if ($local !== '' && $local !== $user) {
+                $userVariants[] = $local;
+            }
+        }
+
+        $endpoints = $this->endpoints();
+        if (!empty($options['smtp_single_endpoint']) && $endpoints !== []) {
+            $endpoints = [$endpoints[0]];
+        }
+
+        $maxRemote = (int) ($options['smtp_max_remote_attempts'] ?? 2);
+        if ($maxRemote < 1) {
+            $maxRemote = 1;
+        }
+        $remoteAttempts = 0;
+        $authRejected = false;
+
+        foreach ($endpoints as $endpoint) {
+            if ($authRejected || $remoteAttempts >= $maxRemote) {
+                break;
+            }
             $label = $endpoint['host'] . ':' . $endpoint['port'] . '/' . $endpoint['encryption'];
             foreach ($userVariants as $authUser) {
+                if ($authRejected || $remoteAttempts >= $maxRemote) {
+                    break 2;
+                }
+                $remoteAttempts++;
                 $authLabel = $label . ' user=' . $authUser;
                 try {
                     $this->sendViaSocket(
@@ -269,7 +299,13 @@ final class Mailer
 
                     return;
                 } catch (\Throwable $e) {
-                    $errors[] = $authLabel . ' → ' . $e->getMessage();
+                    $msg = $e->getMessage();
+                    $errors[] = $authLabel . ' → ' . $msg;
+                    if (self::isSmtpAuthFailure($msg)) {
+                        $authRejected = true;
+                        $errors[] = 'AUTH rechazada (535/cPHulk): se detienen más intentos remotos para no bloquear Neubox.';
+                        break 2;
+                    }
                 }
             }
         }
@@ -279,10 +315,10 @@ final class Mailer
         // Esto NO es el mail() de PHP: es SMTP al MTA local del servidor.
         $allowLocal = Env::getBool('SMTP_LOCAL_FALLBACK', true);
         if ($allowLocal) {
+            // Un solo intento local (evita segundo round-trip redundante).
             foreach (
                 [
                     ['host' => '127.0.0.1', 'port' => 25, 'encryption' => 'none'],
-                    ['host' => 'localhost', 'port' => 25, 'encryption' => 'none'],
                 ] as $local
             ) {
                 $label = $local['host'] . ':' . $local['port'] . '/none (sin AUTH)';
@@ -706,7 +742,7 @@ final class Mailer
                 $remote,
                 $errno,
                 $errstr,
-                12,
+                self::$socketTimeout,
                 STREAM_CLIENT_CONNECT,
                 $context
             );
@@ -719,7 +755,7 @@ final class Mailer
             throw new \RuntimeException("No se pudo conectar a {$remote}: {$errstr} ({$errno})");
         }
 
-        stream_set_timeout($fp, 12);
+        stream_set_timeout($fp, self::$socketTimeout);
         $this->expect($fp, 220);
         $this->command($fp, 'EHLO pdv.institutodoceo.com', 250);
 
@@ -746,8 +782,12 @@ final class Mailer
             $this->command($fp, 'AUTH PLAIN ' . $plain, 235);
 
             return $fp;
-        } catch (\RuntimeException) {
-            // LOGIN
+        } catch (\RuntimeException $e) {
+            // 535/cPHulk: no reintentar LOGIN (misma clave → más bloqueos Neubox).
+            if (self::isSmtpAuthFailure($e->getMessage())) {
+                throw $e;
+            }
+            // Solo si el servidor no soporta PLAIN, probar LOGIN en nueva conexión.
         }
 
         $newFp = $this->connect($host, $port, $encryption);
@@ -759,6 +799,21 @@ final class Mailer
         $this->command($fp, base64_encode($pass), 235);
 
         return $fp;
+    }
+
+
+    public static function isSmtpAuthFailure(string $message): bool
+    {
+        $m = strtolower($message);
+
+        return str_contains($m, '535')
+            || str_contains($m, '534')
+            || str_contains($m, 'authentication failed')
+            || str_contains($m, 'auth failed')
+            || str_contains($m, 'invalid login')
+            || str_contains($m, 'cphulk')
+            || str_contains($m, 'too many login')
+            || (str_contains($m, 'auth') && str_contains($m, 'fail'));
     }
 
     private function encodeAddress(string $name, string $email): string
