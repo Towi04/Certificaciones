@@ -156,7 +156,8 @@ final class AdminController
                 (string) ($_POST['access_key'] ?? ''),
                 (int) Auth::id(),
                 $notify,
-                (string) ($_POST['zoom_url'] ?? '')
+                (string) ($_POST['zoom_url'] ?? ''),
+                trim((string) ($_POST['step_code'] ?? ''))
             );
             flash(
                 $result['notified'] ? 'success' : ($notify ? 'error' : 'success'),
