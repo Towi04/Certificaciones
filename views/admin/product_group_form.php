@@ -153,6 +153,13 @@ $renderMailTemplateField = static function (
 
     <div class="group-panel" data-panel="fields" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Datos que se piden al alumno</h2>
+        <p class="muted" style="margin:.15rem 0 1rem;font-size:.86rem;line-height:1.45">
+            Marca los campos y si son obligatorios u opcionales, luego pulsa
+            <strong>Guardar grupo</strong>. Se muestran en
+            <strong>Adquirir / Registrar alumno</strong> solo en productos
+            <strong>asignados a este grupo</strong>
+            (en el producto: campo «Grupo de proceso»).
+        </p>
         <div class="field-check-grid" id="checkout-field-grid">
             <?php foreach ($fieldMeta as $code => $meta): ?>
                 <?php

@@ -490,11 +490,44 @@ final class CheckoutRequirements
     }
 
 
+    /**
+     * Claves de inscripción que define el grupo de proceso.
+     * Un producto no debe vaciarlas ni reducirlas con leftovers viejos en config_json.
+     *
+     * @var list<string>
+     */
+    private const GROUP_OWNED_CHECKOUT_KEYS = [
+        'checkout_fields',
+        'checkout_field_required',
+        'required_docs',
+        'registration_docs',
+    ];
+
     /** @return array<string, mixed> */
     public static function config(array $product): array
     {
         $group = self::decodeJson($product['group_config_json'] ?? null);
         $own = self::decodeJson($product['config_json'] ?? null);
+
+        // El proceso de compra (qué datos se piden al alumno) vive en el grupo.
+        // Si el producto trae checkout_fields viejos/vacíos, no deben tapar al grupo.
+        foreach (self::GROUP_OWNED_CHECKOUT_KEYS as $key) {
+            if (!array_key_exists($key, $group)) {
+                continue;
+            }
+            // Grupo con lista vacía explícita: sí puede “apagar” campos;
+            // el producto nunca sobrescribe cuando el grupo ya definió la clave.
+            unset($own[$key]);
+        }
+        // Sin grupo (o grupo sin la clave): ignora listas vacías del producto
+        // para no caer en solo campos locked por un [] residual.
+        if (!array_key_exists('checkout_fields', $group)
+            && array_key_exists('checkout_fields', $own)
+            && is_array($own['checkout_fields'])
+            && $own['checkout_fields'] === []
+        ) {
+            unset($own['checkout_fields']);
+        }
 
         if ($group === [] && $own === []) {
             return [];
@@ -546,8 +579,10 @@ final class CheckoutRequirements
     /** @param array<mixed> $arr */
     private static function isAssoc(array $arr): bool
     {
+        // [] no es mapa asociativo: debe reemplazar listas (p. ej. checkout_fields),
+        // no intentar deepMerge como si fuera un objeto.
         if ($arr === []) {
-            return true;
+            return false;
         }
 
         return array_keys($arr) !== range(0, count($arr) - 1);
