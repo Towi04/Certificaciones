@@ -1136,11 +1136,29 @@ final class GroupStepConfig
     {
         $extra = self::decodeExtra($row);
         $email = is_array($step['email'] ?? null) ? $step['email'] : [];
-        $audience = self::audienceFromEmail($email);
-        $code = (string) ($step['code'] ?? '');
+        $code = trim((string) ($step['code'] ?? ''));
+        $tpl = trim((string) ($email['template_code'] ?? ''));
 
         $sentMap = is_array($extra['step_mail_sent'] ?? null) ? $extra['step_mail_sent'] : [];
-        if ($code !== '' && !empty($sentMap[$code])) {
+        if ($code !== '' && self::sentMapEntryIsDone($sentMap[$code] ?? null)) {
+            return true;
+        }
+        // Misma plantilla bajo otro código de paso (configs renombradas / envíos previos).
+        if ($tpl !== '') {
+            foreach ($sentMap as $entry) {
+                if (!is_array($entry)) {
+                    continue;
+                }
+                $entryTpl = trim((string) ($entry['template'] ?? $entry['template_code'] ?? ''));
+                if ($entryTpl !== '' && strcasecmp($entryTpl, $tpl) === 0 && self::sentMapEntryIsDone($entry)) {
+                    return true;
+                }
+            }
+        }
+
+        // StepMailService también escribe step_done al enviar.
+        $doneMap = is_array($extra['step_done'] ?? null) ? $extra['step_done'] : [];
+        if ($code !== '' && !empty($doneMap[$code])) {
             return true;
         }
 
@@ -1150,17 +1168,16 @@ final class GroupStepConfig
             return false;
         }
 
+        $audience = self::audienceFromEmail($email);
         if ($audience === 'provider') {
             return true;
         }
 
-        // Casos ya enviados con plantilla custom mal etiquetada (audiencia ≠ provider):
-        // marcar hecho si el paso coincide con provider_request o la plantilla pide docs.
+        // Casos ya enviados con plantilla custom mal etiquetada (audiencia ≠ provider).
         $prStep = trim((string) ($pr['step_code'] ?? ''));
         if ($prStep !== '' && $code !== '' && $prStep === $code) {
             return true;
         }
-        $tpl = trim((string) ($email['template_code'] ?? ''));
         if ($tpl !== '' && (
             MailTemplateService::isUksSolicitudCode($tpl)
             || MailTemplateService::templateNeedsProviderDocumentLinks($tpl)
@@ -1168,7 +1185,33 @@ final class GroupStepConfig
             return true;
         }
 
+        // Último recurso: el paso «parece» solicitud a proveedor por código/etiqueta.
+        $blob = strtolower($code . ' ' . (string) ($step['ops_label'] ?? '') . ' ' . (string) ($step['label'] ?? ''));
+        if (preg_match('/proveedor|provider|solicitud_(uks|proveedor)|uks_solicitud/u', $blob) === 1) {
+            return true;
+        }
+
         return false;
+    }
+
+    private static function sentMapEntryIsDone(mixed $entry): bool
+    {
+        if ($entry === null || $entry === false || $entry === '') {
+            return false;
+        }
+        if (is_array($entry)) {
+            if (trim((string) ($entry['at'] ?? '')) !== '') {
+                return true;
+            }
+            // Entrada solo con error → no cuenta como enviado.
+            if (trim((string) ($entry['error'] ?? $entry['last_error'] ?? '')) !== '') {
+                return false;
+            }
+
+            return $entry !== [];
+        }
+
+        return true;
     }
 
     /**
