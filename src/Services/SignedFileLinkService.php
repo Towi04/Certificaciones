@@ -68,8 +68,22 @@ final class SignedFileLinkService
         }
 
         $token = $this->base64UrlEncode($payloadJson) . '.' . $this->sign($payloadJson);
+        $absolute = url('/archivo/' . $token);
 
-        return url('/archivo/' . $token);
+        // En correos el href DEBE ser absoluto; si APP_URL falta, url() queda relativo
+        // y el botón se ve pero no abre nada en Gmail/Outlook.
+        if (!preg_match('#^https?://#i', $absolute)) {
+            $base = rtrim((string) (Env::get('APP_URL', '') ?? ''), '/');
+            if ($base === '' || !preg_match('#^https?://#i', $base)) {
+                throw new \RuntimeException(
+                    'Falta APP_URL (URL pública del sitio) en el .env. '
+                    . 'Sin ella los enlaces del correo (Excel/comprobante) quedan rotos.'
+                );
+            }
+            $absolute = $base . '/archivo/' . $token;
+        }
+
+        return $absolute;
     }
 
     private function sign(string $payloadJson): string

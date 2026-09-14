@@ -365,7 +365,9 @@ final class MailTemplateService
             }
             $row = ['cell' => $cell, 'field' => $field];
             if ($formula !== '') {
-                $row['formula'] = mb_substr($formula, 0, 500);
+                $row['formula'] = function_exists('mb_substr')
+                    ? \mb_substr($formula, 0, 500)
+                    : substr($formula, 0, 500);
             }
             $cellMap[] = $row;
         }
