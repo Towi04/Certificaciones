@@ -265,6 +265,51 @@ final class MailTemplateService
      * Sirve para enrutar el envío por ProviderRequestService aunque el código
      * no sea exactamente uks_solicitud.
      */
+    /** ¿La plantilla referencia reglamento firmado? */
+    public static function templateUsesReglamentoPlaceholders(string $code): bool
+    {
+        return self::templateHaystackContains($code, [
+            '{{reglamento_url}}',
+            'reglamento_url',
+        ]);
+    }
+
+    /** ¿La plantilla referencia comprobante DOCEO→proveedor? */
+    public static function templateUsesPaymentProofPlaceholders(string $code): bool
+    {
+        return self::templateHaystackContains($code, [
+            '{{pago_proveedor}}',
+            '{{comprobante_url}}',
+            'pago_proveedor',
+            'comprobante_url',
+        ]);
+    }
+
+    /**
+     * @param list<string> $tokens
+     */
+    public static function templateHaystackContains(string $code, array $tokens): bool
+    {
+        $code = trim($code);
+        if ($code === '' || $tokens === []) {
+            return false;
+        }
+        $row = (new self())->find($code);
+        if ($row === null) {
+            return false;
+        }
+        $haystack = strtolower(
+            (string) ($row['subject'] ?? '') . "\n" . (string) ($row['body_html'] ?? '')
+        );
+        foreach ($tokens as $token) {
+            if ($token !== '' && str_contains($haystack, strtolower($token))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static function templateNeedsProviderDocumentLinks(string $code): bool
     {
         $code = trim($code);

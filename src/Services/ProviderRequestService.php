@@ -184,7 +184,34 @@ final class ProviderRequestService
             }
         }
 
-        return $out;
+        return self::applyTemplateDocumentPolicy($out);
+    }
+
+    /**
+     * Ajusta reglamento/comprobante según la plantilla real.
+     * UKS / plantilla vacía conservan el comportamiento pesado histórico.
+     * Plantillas custom (TOEFL, LinguaFranca, etc.) solo exigen lo que piden sus placeholders.
+     *
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
+    public static function applyTemplateDocumentPolicy(array $config): array
+    {
+        $mailCode = trim((string) ($config['mail_template_code'] ?? ''));
+        if ($mailCode === '' || MailTemplateService::isUksSolicitudCode($mailCode)) {
+            return $config;
+        }
+
+        $needsReglamento = MailTemplateService::templateUsesReglamentoPlaceholders($mailCode);
+        $needsProof = MailTemplateService::templateUsesPaymentProofPlaceholders($mailCode);
+
+        $config['include_reglamento'] = $needsReglamento;
+        $config['require_reglamento'] = $needsReglamento;
+        $config['include_payment_proof'] = $needsProof;
+        // Solo bloquear por comprobante admin si la plantilla realmente lo usa.
+        $config['require_admin_payment_proof'] = $needsProof;
+
+        return $config;
     }
 
     /**
@@ -194,6 +221,46 @@ final class ProviderRequestService
      * @param array<string, mixed> $cfg
      * @return array<string, mixed>|null
      */
+    /**
+     * Lee plantilla/Para/CC del paso de progreso indicado.
+     *
+     * @param array<string, mixed> $product
+     * @return array{mail_template_code:string,to:string,cc:string}|null
+     */
+    public static function mailRoutingFromProductStep(array $product, string $stepCode): ?array
+    {
+        $stepCode = trim($stepCode);
+        if ($stepCode === '') {
+            return null;
+        }
+        $cfg = CheckoutRequirements::config($product);
+        $rawDefs = $cfg['step_defs'] ?? null;
+        if (!is_array($rawDefs)) {
+            $rawDefs = GroupStepConfig::defsFromConfig($cfg);
+        }
+        $def = null;
+        foreach ($rawDefs as $code => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $codeStr = trim((string) ($row['code'] ?? (is_string($code) ? $code : '')));
+            if ($codeStr === $stepCode || (string) $code === $stepCode) {
+                $def = $row;
+                break;
+            }
+        }
+        if ($def === null) {
+            return null;
+        }
+        $email = is_array($def['email'] ?? null) ? $def['email'] : [];
+
+        return [
+            'mail_template_code' => trim((string) ($email['template_code'] ?? '')),
+            'to' => trim((string) ($email['to'] ?? '')),
+            'cc' => trim((string) ($email['cc'] ?? '')),
+        ];
+    }
+
     public static function providerRequestFromStepDefs(array $cfg): ?array
     {
         // Leer step_defs en crudo para no depender de heurísticas de audiencia
@@ -232,6 +299,11 @@ final class ProviderRequestService
             if ($stepCode === '') {
                 $stepCode = 'solicitud_proveedor';
             }
+            $isUks = $tpl === '' || MailTemplateService::isUksSolicitudCode($tpl);
+            $needsReglamento = $isUks
+                || ($tpl !== '' && MailTemplateService::templateUsesReglamentoPlaceholders($tpl));
+            $needsProof = $isUks
+                || ($tpl !== '' && MailTemplateService::templateUsesPaymentProofPlaceholders($tpl));
             $candidate = [
                 'enabled' => true,
                 'step_code' => $stepCode,
@@ -239,10 +311,10 @@ final class ProviderRequestService
                 'to' => trim((string) ($email['to'] ?? '')),
                 'cc' => trim((string) ($email['cc'] ?? '')),
                 'auto_send_on_payment' => ($email['trigger'] ?? '') === 'auto',
-                'include_reglamento' => true,
-                'include_payment_proof' => true,
-                'require_reglamento' => true,
-                'require_admin_payment_proof' => true,
+                'include_reglamento' => $needsReglamento,
+                'include_payment_proof' => $needsProof,
+                'require_reglamento' => $needsReglamento,
+                'require_admin_payment_proof' => $needsProof,
             ];
             if ($tpl !== '' && MailTemplateService::isUksSolicitudCode($tpl)) {
                 return $candidate;
@@ -351,6 +423,29 @@ final class ProviderRequestService
                 $config[$key] = trim((string) $overrides[$key]);
             }
         }
+
+        // Si Operación manda el paso concreto, usar la plantilla de ESE paso
+        // (no la preferida UKS del grupo).
+        $stepOverride = trim((string) ($overrides['step_code'] ?? ''));
+        $tplOverride = trim((string) ($overrides['mail_template_code'] ?? ''));
+        if ($stepOverride !== '' && $tplOverride === '') {
+            $fromStep = self::mailRoutingFromProductStep($product, $stepOverride);
+            if ($fromStep !== null) {
+                if ($fromStep['mail_template_code'] !== '') {
+                    $config['mail_template_code'] = $fromStep['mail_template_code'];
+                }
+                if ($fromStep['to'] !== '' && trim((string) ($config['to'] ?? '')) === '') {
+                    $config['to'] = $fromStep['to'];
+                }
+                if ($fromStep['cc'] !== '' && trim((string) ($config['cc'] ?? '')) === '') {
+                    $config['cc'] = $fromStep['cc'];
+                }
+            }
+        }
+
+        // Plantilla custom (TOEFL/LinguaFranca/etc.): no exigir reglamento UKS
+        // ni comprobante si la plantilla no los usa.
+        $config = self::applyTemplateDocumentPolicy($config);
 
         $to = $this->resolveRecipient($config);
         if ($to === '') {
@@ -516,6 +611,7 @@ final class ProviderRequestService
         array &$tmpFiles = []
     ): array {
         $fields = $this->fieldValues($tracking, $purchase, $product);
+        $config = self::applyTemplateDocumentPolicy($config);
         $includeProof = $forceIncludePaymentProof || !empty($config['include_payment_proof']);
         $includeReglamento = !empty($config['include_reglamento']);
         $requireReglamento = !empty($config['require_reglamento']);
