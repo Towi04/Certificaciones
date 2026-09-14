@@ -1050,6 +1050,10 @@ final class ProviderRequestService
             'force_smtp' => true,
             'smtp_only' => true,
             'log_outbound' => true,
+            // Fail-fast: no bombardear Neubox con reintentos (cPHulk).
+            'smtp_single_endpoint' => true,
+            'smtp_max_remote_attempts' => 1,
+            'smtp_timeout' => 8,
         ];
         if ($cc !== '') {
             $options['cc'] = $cc;

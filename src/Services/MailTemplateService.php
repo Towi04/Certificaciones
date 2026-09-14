@@ -734,6 +734,9 @@ final class MailTemplateService
             'prefer_smtp' => true,
             'force_smtp' => true,
             'smtp_only' => true,
+            'smtp_single_endpoint' => true,
+            'smtp_max_remote_attempts' => 1,
+            'smtp_timeout' => 8,
         ]);
 
         $logPath = $this->logOutboundMail($to, $subject, $text, $html);
