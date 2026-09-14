@@ -120,8 +120,47 @@ final class PartnerController
             'partner' => $partner,
             'tracking' => $tracking,
             'steps' => $steps,
+            'canEditRegistration' => TrackingService::canEditRegistration($tracking),
             'layout' => 'partner',
         ]);
+    }
+
+    public function updateRegistration(string $id): void
+    {
+        Auth::requireRole(['partner']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        $svc = new TrackingService();
+        $tracking = $svc->find($trackingId);
+        $partner = null;
+        try {
+            $partner = (new PartnerRegistrationService())->partnerForUser((int) Auth::id());
+        } catch (\Throwable) {
+            redirect('/partner');
+        }
+        if ($tracking === null || (int) ($tracking['partner_id'] ?? 0) !== (int) $partner['id']) {
+            http_response_code(403);
+            view('errors/403', ['title' => 'Sin acceso', 'layout' => 'partner']);
+
+            return;
+        }
+        try {
+            $svc->updateStudentProfile($trackingId, [
+                'first_name' => (string) ($_POST['first_name'] ?? ''),
+                'last_name_p' => (string) ($_POST['last_name_p'] ?? ''),
+                'last_name_m' => (string) ($_POST['last_name_m'] ?? ''),
+                'phone' => (string) ($_POST['phone'] ?? ''),
+                'email' => (string) ($_POST['email'] ?? ''),
+                'curp' => (string) ($_POST['curp'] ?? ''),
+                'birth_date' => (string) ($_POST['birth_date'] ?? ''),
+                'sex' => (string) ($_POST['sex'] ?? ''),
+                'nationality' => (string) ($_POST['nationality'] ?? ''),
+            ], (int) Auth::id());
+            flash('success', 'Datos del alumno actualizados.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/partner/caso/' . $trackingId);
     }
 
     public function updateExam(string $id): void

@@ -29,6 +29,7 @@ final class ProviderRequestService
         ['value' => 'first_name', 'label' => 'Nombre(s)'],
         ['value' => 'last_name_p', 'label' => 'Apellido paterno'],
         ['value' => 'last_name_m', 'label' => 'Apellido materno'],
+        ['value' => 'last_names', 'label' => 'Apellidos (sin espacios dobles)'],
         ['value' => 'email', 'label' => 'Correo del alumno'],
         ['value' => 'phone', 'label' => 'Teléfono'],
         ['value' => 'matricula', 'label' => 'Matrícula'],
@@ -40,6 +41,7 @@ final class ProviderRequestService
         ['value' => 'birth_date', 'label' => 'Fecha de nacimiento'],
         ['value' => 'sex', 'label' => 'Sexo'],
         ['value' => 'nationality', 'label' => 'Nacionalidad'],
+        ['value' => 'nationality_code', 'label' => 'Código nacionalidad (3 letras)'],
         ['value' => 'passport', 'label' => 'Pasaporte / ID'],
         ['value' => 'address', 'label' => 'Dirección'],
         ['value' => 'city', 'label' => 'Ciudad'],
@@ -652,12 +654,15 @@ final class ProviderRequestService
         $first = (string) ($tracking['first_name'] ?? $checkout['first_name'] ?? '');
         $lp = (string) ($tracking['last_name_p'] ?? $checkout['last_name_p'] ?? '');
         $lm = (string) ($tracking['last_name_m'] ?? $checkout['last_name_m'] ?? '');
+        $lastNames = trim(preg_replace('/\s+/u', ' ', trim($lp . ' ' . $lm)) ?? '');
 
         $values = [
-            'full_name' => trim(implode(' ', array_filter([$first, $lp, $lm]))),
+            'full_name' => trim(preg_replace('/\s+/u', ' ', trim(implode(' ', array_filter([$first, $lp, $lm])))) ?? ''),
+            'name' => $first,
             'first_name' => $first,
             'last_name_p' => $lp,
             'last_name_m' => $lm,
+            'last_names' => $lastNames,
             'email' => (string) ($tracking['student_email'] ?? $checkout['email'] ?? ''),
             'phone' => (string) ($tracking['student_phone'] ?? $checkout['phone'] ?? ''),
             'matricula' => (string) ($tracking['matricula'] ?? $purchase['matricula'] ?? ''),
@@ -675,6 +680,16 @@ final class ProviderRequestService
             'state' => (string) ($checkout['state'] ?? $checkout['estado'] ?? ''),
             'partner_code' => (string) ($tracking['partner_code'] ?? $purchase['partner_code'] ?? $checkout['partner_code'] ?? ''),
         ];
+
+        $nat = trim($values['nationality']);
+        $natNorm = \App\Support\AsciiUpperNormalizer::normalize($nat);
+        if ($natNorm === 'MEXICO' || $natNorm === 'MEX' || $natNorm === 'MX') {
+            $values['nationality_code'] = 'MEX';
+        } elseif ($nat !== '') {
+            $values['nationality_code'] = strtoupper(substr($natNorm, 0, 3));
+        } else {
+            $values['nationality_code'] = '';
+        }
 
         foreach ($checkout as $key => $val) {
             if (!is_string($key) || $key === '' || array_key_exists($key, $values)) {

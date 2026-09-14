@@ -43,8 +43,8 @@ final class CheckoutRequirements
         'curp' => ['label' => 'CURP', 'required' => true, 'type' => 'text'],
         'birth_date' => ['label' => 'Fecha de nacimiento', 'required' => true, 'type' => 'date'],
         'sex' => ['label' => 'Sexo', 'required' => false, 'type' => 'select'],
-        // Si se pide nacionalidad, debe capturarse (p. ej. trámites SEP / CENNI).
-        'nationality' => ['label' => 'Nacionalidad', 'required' => true, 'type' => 'text'],
+        // Si se pide nacionalidad, debe elegirse de la lista (México primero).
+        'nationality' => ['label' => 'Nacionalidad', 'required' => true, 'type' => 'select'],
     ];
 
     /**
@@ -56,6 +56,49 @@ final class CheckoutRequirements
     public const SEX_OPTIONS = [
         ['value' => 'F', 'label' => 'Femenino'],
         ['value' => 'M', 'label' => 'Masculino'],
+    ];
+
+    /**
+     * Nacionalidades frecuentes (valor = etiqueta mostrada).
+     * México va primero; el resto en orden alfabético.
+     *
+     * @var list<array{value:string,label:string}>
+     */
+    public const NATIONALITY_OPTIONS = [
+        ['value' => 'México', 'label' => 'México'],
+        ['value' => 'Alemania', 'label' => 'Alemania'],
+        ['value' => 'Argentina', 'label' => 'Argentina'],
+        ['value' => 'Belice', 'label' => 'Belice'],
+        ['value' => 'Bolivia', 'label' => 'Bolivia'],
+        ['value' => 'Brasil', 'label' => 'Brasil'],
+        ['value' => 'Canada', 'label' => 'Canadá'],
+        ['value' => 'Chile', 'label' => 'Chile'],
+        ['value' => 'China', 'label' => 'China'],
+        ['value' => 'Colombia', 'label' => 'Colombia'],
+        ['value' => 'Corea del Sur', 'label' => 'Corea del Sur'],
+        ['value' => 'Costa Rica', 'label' => 'Costa Rica'],
+        ['value' => 'Cuba', 'label' => 'Cuba'],
+        ['value' => 'Ecuador', 'label' => 'Ecuador'],
+        ['value' => 'El Salvador', 'label' => 'El Salvador'],
+        ['value' => 'España', 'label' => 'España'],
+        ['value' => 'Estados Unidos', 'label' => 'Estados Unidos'],
+        ['value' => 'Francia', 'label' => 'Francia'],
+        ['value' => 'Guatemala', 'label' => 'Guatemala'],
+        ['value' => 'Honduras', 'label' => 'Honduras'],
+        ['value' => 'India', 'label' => 'India'],
+        ['value' => 'Italia', 'label' => 'Italia'],
+        ['value' => 'Japón', 'label' => 'Japón'],
+        ['value' => 'Nicaragua', 'label' => 'Nicaragua'],
+        ['value' => 'Panamá', 'label' => 'Panamá'],
+        ['value' => 'Paraguay', 'label' => 'Paraguay'],
+        ['value' => 'Perú', 'label' => 'Perú'],
+        ['value' => 'Portugal', 'label' => 'Portugal'],
+        ['value' => 'Reino Unido', 'label' => 'Reino Unido'],
+        ['value' => 'República Dominicana', 'label' => 'República Dominicana'],
+        ['value' => 'Rusia', 'label' => 'Rusia'],
+        ['value' => 'Uruguay', 'label' => 'Uruguay'],
+        ['value' => 'Venezuela', 'label' => 'Venezuela'],
+        ['value' => 'Otro', 'label' => 'Otro'],
     ];
 
     /** Campos siempre pedidos y siempre obligatorios. */
@@ -94,6 +137,9 @@ final class CheckoutRequirements
             $meta[$code] = $row + ['custom' => false];
             if ($code === 'sex' && empty($meta[$code]['options'])) {
                 $meta[$code]['options'] = self::SEX_OPTIONS;
+            }
+            if ($code === 'nationality' && empty($meta[$code]['options'])) {
+                $meta[$code]['options'] = self::NATIONALITY_OPTIONS;
             }
         }
         foreach (self::customFieldDefinitions() as $code => $def) {
@@ -439,8 +485,12 @@ final class CheckoutRequirements
             return [];
         }
         $options = self::normalizeSelectOptions($field['options'] ?? []);
-        if ($options === [] && ($field['code'] ?? '') === 'sex') {
+        $code = (string) ($field['code'] ?? '');
+        if ($options === [] && $code === 'sex') {
             $options = self::SEX_OPTIONS;
+        }
+        if ($options === [] && $code === 'nationality') {
+            $options = self::NATIONALITY_OPTIONS;
         }
 
         return array_values(array_map(
@@ -468,10 +518,15 @@ final class CheckoutRequirements
      */
     public static function normalizeSexValue(string $raw): string
     {
-        $v = mb_strtolower(trim($raw), 'UTF-8');
-        if ($v === '') {
+        $trimmed = trim($raw);
+        if ($trimmed === '') {
             return '';
         }
+        $v = function_exists('mb_strtolower')
+            ? \mb_strtolower($trimmed, 'UTF-8')
+            : strtolower(strtr($trimmed, [
+                'Á' => 'á', 'É' => 'é', 'Í' => 'í', 'Ó' => 'ó', 'Ú' => 'ú', 'Ü' => 'ü', 'Ñ' => 'ñ',
+            ]));
 
         return match ($v) {
             'f', 'femenino', 'femenina', 'mujer', 'female' => 'F',
@@ -641,6 +696,9 @@ final class CheckoutRequirements
                 $opts = self::normalizeSelectOptions($meta['options'] ?? []);
                 if ($opts === [] && $code === 'sex') {
                     $opts = self::SEX_OPTIONS;
+                }
+                if ($opts === [] && $code === 'nationality') {
+                    $opts = self::NATIONALITY_OPTIONS;
                 }
                 $row['options'] = $opts;
             }

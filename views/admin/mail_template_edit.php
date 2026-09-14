@@ -276,12 +276,20 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
                 <p style="margin:0 0 .35rem;font-weight:700;font-size:.85rem;color:var(--doceo-blue)">Celdas → campo / fórmula</p>
                 <p class="muted" style="font-size:.8rem;margin:0 0 .65rem">
                     Si pones una <strong>fórmula</strong>, el sistema la evalúa y escribe el <em>valor</em> (no la fórmula) en el Excel.
+                    Usa el <strong>nombre exacto de la hoja</strong> en «Hoja» (p. ej. la hoja 2 puede llamarse <code>Sheet2</code> o <code>Hoja2</code>).
+                    Preferible separar argumentos con <code>;</code> (como Excel en español).
+                    Placeholders recomendados:
+                    <code>{{last_name_p}}</code>, <code>{{last_name_m}}</code>, <code>{{last_names}}</code>,
+                    <code>{{first_name}}</code>, <code>{{full_name}}</code>, <code>{{birth_date}}</code>,
+                    <code>{{sex}}</code> (M/F), <code>{{nationality}}</code>.
                     Ejemplos:
-                    <code>=MAYUSC({{full_name}})</code>,
-                    <code>=ASCIIMAYUSC({{full_name}})</code> (estilo TOEFL),
-                    <code>=TEXTO({{exam_date}};"dd/mm/aaaa")</code>,
-                    <code>=TEXTO({{exam_time}};"hh:mm")</code>.
-                    Funciones: MAYUSC, MINUSC, SUSTITUIR, SINACENTOS, ASCIIMAYUSC, TEXTO, CONCATENAR, RECORTAR.
+                    <code>=MAYUSC({{last_names}})</code>,
+                    <code>=MAYUSC(TEXTO({{birth_date}};"MMM"))</code>,
+                    <code>=AÑO({{birth_date}})</code>,
+                    <code>=SI({{sex}}="Masculino";"M";"F")</code>,
+                    <code>=SI({{nationality}}="México";"MEX";MAYUSC(IZQUIERDA({{nationality}};3)))</code>,
+                    <code>=ASCIIMAYUSC({{full_name}})</code> (TOEFL).
+                    Funciones: MAYUSC, MINUSC, SUSTITUIR, SINACENTOS, ASCIIMAYUSC, TEXTO, CONCATENAR, RECORTAR, SI, AÑO, MES, DIA, IZQUIERDA, DERECHA.
                 </p>
                 <div id="workbook-cells">
                     <?php foreach ($wbCells as $i => $cell): ?>

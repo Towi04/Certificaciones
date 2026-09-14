@@ -186,6 +186,7 @@ $router->get('/admin/salud', fn () => $admin->health());
 
 $router->get('/alumno', fn () => $student->dashboard());
 $router->get('/alumno/caso/{id}', fn (string $id) => $student->caseShow($id));
+$router->post('/alumno/caso/{id}/datos', fn (string $id) => $student->updateRegistration($id));
 $router->post('/alumno/caso/{id}/reagenda', fn (string $id) => $student->requestReschedule($id));
 $router->post('/alumno/caso/{id}/documentos', fn (string $id) => $student->uploadRegistrationDocument($id));
 $router->post('/alumno/documentos/{id}/reenviar', fn (string $id) => $student->reuploadDocument($id));
@@ -194,6 +195,7 @@ $router->get('/partner', fn () => $partner->dashboard());
 $router->get('/partner/registrar', fn () => $partner->registerForm());
 $router->post('/partner/registrar', fn () => $partner->registerSubmit());
 $router->get('/partner/caso/{id}', fn (string $id) => $partner->caseShow($id));
+$router->post('/partner/caso/{id}/datos', fn (string $id) => $partner->updateRegistration($id));
 $router->post('/partner/caso/{id}/examen', fn (string $id) => $partner->updateExam($id));
 
 return $router;

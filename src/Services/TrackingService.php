@@ -239,15 +239,43 @@ final class TrackingService
     }
 
     /**
-     * Actualiza nombre/teléfono del alumno del caso.
+     * ¿Se pueden editar los datos de registro del alumno?
+     * Bloqueado una vez que se marcó asistencia al examen (presente).
      *
-     * @param array{first_name?:string,last_name_p?:string,last_name_m?:string,phone?:string,email?:string} $data
+     * @param array<string, mixed> $tracking
+     */
+    public static function canEditRegistration(array $tracking): bool
+    {
+        if (GroupStepConfig::isExamAttendancePresent($tracking)) {
+            return false;
+        }
+        $status = strtolower(trim((string) ($tracking['status'] ?? '')));
+        if (in_array($status, ['completed', 'cancelled'], true)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Actualiza datos de registro del alumno (usuario + ficha students).
+     * Solo permitido antes de presentar el examen.
+     *
+     * @param array{
+     *   first_name?:string,last_name_p?:string,last_name_m?:string,phone?:string,email?:string,
+     *   curp?:string,birth_date?:string,sex?:string,nationality?:string
+     * } $data
      */
     public function updateStudentProfile(int $trackingId, array $data, ?int $actorUserId = null): void
     {
         $tracking = $this->find($trackingId);
         if ($tracking === null) {
             throw new \InvalidArgumentException('Seguimiento no encontrado.');
+        }
+        if (!self::canEditRegistration($tracking)) {
+            throw new \InvalidArgumentException(
+                'Ya no se pueden modificar los datos de registro: el alumno ya presentó el examen.'
+            );
         }
         $userId = (int) ($tracking['student_user_id'] ?? 0);
         if ($userId < 1) {
@@ -266,6 +294,23 @@ final class TrackingService
             throw new \InvalidArgumentException('Correo inválido.');
         }
 
+        $curp = strtoupper(trim((string) ($data['curp'] ?? '')));
+        $birthDate = trim((string) ($data['birth_date'] ?? ''));
+        $sex = CheckoutRequirements::normalizeSexValue((string) ($data['sex'] ?? ''));
+        $nationality = trim((string) ($data['nationality'] ?? ''));
+        if ($nationality !== '') {
+            $allowedNat = array_map(
+                static fn (array $o): string => (string) $o['value'],
+                CheckoutRequirements::NATIONALITY_OPTIONS
+            );
+            if (!in_array($nationality, $allowedNat, true)) {
+                throw new \InvalidArgumentException('Elige una nacionalidad de la lista.');
+            }
+        }
+        if ($birthDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $birthDate)) {
+            throw new \InvalidArgumentException('Fecha de nacimiento inválida (usa AAAA-MM-DD).');
+        }
+
         if ($email !== '') {
             $dup = $this->pdo->prepare('SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1');
             $dup->execute([$email, $userId]);
@@ -279,6 +324,30 @@ final class TrackingService
             $this->pdo->prepare(
                 'UPDATE users SET first_name = ?, last_name_p = ?, last_name_m = ?, phone = ? WHERE id = ?'
             )->execute([$first, $lp, $lm !== '' ? $lm : null, $phone !== '' ? $phone : null, $userId]);
+        }
+
+        $stu = $this->pdo->prepare('SELECT id FROM students WHERE user_id = ? LIMIT 1');
+        $stu->execute([$userId]);
+        if ($stu->fetchColumn()) {
+            $this->pdo->prepare(
+                'UPDATE students SET curp = ?, birth_date = ?, sex = ?, nationality = ? WHERE user_id = ?'
+            )->execute([
+                $curp !== '' ? $curp : null,
+                $birthDate !== '' ? $birthDate : null,
+                $sex !== '' ? $sex : null,
+                $nationality !== '' ? $nationality : null,
+                $userId,
+            ]);
+        } else {
+            $this->pdo->prepare(
+                'INSERT INTO students (user_id, curp, birth_date, sex, nationality) VALUES (?,?,?,?,?)'
+            )->execute([
+                $userId,
+                $curp !== '' ? $curp : null,
+                $birthDate !== '' ? $birthDate : null,
+                $sex !== '' ? $sex : null,
+                $nationality !== '' ? $nationality : 'México',
+            ]);
         }
 
         $this->log(
