@@ -1254,6 +1254,13 @@ final class ProviderRequestService
                     unset($extra['step_mail_errors']);
                 }
             }
+            $doneMap = is_array($extra['step_done'] ?? null) ? $extra['step_done'] : [];
+            $doneMap[$step] = [
+                'at' => date('c'),
+                'by' => $actorUserId,
+                'note' => 'Solicitud a proveedor enviada a ' . $to,
+            ];
+            $extra['step_done'] = $doneMap;
         }
         $this->saveExtra($trackingId, $extra);
     }

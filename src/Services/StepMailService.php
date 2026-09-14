@@ -102,12 +102,21 @@ final class StepMailService
                 ['step_code' => $stepCode, 'mail_template_code' => $tplCode]
             );
 
-            // ProviderRequestService ya persiste provider_request.sent_at + step_mail_sent.
-            // No reescribir extra_json aquí (evitar condiciones de carrera).
+            $to = (string) ($providerResult['to'] ?? '');
+            $sentTpl = (string) ($providerResult['template'] ?? $tplCode);
+            // Reforzar estado del botón: ProviderRequestService ya escribe sent_at/step_mail_sent,
+            // pero Operación también mira step_done y a veces el código de paso no coincidía.
+            $this->markSent($trackingId, $stepCode, $actorUserId, $to, $sentTpl, 'provider');
+            $this->tracking->markStepDone(
+                $trackingId,
+                $stepCode,
+                $actorUserId,
+                'Solicitud a proveedor «' . $sentTpl . '» enviada a ' . $to
+            );
 
             return [
-                'to' => (string) ($providerResult['to'] ?? ''),
-                'template' => (string) ($providerResult['template'] ?? $tplCode),
+                'to' => $to,
+                'template' => $sentTpl,
                 'audience' => 'provider',
                 'workbook_url' => (string) ($providerResult['workbook_url'] ?? ''),
                 'comprobante_url' => (string) ($providerResult['comprobante_url'] ?? ''),

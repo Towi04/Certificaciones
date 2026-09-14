@@ -260,6 +260,7 @@ final class AdminOpsBoardService
         }
 
         $opsButtons = GroupStepConfig::pendingOpsButtons($row, $pipelineSteps);
+        $opsButtons = self::syncMailButtonDoneFlags($opsButtons, $extra, $providerSentAt);
         $needsExamAccessBtn = false;
         $pendingOps = 0;
         foreach ($opsButtons as $btn) {
@@ -313,6 +314,79 @@ final class AdminOpsBoardService
             || (string) ($row['tracking_status'] ?? '') === 'waiting_admin';
 
         return $row;
+    }
+
+    /**
+     * Asegura verde/check en botones de correo ya ejecutados aunque el paso
+     * se haya renombrado o la audiencia de la plantilla esté mal etiquetada.
+     *
+     * @param list<array<string, mixed>> $buttons
+     * @param array<string, mixed> $extra
+     * @return list<array<string, mixed>>
+     */
+    private static function syncMailButtonDoneFlags(array $buttons, array $extra, string $providerSentAt): array
+    {
+        $sentMap = is_array($extra['step_mail_sent'] ?? null) ? $extra['step_mail_sent'] : [];
+        $doneMap = is_array($extra['step_done'] ?? null) ? $extra['step_done'] : [];
+        $providerSent = $providerSentAt !== '' && $providerSentAt !== 'null';
+
+        foreach ($buttons as $i => $btn) {
+            $action = (string) ($btn['action'] ?? '');
+            if ($action !== GroupStepConfig::ACTION_SEND_MAIL
+                && $action !== GroupStepConfig::ACTION_SEND_RESULTS
+                && $action !== GroupStepConfig::ACTION_EXAM_ACCESS
+            ) {
+                continue;
+            }
+            if (!empty($btn['done']) && (string) ($btn['status'] ?? '') === 'ok') {
+                continue;
+            }
+
+            $code = trim((string) ($btn['code'] ?? ''));
+            $audience = (string) ($btn['audience'] ?? ($btn['email']['audience'] ?? 'student'));
+            $tpl = trim((string) ($btn['email']['template_code'] ?? ''));
+            $marked = false;
+
+            if ($code !== '' && !empty($sentMap[$code])) {
+                $marked = true;
+            }
+            if (!$marked && $code !== '' && !empty($doneMap[$code])) {
+                $marked = true;
+            }
+            if (!$marked && $tpl !== '') {
+                foreach ($sentMap as $entry) {
+                    if (!is_array($entry)) {
+                        continue;
+                    }
+                    $entryTpl = trim((string) ($entry['template'] ?? $entry['template_code'] ?? ''));
+                    if ($entryTpl !== '' && strcasecmp($entryTpl, $tpl) === 0) {
+                        $marked = true;
+                        break;
+                    }
+                }
+            }
+            if (!$marked && $providerSent && (
+                $audience === 'provider'
+                || ($tpl !== '' && (
+                    MailTemplateService::isUksSolicitudCode($tpl)
+                    || MailTemplateService::templateNeedsProviderDocumentLinks($tpl)
+                ))
+            )) {
+                $marked = true;
+            }
+
+            if ($marked) {
+                $buttons[$i]['done'] = true;
+                $buttons[$i]['status'] = 'ok';
+                $buttons[$i]['status_detail'] = 'Enviado / completado';
+                $label = (string) ($buttons[$i]['label'] ?? '');
+                if ($label !== '' && !str_starts_with(mb_strtolower($label), 'reenviar')) {
+                    $buttons[$i]['label'] = 'Reenviar · ' . $label;
+                }
+            }
+        }
+
+        return $buttons;
     }
 
     /**
