@@ -74,12 +74,14 @@ final class AdminOpsBoardService
                     pu.matricula, pu.status AS purchase_status, pu.charged_amount, pu.payment_method,
                     pu.payment_proof_path, pu.paid_at, pu.combo_id,
                     u.first_name, u.last_name_p, u.last_name_m, u.email AS student_email, u.phone AS student_phone,
+                    st.curp, st.birth_date, st.sex, st.nationality,
                     pt.code AS pipeline_code,
                     pa.code AS partner_code, pa.display_name AS partner_name
              FROM trackings t
              JOIN products pr ON pr.id = t.product_id
              JOIN purchases pu ON pu.id = t.purchase_id
              JOIN users u ON u.id = t.student_user_id
+             LEFT JOIN students st ON st.user_id = t.student_user_id
              LEFT JOIN product_groups pg ON pg.id = pr.product_group_id
              LEFT JOIN pipeline_templates pt ON pt.id = t.pipeline_template_id
              LEFT JOIN partners pa ON pa.id = t.partner_id

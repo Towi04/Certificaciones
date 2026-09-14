@@ -34,6 +34,15 @@ $statusLabels = [
     <?php if (!empty($tracking['student_phone'])): ?> · <?= e($tracking['student_phone']) ?><?php endif; ?>
 </p>
 
+<div class="panel" style="margin-top:1rem">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Datos de registro</h2>
+    <?php
+    $canEditRegistration = \App\Services\TrackingService::canEditRegistration($tracking);
+    $formAction = url('/admin/seguimientos/' . (int) $tracking['id'] . '/alumno');
+    require BASE_PATH . '/views/partials/registration_edit_form.php';
+    ?>
+</div>
+
 <?php if (in_array((string) $tracking['purchase_status'], ['awaiting_payment', 'payment_review'], true)): ?>
     <div class="panel" style="margin-top:1rem;border:2px solid var(--doceo-yellow)">
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Pago pendiente de confirmación</h2>

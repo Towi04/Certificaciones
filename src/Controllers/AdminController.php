@@ -1344,6 +1344,10 @@ final class AdminController
                 'last_name_m' => (string) ($_POST['last_name_m'] ?? ''),
                 'phone' => (string) ($_POST['phone'] ?? ''),
                 'email' => (string) ($_POST['email'] ?? ''),
+                'curp' => (string) ($_POST['curp'] ?? ''),
+                'birth_date' => (string) ($_POST['birth_date'] ?? ''),
+                'sex' => (string) ($_POST['sex'] ?? ''),
+                'nationality' => (string) ($_POST['nationality'] ?? ''),
             ], (int) Auth::id());
             $stepCode = trim((string) ($_POST['step_code'] ?? ''));
             if ($stepCode !== '') {

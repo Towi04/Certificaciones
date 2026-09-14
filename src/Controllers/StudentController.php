@@ -53,10 +53,43 @@ final class StudentController
             'registrationDocs' => $checklist,
             'logs' => $svc->logs((int) $tracking['id']),
             'canReschedule' => $svc->canStudentRequestReschedule($tracking),
+            'canEditRegistration' => TrackingService::canEditRegistration($tracking),
             'uksReport' => ImportService::uksReportFromTracking($tracking),
             'eletExamUrl' => (new UksEletService())->examUrl(),
             'layout' => 'student',
         ]);
+    }
+
+    public function updateRegistration(string $id): void
+    {
+        Auth::requireRole(['student']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        $svc = new TrackingService();
+        $tracking = $svc->find($trackingId);
+        if ($tracking === null || (int) $tracking['student_user_id'] !== (int) Auth::id()) {
+            http_response_code(404);
+            view('errors/404', ['title' => 'Caso no encontrado', 'layout' => 'student']);
+
+            return;
+        }
+        try {
+            $svc->updateStudentProfile($trackingId, [
+                'first_name' => (string) ($_POST['first_name'] ?? ''),
+                'last_name_p' => (string) ($_POST['last_name_p'] ?? ''),
+                'last_name_m' => (string) ($_POST['last_name_m'] ?? ''),
+                'phone' => (string) ($_POST['phone'] ?? ''),
+                'email' => (string) ($_POST['email'] ?? ''),
+                'curp' => (string) ($_POST['curp'] ?? ''),
+                'birth_date' => (string) ($_POST['birth_date'] ?? ''),
+                'sex' => (string) ($_POST['sex'] ?? ''),
+                'nationality' => (string) ($_POST['nationality'] ?? ''),
+            ], (int) Auth::id());
+            flash('success', 'Tus datos de registro se actualizaron.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/alumno/caso/' . $trackingId);
     }
 
     public function requestReschedule(string $id): void

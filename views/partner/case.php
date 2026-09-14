@@ -21,6 +21,19 @@ $current = (string) ($tracking['current_step_code'] ?? '');
     <?php if (!empty($tracking['student_phone'])): ?> · <?= e($tracking['student_phone']) ?><?php endif; ?>
 </p>
 
+<div class="panel" style="margin-top:1rem">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Datos de registro del alumno</h2>
+    <p class="muted" style="font-size:.85rem;margin-top:0">
+        Corrige nombre u otros datos si el alumno se equivocó al registrarse.
+        Solo se permite <strong>antes de presentar el examen</strong>.
+    </p>
+    <?php
+    $canEditRegistration = !empty($canEditRegistration);
+    $formAction = url('/partner/caso/' . (int) $tracking['id'] . '/datos');
+    require BASE_PATH . '/views/partials/registration_edit_form.php';
+    ?>
+</div>
+
 <?php if ($steps !== []): ?>
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Progreso</h2>

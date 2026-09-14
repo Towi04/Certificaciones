@@ -5,462 +5,725 @@ declare(strict_types=1);
 namespace App\Support;
 
 /**
- * Evalúa fórmulas estilo Excel (español/inglés) con placeholders {{campo}}.
- * El resultado es un valor de texto listo para escribir en la celda (sin fórmula).
+ * Evalúa un DSL pequeño estilo Excel para mapear celdas de plantillas.
  *
- * Ejemplos:
- *   =MAYUSC({{full_name}})
- *   =ASCIIMAYUSC({{full_name}})
- *   =TEXTO({{exam_date}};"dd/mm/aaaa")
- *   =TEXTO({{exam_time}};"hh:mm")
- *   =SUSTITUIR(MAYUSC({{first_name}});"Ñ";"N")
+ * Funciones (ES + EN):
+ *   MAYUSC/UPPER, MINUSC/LOWER, SUSTITUIR/SUBSTITUTE, SINACENTOS, ASCIIMAYUSC,
+ *   TEXTO/TEXT, CONCATENAR/CONCAT, RECORTAR/TRIM,
+ *   SI/IF, AÑO/YEAR, MES/MONTH, DIA/DAY, IZQUIERDA/LEFT, DERECHA/RIGHT,
+ *   Y/AND, O/OR, NO/NOT
+ * También: & concatenación, comparaciones (= <> != < > <= >=), ; o , como separador.
+ *
+ * Placeholders: {{campo}} o {{campo|FALLBACK}}.
+ * Alias (p. ej. apellido_paterno → last_name_p) se resuelven antes de evaluar.
  */
 final class CellFormulaEvaluator
 {
-    /** @param array<string, string> $fields */
-    public static function evaluate(string $expression, array $fields): string
+    /** @var array<string, string> alias en minúsculas → clave canónica */
+    private const FIELD_ALIASES = [
+        'apellido_paterno' => 'last_name_p',
+        'apellido_materno' => 'last_name_m',
+        'apellidos' => 'last_names',
+        'name' => 'first_name',
+        'nombre' => 'first_name',
+        'nombres' => 'first_name',
+        'nombre_completo' => 'full_name',
+        'fecha_nacimiento' => 'birth_date',
+        'fecha_nac' => 'birth_date',
+        'sexo' => 'sex',
+        'genero' => 'sex',
+        'género' => 'sex',
+        'nacionalidad' => 'nationality',
+        'fecha_examen' => 'exam_date',
+        'hora_examen' => 'exam_time',
+        'fecha_hora_examen' => 'exam_datetime',
+        'correo' => 'email',
+        'telefono' => 'phone',
+        'teléfono' => 'phone',
+    ];
+
+    /**
+     * @param array<string, scalar|null> $fields
+     */
+    public static function evaluate(?string $formula, array $fields): string
     {
-        $expression = trim($expression);
-        if ($expression === '') {
+        $raw = trim((string) $formula);
+        if ($raw === '') {
             return '';
         }
 
-        // Plantilla simple sin fórmula: "Hola {{first_name}}"
-        if (!str_starts_with($expression, '=') && !preg_match('/^[A-Za-zÁÉÍÓÚÜÑ_]+\s*\(/u', $expression)) {
-            return self::replacePlaceholders($expression, $fields);
+        $bag = self::enrichFields($fields);
+
+        if ($raw[0] !== '=') {
+            return self::interpolate($raw, $bag);
         }
 
-        if (str_starts_with($expression, '=')) {
-            $expression = substr($expression, 1);
-        }
-        $expression = trim($expression);
-        if ($expression === '') {
+        $expr = ltrim(substr($raw, 1));
+        if ($expr === '') {
             return '';
         }
 
-        $parser = new self($expression, $fields);
+        try {
+            $tokens = self::tokenize($expr);
+            $parser = new FormulaParser($tokens, $bag);
+            $value = $parser->parseExpression();
+            $parser->expectEof();
 
-        return $parser->parseExpression();
+            return self::stringify($value);
+        } catch (\Throwable) {
+            return self::interpolate($raw, $bag);
+        }
     }
 
-    /** @param array<string, string> $fields */
-    public static function replacePlaceholders(string $template, array $fields): string
+    /**
+     * @param array<string, scalar|null> $fields
+     * @return array<string, string>
+     */
+    private static function enrichFields(array $fields): array
+    {
+        $out = [];
+        foreach ($fields as $k => $v) {
+            $key = strtolower(trim((string) $k));
+            if ($key === '') {
+                continue;
+            }
+            $out[$key] = trim((string) ($v ?? ''));
+        }
+
+        $canon = [];
+        foreach ($out as $k => $v) {
+            $canon[self::canonicalizeFieldKey($k)] = $v;
+        }
+        $out = array_merge($out, $canon);
+
+        $lp = trim((string) ($out['last_name_p'] ?? ''));
+        $lm = trim((string) ($out['last_name_m'] ?? ''));
+        $out['last_names'] = trim(preg_replace('/\s+/u', ' ', trim($lp . ' ' . $lm)) ?? '');
+
+        $sex = strtoupper(self::stripAccents(trim((string) ($out['sex'] ?? ''))));
+        if (in_array($sex, ['M', 'MASCULINO', 'HOMBRE', 'H'], true)) {
+            $out['sex'] = 'M';
+            $out['sex_label'] = 'Masculino';
+            $out['sex_code'] = 'M';
+        } elseif (in_array($sex, ['F', 'FEMENINO', 'MUJER'], true)) {
+            $out['sex'] = 'F';
+            $out['sex_label'] = 'Femenino';
+            $out['sex_code'] = 'F';
+        } else {
+            $out['sex_label'] = (string) ($out['sex'] ?? '');
+            $out['sex_code'] = (string) ($out['sex'] ?? '');
+        }
+
+        $nat = trim((string) ($out['nationality'] ?? ''));
+        $natNorm = AsciiUpperNormalizer::normalize($nat);
+        if ($natNorm === 'MEXICO' || $natNorm === 'MEX' || $natNorm === 'MX') {
+            $out['nationality_code'] = 'MEX';
+        } elseif ($nat !== '') {
+            $out['nationality_code'] = strtoupper(substr($natNorm, 0, 3));
+        } else {
+            $out['nationality_code'] = '';
+        }
+
+        return $out;
+    }
+
+    public static function canonicalizeFieldKey(string $key): string
+    {
+        $k = strtolower(trim($key));
+        $k = str_replace([' ', '-'], '_', $k);
+        $k = preg_replace('/_+/', '_', $k) ?? $k;
+        $k = trim($k, '_');
+
+        return self::FIELD_ALIASES[$k] ?? $k;
+    }
+
+    /**
+     * @param array<string, string> $fields
+     */
+    private static function interpolate(string $text, array $fields): string
     {
         return (string) preg_replace_callback(
-            '/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/',
+            '/\{\{\s*([a-zA-Z0-9_ \-]+)\s*(?:\|\s*([^}]*))?\s*\}\}/u',
             static function (array $m) use ($fields): string {
-                $key = $m[1];
+                $key = self::canonicalizeFieldKey($m[1]);
+                $fallback = array_key_exists(2, $m) ? trim((string) $m[2]) : '';
+                $val = $fields[$key] ?? '';
+                if ($val === '' && $fallback !== '') {
+                    return $fallback;
+                }
 
-                return (string) ($fields[$key] ?? '');
+                return $val;
             },
-            $template
+            $text
         );
     }
 
-    private string $src;
+    /**
+     * @return list<array{0:string,1:string}>
+     */
+    private static function tokenize(string $expr): array
+    {
+        $tokens = [];
+        $len = strlen($expr);
+        $i = 0;
+        while ($i < $len) {
+            $ch = $expr[$i];
+            if (ctype_space($ch)) {
+                $i++;
+                continue;
+            }
+            if ($ch === '"' || $ch === "'") {
+                $quote = $ch;
+                $i++;
+                $buf = '';
+                while ($i < $len) {
+                    $c = $expr[$i];
+                    if ($c === $quote) {
+                        $i++;
+                        break;
+                    }
+                    if ($c === '\\' && $i + 1 < $len) {
+                        $buf .= $expr[$i + 1];
+                        $i += 2;
+                        continue;
+                    }
+                    $buf .= $c;
+                    $i++;
+                }
+                $tokens[] = ['STR', $buf];
+                continue;
+            }
+            if ($ch === '{' && $i + 1 < $len && $expr[$i + 1] === '{') {
+                $end = strpos($expr, '}}', $i + 2);
+                if ($end === false) {
+                    throw new \RuntimeException('placeholder sin cierre');
+                }
+                $inner = substr($expr, $i + 2, $end - ($i + 2));
+                $tokens[] = ['PH', $inner];
+                $i = $end + 2;
+                continue;
+            }
+            if (preg_match('/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ_][A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9_]*/u', substr($expr, $i), $m) === 1) {
+                $tokens[] = ['ID', $m[0]];
+                $i += strlen($m[0]);
+                continue;
+            }
+            if (preg_match('/^\d+(?:\.\d+)?/', substr($expr, $i), $m) === 1) {
+                $tokens[] = ['NUM', $m[0]];
+                $i += strlen($m[0]);
+                continue;
+            }
+            if (in_array($ch, ['&', '(', ')', ',', ';', '+', '-', '*', '/'], true)) {
+                $tokens[] = ['SYM', $ch];
+                $i++;
+                continue;
+            }
+            if ($ch === '<' || $ch === '>' || $ch === '=' || $ch === '!') {
+                $two = substr($expr, $i, 2);
+                if (in_array($two, ['<=', '>=', '<>', '!='], true)) {
+                    $tokens[] = ['OP', $two];
+                    $i += 2;
+                    continue;
+                }
+                if ($ch === '=' || $ch === '<' || $ch === '>') {
+                    $tokens[] = ['OP', $ch];
+                    $i++;
+                    continue;
+                }
+            }
+            throw new \RuntimeException('token inválido cerca de: ' . substr($expr, $i, 12));
+        }
+        $tokens[] = ['EOF', ''];
+
+        return $tokens;
+    }
+
+    public static function stringify(mixed $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+        if (is_bool($value)) {
+            return $value ? 'TRUE' : 'FALSE';
+        }
+        if (is_float($value)) {
+            if (abs($value - round($value)) < 1e-9) {
+                return (string) (int) round($value);
+            }
+
+            return rtrim(rtrim(sprintf('%.8F', $value), '0'), '.');
+        }
+        if (is_int($value)) {
+            return (string) $value;
+        }
+
+        return (string) $value;
+    }
+
+    public static function stripAccents(string $s): string
+    {
+        return AsciiUpperNormalizer::stripAccents($s);
+    }
+
+    public static function utf8Upper(string $s): string
+    {
+        if (function_exists('mb_strtoupper')) {
+            return \mb_strtoupper($s, 'UTF-8');
+        }
+        $map = [
+            'á' => 'Á', 'é' => 'É', 'í' => 'Í', 'ó' => 'Ó', 'ú' => 'Ú', 'ü' => 'Ü', 'ñ' => 'Ñ',
+            'à' => 'À', 'è' => 'È', 'ì' => 'Ì', 'ò' => 'Ò', 'ù' => 'Ù',
+        ];
+
+        return strtoupper(strtr($s, $map));
+    }
+
+    public static function utf8Lower(string $s): string
+    {
+        if (function_exists('mb_strtolower')) {
+            return \mb_strtolower($s, 'UTF-8');
+        }
+        $map = [
+            'Á' => 'á', 'É' => 'é', 'Í' => 'í', 'Ó' => 'ó', 'Ú' => 'ú', 'Ü' => 'ü', 'Ñ' => 'ñ',
+            'À' => 'à', 'È' => 'è', 'Ì' => 'ì', 'Ò' => 'ò', 'Ù' => 'ù',
+        ];
+
+        return strtolower(strtr($s, $map));
+    }
+
+    public static function utf8Len(string $s): int
+    {
+        if (function_exists('mb_strlen')) {
+            return \mb_strlen($s, 'UTF-8');
+        }
+
+        return count(preg_split('//u', $s, -1, PREG_SPLIT_NO_EMPTY) ?: []);
+    }
+
+    public static function utf8Substr(string $s, int $start, ?int $length = null): string
+    {
+        if (function_exists('mb_substr')) {
+            return $length === null
+                ? \mb_substr($s, $start, null, 'UTF-8')
+                : \mb_substr($s, $start, $length, 'UTF-8');
+        }
+        $chars = preg_split('//u', $s, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $slice = $length === null ? array_slice($chars, $start) : array_slice($chars, $start, $length);
+
+        return implode('', $slice);
+    }
+}
+
+/**
+ * @internal
+ */
+final class FormulaParser
+{
+    /** @var list<array{0:string,1:string}> */
+    private array $tokens;
     private int $pos = 0;
     /** @var array<string, string> */
     private array $fields;
 
-    /** @param array<string, string> $fields */
-    private function __construct(string $src, array $fields)
+    /**
+     * @param list<array{0:string,1:string}> $tokens
+     * @param array<string, string> $fields
+     */
+    public function __construct(array $tokens, array $fields)
     {
-        $this->src = $src;
+        $this->tokens = $tokens;
         $this->fields = $fields;
     }
 
-    private function parseExpression(): string
+    public function parseExpression(): mixed
     {
-        $left = $this->parsePrimary();
-        $this->skipWs();
-        while ($this->peek() === '&') {
-            $this->pos++;
-            $right = $this->parsePrimary();
-            $left .= $right;
-            $this->skipWs();
+        return $this->parseComparison();
+    }
+
+    public function expectEof(): void
+    {
+        if ($this->peekType() !== 'EOF') {
+            throw new \RuntimeException('tokens sobrantes');
         }
-        $this->skipWs();
-        if ($this->pos < strlen($this->src)) {
-            throw new \InvalidArgumentException(
-                'Fórmula no válida cerca de: ' . substr($this->src, $this->pos, 24)
-            );
+    }
+
+    private function parseComparison(): mixed
+    {
+        $left = $this->parseConcat();
+        $op = $this->peek();
+        if ($op[0] === 'OP') {
+            $this->next();
+            $right = $this->parseConcat();
+
+            return $this->compare($left, $op[1], $right);
         }
 
         return $left;
     }
 
-    private function parsePrimary(): string
+    private function parseConcat(): mixed
     {
-        $this->skipWs();
-        $ch = $this->peek();
-        if ($ch === '') {
-            return '';
+        $left = $this->parseAdd();
+        while ($this->peekType() === 'SYM' && $this->peekValue() === '&') {
+            $this->next();
+            $right = $this->parseAdd();
+            $left = CellFormulaEvaluator::stringify($left) . CellFormulaEvaluator::stringify($right);
         }
 
-        // String literal
-        if ($ch === '"' || $ch === "'") {
-            return $this->parseStringLiteral();
-        }
-
-        // Placeholder {{field}}
-        if ($ch === '{' && ($this->src[$this->pos + 1] ?? '') === '{') {
-            return $this->parsePlaceholder();
-        }
-
-        // Number
-        if (ctype_digit($ch) || ($ch === '.' && isset($this->src[$this->pos + 1]) && ctype_digit($this->src[$this->pos + 1]))) {
-            return $this->parseNumber();
-        }
-
-        // Function or bare identifier
-        if (preg_match('/[A-Za-zÁÉÍÓÚÜÑ_]/u', $ch)) {
-            $name = $this->parseIdentifier();
-            $this->skipWs();
-            if ($this->peek() === '(') {
-                return $this->parseFunctionCall($name);
-            }
-            // Identificador suelto: tratarlo como campo si existe
-            $key = strtolower($name);
-            if (array_key_exists($key, $this->fields)) {
-                return (string) $this->fields[$key];
-            }
-            throw new \InvalidArgumentException('Identificador desconocido en fórmula: ' . $name);
-        }
-
-        if ($ch === '(') {
-            $this->pos++;
-            $start = $this->pos;
-            $depth = 0;
-            $inStr = null;
-            $len = strlen($this->src);
-            while ($this->pos < $len) {
-                $c = $this->src[$this->pos];
-                if ($inStr !== null) {
-                    if ($c === $inStr) {
-                        $inStr = null;
-                    }
-                    $this->pos++;
-                    continue;
-                }
-                if ($c === '"' || $c === "'") {
-                    $inStr = $c;
-                    $this->pos++;
-                    continue;
-                }
-                if ($c === '(') {
-                    $depth++;
-                } elseif ($c === ')') {
-                    if ($depth === 0) {
-                        $inner = trim(substr($this->src, $start, $this->pos - $start));
-                        $this->pos++;
-                        if ($inner === '') {
-                            return '';
-                        }
-                        $sub = new self($inner, $this->fields);
-
-                        return $sub->parseExpression();
-                    }
-                    $depth--;
-                }
-                $this->pos++;
-            }
-            throw new \InvalidArgumentException('Falta ) en la fórmula.');
-        }
-
-        throw new \InvalidArgumentException('Token inesperado en fórmula: ' . $ch);
+        return $left;
     }
 
-    private function parseFunctionCall(string $name): string
+    private function parseAdd(): mixed
     {
-        if ($this->peek() !== '(') {
-            throw new \InvalidArgumentException('Se esperaba ( tras ' . $name);
+        $left = $this->parseMul();
+        while ($this->peekType() === 'SYM' && ($this->peekValue() === '+' || $this->peekValue() === '-')) {
+            $op = $this->next()[1];
+            $right = $this->parseMul();
+            $a = $this->asNumber($left);
+            $b = $this->asNumber($right);
+            $left = $op === '+' ? ($a + $b) : ($a - $b);
         }
-        $this->pos++; // (
-        $args = [];
-        $this->skipWs();
-        if ($this->peek() !== ')') {
-            while (true) {
-                $args[] = $this->parseArg();
-                $this->skipWs();
-                $sep = $this->peek();
-                if ($sep === ',' || $sep === ';') {
-                    $this->pos++;
-                    $this->skipWs();
-                    continue;
-                }
-                break;
-            }
-        }
-        if ($this->peek() !== ')') {
-            throw new \InvalidArgumentException('Falta ) al cerrar ' . $name);
-        }
-        $this->pos++;
 
-        return $this->callFunction($name, $args);
+        return $left;
     }
 
-    private function parseArg(): string
+    private function parseMul(): mixed
     {
-        $this->skipWs();
-        $start = $this->pos;
-        $depth = 0;
-        $inStr = null;
-        $len = strlen($this->src);
-        while ($this->pos < $len) {
-            $c = $this->src[$this->pos];
-            if ($inStr !== null) {
-                if ($c === '\\') {
-                    $this->pos += 2;
-                    continue;
-                }
-                if ($c === $inStr) {
-                    $inStr = null;
-                }
-                $this->pos++;
-                continue;
-            }
-            if ($c === '"' || $c === "'") {
-                $inStr = $c;
-                $this->pos++;
-                continue;
-            }
-            if ($c === '(') {
-                $depth++;
-            } elseif ($c === ')') {
-                if ($depth === 0) {
-                    break;
-                }
-                $depth--;
-            } elseif (($c === ',' || $c === ';') && $depth === 0) {
-                break;
-            }
-            $this->pos++;
+        $left = $this->parseUnary();
+        while ($this->peekType() === 'SYM' && ($this->peekValue() === '*' || $this->peekValue() === '/')) {
+            $op = $this->next()[1];
+            $right = $this->parseUnary();
+            $a = $this->asNumber($left);
+            $b = $this->asNumber($right);
+            $left = $op === '*' ? ($a * $b) : ($b == 0.0 ? 0.0 : ($a / $b));
         }
-        $chunk = trim(substr($this->src, $start, $this->pos - $start));
-        if ($chunk === '') {
-            return '';
-        }
-        $sub = new self($chunk, $this->fields);
 
-        return $sub->parseExpression();
+        return $left;
     }
 
-    /** @param list<string> $args */
-    private function callFunction(string $name, array $args): string
+    private function parseUnary(): mixed
     {
-        $fn = $this->normalizeFunctionName($name);
+        if ($this->peekType() === 'SYM' && $this->peekValue() === '-') {
+            $this->next();
+
+            return -1 * $this->asNumber($this->parseUnary());
+        }
+        if ($this->peekType() === 'SYM' && $this->peekValue() === '+') {
+            $this->next();
+
+            return $this->parseUnary();
+        }
+
+        return $this->parsePrimary();
+    }
+
+    private function parsePrimary(): mixed
+    {
+        $t = $this->peek();
+        if ($t[0] === 'STR') {
+            $this->next();
+
+            return $t[1];
+        }
+        if ($t[0] === 'NUM') {
+            $this->next();
+
+            return str_contains($t[1], '.') ? (float) $t[1] : (int) $t[1];
+        }
+        if ($t[0] === 'PH') {
+            $this->next();
+
+            return $this->resolvePlaceholder($t[1]);
+        }
+        if ($t[0] === 'ID') {
+            $name = $t[1];
+            $this->next();
+            if ($this->peekType() === 'SYM' && $this->peekValue() === '(') {
+                $this->next();
+                $args = $this->parseArgList();
+                $this->expectSym(')');
+
+                return $this->callFunction($name, $args);
+            }
+
+            return $this->resolvePlaceholder($name);
+        }
+        if ($t[0] === 'SYM' && $t[1] === '(') {
+            $this->next();
+            $inner = $this->parseExpression();
+            $this->expectSym(')');
+
+            return $inner;
+        }
+        throw new \RuntimeException('expresión inválida');
+    }
+
+    /** @return list<mixed> */
+    private function parseArgList(): array
+    {
+        if ($this->peekType() === 'SYM' && $this->peekValue() === ')') {
+            return [];
+        }
+        $args = [$this->parseExpression()];
+        while ($this->peekType() === 'SYM' && ($this->peekValue() === ',' || $this->peekValue() === ';')) {
+            $this->next();
+            $args[] = $this->parseExpression();
+        }
+
+        return $args;
+    }
+
+    private function resolvePlaceholder(string $inner): string
+    {
+        $inner = trim($inner);
+        $fallback = '';
+        if (str_contains($inner, '|')) {
+            [$inner, $fb] = array_map('trim', explode('|', $inner, 2));
+            $fallback = $fb;
+        }
+        $key = CellFormulaEvaluator::canonicalizeFieldKey($inner);
+        $val = $this->fields[$key] ?? '';
+        if ($val === '' && $fallback !== '') {
+            return $fallback;
+        }
+
+        return $val;
+    }
+
+    /** @param list<mixed> $args */
+    private function callFunction(string $name, array $args): mixed
+    {
+        $fn = $this->normalizeFn($name);
+
         return match ($fn) {
-            'MAYUSC', 'UPPER' => self::upper((string) ($args[0] ?? '')),
-            'MINUSC', 'LOWER' => self::lower((string) ($args[0] ?? '')),
-            'SUSTITUIR', 'SUBSTITUTE' => str_replace(
-                (string) ($args[1] ?? ''),
-                (string) ($args[2] ?? ''),
-                (string) ($args[0] ?? '')
+            'UPPER' => CellFormulaEvaluator::utf8Upper($this->argString($args, 0)),
+            'LOWER' => CellFormulaEvaluator::utf8Lower($this->argString($args, 0)),
+            'TRIM' => trim(preg_replace('/\s+/u', ' ', $this->argString($args, 0)) ?? ''),
+            'SUBSTITUTE' => str_replace($this->argString($args, 1), $this->argString($args, 2), $this->argString($args, 0)),
+            'UNACCENT' => CellFormulaEvaluator::stripAccents($this->argString($args, 0)),
+            'ASCIIUPPER' => AsciiUpperNormalizer::normalize($this->argString($args, 0)),
+            'CONCAT' => implode('', array_map(static fn ($a) => CellFormulaEvaluator::stringify($a), $args)),
+            'TEXT' => $this->formatText($this->argString($args, 0), $this->argString($args, 1)),
+            'IF' => $this->truthy($args[0] ?? false) ? ($args[1] ?? '') : ($args[2] ?? ''),
+            'YEAR' => $this->datePart($this->argString($args, 0), 'Y'),
+            'MONTH' => $this->datePart($this->argString($args, 0), 'n'),
+            'DAY' => $this->datePart($this->argString($args, 0), 'j'),
+            'LEFT' => CellFormulaEvaluator::utf8Substr(
+                $this->argString($args, 0),
+                0,
+                max(0, (int) $this->asNumber($args[1] ?? 0))
             ),
-            'SINACENTOS' => AsciiUpperNormalizer::stripAccents((string) ($args[0] ?? '')),
-            'ASCIIMAYUSC', 'TOEFL' => AsciiUpperNormalizer::normalize((string) ($args[0] ?? '')),
-            'TEXTO', 'TEXT' => self::formatText((string) ($args[0] ?? ''), (string) ($args[1] ?? '')),
-            'CONCATENAR', 'CONCAT', 'CONCATENATE' => implode('', $args),
-            'RECORTAR', 'TRIM' => trim((string) ($args[0] ?? '')),
-            default => throw new \InvalidArgumentException('Función no soportada: ' . $name),
+            'RIGHT' => (static function (string $s, int $n): string {
+                if ($n <= 0) {
+                    return '';
+                }
+                $len = CellFormulaEvaluator::utf8Len($s);
+
+                return CellFormulaEvaluator::utf8Substr($s, max(0, $len - $n));
+            })($this->argString($args, 0), (int) $this->asNumber($args[1] ?? 0)),
+            'AND' => array_reduce($args, fn ($c, $a) => $c && $this->truthy($a), true),
+            'OR' => array_reduce($args, fn ($c, $a) => $c || $this->truthy($a), false),
+            'NOT' => !$this->truthy($args[0] ?? false),
+            default => throw new \RuntimeException('función no soportada: ' . $name),
         };
     }
 
-    private function normalizeFunctionName(string $name): string
+    private function normalizeFn(string $name): string
     {
-        $name = self::upper(trim($name));
-        $map = [
-            'Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' => 'U', 'Ü' => 'U', 'Ñ' => 'N',
-        ];
+        $n = CellFormulaEvaluator::utf8Upper(CellFormulaEvaluator::stripAccents($name));
 
-        return strtr($name, $map);
+        return match ($n) {
+            'MAYUSC', 'MAYUSCULAS', 'UPPER' => 'UPPER',
+            'MINUSC', 'MINUSCULAS', 'LOWER' => 'LOWER',
+            'RECORTAR', 'TRIM' => 'TRIM',
+            'SUSTITUIR', 'SUBSTITUTE' => 'SUBSTITUTE',
+            'SINACENTOS', 'UNACCENT' => 'UNACCENT',
+            'ASCIIMAYUSC', 'ASCIIUPPER' => 'ASCIIUPPER',
+            'CONCATENAR', 'CONCAT' => 'CONCAT',
+            'TEXTO', 'TEXT' => 'TEXT',
+            'SI', 'IF' => 'IF',
+            'ANO', 'AÑO', 'YEAR' => 'YEAR',
+            'MES', 'MONTH' => 'MONTH',
+            'DIA', 'DÍA', 'DAY' => 'DAY',
+            'IZQUIERDA', 'LEFT' => 'LEFT',
+            'DERECHA', 'RIGHT' => 'RIGHT',
+            'Y', 'AND' => 'AND',
+            'O', 'OR' => 'OR',
+            'NO', 'NOT' => 'NOT',
+            default => $n,
+        };
     }
 
-    private static function upper(string $value): string
-    {
-        if (function_exists('mb_strtoupper')) {
-            return \mb_strtoupper($value, 'UTF-8');
-        }
-        // Fallback sin mbstring (mapa UTF-8 por secuencias hex).
-        $map = [
-            "\xC3\xA1" => "\xC3\x81", "\xC3\xA0" => "\xC3\x80", "\xC3\xA4" => "\xC3\x84", "\xC3\xA2" => "\xC3\x82", "\xC3\xA3" => "\xC3\x83",
-            "\xC3\xA9" => "\xC3\x89", "\xC3\xA8" => "\xC3\x88", "\xC3\xAB" => "\xC3\x8B", "\xC3\xAA" => "\xC3\x8A",
-            "\xC3\xAD" => "\xC3\x8D", "\xC3\xAC" => "\xC3\x8C", "\xC3\xAF" => "\xC3\x8F", "\xC3\xAE" => "\xC3\x8E",
-            "\xC3\xB3" => "\xC3\x93", "\xC3\xB2" => "\xC3\x92", "\xC3\xB6" => "\xC3\x96", "\xC3\xB4" => "\xC3\x94", "\xC3\xB5" => "\xC3\x95",
-            "\xC3\xBA" => "\xC3\x9A", "\xC3\xB9" => "\xC3\x99", "\xC3\xBC" => "\xC3\x9C", "\xC3\xBB" => "\xC3\x9B",
-            "\xC3\xB1" => "\xC3\x91", "\xC3\xA7" => "\xC3\x87",
-        ];
-
-        return strtoupper(strtr($value, $map));
-    }
-
-    private static function lower(string $value): string
-    {
-        if (function_exists('mb_strtolower')) {
-            return \mb_strtolower($value, 'UTF-8');
-        }
-        $map = [
-            "\xC3\x81" => "\xC3\xA1", "\xC3\x80" => "\xC3\xA0", "\xC3\x84" => "\xC3\xA4", "\xC3\x82" => "\xC3\xA2", "\xC3\x83" => "\xC3\xA3",
-            "\xC3\x89" => "\xC3\xA9", "\xC3\x88" => "\xC3\xA8", "\xC3\x8B" => "\xC3\xAB", "\xC3\x8A" => "\xC3\xAA",
-            "\xC3\x8D" => "\xC3\xAD", "\xC3\x8C" => "\xC3\xAC", "\xC3\x8F" => "\xC3\xAF", "\xC3\x8E" => "\xC3\xAE",
-            "\xC3\x93" => "\xC3\xB3", "\xC3\x92" => "\xC3\xB2", "\xC3\x96" => "\xC3\xB6", "\xC3\x94" => "\xC3\xB4", "\xC3\x95" => "\xC3\xB5",
-            "\xC3\x9A" => "\xC3\xBA", "\xC3\x99" => "\xC3\xB9", "\xC3\x9C" => "\xC3\xBC", "\xC3\x9B" => "\xC3\xBB",
-            "\xC3\x91" => "\xC3\xB1", "\xC3\x87" => "\xC3\xA7",
-        ];
-
-        return strtolower(strtr($value, $map));
-    }
-
-    private static function formatText(string $value, string $format): string
+    private function formatText(string $value, string $pattern): string
     {
         $value = trim($value);
-        $format = trim($format);
-        if ($value === '' || $format === '') {
+        $pattern = trim($pattern);
+        if ($value === '' || $pattern === '') {
             return $value;
-        }
-
-        $dt = self::parseDateTime($value);
-        if ($dt === null) {
-            return $value;
-        }
-
-        $key = self::lower($format);
-        $presets = [
-            'dd/mm/aaaa' => 'd/m/Y',
-            'dd-mm-aaaa' => 'd-m-Y',
-            'dd/mm/yyyy' => 'd/m/Y',
-            'dd-mm-yyyy' => 'd-m-Y',
-            'aaaa-mm-dd' => 'Y-m-d',
-            'aaaa/mm/dd' => 'Y/m/d',
-            'yyyy-mm-dd' => 'Y-m-d',
-            'yyyy/mm/dd' => 'Y/m/d',
-            'hh:mm' => 'H:i',
-            'hh:mm:ss' => 'H:i:s',
-            'h:mm' => 'G:i',
-        ];
-        if (isset($presets[$key])) {
-            return $dt->format($presets[$key]);
-        }
-
-        // Reemplazo genérico de tokens (aaaa/yyyy, aa/yy, dd, mm, hh).
-        $php = $format;
-        $php = str_ireplace(['aaaa', 'yyyy'], 'Y', $php);
-        $php = str_ireplace(['aa', 'yy'], 'y', $php);
-        $php = str_ireplace('dd', 'd', $php);
-        // hh → H (24h); mm → m (mes) salvo si parece hora
-        if (preg_match('/h/i', $format)) {
-            $php = str_ireplace('hh', 'H', $php);
-            $php = preg_replace('/(?<=H:|H)m{1,2}/i', 'i', $php) ?? $php;
-            $php = str_ireplace('mm', 'i', $php);
-        } else {
-            $php = str_ireplace('mm', 'm', $php);
-        }
-
-        try {
-            return $dt->format($php);
-        } catch (\Throwable) {
-            return $value;
-        }
-    }
-
-    private static function parseDateTime(string $value): ?\DateTimeImmutable
-    {
-        $value = trim($value);
-        $formats = [
-            'Y-m-d H:i:s',
-            'Y-m-d H:i',
-            'Y-m-d',
-            'd/m/Y H:i',
-            'd/m/Y',
-            'd-m-Y',
-            'H:i:s',
-            'H:i',
-        ];
-        foreach ($formats as $f) {
-            $dt = \DateTimeImmutable::createFromFormat('!' . $f, $value);
-            if ($dt instanceof \DateTimeImmutable) {
-                return $dt;
-            }
         }
         $ts = strtotime($value);
-        if ($ts !== false) {
-            return (new \DateTimeImmutable('@' . $ts))->setTimezone(new \DateTimeZone(date_default_timezone_get()));
+        if ($ts === false) {
+            return $value;
+        }
+        $p = CellFormulaEvaluator::utf8Lower($pattern);
+
+        $monthsShortEs = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+        $monthsLongEs = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+        if ($p === 'mmm') {
+            return CellFormulaEvaluator::utf8Upper($monthsShortEs[(int) date('n', $ts) - 1]);
+        }
+        if ($p === 'mmmm') {
+            return CellFormulaEvaluator::utf8Upper($monthsLongEs[(int) date('n', $ts) - 1]);
         }
 
-        return null;
-    }
-
-    private function parsePlaceholder(): string
-    {
-        if (!preg_match('/\G\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/', $this->src, $m, 0, $this->pos)) {
-            throw new \InvalidArgumentException('Placeholder {{campo}} inválido.');
-        }
-        $this->pos += strlen($m[0]);
-        $key = $m[1];
-
-        return (string) ($this->fields[$key] ?? '');
-    }
-
-    private function parseStringLiteral(): string
-    {
-        $quote = $this->src[$this->pos];
-        $this->pos++;
-        $out = '';
-        $len = strlen($this->src);
-        while ($this->pos < $len) {
-            $c = $this->src[$this->pos];
-            if ($c === $quote) {
-                // Excel doubles quotes for escape
-                if (($this->src[$this->pos + 1] ?? '') === $quote) {
-                    $out .= $quote;
-                    $this->pos += 2;
-                    continue;
+        $map = [
+            'aaaa' => 'Y',
+            'yyyy' => 'Y',
+            'aa' => 'y',
+            'yy' => 'y',
+            'mm' => 'm',
+            'dd' => 'd',
+            'hh' => 'H',
+            'h' => 'G',
+            'ii' => 'i',
+            'ss' => 's',
+        ];
+        uksort($map, static fn ($a, $b) => strlen($b) <=> strlen($a));
+        $php = '';
+        $i = 0;
+        $len = strlen($p);
+        while ($i < $len) {
+            $matched = false;
+            foreach ($map as $token => $phpTok) {
+                $tlen = strlen($token);
+                if (substr($p, $i, $tlen) === $token) {
+                    $php .= $phpTok;
+                    $i += $tlen;
+                    $matched = true;
+                    break;
                 }
-                $this->pos++;
-                return $out;
             }
-            if ($c === '\\') {
-                $out .= $this->src[$this->pos + 1] ?? '';
-                $this->pos += 2;
-                continue;
+            if (!$matched) {
+                $ch = $p[$i];
+                $php .= preg_match('/[A-Za-z]/', $ch) === 1 ? '\\' . $ch : $ch;
+                $i++;
             }
-            $out .= $c;
-            $this->pos++;
-        }
-        throw new \InvalidArgumentException('Cadena sin cerrar en la fórmula.');
-    }
-
-    private function parseNumber(): string
-    {
-        $start = $this->pos;
-        while ($this->pos < strlen($this->src) && (ctype_digit($this->src[$this->pos]) || $this->src[$this->pos] === '.')) {
-            $this->pos++;
         }
 
-        return substr($this->src, $start, $this->pos - $start);
+        return date($php, $ts);
     }
 
-    private function parseIdentifier(): string
+    private function datePart(string $value, string $phpFormat): int
     {
-        $start = $this->pos;
-        $len = strlen($this->src);
-        while ($this->pos < $len && preg_match('/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9_]/u', $this->src[$this->pos])) {
-            $this->pos++;
+        $ts = strtotime(trim($value));
+        if ($ts === false) {
+            return 0;
         }
 
-        return substr($this->src, $start, $this->pos - $start);
+        return (int) date($phpFormat, $ts);
     }
 
-    private function peek(): string
+    /** @param list<mixed> $args */
+    private function argString(array $args, int $idx): string
     {
-        return $this->src[$this->pos] ?? '';
+        return CellFormulaEvaluator::stringify($args[$idx] ?? '');
     }
 
-    private function skipWs(): void
+    private function asNumber(mixed $v): float
     {
-        $len = strlen($this->src);
-        while ($this->pos < $len && ctype_space($this->src[$this->pos])) {
-            $this->pos++;
+        if (is_int($v) || is_float($v)) {
+            return (float) $v;
+        }
+        if (is_bool($v)) {
+            return $v ? 1.0 : 0.0;
+        }
+        $s = trim((string) $v);
+        if ($s === '' || !is_numeric($s)) {
+            return 0.0;
+        }
+
+        return (float) $s;
+    }
+
+    private function truthy(mixed $v): bool
+    {
+        if (is_bool($v)) {
+            return $v;
+        }
+        if (is_int($v) || is_float($v)) {
+            return $v != 0;
+        }
+        $s = strtoupper(trim((string) $v));
+        if ($s === '' || $s === '0' || $s === 'FALSE' || $s === 'NO' || $s === 'FALSO') {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function compare(mixed $left, string $op, mixed $right): bool
+    {
+        if ((is_int($left) || is_float($left)) && (is_int($right) || is_float($right))) {
+            $a = (float) $left;
+            $b = (float) $right;
+        } elseif (is_numeric($left) && is_numeric($right) && !is_string($left) && !is_string($right)) {
+            $a = (float) $left;
+            $b = (float) $right;
+        } else {
+            $a = CellFormulaEvaluator::utf8Upper(trim(CellFormulaEvaluator::stringify($left)));
+            $b = CellFormulaEvaluator::utf8Upper(trim(CellFormulaEvaluator::stringify($right)));
+            $sexMap = ['MASCULINO' => 'M', 'HOMBRE' => 'M', 'FEMENINO' => 'F', 'MUJER' => 'F'];
+            $a = $sexMap[$a] ?? $a;
+            $b = $sexMap[$b] ?? $b;
+            $aNorm = CellFormulaEvaluator::stripAccents($a);
+            $bNorm = CellFormulaEvaluator::stripAccents($b);
+            $natMap = ['MEXICO' => 'MEXICO', 'MEX' => 'MEXICO', 'MX' => 'MEXICO'];
+            $a = $natMap[strtoupper($aNorm)] ?? strtoupper($aNorm);
+            $b = $natMap[strtoupper($bNorm)] ?? strtoupper($bNorm);
+        }
+
+        return match ($op) {
+            '=' => $a == $b,
+            '<>', '!=' => $a != $b,
+            '<' => $a < $b,
+            '>' => $a > $b,
+            '<=' => $a <= $b,
+            '>=' => $a >= $b,
+            default => false,
+        };
+    }
+
+    /** @return array{0:string,1:string} */
+    private function peek(): array
+    {
+        return $this->tokens[$this->pos];
+    }
+
+    private function peekType(): string
+    {
+        return $this->tokens[$this->pos][0];
+    }
+
+    private function peekValue(): string
+    {
+        return $this->tokens[$this->pos][1];
+    }
+
+    /** @return array{0:string,1:string} */
+    private function next(): array
+    {
+        $t = $this->tokens[$this->pos];
+        $this->pos++;
+
+        return $t;
+    }
+
+    private function expectSym(string $sym): void
+    {
+        $t = $this->next();
+        if ($t[0] !== 'SYM' || $t[1] !== $sym) {
+            throw new \RuntimeException('se esperaba ' . $sym);
         }
     }
 }

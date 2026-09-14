@@ -77,6 +77,19 @@ $portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($track
     <?php endif; ?>
 </div>
 
+<div class="panel" style="margin-top:1rem">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Mis datos de registro</h2>
+    <p class="muted" style="font-size:.85rem;margin-top:0">
+        Si detectas un error en tu nombre u otros datos (después del correo de bienvenida), corrígelos aquí
+        <strong>antes de presentar el examen</strong>.
+    </p>
+    <?php
+    $canEditRegistration = !empty($canEditRegistration);
+    $formAction = url('/alumno/caso/' . (int) $tracking['id'] . '/datos');
+    require BASE_PATH . '/views/partials/registration_edit_form.php';
+    ?>
+</div>
+
 <?php if ($cenniMeta !== []): ?>
 <div class="panel" style="margin-top:1rem;border:2px solid #dbeafe">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Trámite CENNI</h2>

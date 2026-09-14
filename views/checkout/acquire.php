@@ -116,9 +116,15 @@ $stepLabels = [
                                 if ($options === [] && $code === 'sex') {
                                     $options = \App\Services\CheckoutRequirements::SEX_OPTIONS;
                                 }
+                                if ($options === [] && $code === 'nationality') {
+                                    $options = \App\Services\CheckoutRequirements::NATIONALITY_OPTIONS;
+                                }
                                 $selected = (string) $val;
                                 if ($code === 'sex') {
                                     $selected = \App\Services\CheckoutRequirements::normalizeSexValue($selected);
+                                }
+                                if ($code === 'nationality' && $selected === '') {
+                                    $selected = 'México';
                                 }
                                 ?>
                                 <label><?= e($field['label']) ?><?= $req ? ' *' : '' ?>

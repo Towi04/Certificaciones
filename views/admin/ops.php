@@ -445,8 +445,40 @@ $extraColHeader = count($extraColLabels) === 1
                                                        value="<?= e((string) ($r['student_email'] ?? '')) ?>" placeholder="Correo">
                                                 <input class="ops-input" type="text" name="phone"
                                                        value="<?= e((string) ($r['student_phone'] ?? '')) ?>" placeholder="Teléfono">
+                                                <input class="ops-input" type="text" name="curp"
+                                                       value="<?= e((string) ($r['curp'] ?? '')) ?>" placeholder="CURP" maxlength="18">
+                                                <input class="ops-input" type="date" name="birth_date"
+                                                       value="<?= e((string) ($r['birth_date'] ?? '')) ?>" placeholder="Fecha nacimiento">
+                                                <select class="ops-input" name="sex">
+                                                    <option value="">Sexo</option>
+                                                    <?php
+                                                    $sexVal = \App\Services\CheckoutRequirements::normalizeSexValue((string) ($r['sex'] ?? ''));
+                                                    foreach (\App\Services\CheckoutRequirements::SEX_OPTIONS as $opt):
+                                                    ?>
+                                                        <option value="<?= e($opt['value']) ?>" <?= $sexVal === $opt['value'] ? 'selected' : '' ?>>
+                                                            <?= e($opt['label']) ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                                <select class="ops-input" name="nationality">
+                                                    <option value="">Nacionalidad</option>
+                                                    <?php
+                                                    $natVal = (string) ($r['nationality'] ?? '');
+                                                    foreach (\App\Services\CheckoutRequirements::NATIONALITY_OPTIONS as $opt):
+                                                    ?>
+                                                        <option value="<?= e($opt['value']) ?>" <?= $natVal === $opt['value'] ? 'selected' : '' ?>>
+                                                            <?= e($opt['label']) ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
                                             </div>
-                                            <button class="btn btn-accent btn-sm" type="submit">Guardar datos</button>
+                                            <?php if (!\App\Services\TrackingService::canEditRegistration($r)): ?>
+                                                <p class="muted" style="font-size:.75rem;margin:.35rem 0">Bloqueado: examen ya presentado.</p>
+                                            <?php endif; ?>
+                                            <button class="btn btn-accent btn-sm" type="submit"
+                                                <?= \App\Services\TrackingService::canEditRegistration($r) ? '' : 'disabled' ?>>
+                                                Guardar datos
+                                            </button>
                                         </form>
                                     </details>
                                 <?php elseif ($action === \App\Services\GroupStepConfig::ACTION_DOWNLOAD_CSV): ?>
