@@ -316,12 +316,17 @@ final class MailTemplateService
         if ($code === '') {
             return false;
         }
+        /** @var array<string, bool> $memo */
+        static $memo = [];
+        if (array_key_exists($code, $memo)) {
+            return $memo[$code];
+        }
         if (self::templateUsesWorkbookPlaceholders($code)) {
-            return true;
+            return $memo[$code] = true;
         }
         $row = (new self())->find($code);
         if ($row === null) {
-            return false;
+            return $memo[$code] = false;
         }
         $haystack = strtolower(
             (string) ($row['subject'] ?? '') . "\n" . (string) ($row['body_html'] ?? '')
@@ -338,11 +343,11 @@ final class MailTemplateService
             'documentos_html',
         ] as $token) {
             if (str_contains($haystack, $token)) {
-                return true;
+                return $memo[$code] = true;
             }
         }
 
-        return false;
+        return $memo[$code] = false;
     }
 
     /** Destinatario UKS configurado en la plantilla (producción). */

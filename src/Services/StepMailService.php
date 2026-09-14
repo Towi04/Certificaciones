@@ -102,6 +102,9 @@ final class StepMailService
                 ['step_code' => $stepCode, 'mail_template_code' => $tplCode]
             );
 
+            // ProviderRequestService ya persiste provider_request.sent_at + step_mail_sent.
+            // No reescribir extra_json aquí (evitar condiciones de carrera).
+
             return [
                 'to' => (string) ($providerResult['to'] ?? ''),
                 'template' => (string) ($providerResult['template'] ?? $tplCode),
