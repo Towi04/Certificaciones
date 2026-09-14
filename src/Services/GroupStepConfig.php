@@ -643,6 +643,15 @@ final class GroupStepConfig
     {
         $tpl = trim((string) ($email['template_code'] ?? ''));
         if ($tpl !== '') {
+            // Solicitud con Excel/comprobante/reglamento = siempre proveedor en Operación,
+            // aunque la plantilla se haya guardado por error con audiencia alumno.
+            if (
+                MailTemplateService::isUksSolicitudCode($tpl)
+                || MailTemplateService::templateNeedsProviderDocumentLinks($tpl)
+            ) {
+                return 'provider';
+            }
+
             return MailTemplateService::audienceForTemplate($tpl);
         }
 
@@ -1144,20 +1153,35 @@ final class GroupStepConfig
         $audience = self::audienceFromEmail($email);
         $code = (string) ($step['code'] ?? '');
 
-        if ($audience === 'provider') {
-            $pr = is_array($extra['provider_request'] ?? null) ? $extra['provider_request'] : [];
-            $sent = trim((string) ($pr['sent_at'] ?? ''));
-
-            return $sent !== '' && $sent !== 'null';
-        }
-
         $sentMap = is_array($extra['step_mail_sent'] ?? null) ? $extra['step_mail_sent'] : [];
         if ($code !== '' && !empty($sentMap[$code])) {
             return true;
         }
 
-        // Si el caso ya pasó ese paso, consideramos el correo admin pendiente solo si aún no hay registro.
-        // Para ops: si current está después del paso, ocultar botón de envío one-shot.
+        $pr = is_array($extra['provider_request'] ?? null) ? $extra['provider_request'] : [];
+        $sent = trim((string) ($pr['sent_at'] ?? ''));
+        if ($sent === '' || $sent === 'null') {
+            return false;
+        }
+
+        if ($audience === 'provider') {
+            return true;
+        }
+
+        // Casos ya enviados con plantilla custom mal etiquetada (audiencia ≠ provider):
+        // marcar hecho si el paso coincide con provider_request o la plantilla pide docs.
+        $prStep = trim((string) ($pr['step_code'] ?? ''));
+        if ($prStep !== '' && $code !== '' && $prStep === $code) {
+            return true;
+        }
+        $tpl = trim((string) ($email['template_code'] ?? ''));
+        if ($tpl !== '' && (
+            MailTemplateService::isUksSolicitudCode($tpl)
+            || MailTemplateService::templateNeedsProviderDocumentLinks($tpl)
+        )) {
+            return true;
+        }
+
         return false;
     }
 

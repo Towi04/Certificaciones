@@ -527,7 +527,7 @@ final class ProviderRequestService
                     ->execute(['waiting_provider', $trackingId]);
             }
 
-            $this->markSent($trackingId, $to, $actorUserId);
+            $this->markSent($trackingId, $to, $actorUserId, $step, $templateCode);
             $workbookSkip = trim((string) ($vars['_workbook_skip'] ?? ''));
             $note = 'Solicitud enviada a ' . $to
                 . ' (solo enlaces, sin adjuntos · transporte ' . $transport
@@ -1212,18 +1212,49 @@ final class ProviderRequestService
         $this->saveExtra($trackingId, $extra);
     }
 
-    private function markSent(int $trackingId, string $to, ?int $actorUserId): void
-    {
+    private function markSent(
+        int $trackingId,
+        string $to,
+        ?int $actorUserId,
+        ?string $stepCode = null,
+        ?string $templateCode = null
+    ): void {
         $tracking = $this->tracking->find($trackingId);
+        if ($tracking === null) {
+            return;
+        }
         $extra = $this->decodeExtra($tracking['extra_json'] ?? null);
         $prev = is_array($extra[self::EXTRA_KEY] ?? null) ? $extra[self::EXTRA_KEY] : [];
+        $step = trim((string) ($stepCode ?? $prev['step_code'] ?? ''));
+        $tpl = trim((string) ($templateCode ?? $prev['mail_template_code'] ?? ''));
         $extra[self::EXTRA_KEY] = array_merge($prev, [
             'required' => true,
             'sent_at' => date('c'),
             'sent_to' => $to,
             'sent_by' => $actorUserId,
             'last_error' => null,
+            'step_code' => $step !== '' ? $step : ($prev['step_code'] ?? null),
         ]);
+        // También step_mail_sent: el botón de Operación a veces resuelve audiencia ≠ provider
+        // (plantilla custom guardada como alumno) y solo mira este mapa.
+        if ($step !== '') {
+            $sentMap = is_array($extra['step_mail_sent'] ?? null) ? $extra['step_mail_sent'] : [];
+            $sentMap[$step] = [
+                'at' => date('c'),
+                'by' => $actorUserId,
+                'to' => $to,
+                'template' => $tpl,
+                'audience' => 'provider',
+                'error' => null,
+            ];
+            $extra['step_mail_sent'] = $sentMap;
+            if (isset($extra['step_mail_errors']) && is_array($extra['step_mail_errors'])) {
+                unset($extra['step_mail_errors'][$step]);
+                if ($extra['step_mail_errors'] === []) {
+                    unset($extra['step_mail_errors']);
+                }
+            }
+        }
         $this->saveExtra($trackingId, $extra);
     }
 
