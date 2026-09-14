@@ -2263,7 +2263,17 @@ final class ProductAdminService
         $repo = new \App\Repositories\PipelineRepository();
         $tpl = $repo->findByCode($pipelineCode);
         if ($tpl === null) {
-            throw new \InvalidArgumentException('La plantilla de progreso "' . $pipelineCode . '" no existe.');
+            // Crear plantilla del grupo si aún no existe (evita quedar con pipeline legado).
+            $name = trim((string) ($input['name'] ?? $pipelineCode));
+            if ($name === '') {
+                $name = $pipelineCode;
+            }
+            $id = $repo->create([
+                'code' => $pipelineCode,
+                'name' => 'Progreso · ' . $name,
+                'product_type' => 'certification',
+            ]);
+            $tpl = $repo->find($id) ?? ['id' => $id, 'code' => $pipelineCode];
         }
 
         $rawSteps = $input['pipeline_steps'];

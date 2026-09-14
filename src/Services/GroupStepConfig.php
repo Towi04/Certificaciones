@@ -211,6 +211,47 @@ final class GroupStepConfig
     }
 
     /**
+     * Progreso efectivo del caso: si el grupo tiene step_defs, esos mandan
+     * (orden + etiquetas). Si no, se usa la plantilla pipeline_steps (legado).
+     * Evita que plantillas viejas de BD “arrastren” Documentos / Esperando pago
+     * cuando el grupo ya redefinió el flujo.
+     *
+     * @param list<array<string, mixed>> $pipelineSteps
+     * @param array<string, array<string, mixed>> $defs
+     * @return list<array<string, mixed>>
+     */
+    public static function orderedProgressSteps(array $pipelineSteps, array $defs): array
+    {
+        if ($defs !== []) {
+            $out = [];
+            $codes = array_keys($defs);
+            $last = count($codes) - 1;
+            foreach ($codes as $i => $code) {
+                $def = $defs[$code];
+                if (!is_array($def)) {
+                    continue;
+                }
+                $code = self::normalizeCode((string) $code);
+                if ($code === '') {
+                    continue;
+                }
+                $out[] = array_merge($def, [
+                    'code' => $code,
+                    'label' => (string) ($def['label'] ?? $code),
+                    'actor' => (string) ($def['actor'] ?? 'admin'),
+                    'admin_only' => !empty($def['admin_only']),
+                    'is_terminal' => $i === $last || !empty($def['is_terminal']),
+                    'sort_order' => $i,
+                ]);
+            }
+
+            return $out;
+        }
+
+        return self::mergePipelineSteps($pipelineSteps, $defs);
+    }
+
+    /**
      * Botones pendientes para una fila del tablero ops.
      *
      * @param array<string, mixed> $row tracking anotado (con config_json / group_config_json)
@@ -224,9 +265,25 @@ final class GroupStepConfig
             'group_config_json' => $row['group_config_json'] ?? null,
         ]);
         $defs = self::defsFromConfig($config);
-        $merged = $pipelineSteps !== []
-            ? self::mergePipelineSteps($pipelineSteps, $defs)
-            : array_values($defs);
+        $explicit = is_array($config['step_defs'] ?? null) ? $config['step_defs'] : [];
+        if ($explicit !== []) {
+            $ordered = [];
+            foreach ($explicit as $code => $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $code = self::normalizeCode(is_string($code) ? $code : (string) ($row['code'] ?? ''));
+                if ($code === '' || !isset($defs[$code])) {
+                    continue;
+                }
+                $ordered[$code] = $defs[$code];
+            }
+            $merged = self::orderedProgressSteps([], $ordered !== [] ? $ordered : $defs);
+        } else {
+            $merged = $pipelineSteps !== []
+                ? self::mergePipelineSteps($pipelineSteps, $defs)
+                : array_values($defs);
+        }
 
         // ¿El grupo ya definió botones en Operación? Si sí, no inyectar legacies.
         $hasConfiguredOps = false;
@@ -643,16 +700,31 @@ final class GroupStepConfig
     }
 
     /**
-     * Pasos visibles para alumno (y partner en la ficha del alumno).
-     * Oculta los marcados «Solo admin (oculto al alumno)».
-     *
      * @param list<array<string, mixed>> $steps
      * @param array<string, array<string, mixed>> $defs
+     * @param array<string, mixed> $config config fusionado (para detectar step_defs explícitos del grupo)
      * @return list<array<string, mixed>>
      */
-    public static function visibleToStudent(array $steps, array $defs): array
+    public static function visibleToStudent(array $steps, array $defs, array $config = []): array
     {
-        $merged = self::mergePipelineSteps($steps, $defs);
+        $explicit = is_array($config['step_defs'] ?? null) ? $config['step_defs'] : [];
+        if ($explicit !== []) {
+            $ordered = [];
+            foreach ($explicit as $code => $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $code = self::normalizeCode(is_string($code) ? $code : (string) ($row['code'] ?? ''));
+                if ($code === '') {
+                    continue;
+                }
+                $ordered[$code] = $defs[$code] ?? self::normalizeDef($code, $row);
+            }
+            $merged = self::orderedProgressSteps([], $ordered);
+        } else {
+            // Sin step_defs en el grupo: plantilla pipeline (legado).
+            $merged = self::mergePipelineSteps($steps, $defs);
+        }
         $out = [];
         foreach ($merged as $step) {
             if (self::isAdminOnlyStep($step, $defs)) {
