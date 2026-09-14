@@ -225,10 +225,13 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
 
             <?php if ($isUksSolicitud): ?>
                 <p class="muted" style="font-size:.82rem;margin:.85rem 0 0">
-                    Para la solicitud al proveedor, usa
-                    <code>{{pago_proveedor}}</code> (comprobante DOCEO→proveedor),
-                    <code>{{reglamento_url}}</code> y/o <code>{{workbook_url}}</code>,
+                    Para la solicitud al proveedor, el placeholder debe ir en el
+                    <strong>href</strong> del botón, no solo como texto:
+                    <code>&lt;a href="{{workbook_url}}"&gt;Excel&lt;/a&gt;</code>,
+                    <code>&lt;a href="{{pago_proveedor}}"&gt;Comprobante&lt;/a&gt;</code>,
+                    <code>&lt;a href="{{reglamento_url}}"&gt;Reglamento&lt;/a&gt;</code>,
                     o el bloque <code>{{documentos_html}}</code>.
+                    Al insertar estas etiquetas en HTML se crea el botón con enlace.
                 </p>
             <?php endif; ?>
         </div>
@@ -586,8 +589,24 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
     var key = item.getAttribute('data-key') || '';
     if (!key) return;
     var tag = '{{' + key + '}}';
+    var urlKeys = {
+      workbook_url: 'Descargar Excel',
+      pago_proveedor: 'Comprobante de pago',
+      comprobante_url: 'Comprobante de pago',
+      reglamento_url: 'Reglamento firmado',
+      login_url: 'Iniciar sesión',
+      exam_url: 'Acceso al examen',
+      results_url: 'Ver resultados',
+      results_pdf_url: 'PDF de resultados',
+      moodle_url: 'Ir a Moodle'
+    };
     if (insertBtn.getAttribute('data-target') === 'subject') {
       insertAtCursor(subjectInput, tag);
+    } else if (urlKeys[key]) {
+      var btnHtml = '<a href="' + tag + '" style="display:inline-block;padding:12px 18px;'
+        + 'background:#315285;color:#ffffff;text-decoration:none;border-radius:8px;'
+        + 'font-weight:600">' + urlKeys[key] + '</a>';
+      insertAtCursor(bodyInput, btnHtml);
     } else {
       insertAtCursor(bodyInput, tag);
     }

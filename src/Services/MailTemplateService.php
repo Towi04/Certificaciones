@@ -846,7 +846,12 @@ final class MailTemplateService
             $lookup['comprobante_url'] = $lookup['pago_proveedor'];
         }
 
-        return (string) preg_replace_callback(
+        // Editores a veces dejan el placeholder URL-encoded en el href.
+        $template = self::decodeEncodedPlaceholdersInHrefs($template);
+        // Si el botón tiene href vacío/# y el texto es {{workbook_url}}, moverlo al href.
+        $template = self::promoteUrlPlaceholdersIntoEmptyHrefs($template);
+
+        $rendered = (string) preg_replace_callback(
             '/\{\{\s*([a-zA-Z0-9_\- ]+?)\s*\}\}/u',
             static function (array $m) use ($lookup): string {
                 $key = self::normalizePlaceholderKey($m[1]);
@@ -857,6 +862,300 @@ final class MailTemplateService
                 return $m[0];
             },
             $template
+        );
+
+        // Tras sustituir: reparar <a href="">https://…</a> o botones CTA sin enlace.
+        $rendered = self::repairEmptyAnchorHrefs($rendered, $lookup);
+
+        // Último recurso: botones con href vacío (sin palabras clave) reciben
+        // las URLs disponibles en orden (Excel → comprobante → reglamento…).
+        return self::fillRemainingEmptyCtaHrefs($rendered, $lookup);
+    }
+
+    /**
+     * Placeholders que representan URLs clicables en correos.
+     *
+     * @return list<string>
+     */
+    public static function urlPlaceholderKeys(): array
+    {
+        return [
+            'workbook_url',
+            'pago_proveedor',
+            'comprobante_url',
+            'reglamento_url',
+            'login_url',
+            'exam_url',
+            'results_url',
+            'results_pdf_url',
+            'score_report_url',
+            'moodle_url',
+            'instruction_pdf_url',
+            'instruction_video_url',
+        ];
+    }
+
+    /** Decodifica %7B%7Bworkbook_url%7D%7D → {{workbook_url}} dentro de atributos href. */
+    public static function decodeEncodedPlaceholdersInHrefs(string $html): string
+    {
+        return (string) preg_replace_callback(
+            '/\bhref\s*=\s*(["\'])(.*?)\1/iu',
+            static function (array $m): string {
+                $raw = html_entity_decode($m[2], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $decoded = rawurldecode($raw);
+                if ($decoded === $m[2] && $raw === $m[2]) {
+                    return $m[0];
+                }
+                // Solo reescribir si aparece un placeholder.
+                if (
+                    preg_match('/\{\{\s*[a-zA-Z0-9_\- ]+?\s*\}\}/u', $decoded) !== 1
+                    && preg_match('/\{\{\s*[a-zA-Z0-9_\- ]+?\s*\}\}/u', $raw) !== 1
+                ) {
+                    return $m[0];
+                }
+                $value = preg_match('/\{\{\s*[a-zA-Z0-9_\- ]+?\s*\}\}/u', $decoded) === 1
+                    ? $decoded
+                    : $raw;
+
+                return 'href=' . $m[1] . $value . $m[1];
+            },
+            $html
+        );
+    }
+
+    /**
+     * <a href="">{{workbook_url}}</a> → <a href="{{workbook_url}}">Descargar</a>
+     */
+    public static function promoteUrlPlaceholdersIntoEmptyHrefs(string $html): string
+    {
+        $keys = array_map(
+            static fn (string $k): string => preg_quote($k, '/'),
+            self::urlPlaceholderKeys()
+        );
+        $keyAlt = implode('|', $keys);
+        if ($keyAlt === '') {
+            return $html;
+        }
+
+        $labels = [
+            'workbook_url' => 'Descargar Excel',
+            'pago_proveedor' => 'Comprobante de pago',
+            'comprobante_url' => 'Comprobante de pago',
+            'reglamento_url' => 'Reglamento firmado',
+            'login_url' => 'Iniciar sesión',
+            'exam_url' => 'Acceso al examen',
+            'results_url' => 'Ver resultados',
+            'results_pdf_url' => 'PDF de resultados',
+            'score_report_url' => 'Score report',
+            'moodle_url' => 'Ir a Moodle',
+            'instruction_pdf_url' => 'Instrucciones (PDF)',
+            'instruction_video_url' => 'Video de instrucciones',
+        ];
+
+        return (string) preg_replace_callback(
+            '/<a\b([^>]*?)\bhref\s*=\s*(["\'])\s*(?:#|about:blank)?\s*\2([^>]*)>(\{\{\s*('
+            . $keyAlt
+            . ')\s*\}\})<\/a>/iu',
+            static function (array $m) use ($labels): string {
+                $key = self::normalizePlaceholderKey($m[5]);
+                $label = $labels[$key] ?? 'Abrir enlace';
+                $before = $m[1];
+                $after = $m[3];
+                $attrs = trim($before . ' ' . $after);
+
+                return '<a href="{{' . $key . '}}"'
+                    . ($attrs !== '' ? ' ' . $attrs : '')
+                    . '>' . $label . '</a>';
+            },
+            $html
+        );
+    }
+
+    /**
+     * Repara anchors con href vacío tras interpolar variables.
+     *
+     * @param array<string, string> $lookup
+     */
+    public static function repairEmptyAnchorHrefs(string $html, array $lookup): string
+    {
+        $urlByKey = [];
+        foreach (self::urlPlaceholderKeys() as $key) {
+            $val = trim((string) ($lookup[$key] ?? ''));
+            if ($val !== '' && preg_match('#^https?://#i', $val) === 1) {
+                $urlByKey[$key] = $val;
+            }
+        }
+
+        return (string) preg_replace_callback(
+            '/<a\b([^>]*)>(.*?)<\/a>/is',
+            static function (array $m) use ($urlByKey): string {
+                $attrs = $m[1];
+                $inner = $m[2];
+                $href = null;
+                if (preg_match('/\bhref\s*=\s*(["\'])(.*?)\1/iu', $attrs, $hm) === 1) {
+                    $href = trim(html_entity_decode($hm[2], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                } elseif (preg_match('/\bhref\s*=\s*([^\s>]+)/iu', $attrs, $hm) === 1) {
+                    $href = trim(html_entity_decode($hm[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                }
+
+                $hrefBroken = $href === null
+                    || $href === ''
+                    || $href === '#'
+                    || strcasecmp($href, 'about:blank') === 0
+                    || str_starts_with($href, 'javascript:');
+
+                if (!$hrefBroken) {
+                    return $m[0];
+                }
+
+                $text = trim(html_entity_decode(strip_tags($inner), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                $newHref = '';
+
+                // Caso 1: el texto del botón YA es la URL absoluta.
+                if (preg_match('#^https?://\S+#i', $text) === 1) {
+                    $newHref = $text;
+                } else {
+                    // Caso 2: etiquetar por texto del botón (Excel / comprobante / reglamento).
+                    $lower = function_exists('mb_strtolower')
+                        ? \mb_strtolower($text, 'UTF-8')
+                        : strtolower($text);
+                    $candidates = [];
+                    if (
+                        str_contains($lower, 'excel')
+                        || str_contains($lower, 'workbook')
+                        || str_contains($lower, 'plantilla')
+                    ) {
+                        $candidates[] = 'workbook_url';
+                    }
+                    if (
+                        str_contains($lower, 'comprobante')
+                        || str_contains($lower, 'pago')
+                        || str_contains($lower, 'proveedor')
+                    ) {
+                        $candidates[] = 'pago_proveedor';
+                        $candidates[] = 'comprobante_url';
+                    }
+                    if (str_contains($lower, 'reglamento')) {
+                        $candidates[] = 'reglamento_url';
+                    }
+                    if (str_contains($lower, 'moodle') || str_contains($lower, 'campus')) {
+                        $candidates[] = 'moodle_url';
+                    }
+                    if (str_contains($lower, 'examen') || str_contains($lower, 'exam')) {
+                        $candidates[] = 'exam_url';
+                    }
+                    if (str_contains($lower, 'resultado') || str_contains($lower, 'certificado')) {
+                        $candidates[] = 'results_url';
+                        $candidates[] = 'results_pdf_url';
+                    }
+                    if (
+                        str_contains($lower, 'login')
+                        || str_contains($lower, 'sesión')
+                        || str_contains($lower, 'sesion')
+                    ) {
+                        $candidates[] = 'login_url';
+                    }
+                    foreach ($candidates as $key) {
+                        if (isset($urlByKey[$key])) {
+                            $newHref = $urlByKey[$key];
+                            break;
+                        }
+                    }
+                }
+
+                if ($newHref === '') {
+                    return $m[0];
+                }
+
+                $safe = htmlspecialchars($newHref, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                if (preg_match('/\bhref\s*=\s*(["\']).*?\1/iu', $attrs) === 1) {
+                    $attrs = (string) preg_replace(
+                        '/\bhref\s*=\s*(["\']).*?\1/iu',
+                        'href="' . $safe . '"',
+                        $attrs,
+                        1
+                    );
+                } elseif (preg_match('/\bhref\s*=\s*[^\s>]+/iu', $attrs) === 1) {
+                    $attrs = (string) preg_replace(
+                        '/\bhref\s*=\s*[^\s>]+/iu',
+                        'href="' . $safe . '"',
+                        $attrs,
+                        1
+                    );
+                } else {
+                    $attrs .= ' href="' . $safe . '"';
+                }
+
+                return '<a' . $attrs . '>' . $inner . '</a>';
+            },
+            $html
+        );
+    }
+
+
+    /**
+     * Asigna URLs restantes a <a href="">…</a> en orden de aparición.
+     *
+     * @param array<string, string> $lookup
+     */
+    public static function fillRemainingEmptyCtaHrefs(string $html, array $lookup): string
+    {
+        $queue = [];
+        foreach (self::urlPlaceholderKeys() as $key) {
+            $val = trim((string) ($lookup[$key] ?? ''));
+            if ($val !== '' && preg_match('#^https?://#i', $val) === 1 && !in_array($val, $queue, true)) {
+                $queue[] = $val;
+            }
+        }
+        if ($queue === []) {
+            return $html;
+        }
+
+        return (string) preg_replace_callback(
+            '/<a\b([^>]*)>(.*?)<\/a>/is',
+            static function (array $m) use (&$queue): string {
+                if ($queue === []) {
+                    return $m[0];
+                }
+                $attrs = $m[1];
+                $href = null;
+                if (preg_match('/\bhref\s*=\s*(["\'])(.*?)\1/iu', $attrs, $hm) === 1) {
+                    $href = trim(html_entity_decode($hm[2], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                } elseif (preg_match('/\bhref\s*=\s*([^\s>]+)/iu', $attrs, $hm) === 1) {
+                    $href = trim(html_entity_decode($hm[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                }
+                $hrefBroken = $href === null
+                    || $href === ''
+                    || $href === '#'
+                    || strcasecmp($href, 'about:blank') === 0
+                    || str_starts_with($href, 'javascript:');
+                if (!$hrefBroken) {
+                    return $m[0];
+                }
+
+                $newHref = array_shift($queue);
+                $safe = htmlspecialchars((string) $newHref, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                if (preg_match('/\bhref\s*=\s*(["\']).*?\1/iu', $attrs) === 1) {
+                    $attrs = (string) preg_replace(
+                        '/\bhref\s*=\s*(["\']).*?\1/iu',
+                        'href="' . $safe . '"',
+                        $attrs,
+                        1
+                    );
+                } elseif (preg_match('/\bhref\s*=\s*[^\s>]+/iu', $attrs) === 1) {
+                    $attrs = (string) preg_replace(
+                        '/\bhref\s*=\s*[^\s>]+/iu',
+                        'href="' . $safe . '"',
+                        $attrs,
+                        1
+                    );
+                } else {
+                    $attrs .= ' href="' . $safe . '"';
+                }
+
+                return '<a' . $attrs . '>' . $m[2] . '</a>';
+            },
+            $html
         );
     }
 
