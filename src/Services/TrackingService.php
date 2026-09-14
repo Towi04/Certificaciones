@@ -934,13 +934,24 @@ final class TrackingService
         }
         $this->log($trackingId, 'examen', $note, $actorUserId);
 
-        // Si el pipeline tiene paso examen y aún no está ahí ni más adelante, muévelo
+        // Si el progreso del grupo tiene un paso de examen/confirmación y aún no estamos ahí ni más adelante, avanzar.
         $current = (string) ($tracking['current_step_code'] ?? '');
-        if ($current !== 'examen' && $current !== 'resultados' && $current !== 'fin') {
-            try {
-                $this->setStep($trackingId, 'examen', $actorUserId, 'Fecha de examen asignada', 'waiting_student');
-            } catch (\Throwable) {
-                // Pipelines sin paso examen (cursos): solo guarda fechas
+        $examStepCode = $this->resolveExamScheduleStepCode($tracking);
+        if ($examStepCode !== null && $current !== $examStepCode) {
+            $progress = $this->progressStepsForTracking($tracking);
+            $codes = array_values(array_map(
+                static fn (array $s): string => (string) ($s['code'] ?? ''),
+                $progress
+            ));
+            $curIdx = $current !== '' ? array_search($current, $codes, true) : false;
+            $examIdx = array_search($examStepCode, $codes, true);
+            // Solo mover si aún no alcanzamos el paso de examen (índice actual < examen).
+            if ($examIdx !== false && ($curIdx === false || (int) $curIdx < (int) $examIdx)) {
+                try {
+                    $this->setStep($trackingId, $examStepCode, $actorUserId, 'Fecha de examen asignada', 'waiting_student');
+                } catch (\Throwable) {
+                    // Sin paso de examen en el progreso: solo guarda fechas.
+                }
             }
         }
 
@@ -1026,28 +1037,19 @@ final class TrackingService
             if ($stepCode !== '') {
                 $this->markStepDone($trackingId, $stepCode, $actorUserId, 'Examen presentado');
             }
-            $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
-            if ($pipelineId > 0 && $stepCode !== '') {
-                $steps = $this->steps($pipelineId);
-                foreach ($steps as $i => $s) {
-                    if ((string) ($s['code'] ?? '') !== $stepCode) {
-                        continue;
-                    }
-                    $nextCode = trim((string) ($steps[$i + 1]['code'] ?? ''));
-                    if ($nextCode !== '') {
-                        $this->setStep(
-                            $trackingId,
-                            $nextCode,
-                            $actorUserId,
-                            'Examen presentado · avance a ' . $nextCode,
-                            null
-                        );
-                        $nextStep = $nextCode;
-                    }
-                    break;
-                }
+            // Avanzar según el progreso del grupo (step_defs), no la plantilla pipeline UKS.
+            $nextCode = $this->nextProgressStepCode($tracking, $stepCode);
+            if ($nextCode !== null) {
+                $this->setStep(
+                    $trackingId,
+                    $nextCode,
+                    $actorUserId,
+                    'Examen presentado · avance a ' . $nextCode,
+                    null
+                );
+                $nextStep = $nextCode;
             }
-            $this->log($trackingId, 'examen_asistencia', 'Se presentó al examen', $actorUserId);
+            $this->log($trackingId, $stepCode !== '' ? $stepCode : 'examen_asistencia', 'Se presentó al examen', $actorUserId);
         } else {
             if ($stepCode !== '' && (string) ($tracking['current_step_code'] ?? '') !== $stepCode) {
                 try {
@@ -1059,18 +1061,93 @@ final class TrackingService
                         'waiting_admin'
                     );
                 } catch (\Throwable) {
-                    // Si el código no está en el pipeline, solo queda el flag.
+                    // Si el código no está en el progreso del grupo, solo queda el flag.
                 }
             }
             $this->log(
                 $trackingId,
-                'examen_asistencia',
+                $stepCode !== '' ? $stepCode : 'examen_asistencia',
                 'No se presentó al examen · pendiente reagendar',
                 $actorUserId
             );
         }
 
         return ['status' => $outcome, 'next_step' => $nextStep];
+    }
+
+    /**
+     * Siguiente código de paso en el progreso del grupo (no en la plantilla pipeline legada).
+     * Si $fromStepCode está vacío, usa el paso actual del tracking o el de «Confirmar examen».
+     */
+    private function nextProgressStepCode(array $tracking, string $fromStepCode = ''): ?string
+    {
+        $steps = $this->progressStepsForTracking($tracking);
+        if ($steps === []) {
+            return null;
+        }
+
+        $fromStepCode = trim($fromStepCode);
+        if ($fromStepCode === '') {
+            $fromStepCode = trim((string) ($tracking['current_step_code'] ?? ''));
+        }
+        if ($fromStepCode === '') {
+            foreach ($steps as $s) {
+                if ((string) ($s['action'] ?? '') === GroupStepConfig::ACTION_CONFIRM_EXAM) {
+                    $fromStepCode = trim((string) ($s['code'] ?? ''));
+                    break;
+                }
+            }
+        }
+        if ($fromStepCode === '') {
+            return null;
+        }
+
+        foreach ($steps as $i => $s) {
+            if ((string) ($s['code'] ?? '') !== $fromStepCode) {
+                continue;
+            }
+            $next = trim((string) ($steps[$i + 1]['code'] ?? ''));
+
+            return $next !== '' ? $next : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Código del paso de agenda/confirmación de examen en el progreso del grupo.
+     * Preferencia: capturar fecha → confirmar examen → código «examen».
+     *
+     * @param array<string, mixed> $tracking
+     */
+    private function resolveExamScheduleStepCode(array $tracking): ?string
+    {
+        $steps = $this->progressStepsForTracking($tracking);
+        $confirmCode = null;
+        foreach ($steps as $s) {
+            if (!is_array($s)) {
+                continue;
+            }
+            if (GroupStepConfig::stepCollectsExamSchedule($s)) {
+                return trim((string) ($s['code'] ?? '')) ?: null;
+            }
+            if ($confirmCode === null
+                && (string) ($s['action'] ?? '') === GroupStepConfig::ACTION_CONFIRM_EXAM
+            ) {
+                $confirmCode = trim((string) ($s['code'] ?? '')) ?: null;
+            }
+        }
+        if ($confirmCode !== null) {
+            return $confirmCode;
+        }
+        foreach ($steps as $s) {
+            $code = trim((string) ($s['code'] ?? ''));
+            if ($code === 'examen' || $code === 'exam') {
+                return $code;
+            }
+        }
+
+        return null;
     }
 
     /**
