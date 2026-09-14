@@ -547,43 +547,78 @@ final class ProviderRequestService
         if ($includeProof) {
             $adminDoc = $this->findAdminPaymentProof((int) ($tracking['id'] ?? 0));
             if ($adminDoc !== null) {
-                $abs = $this->documents->absolutePath((string) $adminDoc['storage_path']);
-                if (is_file($abs)) {
-                    $comprobanteUrl = $fileLinks->documentLink((int) $adminDoc['id']);
-                }
+                // Generar enlace aunque is_file falle (ruta legacy / storage movido);
+                // el endpoint /archivo mostrará error claro si el binario no existe.
+                $comprobanteUrl = $fileLinks->documentLink((int) $adminDoc['id']);
             } else {
                 $proofPath = (string) ($purchase['payment_proof_path'] ?? $tracking['payment_proof_path'] ?? '');
                 if ($proofPath !== '') {
-                    $abs = $this->documents->absolutePath($proofPath);
-                    if (is_file($abs)) {
-                        $comprobanteUrl = $fileLinks->purchaseProofLink((int) $purchase['id']);
-                    }
+                    $comprobanteUrl = $fileLinks->purchaseProofLink((int) $purchase['id']);
                 }
             }
         }
 
+        $mailCode = trim((string) ($config['mail_template_code'] ?? ''));
+        // Si el grupo no trae Excel, heredar siempre de la plantilla de correo del paso.
+        if (
+            $mailCode !== ''
+            && (
+                empty($config['workbook']['enabled'])
+                || trim((string) ($config['workbook']['template_path'] ?? '')) === ''
+            )
+        ) {
+            $fromMail = MailTemplateService::workbookConfig($mailCode);
+            if (
+                !empty($fromMail['enabled'])
+                && trim((string) ($fromMail['template_path'] ?? '')) !== ''
+            ) {
+                $config['workbook'] = array_merge(
+                    is_array($config['workbook'] ?? null) ? $config['workbook'] : [],
+                    $fromMail,
+                    ['attach' => false]
+                );
+            }
+        }
+
+        $templateWantsWorkbook = $mailCode !== ''
+            && MailTemplateService::templateUsesWorkbookPlaceholders($mailCode);
+        if ($mailCode === '' || MailTemplateService::isUksSolicitudCode($mailCode)) {
+            $templateWantsWorkbook = $templateWantsWorkbook || !empty($config['workbook']['enabled']);
+        }
+
         if (!empty($config['workbook']['enabled'])) {
-            $mailCode = trim((string) ($config['mail_template_code'] ?? ''));
-            $templateWantsWorkbook = $mailCode === ''
-                || MailTemplateService::isUksSolicitudCode($mailCode)
-                || MailTemplateService::templateUsesWorkbookPlaceholders($mailCode);
-            if (!$templateWantsWorkbook) {
-                // El grupo/plantilla tenía Excel, pero el correo del paso no lo usa.
+            try {
+                $workbookUrl = $this->prepareWorkbookLink($tracking, $purchase, $product, $config, $tmpFiles);
+                $varsWorkbookSkip = '';
+            } catch (\Throwable $e) {
+                error_log('[Doceo] Excel solicitud proveedor: ' . $e->getMessage());
                 $workbookUrl = '';
-                $varsWorkbookSkip = 'la plantilla de correo no incluye Excel';
-            } else {
-                try {
-                    $workbookUrl = $this->prepareWorkbookLink($tracking, $purchase, $product, $config, $tmpFiles);
-                    $varsWorkbookSkip = '';
-                } catch (\Throwable $e) {
-                    // No tumbar el correo entero si falla el Excel; el admin puede reenviar luego.
-                    error_log('[Doceo] Excel solicitud proveedor: ' . $e->getMessage());
-                    $workbookUrl = '';
-                    $varsWorkbookSkip = $e->getMessage();
+                $varsWorkbookSkip = $e->getMessage();
+                // Si la plantilla pide {{workbook_url}}, no enviar botones rotos.
+                if ($templateWantsWorkbook) {
+                    throw new \RuntimeException(
+                        'No se pudo generar el Excel para el correo: ' . $e->getMessage()
+                    );
                 }
             }
+        } elseif ($templateWantsWorkbook) {
+            $varsWorkbookSkip = 'la plantilla pide {{workbook_url}} pero no hay Excel habilitado/subido';
+            throw new \RuntimeException(
+                'La plantilla de correo usa {{workbook_url}}, pero no hay plantilla Excel activa. '
+                . 'Marca «Este correo incluye plantilla Excel», sube el .xlsx y guarda.'
+            );
         } else {
             $varsWorkbookSkip = '';
+        }
+
+        if ($includeProof && $comprobanteUrl === '') {
+            $mailNeedsProof = $mailCode !== '' && self::mailTemplateNeedsPaymentProof($mailCode);
+            if ($mailNeedsProof || $forceIncludePaymentProof) {
+                throw new \RuntimeException(
+                    'El correo incluye {{pago_proveedor}}/{{comprobante_url}}, pero no hay comprobante '
+                    . 'DOCEO→proveedor para generar el enlace. Súbelo de nuevo e intenta enviar.'
+                );
+            }
         }
 
         $workbookNote = $workbookUrl !== ''
@@ -766,16 +801,34 @@ final class ProviderRequestService
         return $out;
     }
 
+    /** ¿La plantilla pide enlace de comprobante? */
+    private static function mailTemplateNeedsPaymentProof(string $code): bool
+    {
+        $code = trim($code);
+        if ($code === '') {
+            return false;
+        }
+        $row = (new MailTemplateService())->find($code);
+        if ($row === null) {
+            return false;
+        }
+        $haystack = strtolower(
+            (string) ($row['subject'] ?? '') . "\n" . (string) ($row['body_html'] ?? '')
+        );
+
+        return str_contains($haystack, '{{pago_proveedor}}')
+            || str_contains($haystack, '{{comprobante_url}}')
+            || str_contains($haystack, 'pago_proveedor')
+            || str_contains($haystack, 'comprobante_url');
+    }
+
     /**
+     * Rellena la plantilla Excel, la guarda como documento y devuelve enlace firmado.
+     *
      * @param array<string, mixed> $tracking
      * @param array<string, mixed> $purchase
      * @param array<string, mixed> $product
      * @param array<string, mixed> $config
-     * @param list<string> $tmpFiles
-     */
-    /**
-     * Rellena la plantilla Excel, la guarda como documento y devuelve enlace firmado.
-     *
      * @param list<string> $tmpFiles
      */
     private function prepareWorkbookLink(

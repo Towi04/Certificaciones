@@ -1608,6 +1608,18 @@ final class AdminController
             if ($to !== '') {
                 $msg .= ' a ' . $to;
             }
+            $extras = [];
+            if (trim((string) ($result['workbook_url'] ?? '')) !== '') {
+                $extras[] = 'Excel OK';
+            } elseif (trim((string) ($result['workbook_skip'] ?? '')) !== '') {
+                $extras[] = 'Excel omitido: ' . trim((string) $result['workbook_skip']);
+            }
+            if (trim((string) ($result['comprobante_url'] ?? '')) !== '') {
+                $extras[] = 'comprobante OK';
+            }
+            if ($extras !== []) {
+                $msg .= ' (' . implode(' · ', $extras) . ')';
+            }
             flash('success', $msg . '.');
         } catch (\Throwable $e) {
             try {
