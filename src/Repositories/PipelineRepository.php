@@ -48,6 +48,32 @@ final class PipelineRepository
         return $row ?: null;
     }
 
+    /**
+     * @param array{code:string,name:string,product_type?:string} $data
+     */
+    public function create(array $data): int
+    {
+        $code = strtolower(trim((string) ($data['code'] ?? '')));
+        $code = preg_replace('/[^a-z0-9_-]+/', '_', $code) ?? '';
+        $code = trim($code, '_');
+        $name = trim((string) ($data['name'] ?? ''));
+        if ($code === '' || $name === '') {
+            throw new \InvalidArgumentException('Código y nombre de plantilla de progreso son obligatorios.');
+        }
+        if ($this->findByCode($code) !== null) {
+            throw new \InvalidArgumentException('Ya existe una plantilla de progreso con el código ' . $code);
+        }
+        $productType = trim((string) ($data['product_type'] ?? 'certification'));
+        if ($productType === '') {
+            $productType = 'certification';
+        }
+        $this->pdo->prepare(
+            'INSERT INTO pipeline_templates (code, name, product_type) VALUES (?, ?, ?)'
+        )->execute([$code, $name, $productType]);
+
+        return (int) $this->pdo->lastInsertId();
+    }
+
     /** @return list<array<string, mixed>> */
     public function stepsForTemplate(int $templateId): array
     {

@@ -44,7 +44,7 @@ final class StudentController
         $steps = $pipelineId > 0 ? $svc->steps($pipelineId) : [];
         $cfg = \App\Services\CheckoutRequirements::config($tracking);
         $defs = \App\Services\GroupStepConfig::defsFromConfig($cfg);
-        $steps = \App\Services\GroupStepConfig::visibleToStudent($steps, $defs);
+        $steps = \App\Services\GroupStepConfig::visibleToStudent($steps, $defs, $cfg);
         view('student/case', [
             'title' => 'Caso ' . $tracking['matricula'],
             'tracking' => $tracking,

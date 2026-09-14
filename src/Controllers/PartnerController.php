@@ -114,7 +114,7 @@ final class PartnerController
         $cfg = \App\Services\CheckoutRequirements::config($tracking);
         $defs = \App\Services\GroupStepConfig::defsFromConfig($cfg);
         // Ocultar pasos marcados «Solo admin (oculto al alumno)» también en la ficha partner.
-        $steps = \App\Services\GroupStepConfig::visibleToStudent($steps, $defs);
+        $steps = \App\Services\GroupStepConfig::visibleToStudent($steps, $defs, $cfg);
         view('partner/case', [
             'title' => 'Caso ' . $tracking['matricula'],
             'partner' => $partner,

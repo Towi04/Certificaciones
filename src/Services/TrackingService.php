@@ -77,6 +77,40 @@ final class TrackingService
         return $stmt->fetchAll();
     }
 
+    /**
+     * Pasos de progreso del caso: step_defs del grupo si existen; si no, plantilla pipeline.
+     *
+     * @param array<string, mixed> $tracking
+     * @return list<array<string, mixed>>
+     */
+    public function progressStepsForTracking(array $tracking): array
+    {
+        $cfg = CheckoutRequirements::config($tracking);
+        $defs = GroupStepConfig::defsFromConfig($cfg);
+        // Solo step_defs explícitos del grupo cuentan como fuente de verdad.
+        $explicit = is_array($cfg['step_defs'] ?? null) ? $cfg['step_defs'] : [];
+        if ($explicit !== []) {
+            $ordered = [];
+            foreach ($explicit as $code => $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $code = GroupStepConfig::normalizeCode(is_string($code) ? $code : (string) ($row['code'] ?? ''));
+                if ($code === '' || !isset($defs[$code])) {
+                    continue;
+                }
+                $ordered[$code] = $defs[$code];
+            }
+            if ($ordered !== []) {
+                return GroupStepConfig::orderedProgressSteps([], $ordered);
+            }
+        }
+        $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
+        $pipelineSteps = $pipelineId > 0 ? $this->steps($pipelineId) : [];
+
+        return GroupStepConfig::orderedProgressSteps($pipelineSteps, $defs);
+    }
+
     /** @return list<array<string, mixed>> */
     public function logs(int $trackingId): array
     {
@@ -125,12 +159,11 @@ final class TrackingService
             throw new \InvalidArgumentException('Seguimiento no encontrado.');
         }
 
-        $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
-        if ($pipelineId > 0) {
-            $steps = $this->steps($pipelineId);
+        $steps = $this->progressStepsForTracking($tracking);
+        if ($steps !== []) {
             $codes = array_column($steps, 'code');
-            if ($codes !== [] && !in_array($stepCode, $codes, true)) {
-                throw new \InvalidArgumentException('Paso no pertenece al pipeline: ' . $stepCode);
+            if (!in_array($stepCode, $codes, true)) {
+                throw new \InvalidArgumentException('Paso no pertenece al progreso del grupo: ' . $stepCode);
             }
             $stepRow = null;
             foreach ($steps as $s) {
@@ -140,7 +173,10 @@ final class TrackingService
                 }
             }
             if ($status === null && $stepRow !== null) {
-                $status = $this->statusForActor((string) $stepRow['actor'], (bool) $stepRow['is_terminal']);
+                $status = $this->statusForActor(
+                    (string) ($stepRow['actor'] ?? 'admin'),
+                    !empty($stepRow['is_terminal'])
+                );
             }
         }
 
@@ -259,14 +295,9 @@ final class TrackingService
         if ($tracking === null) {
             throw new \InvalidArgumentException('Seguimiento no encontrado.');
         }
-        $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
-        if ($pipelineId < 1) {
-            throw new \InvalidArgumentException('Este seguimiento no tiene pipeline.');
-        }
-
-        $steps = $this->steps($pipelineId);
+        $steps = $this->progressStepsForTracking($tracking);
         if ($steps === []) {
-            throw new \InvalidArgumentException('Pipeline sin pasos.');
+            throw new \InvalidArgumentException('Este caso no tiene pasos de progreso configurados en el grupo.');
         }
 
         $current = (string) ($tracking['current_step_code'] ?? '');

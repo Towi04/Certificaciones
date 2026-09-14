@@ -1115,11 +1115,9 @@ final class AdminController
         if ($isEletUks && !empty($tracking['exam_date'])) {
             $accessKeyHint = $uksElet->accessKeyHintForDate((string) $tracking['exam_date'], (int) $tracking['id']);
         }
-        $rawSteps = $pipelineId > 0 ? $svc->steps($pipelineId) : [];
         $stepDefs = GroupStepConfig::defsFromConfig($productCfg);
-        $steps = $rawSteps !== []
-            ? GroupStepConfig::mergePipelineSteps($rawSteps, $stepDefs)
-            : array_values($stepDefs);
+        // step_defs del grupo manda; si no hay, plantilla pipeline (legado).
+        $steps = $svc->progressStepsForTracking($tracking);
         view('admin/tracking', [
             'title' => 'Caso ' . $tracking['matricula'],
             'tracking' => $tracking,

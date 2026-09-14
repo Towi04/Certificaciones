@@ -1588,6 +1588,9 @@ $renderMailTemplateField = static function (
       });
       if (Object.keys(stepDefsOut).length) {
         base.step_defs = stepDefsOut;
+      } else {
+        // Si quitaron todos los pasos, no dejar step_defs viejos en el JSON.
+        delete base.step_defs;
       }
     }
 
@@ -2431,8 +2434,9 @@ $renderMailTemplateField = static function (
     });
   }
 
-  function loadPipeline(code) {
-    if (!code) {
+  function loadPipeline(code, preferGroupDefs) {
+    if (preferGroupDefs === undefined) preferGroupDefs = true;
+    if (!code && !(preferGroupDefs && stepDefs && Object.keys(stepDefs).length)) {
       renderSteps([]);
       if (stepsEmpty) {
         stepsEmpty.style.display = 'block';
@@ -2440,22 +2444,38 @@ $renderMailTemplateField = static function (
       }
       return;
     }
-    var steps = (stepsByCode[code] || []).map(function (s) {
-      return {
-        code: s.code || '',
-        label: s.label || '',
-        actor: s.actor || 'admin',
-        is_terminal: s.is_terminal
-      };
-    });
+    // Fuente de verdad del grupo: step_defs guardados (evita re-cargar pasos viejos de la plantilla BD).
+    var defCodes = preferGroupDefs ? Object.keys(stepDefs || {}) : [];
+    var steps;
+    if (defCodes.length) {
+      steps = defCodes.map(function (c) {
+        var d = stepDefs[c] || {};
+        return {
+          code: c,
+          label: d.label || c,
+          actor: d.actor || 'admin',
+          is_terminal: !!d.is_terminal
+        };
+      });
+    } else {
+      steps = (stepsByCode[code] || []).map(function (s) {
+        return {
+          code: s.code || '',
+          label: s.label || '',
+          actor: s.actor || 'admin',
+          is_terminal: s.is_terminal
+        };
+      });
+    }
     renderSteps(steps);
   }
 
   if (pipelineSelect) {
     pipelineSelect.addEventListener('change', function () {
-      loadPipeline(pipelineSelect.value);
+      // Al cambiar de plantilla, cargar pasos de esa plantilla (no los step_defs previos).
+      loadPipeline(pipelineSelect.value, false);
     });
-    loadPipeline(pipelineSelect.value);
+    loadPipeline(pipelineSelect.value, true);
   }
   if (addStepBtn) {
     addStepBtn.addEventListener('click', function () {
