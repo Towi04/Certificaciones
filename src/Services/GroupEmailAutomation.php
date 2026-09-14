@@ -160,8 +160,22 @@ final class GroupEmailAutomation
             try {
                 // Solicitud UKS inicial: enlaces reglamento/pago/Excel.
                 // No deduplicar: cada producto del paquete puede requerir su solicitud.
-                if (MailTemplateService::isUksSolicitudCode($code) && $trackingId > 0 && $purchaseId > 0) {
-                    (new ProviderRequestService())->send($trackingId, $purchaseId, null, true);
+                if (
+                    $trackingId > 0
+                    && $purchaseId > 0
+                    && (
+                        MailTemplateService::isUksSolicitudCode($code)
+                        || MailTemplateService::templateNeedsProviderDocumentLinks($code)
+                    )
+                ) {
+                    (new ProviderRequestService())->send(
+                        $trackingId,
+                        $purchaseId,
+                        null,
+                        false,
+                        false,
+                        ['mail_template_code' => $code]
+                    );
                     continue;
                 }
 

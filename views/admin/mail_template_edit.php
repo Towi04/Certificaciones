@@ -225,13 +225,13 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
 
             <?php if ($isUksSolicitud): ?>
                 <p class="muted" style="font-size:.82rem;margin:.85rem 0 0">
-                    Para la solicitud al proveedor, el placeholder debe ir en el
-                    <strong>href</strong> del botón, no solo como texto:
-                    <code>&lt;a href="{{workbook_url}}"&gt;Excel&lt;/a&gt;</code>,
-                    <code>&lt;a href="{{pago_proveedor}}"&gt;Comprobante&lt;/a&gt;</code>,
-                    <code>&lt;a href="{{reglamento_url}}"&gt;Reglamento&lt;/a&gt;</code>,
-                    o el bloque <code>{{documentos_html}}</code>.
-                    Al insertar estas etiquetas en HTML se crea el botón con enlace.
+                    Para la solicitud al proveedor, pon el placeholder en el
+                    <strong>href</strong> del botón (no solo como texto suelto):
+                    <code>&lt;a href="{{workbook_url}}"&gt;Formato de Inscripción&lt;/a&gt;</code>,
+                    <code>&lt;a href="{{pago_proveedor}}"&gt;Comprobante de pago&lt;/a&gt;</code>.
+                    También puedes usar <code>{{documentos_html}}</code>.
+                    Si ves <code>{{workbook_url}}</code> literal en el correo, el envío
+                    no pasó por la solicitud a proveedor (faltaron las URLs).
                 </p>
             <?php endif; ?>
         </div>

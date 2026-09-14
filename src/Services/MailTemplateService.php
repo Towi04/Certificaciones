@@ -258,6 +258,48 @@ final class MailTemplateService
             || str_contains($haystack, 'workbook_note');
     }
 
+
+    /**
+     * ¿La plantilla pide enlaces de documentos de solicitud a proveedor?
+     * (Excel, comprobante, reglamento, bloque documentos_html).
+     * Sirve para enrutar el envío por ProviderRequestService aunque el código
+     * no sea exactamente uks_solicitud.
+     */
+    public static function templateNeedsProviderDocumentLinks(string $code): bool
+    {
+        $code = trim($code);
+        if ($code === '') {
+            return false;
+        }
+        if (self::templateUsesWorkbookPlaceholders($code)) {
+            return true;
+        }
+        $row = (new self())->find($code);
+        if ($row === null) {
+            return false;
+        }
+        $haystack = strtolower(
+            (string) ($row['subject'] ?? '') . "\n" . (string) ($row['body_html'] ?? '')
+        );
+
+        foreach ([
+            '{{pago_proveedor}}',
+            '{{comprobante_url}}',
+            '{{reglamento_url}}',
+            '{{documentos_html}}',
+            'pago_proveedor',
+            'comprobante_url',
+            'reglamento_url',
+            'documentos_html',
+        ] as $token) {
+            if (str_contains($haystack, $token)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** Destinatario UKS configurado en la plantilla (producción). */
     public function uksSolicitudRecipient(): string
     {
@@ -1002,7 +1044,9 @@ final class MailTemplateService
                     || $href === ''
                     || $href === '#'
                     || strcasecmp($href, 'about:blank') === 0
-                    || str_starts_with($href, 'javascript:');
+                    || str_starts_with($href, 'javascript:')
+                    // Placeholder sin sustituir (vars no llegaron) → clientes quitan el <a>.
+                    || str_contains($href, '{{');
 
                 if (!$hrefBroken) {
                     return $m[0];
@@ -1024,6 +1068,9 @@ final class MailTemplateService
                         str_contains($lower, 'excel')
                         || str_contains($lower, 'workbook')
                         || str_contains($lower, 'plantilla')
+                        || str_contains($lower, 'formato')
+                        || str_contains($lower, 'inscripci')
+                        || str_contains($lower, 'inscription')
                     ) {
                         $candidates[] = 'workbook_url';
                     }
@@ -1128,7 +1175,9 @@ final class MailTemplateService
                     || $href === ''
                     || $href === '#'
                     || strcasecmp($href, 'about:blank') === 0
-                    || str_starts_with($href, 'javascript:');
+                    || str_starts_with($href, 'javascript:')
+                    // Placeholder sin sustituir (vars no llegaron) → clientes quitan el <a>.
+                    || str_contains($href, '{{');
                 if (!$hrefBroken) {
                     return $m[0];
                 }

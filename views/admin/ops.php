@@ -309,13 +309,13 @@ $extraColHeader = count($extraColLabels) === 1
                                         ? $btn['results_pdf_fields']
                                         : [];
                                     $mailClickable = $resultsReady || $opsResultsPdfUpload;
-                                    // Solo la solicitud inicial UKS usa ProviderRequestService
-                                    // (reglamento / pago / Excel). Otras plantillas de proveedor
-                                    // (p. ej. reagendar_uks) van por enviar-correo-paso.
+                                    // Solicitud con Excel/comprobante/reglamento → ProviderRequestService.
+                                    // Otras plantillas de proveedor (p. ej. reagendar) van por enviar-correo-paso.
                                     $isHeavyProviderRequest = $audience === 'provider'
                                         && (
                                             $sendTpl === ''
                                             || \App\Services\MailTemplateService::isUksSolicitudCode($sendTpl)
+                                            || \App\Services\MailTemplateService::templateNeedsProviderDocumentLinks($sendTpl)
                                         );
                                     $mailBtnClass = $btnClass . ($mailClickable ? '' : ' ops-icon-btn--disabled');
                                     $mailTitle = $mailClickable
