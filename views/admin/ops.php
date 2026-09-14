@@ -410,6 +410,7 @@ $extraColHeader = count($extraColLabels) === 1
                                         <?= csrf_field() ?>
                                         <input type="hidden" name="return_view" value="<?= e($view) ?>">
                                         <input type="hidden" name="return_q" value="<?= e($q) ?>">
+                                        <input type="hidden" name="step_code" value="<?= e((string) ($btn['code'] ?? '')) ?>">
                                         <input type="hidden" name="folio" class="ops-access-folio-hidden" value="<?= e((string) ($r['folio'] ?? '')) ?>">
                                         <input type="hidden" name="access_key" class="ops-access-key-hidden" value="<?= e((string) ($r['access_key'] ?? '')) ?>">
                                         <input type="hidden" name="zoom_url" class="ops-access-zoom-hidden" value="<?= e((string) ($r['zoom_url'] ?? '')) ?>">

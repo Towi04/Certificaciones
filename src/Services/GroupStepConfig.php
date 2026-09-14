@@ -567,24 +567,10 @@ final class GroupStepConfig
             return self::ACTION_CONFIRM_PAYMENT_POPUP;
         }
 
-        if ($action === self::ACTION_SEND_MAIL) {
-            // Reagendar/fecha: no convertir a folio/clave aunque el texto mencione «examen».
-            if (self::stepCollectsExamSchedule($step)) {
-                return self::ACTION_SEND_MAIL;
-            }
-            $email = is_array($step['email'] ?? null) ? $step['email'] : [];
-            $audience = self::audienceFromEmail($email);
-            $tpl = mb_strtolower((string) ($email['template_code'] ?? ''));
-            if ($audience === 'student'
-                && (
-                    str_contains($tpl, 'exam_access')
-                    || str_contains($tpl, 'acceso')
-                    || preg_match('/folio|clave|acceso/u', $blob) === 1
-                )
-            ) {
-                return self::ACTION_EXAM_ACCESS;
-            }
-        }
+        // No reescribir send_mail → exam_access por etiqueta/plantilla («Enviar Accesos»,
+        // toefl_access, etc.): el progreso es la fuente de verdad. Si el admin eligió
+        // «Enviar correo (plantilla)», Operación debe usar StepMailService con esa plantilla,
+        // no el flujo legado ELET-UKS de folio/clave.
 
         return $action;
     }

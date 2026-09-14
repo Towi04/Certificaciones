@@ -356,7 +356,8 @@ final class AdminOpsBoardService
     }
 
     /**
-     * Guarda folio/clave/campo extra y, si $notify, publica accesos (plantilla alumno).
+     * Guarda folio/clave/campo extra y, si $notify, envía la plantilla del paso de Progreso.
+     * Ya no exige ELET-UKS: cualquier producto puede capturar accesos y correo según step_defs.
      *
      * @return array{saved:bool,notified:bool}
      */
@@ -366,11 +367,13 @@ final class AdminOpsBoardService
         string $accessKey,
         int $adminUserId,
         bool $notify,
-        string $zoomUrl = ''
+        string $zoomUrl = '',
+        string $stepCode = ''
     ): array {
         $folio = trim($folio);
         $accessKey = trim($accessKey);
         $zoomUrl = self::normalizeExtraValue($zoomUrl);
+        $stepCode = trim($stepCode);
 
         if (($folio !== '' || $accessKey !== '') && ($folio === '' || $accessKey === '')) {
             throw new \InvalidArgumentException('Indica folio y clave juntos.');
@@ -395,9 +398,10 @@ final class AdminOpsBoardService
         if ($zoomUrl !== '') {
             $logParts[] = 'dato extra';
         }
+        $logStep = $stepCode !== '' ? $stepCode : 'codigos';
         (new TrackingService())->addLog(
             $trackingId,
-            'codigos',
+            $logStep,
             implode('/', $logParts) . ' guardados desde tablero operativo',
             $adminUserId
         );
@@ -412,9 +416,70 @@ final class AdminOpsBoardService
             );
         }
 
-        $notified = (new UksEletService())->publishExamAccess($trackingId, $folio, $accessKey, $adminUserId, true);
+        if ($stepCode === '') {
+            $stepCode = $this->resolveAccessMailStepCode($trackingId);
+        }
+        if ($stepCode === '') {
+            throw new \InvalidArgumentException(
+                'No hay un paso de accesos con «Enviar correo» y plantilla en el progreso del grupo.'
+            );
+        }
 
-        return ['saved' => true, 'notified' => $notified];
+        (new StepMailService())->sendForStep($trackingId, $stepCode, $adminUserId);
+
+        return ['saved' => true, 'notified' => true];
+    }
+
+    /**
+     * Paso del progreso cuya acción/plantilla corresponde a envío de accesos.
+     */
+    private function resolveAccessMailStepCode(int $trackingId): string
+    {
+        $tracking = (new TrackingService())->find($trackingId);
+        if ($tracking === null) {
+            return '';
+        }
+        $product = [
+            'config_json' => $tracking['config_json'] ?? null,
+            'group_config_json' => $tracking['group_config_json'] ?? null,
+            'id' => $tracking['product_id'] ?? 0,
+            'name' => $tracking['product_name'] ?? '',
+            'code' => $tracking['product_code'] ?? '',
+        ];
+        $defs = GroupStepConfig::defsFromConfig(CheckoutRequirements::config($product));
+
+        $fallback = '';
+        foreach ($defs as $code => $def) {
+            if (!is_array($def)) {
+                continue;
+            }
+            $email = is_array($def['email'] ?? null) ? $def['email'] : [];
+            if (empty($email['enabled']) || trim((string) ($email['template_code'] ?? '')) === '') {
+                continue;
+            }
+            $action = (string) ($def['action'] ?? '');
+            $tpl = mb_strtolower(trim((string) ($email['template_code'] ?? '')));
+            $stepCode = (string) ($def['code'] ?? $code);
+            if ($action === GroupStepConfig::ACTION_EXAM_ACCESS) {
+                return $stepCode;
+            }
+            if (
+                $action === GroupStepConfig::ACTION_SEND_MAIL
+                && (
+                    str_contains($tpl, 'exam_access')
+                    || str_contains($tpl, 'acceso')
+                    || str_contains($tpl, 'access')
+                    || $stepCode === 'codigos'
+                )
+            ) {
+                return $stepCode;
+            }
+            if ($fallback === '' && ($stepCode === 'codigos' || str_contains($tpl, 'access'))) {
+                $fallback = $stepCode;
+            }
+        }
+
+        return $fallback;
     }
 
     /**
