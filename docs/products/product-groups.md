@@ -108,8 +108,9 @@ Si marcas **Es un examen de nivel**, se guarda en `products.config_json` bajo `l
 | Importar CSV | POST `/admin/precios/import` |
 
 Orden de columnas (tabla, edición de producto y CSV):
-`code,name,cost_price,catalog_price,public_price,price_cncm,price_partner_a,price_partner_b,price_partner_c`
+`code,name,cost_price,catalog_price,public_price,price_cncm,price_partner_bronze,price_partner_silver,price_partner_gold`
 (Costo → Lista → Público → CNCM → Partner Bronze/Silver/Gold).
+La importación también acepta los nombres legacy `price_partner_a/b/c`.
 
 La edición de precios por producto individual se mantiene.
 

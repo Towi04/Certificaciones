@@ -72,10 +72,7 @@ $priceFields = [
     'catalog_price' => 'Lista / catálogo',
     'public_price' => 'Público',
     'price_cncm' => 'CNCM',
-    'price_partner_a' => 'Partner Bronze',
-    'price_partner_b' => 'Partner Silver',
-    'price_partner_c' => 'Partner Gold',
-];
+] + \App\Services\PartnerAdminService::priceFieldLabels();
 $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px';
 $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600';
 ?>
