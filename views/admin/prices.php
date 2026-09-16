@@ -1,7 +1,8 @@
 <?php
-/** @var list<array<string,mixed>> $products */
+/** @var list<array<string,mixed>> $items */
 /** @var list<array<string,mixed>> $suppliers */
 /** @var int|null $filterSupplierId */
+$items = $items ?? [];
 $filterSupplierId = $filterSupplierId ?? null;
 $priceFields = [
     'cost_price' => 'Costo',
@@ -17,14 +18,15 @@ $priceFields = [
     <div>
         <h1 style="margin:0;color:var(--doceo-blue)">Precios masivos</h1>
         <p class="muted" style="margin:.35rem 0 0;max-width:48rem">
-            Edita en una sola tabla costo, lista, público y niveles partner.
+            Edita en una sola tabla costo, lista, público y niveles partner de productos y combos.
             También puedes descargar una plantilla CSV, actualizarla y volver a subirla.
-            La edición por producto individual sigue disponible.
+            La edición individual sigue disponible.
         </p>
     </div>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
         <a class="btn btn-ghost" href="<?= e(url('/admin/precios/plantilla.csv' . ($filterSupplierId ? ('?supplier_id=' . $filterSupplierId) : ''))) ?>">Descargar plantilla CSV</a>
         <a class="btn btn-ghost" href="<?= e(url('/admin/productos')) ?>">Ver productos</a>
+        <a class="btn btn-ghost" href="<?= e(url('/admin/combos')) ?>">Ver combos</a>
     </div>
 </div>
 
@@ -41,6 +43,11 @@ $priceFields = [
         </select>
     </label>
     <button class="btn btn-ghost" type="submit">Filtrar</button>
+    <?php if ($filterSupplierId): ?>
+        <span class="muted" style="font-size:.8rem;max-width:22rem">
+            Con filtro de proveedor solo se muestran productos. Los combos aparecen al elegir «Todos».
+        </span>
+    <?php endif; ?>
 </form>
 
 <form method="post" action="<?= e(url('/admin/precios/import')) ?>" enctype="multipart/form-data" class="panel" style="margin-top:.75rem;display:flex;gap:.75rem;flex-wrap:wrap;align-items:end">
@@ -52,7 +59,8 @@ $priceFields = [
     <button class="btn btn-accent" type="submit">Subir e importar</button>
     <span class="muted" style="font-size:.78rem;max-width:28rem">
         Columnas:
-        <code>code,name,cost_price,catalog_price,public_price,price_cncm,price_partner_a,price_partner_b,price_partner_c</code>
+        <code>type,code,name,cost_price,catalog_price,public_price,price_cncm,price_partner_a,price_partner_b,price_partner_c</code>
+        (<code>type</code>: <code>product</code> o <code>combo</code>; el costo no aplica a combos).
     </span>
 </form>
 
@@ -65,8 +73,9 @@ $priceFields = [
         <table class="data">
             <thead>
             <tr>
+                <th>Tipo</th>
                 <th>Código</th>
-                <th>Producto</th>
+                <th>Nombre</th>
                 <th>Proveedor</th>
                 <?php foreach ($priceFields as $label): ?>
                     <th><?= e($label) ?></th>
@@ -74,33 +83,49 @@ $priceFields = [
             </tr>
             </thead>
             <tbody>
-            <?php foreach ($products as $p): ?>
-                <?php $pid = (int) $p['id']; ?>
+            <?php foreach ($items as $row): ?>
+                <?php
+                $isCombo = (($row['_kind'] ?? $row['type'] ?? '') === 'combo');
+                $rid = (int) $row['id'];
+                $inputPrefix = $isCombo ? "combo_prices[{$rid}]" : "prices[{$rid}]";
+                $editUrl = $isCombo ? url('/admin/combos/' . $rid) : url('/admin/productos/' . $rid);
+                ?>
                 <tr>
-                    <td><code><?= e((string) $p['code']) ?></code></td>
                     <td>
-                        <a href="<?= e(url('/admin/productos/' . $pid)) ?>"><?= e((string) $p['name']) ?></a>
+                        <?php if ($isCombo): ?>
+                            <span class="muted" style="font-size:.78rem;font-weight:700;letter-spacing:.02em">COMBO</span>
+                        <?php else: ?>
+                            <span class="muted" style="font-size:.78rem;font-weight:700;letter-spacing:.02em">PRODUCTO</span>
+                        <?php endif; ?>
                     </td>
-                    <td><?= e((string) ($p['supplier_name'] ?? '—')) ?></td>
+                    <td><code><?= e((string) $row['code']) ?></code></td>
+                    <td>
+                        <a href="<?= e($editUrl) ?>"><?= e((string) $row['name']) ?></a>
+                    </td>
+                    <td><?= e((string) ($row['supplier_name'] ?? '—')) ?></td>
                     <?php foreach ($priceFields as $field => $_label):
-                        $val = $p[$field] ?? '';
+                        $val = $row[$field] ?? '';
                         ?>
                         <td>
-                            <input type="number" min="0" step="0.01"
-                                   name="prices[<?= $pid ?>][<?= e($field) ?>]"
-                                   value="<?= e($val !== null && $val !== '' ? (string) $val : '') ?>"
-                                   style="width:6.2rem;padding:.35rem .45rem;border:1px solid #cfd8e6;border-radius:8px">
+                            <?php if ($isCombo && $field === 'cost_price'): ?>
+                                <span class="muted" title="Los combos no tienen costo">—</span>
+                            <?php else: ?>
+                                <input type="number" min="0" step="0.01"
+                                       name="<?= e($inputPrefix) ?>[<?= e($field) ?>]"
+                                       value="<?= e($val !== null && $val !== '' ? (string) $val : '') ?>"
+                                       style="width:6.2rem;padding:.35rem .45rem;border:1px solid #cfd8e6;border-radius:8px">
+                            <?php endif; ?>
                         </td>
                     <?php endforeach; ?>
                 </tr>
             <?php endforeach; ?>
-            <?php if ($products === []): ?>
-                <tr><td colspan="10" class="muted">No hay productos para mostrar.</td></tr>
+            <?php if ($items === []): ?>
+                <tr><td colspan="11" class="muted">No hay productos ni combos para mostrar.</td></tr>
             <?php endif; ?>
             </tbody>
         </table>
     </div>
-    <?php if ($products !== []): ?>
+    <?php if ($items !== []): ?>
         <div style="margin-top:1rem">
             <button class="btn btn-accent" type="submit">Guardar precios</button>
         </div>

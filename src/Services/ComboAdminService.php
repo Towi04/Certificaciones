@@ -105,6 +105,73 @@ final class ComboAdminService
     }
 
     /**
+     * Actualización masiva solo de precios (sin tocar ítems del combo).
+     *
+     * @param array<int|string, mixed> $rows
+     */
+    public function updatePricesBulk(array $rows): int
+    {
+        $updated = 0;
+        foreach ($rows as $idRaw => $fields) {
+            if (!is_array($fields)) {
+                continue;
+            }
+            $id = (int) $idRaw;
+            if ($id < 1) {
+                continue;
+            }
+            $existing = $this->combos->find($id);
+            if ($existing === null) {
+                continue;
+            }
+            $payload = $this->pricePayloadFromInput($fields, $existing);
+            $this->combos->update($id, $payload);
+            $updated++;
+        }
+
+        return $updated;
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @param array<string, mixed> $existing
+     * @return array<string, mixed>
+     */
+    public function pricePayloadFromInput(array $input, array $existing): array
+    {
+        $publicRaw = $input['public_price'] ?? null;
+        $publicPrice = ($publicRaw === null || $publicRaw === '')
+            ? round(max(0, (float) ($existing['public_price'] ?? 0)), 2)
+            : round(max(0, (float) $publicRaw), 2);
+
+        $catalogRaw = $input['catalog_price'] ?? null;
+        if ($catalogRaw === null || $catalogRaw === '') {
+            $catalogPrice = isset($existing['catalog_price']) && $existing['catalog_price'] !== null && $existing['catalog_price'] !== ''
+                ? round(max(0, (float) $existing['catalog_price']), 2)
+                : Settings::catalogPriceFromPublic($publicPrice);
+        } else {
+            $catalogPrice = round(max(0, (float) $catalogRaw), 2);
+        }
+
+        return [
+            'public_price' => $publicPrice,
+            'catalog_price' => $catalogPrice,
+            'price_cncm' => array_key_exists('price_cncm', $input)
+                ? $this->nullableMoney($input['price_cncm'])
+                : $this->nullableMoney($existing['price_cncm'] ?? null),
+            'price_partner_a' => array_key_exists('price_partner_a', $input)
+                ? $this->nullableMoney($input['price_partner_a'])
+                : $this->nullableMoney($existing['price_partner_a'] ?? null),
+            'price_partner_b' => array_key_exists('price_partner_b', $input)
+                ? $this->nullableMoney($input['price_partner_b'])
+                : $this->nullableMoney($existing['price_partner_b'] ?? null),
+            'price_partner_c' => array_key_exists('price_partner_c', $input)
+                ? $this->nullableMoney($input['price_partner_c'])
+                : $this->nullableMoney($existing['price_partner_c'] ?? null),
+        ];
+    }
+
+    /**
      * Precio de lista (catálogo) de un producto/ítem: lo que pagaría el alumno
      * comprándolo suelto sin código promocional.
      *

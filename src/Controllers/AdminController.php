@@ -2575,19 +2575,12 @@ final class AdminController
     {
         Auth::requireRole(['admin']);
         $filterSupplierId = !empty($_GET['supplier_id']) ? (int) $_GET['supplier_id'] : null;
-        $repo = new ProductRepository();
-        $allProducts = $repo->adminList();
-        if ($filterSupplierId !== null) {
-            $allProducts = array_values(array_filter(
-                $allProducts,
-                static fn (array $p): bool => (int) ($p['supplier_id'] ?? 0) === $filterSupplierId
-            ));
-        }
-        $pagination = Pagination::fromRequest(count($allProducts));
-        $products = array_slice($allProducts, $pagination['offset'], $pagination['limit']);
+        $allRows = $this->pricesRows($filterSupplierId);
+        $pagination = Pagination::fromRequest(count($allRows));
+        $items = array_slice($allRows, $pagination['offset'], $pagination['limit']);
         view('admin/prices', [
             'title' => 'Precios masivos',
-            'products' => $products,
+            'items' => $items,
             'pagination' => $pagination,
             'suppliers' => (new SupplierRepository())->all(),
             'filterSupplierId' => $filterSupplierId,
@@ -2599,16 +2592,34 @@ final class AdminController
     {
         Auth::requireRole(['admin']);
         csrf_verify();
-        $rows = $_POST['prices'] ?? [];
-        if (!is_array($rows)) {
+        $productRows = $_POST['prices'] ?? [];
+        $comboRows = $_POST['combo_prices'] ?? [];
+        if (!is_array($productRows)) {
+            $productRows = [];
+        }
+        if (!is_array($comboRows)) {
+            $comboRows = [];
+        }
+        if ($productRows === [] && $comboRows === []) {
             flash('error', 'No se recibieron precios.');
             redirect('/admin/precios');
 
             return;
         }
         try {
-            $n = (new ProductAdminService())->updatePricesBulk($rows);
-            flash('success', "Precios actualizados: {$n} producto(s).");
+            $nProducts = (new ProductAdminService())->updatePricesBulk($productRows);
+            $nCombos = (new \App\Services\ComboAdminService())->updatePricesBulk($comboRows);
+            $parts = [];
+            if ($nProducts > 0) {
+                $parts[] = "{$nProducts} producto(s)";
+            }
+            if ($nCombos > 0) {
+                $parts[] = "{$nCombos} combo(s)";
+            }
+            $msg = $parts === []
+                ? 'No se actualizó ningún precio.'
+                : 'Precios actualizados: ' . implode(', ', $parts) . '.';
+            flash('success', $msg);
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
@@ -2620,14 +2631,41 @@ final class AdminController
     {
         Auth::requireRole(['admin']);
         $filterSupplierId = !empty($_GET['supplier_id']) ? (int) $_GET['supplier_id'] : null;
-        $products = (new ProductRepository())->adminList();
+        (new ProductAdminService())->sendPriceTemplateCsv($this->pricesRows($filterSupplierId));
+    }
+
+    /**
+     * Filas unificadas producto/combo para editor y plantilla CSV.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function pricesRows(?int $filterSupplierId): array
+    {
+        $allProducts = (new ProductRepository())->adminList();
         if ($filterSupplierId !== null) {
-            $products = array_values(array_filter(
-                $products,
+            $allProducts = array_values(array_filter(
+                $allProducts,
                 static fn (array $p): bool => (int) ($p['supplier_id'] ?? 0) === $filterSupplierId
             ));
         }
-        (new ProductAdminService())->sendPriceTemplateCsv($products);
+        $rows = [];
+        foreach ($allProducts as $p) {
+            $p['_kind'] = 'product';
+            $p['type'] = 'product';
+            $rows[] = $p;
+        }
+        // Los combos no tienen proveedor: solo se listan sin filtro de proveedor.
+        if ($filterSupplierId === null) {
+            foreach ((new \App\Repositories\ComboRepository())->all() as $c) {
+                $c['_kind'] = 'combo';
+                $c['type'] = 'combo';
+                $c['supplier_name'] = '—';
+                $c['cost_price'] = null;
+                $rows[] = $c;
+            }
+        }
+
+        return $rows;
     }
 
     public function pricesImport(): void

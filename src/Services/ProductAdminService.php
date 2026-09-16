@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Repositories\CatalogFilterRepository;
 use App\Repositories\CertifierRepository;
+use App\Repositories\ComboRepository;
 use App\Repositories\ProductGroupRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\SupplierRepository;
@@ -526,6 +527,7 @@ final class ProductAdminService
     public static function priceCsvHeaders(): array
     {
         return [
+            'type',
             'code',
             'name',
             'cost_price',
@@ -539,9 +541,9 @@ final class ProductAdminService
     }
 
     /**
-     * @param list<array<string, mixed>> $products
+     * @param list<array<string, mixed>> $rows Filas de producto o combo (con clave opcional type/kind).
      */
-    public function sendPriceTemplateCsv(array $products, string $filename = 'plantilla-precios.csv'): void
+    public function sendPriceTemplateCsv(array $rows, string $filename = 'plantilla-precios.csv'): void
     {
         $headers = self::priceCsvHeaders();
         csv_download_headers($filename);
@@ -550,10 +552,22 @@ final class ProductAdminService
             throw new \RuntimeException('No se pudo generar el CSV.');
         }
         csv_put($out, $headers);
-        foreach ($products as $p) {
+        foreach ($rows as $item) {
+            $kind = strtolower((string) ($item['type'] ?? $item['_kind'] ?? 'product'));
+            if ($kind !== 'combo') {
+                $kind = 'product';
+            }
             $row = [];
             foreach ($headers as $h) {
-                $val = $p[$h] ?? '';
+                if ($h === 'type') {
+                    $row[] = $kind;
+                    continue;
+                }
+                if ($h === 'cost_price' && $kind === 'combo') {
+                    $row[] = '';
+                    continue;
+                }
+                $val = $item[$h] ?? '';
                 $row[] = $val === null ? '' : (string) $val;
             }
             csv_put($out, $row);
@@ -563,7 +577,7 @@ final class ProductAdminService
     }
 
     /**
-     * Importa precios desde CSV (columna code obligatoria).
+     * Importa precios desde CSV (columna code obligatoria; type opcional: product|combo).
      *
      * @return array{updated:int,skipped:int,errors:list<string>}
      */
@@ -598,6 +612,8 @@ final class ProductAdminService
             throw new \InvalidArgumentException('El CSV debe incluir la columna code.');
         }
 
+        $comboService = new ComboAdminService();
+        $combos = new ComboRepository();
         $updated = 0;
         $skipped = 0;
         $errors = [];
@@ -607,18 +623,18 @@ final class ProductAdminService
             if ($this->csvRowEmpty($data)) {
                 continue;
             }
-            $code = self::normalizeProductCode((string) ($data[$map['code']] ?? ''));
-            if ($code === '') {
-                $errors[] = "Fila {$line}: código vacío.";
+            $typeRaw = isset($map['type'])
+                ? strtolower(trim((string) ($data[$map['type']] ?? '')))
+                : '';
+            $isCombo = in_array($typeRaw, ['combo', 'combos', 'paquete'], true);
+            $isProduct = in_array($typeRaw, ['product', 'producto', 'productos', 'certification', 'certificacion'], true);
+            if ($typeRaw !== '' && !$isCombo && !$isProduct) {
+                $errors[] = "Fila {$line}: tipo desconocido «{$typeRaw}» (usa product o combo).";
                 $skipped++;
                 continue;
             }
-            $product = $this->products->findByCode($code);
-            if ($product === null) {
-                $errors[] = "Fila {$line}: no existe el producto {$code}.";
-                $skipped++;
-                continue;
-            }
+
+            $rawCode = (string) ($data[$map['code']] ?? '');
             $fields = [];
             foreach (['cost_price', 'catalog_price', 'public_price', 'price_cncm', 'price_partner_a', 'price_partner_b', 'price_partner_c'] as $col) {
                 if (!isset($map[$col])) {
@@ -626,12 +642,56 @@ final class ProductAdminService
                 }
                 $fields[$col] = $data[$map[$col]] ?? '';
             }
+
             try {
+                if ($isCombo) {
+                    $code = ComboAdminService::normalizeCode($rawCode);
+                    if ($code === '') {
+                        $errors[] = "Fila {$line}: código vacío.";
+                        $skipped++;
+                        continue;
+                    }
+                    $combo = $combos->findByCode($code);
+                    if ($combo === null) {
+                        $errors[] = "Fila {$line}: no existe el combo {$code}.";
+                        $skipped++;
+                        continue;
+                    }
+                    $payload = $comboService->pricePayloadFromInput($fields, $combo);
+                    $combos->update((int) $combo['id'], $payload);
+                    $updated++;
+                    continue;
+                }
+
+                $code = self::normalizeProductCode($rawCode);
+                if ($code === '') {
+                    $errors[] = "Fila {$line}: código vacío.";
+                    $skipped++;
+                    continue;
+                }
+                $product = $this->products->findByCode($code);
+                if ($product === null && !$isProduct) {
+                    // Compatibilidad: plantillas sin columna type pueden traer combos.
+                    $comboCode = ComboAdminService::normalizeCode($rawCode);
+                    $combo = $comboCode !== '' ? $combos->findByCode($comboCode) : null;
+                    if ($combo !== null) {
+                        $payload = $comboService->pricePayloadFromInput($fields, $combo);
+                        $combos->update((int) $combo['id'], $payload);
+                        $updated++;
+                        continue;
+                    }
+                }
+                if ($product === null) {
+                    $errors[] = "Fila {$line}: no existe el producto {$code}.";
+                    $skipped++;
+                    continue;
+                }
                 $payload = $this->pricePayloadFromInput($fields, $product);
                 $this->products->update((int) $product['id'], $payload);
                 $updated++;
             } catch (\Throwable $e) {
-                $errors[] = "Fila {$line} ({$code}): " . $e->getMessage();
+                $label = trim($rawCode) !== '' ? trim($rawCode) : '?';
+                $errors[] = "Fila {$line} ({$label}): " . $e->getMessage();
                 $skipped++;
             }
         }
