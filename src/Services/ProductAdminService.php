@@ -10,6 +10,7 @@ use App\Repositories\ComboRepository;
 use App\Repositories\ProductGroupRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\SupplierRepository;
+use App\Support\Csv;
 use App\Support\Settings;
 
 // CheckoutRequirements vive en el mismo namespace.
@@ -551,6 +552,8 @@ final class ProductAdminService
         if ($out === false) {
             throw new \RuntimeException('No se pudo generar el CSV.');
         }
+        // Excel en MX/ES usa ; por defecto: esta pista fuerza comas al abrir.
+        Csv::writeExcelSepHint($out, ',');
         csv_put($out, $headers);
         foreach ($rows as $item) {
             $kind = strtolower((string) ($item['type'] ?? $item['_kind'] ?? 'product'));
@@ -569,7 +572,19 @@ final class ProductAdminService
                 }
                 $dbKey = PartnerAdminService::resolvePriceDbColumn($h) ?? $h;
                 $val = $item[$dbKey] ?? '';
-                $row[] = $val === null ? '' : (string) $val;
+                if ($val === null || $val === '') {
+                    $row[] = '';
+                    continue;
+                }
+                // Montos como texto plano con punto decimal (evita que Excel los rompa).
+                if (in_array($dbKey, [
+                    'cost_price', 'catalog_price', 'public_price', 'price_cncm',
+                    'price_partner_a', 'price_partner_b', 'price_partner_c',
+                ], true) && is_numeric($val)) {
+                    $row[] = number_format((float) $val, 2, '.', '');
+                    continue;
+                }
+                $row[] = (string) $val;
             }
             csv_put($out, $row);
         }
@@ -589,10 +604,11 @@ final class ProductAdminService
             throw new \InvalidArgumentException('No se pudo leer el archivo CSV.');
         }
 
-        $header = csv_get($handle);
-        if ($header === false) {
+        try {
+            [$header, $delimiter] = Csv::readHeader($handle);
+        } catch (\InvalidArgumentException $e) {
             fclose($handle);
-            throw new \InvalidArgumentException('El CSV no tiene encabezados.');
+            throw $e;
         }
         $header = array_map(
             static fn ($h) => strtolower(trim((string) $h, " \t\n\r\0\x0B\"")),
@@ -619,7 +635,7 @@ final class ProductAdminService
         $skipped = 0;
         $errors = [];
         $line = 1;
-        while (($data = csv_get($handle)) !== false) {
+        while (($data = csv_get($handle, null, $delimiter)) !== false) {
             $line++;
             if ($this->csvRowEmpty($data)) {
                 continue;
@@ -664,7 +680,7 @@ final class ProductAdminService
                         $skipped++;
                         continue;
                     }
-                    $payload = $comboService->pricePayloadFromInput($fields, $combo);
+                    $payload = $comboService->pricePayloadFromInput($fields, $combo, true);
                     $combos->update((int) $combo['id'], $payload);
                     $updated++;
                     continue;
@@ -682,7 +698,7 @@ final class ProductAdminService
                     $comboCode = ComboAdminService::normalizeCode($rawCode);
                     $combo = $comboCode !== '' ? $combos->findByCode($comboCode) : null;
                     if ($combo !== null) {
-                        $payload = $comboService->pricePayloadFromInput($fields, $combo);
+                        $payload = $comboService->pricePayloadFromInput($fields, $combo, true);
                         $combos->update((int) $combo['id'], $payload);
                         $updated++;
                         continue;
@@ -693,7 +709,7 @@ final class ProductAdminService
                     $skipped++;
                     continue;
                 }
-                $payload = $this->pricePayloadFromInput($fields, $product);
+                $payload = $this->pricePayloadFromInput($fields, $product, true);
                 $this->products->update((int) $product['id'], $payload);
                 $updated++;
             } catch (\Throwable $e) {
@@ -727,10 +743,11 @@ final class ProductAdminService
         if ($handle === false) {
             throw new \InvalidArgumentException('No se pudo leer el archivo CSV.');
         }
-        $header = csv_get($handle);
-        if ($header === false) {
+        try {
+            [$header, $delimiter] = Csv::readHeader($handle);
+        } catch (\InvalidArgumentException $e) {
             fclose($handle);
-            throw new \InvalidArgumentException('El CSV no tiene encabezados.');
+            throw $e;
         }
         $header = array_map(
             static fn ($h) => strtolower(trim((string) $h, " \t\n\r\0\x0B\"")),
@@ -758,7 +775,7 @@ final class ProductAdminService
         $skipped = 0;
         $errors = [];
         $line = 1;
-        while (($data = csv_get($handle)) !== false) {
+        while (($data = csv_get($handle, null, $delimiter)) !== false) {
             $line++;
             if ($this->csvRowEmpty($data)) {
                 continue;
@@ -1058,6 +1075,7 @@ final class ProductAdminService
         if ($out === false) {
             throw new \RuntimeException('No se pudo generar el CSV.');
         }
+        Csv::writeExcelSepHint($out, ',');
         csv_put($out, self::productBulkCsvHeaders());
         csv_put($out, [
             'EJEMPLO-B1',
@@ -1065,13 +1083,13 @@ final class ProductAdminService
             'certification',
             'english_adult',
             'adult',
-            '2500',
-            '3000',
-            '1800',
-            '2200',
-            '2300',
-            '2400',
-            '2450',
+            '2500.00',
+            '3000.00',
+            '1800.00',
+            '2200.00',
+            '2300.00',
+            '2400.00',
+            '2450.00',
             'itep-exams',
             'itep',
             'itep',
@@ -1099,6 +1117,7 @@ final class ProductAdminService
         if ($out === false) {
             throw new \RuntimeException('No se pudo generar el CSV.');
         }
+        Csv::writeExcelSepHint($out, ',');
         $headers = self::productBulkCsvHeaders();
         csv_put($out, $headers);
         $filterSvc = new CatalogFilterService();
@@ -1109,19 +1128,26 @@ final class ProductAdminService
             } catch (\Throwable $e) {
                 error_log('[Doceo] export cenni_types: ' . $e->getMessage());
             }
+            $money = static function (mixed $v): string {
+                if ($v === null || $v === '') {
+                    return '';
+                }
+
+                return number_format((float) $v, 2, '.', '');
+            };
             csv_put($out, [
                 (string) ($p['code'] ?? ''),
                 (string) ($p['name'] ?? ''),
                 (string) ($p['type'] ?? 'certification'),
                 (string) ($p['category'] ?? 'other'),
                 (string) ($p['audience'] ?? 'any'),
-                (string) ($p['public_price'] ?? ''),
-                (string) ($p['catalog_price'] ?? ''),
-                (string) ($p['cost_price'] ?? ''),
-                (string) ($p['price_cncm'] ?? ''),
-                (string) ($p['price_partner_a'] ?? ''),
-                (string) ($p['price_partner_b'] ?? ''),
-                (string) ($p['price_partner_c'] ?? ''),
+                $money($p['public_price'] ?? ''),
+                $money($p['catalog_price'] ?? ''),
+                $money($p['cost_price'] ?? ''),
+                $money($p['price_cncm'] ?? ''),
+                $money($p['price_partner_a'] ?? ''),
+                $money($p['price_partner_b'] ?? ''),
+                $money($p['price_partner_c'] ?? ''),
                 (string) ($p['product_group_code'] ?? ''),
                 (string) ($p['supplier_code'] ?? ''),
                 (string) ($p['certifier_code'] ?? ''),
@@ -1474,11 +1500,13 @@ final class ProductAdminService
             }
         }
 
-        $publicPrice = round(max(0, (float) ($input['public_price'] ?? ($existing['public_price'] ?? 0))), 2);
-        $catalogRaw = trim((string) ($input['catalog_price'] ?? ''));
-        $catalogPrice = $catalogRaw === ''
+        $publicParsed = Csv::parseMoney($input['public_price'] ?? ($existing['public_price'] ?? 0));
+        $publicPrice = $publicParsed ?? 0.0;
+        $catalogRaw = $input['catalog_price'] ?? '';
+        $catalogParsed = Csv::parseMoney($catalogRaw);
+        $catalogPrice = $catalogParsed === null
             ? Settings::catalogPriceFromPublic($publicPrice)
-            : round(max(0, (float) $catalogRaw), 2);
+            : $catalogParsed;
 
         $months = (int) ($input['access_months'] ?? ($existing['access_months'] ?? 6));
         if ($months < 1) {
@@ -1487,6 +1515,8 @@ final class ProductAdminService
         if ($months > 60) {
             $months = 60;
         }
+
+        $costParsed = Csv::parseMoney($input['cost_price'] ?? ($existing['cost_price'] ?? 0));
 
         return [
             'code' => $code,
@@ -1505,7 +1535,7 @@ final class ProductAdminService
             'level_label' => $this->nullableString($input['level_label'] ?? ($existing['level_label'] ?? null)),
             'public_price' => $publicPrice,
             'catalog_price' => $catalogPrice,
-            'cost_price' => round(max(0, (float) ($input['cost_price'] ?? ($existing['cost_price'] ?? 0))), 2),
+            'cost_price' => $costParsed ?? 0.0,
             'price_cncm' => $this->nullableMoney($input['price_cncm'] ?? ($existing['price_cncm'] ?? null)),
             'price_partner_a' => $this->nullableMoney($input['price_partner_a'] ?? ($existing['price_partner_a'] ?? null)),
             'price_partner_b' => $this->nullableMoney($input['price_partner_b'] ?? ($existing['price_partner_b'] ?? null)),
@@ -2453,44 +2483,89 @@ final class ProductAdminService
      * @param array<string, mixed> $existing
      * @return array<string, mixed>
      */
-    private function pricePayloadFromInput(array $input, array $existing): array
+    private function pricePayloadFromInput(array $input, array $existing, bool $fromCsv = false): array
     {
-        $publicRaw = $input['public_price'] ?? null;
-        $publicPrice = ($publicRaw === null || $publicRaw === '')
-            ? round(max(0, (float) ($existing['public_price'] ?? 0)), 2)
-            : round(max(0, (float) $publicRaw), 2);
+        // $fromCsv: la importación CSV pasa true; el parseo de montos ya usa Csv::parseMoney.
+        unset($fromCsv);
 
-        $catalogRaw = $input['catalog_price'] ?? null;
-        if ($catalogRaw === null || $catalogRaw === '') {
+        $publicPrice = $this->resolveMoneyField(
+            $input,
+            'public_price',
+            (float) ($existing['public_price'] ?? 0),
+            false
+        );
+
+        if (array_key_exists('catalog_price', $input)) {
+            $catalogParsed = Csv::parseMoney($input['catalog_price']);
+            if ($catalogParsed === null) {
+                $catalogPrice = isset($existing['catalog_price']) && $existing['catalog_price'] !== null && $existing['catalog_price'] !== ''
+                    ? round(max(0, (float) $existing['catalog_price']), 2)
+                    : Settings::catalogPriceFromPublic($publicPrice);
+            } else {
+                $catalogPrice = $catalogParsed;
+            }
+        } else {
             $catalogPrice = isset($existing['catalog_price']) && $existing['catalog_price'] !== null && $existing['catalog_price'] !== ''
                 ? round(max(0, (float) $existing['catalog_price']), 2)
                 : Settings::catalogPriceFromPublic($publicPrice);
-        } else {
-            $catalogPrice = round(max(0, (float) $catalogRaw), 2);
         }
 
-        $costRaw = $input['cost_price'] ?? null;
-        $costPrice = ($costRaw === null || $costRaw === '')
-            ? round(max(0, (float) ($existing['cost_price'] ?? 0)), 2)
-            : round(max(0, (float) $costRaw), 2);
+        $costPrice = $this->resolveMoneyField(
+            $input,
+            'cost_price',
+            (float) ($existing['cost_price'] ?? 0),
+            false
+        );
 
         return [
             'public_price' => $publicPrice,
             'catalog_price' => $catalogPrice,
             'cost_price' => $costPrice,
-            'price_cncm' => array_key_exists('price_cncm', $input)
-                ? $this->nullableMoney($input['price_cncm'])
-                : $this->nullableMoney($existing['price_cncm'] ?? null),
-            'price_partner_a' => array_key_exists('price_partner_a', $input)
-                ? $this->nullableMoney($input['price_partner_a'])
-                : $this->nullableMoney($existing['price_partner_a'] ?? null),
-            'price_partner_b' => array_key_exists('price_partner_b', $input)
-                ? $this->nullableMoney($input['price_partner_b'])
-                : $this->nullableMoney($existing['price_partner_b'] ?? null),
-            'price_partner_c' => array_key_exists('price_partner_c', $input)
-                ? $this->nullableMoney($input['price_partner_c'])
-                : $this->nullableMoney($existing['price_partner_c'] ?? null),
+            'price_cncm' => $this->resolveNullableMoneyField($input, $existing, 'price_cncm'),
+            'price_partner_a' => $this->resolveNullableMoneyField($input, $existing, 'price_partner_a'),
+            'price_partner_b' => $this->resolveNullableMoneyField($input, $existing, 'price_partner_b'),
+            'price_partner_c' => $this->resolveNullableMoneyField($input, $existing, 'price_partner_c'),
         ];
+    }
+
+    /**
+     * Resuelve un monto obligatorio (costo/público). Si la clave viene en el input
+     * con valor no vacío, siempre sobrescribe (importante para CSV).
+     *
+     * @param array<string, mixed> $input
+     */
+    private function resolveMoneyField(
+        array $input,
+        string $key,
+        float $existing,
+        bool $emptyMeansZero
+    ): float {
+        if (!array_key_exists($key, $input)) {
+            return round(max(0, $existing), 2);
+        }
+        $parsed = Csv::parseMoney($input[$key]);
+        if ($parsed === null) {
+            if ($emptyMeansZero) {
+                return 0.0;
+            }
+            // Celda vacía: se conserva el valor previo (no borrar por accidente).
+            return round(max(0, $existing), 2);
+        }
+
+        return $parsed;
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @param array<string, mixed> $existing
+     */
+    private function resolveNullableMoneyField(array $input, array $existing, string $key): ?float
+    {
+        if (!array_key_exists($key, $input)) {
+            return $this->nullableMoney($existing[$key] ?? null);
+        }
+
+        return $this->nullableMoney($input[$key]);
     }
 
     /** @param list<mixed>|false $data */
@@ -2546,11 +2621,7 @@ final class ProductAdminService
 
     private function nullableMoney(mixed $value): ?float
     {
-        if ($value === null || $value === '') {
-            return null;
-        }
-
-        return round(max(0, (float) $value), 2);
+        return Csv::parseMoney($value);
     }
 
     private function nullableString(mixed $value): ?string

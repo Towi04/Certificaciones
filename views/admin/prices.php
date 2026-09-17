@@ -59,6 +59,8 @@ $partnerCsvHeaders = implode(',', \App\Services\PartnerAdminService::priceCsvHea
         Columnas:
         <code>type,code,name,cost_price,catalog_price,public_price,price_cncm,<?= e($partnerCsvHeaders) ?></code>
         (<code>type</code>: <code>product</code> o <code>combo</code>; el costo no aplica a combos).
+        Edita los montos y vuelve a subir: si la celda tiene valor, se sobrescribe.
+        Preferible abrir/guardar como CSV UTF-8; la plantilla incluye <code>sep=,</code> para Excel.
     </span>
 </form>
 

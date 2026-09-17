@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Repositories\ComboRepository;
 use App\Repositories\ProductRepository;
+use App\Support\Csv;
 use App\Support\Settings;
 
 /** CRUD de combos (certificación + curso + trámite) con precios por nivel. */
@@ -137,22 +138,33 @@ final class ComboAdminService
      * @param array<string, mixed> $existing
      * @return array<string, mixed>
      */
-    public function pricePayloadFromInput(array $input, array $existing): array
+    public function pricePayloadFromInput(array $input, array $existing, bool $fromCsv = false): array
     {
-        $publicRaw = $input['public_price'] ?? null;
-        $publicPrice = ($publicRaw === null || $publicRaw === '')
-            ? round(max(0, (float) ($existing['public_price'] ?? 0)), 2)
-            : round(max(0, (float) $publicRaw), 2);
+        if (!array_key_exists('public_price', $input)) {
+            $publicPrice = round(max(0, (float) ($existing['public_price'] ?? 0)), 2);
+        } else {
+            $parsed = Csv::parseMoney($input['public_price']);
+            $publicPrice = $parsed === null
+                ? round(max(0, (float) ($existing['public_price'] ?? 0)), 2)
+                : $parsed;
+        }
 
-        $catalogRaw = $input['catalog_price'] ?? null;
-        if ($catalogRaw === null || $catalogRaw === '') {
+        if (array_key_exists('catalog_price', $input)) {
+            $catalogParsed = Csv::parseMoney($input['catalog_price']);
+            if ($catalogParsed === null) {
+                $catalogPrice = isset($existing['catalog_price']) && $existing['catalog_price'] !== null && $existing['catalog_price'] !== ''
+                    ? round(max(0, (float) $existing['catalog_price']), 2)
+                    : Settings::catalogPriceFromPublic($publicPrice);
+            } else {
+                $catalogPrice = $catalogParsed;
+            }
+        } else {
             $catalogPrice = isset($existing['catalog_price']) && $existing['catalog_price'] !== null && $existing['catalog_price'] !== ''
                 ? round(max(0, (float) $existing['catalog_price']), 2)
                 : Settings::catalogPriceFromPublic($publicPrice);
-        } else {
-            $catalogPrice = round(max(0, (float) $catalogRaw), 2);
         }
 
+        // $fromCsv mantiene la misma firma que ProductAdminService (import CSV).
         return [
             'public_price' => $publicPrice,
             'catalog_price' => $catalogPrice,
@@ -380,11 +392,7 @@ final class ComboAdminService
 
     private function nullableMoney(mixed $value): ?float
     {
-        if ($value === null || $value === '') {
-            return null;
-        }
-
-        return round(max(0, (float) $value), 2);
+        return Csv::parseMoney($value);
     }
 
     /**
