@@ -48,7 +48,7 @@ $action = $isEdit
                 <?php endforeach; ?>
             </select>
             <span class="muted" style="font-size:.78rem;font-weight:500">
-                Bronze (antes A) · Silver (antes B) · Gold (antes C). Gold suele ser el precio partner más preferente.
+                Niveles: Bronze, Silver y Gold. Gold suele ser el precio partner más preferente.
             </span>
         </label>
     </div>

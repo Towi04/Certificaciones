@@ -526,18 +526,18 @@ final class ProductAdminService
      */
     public static function priceCsvHeaders(): array
     {
-        return [
-            'type',
-            'code',
-            'name',
-            'cost_price',
-            'catalog_price',
-            'public_price',
-            'price_cncm',
-            'price_partner_a',
-            'price_partner_b',
-            'price_partner_c',
-        ];
+        return array_merge(
+            [
+                'type',
+                'code',
+                'name',
+                'cost_price',
+                'catalog_price',
+                'public_price',
+                'price_cncm',
+            ],
+            PartnerAdminService::priceCsvHeaders()
+        );
     }
 
     /**
@@ -567,7 +567,8 @@ final class ProductAdminService
                     $row[] = '';
                     continue;
                 }
-                $val = $item[$h] ?? '';
+                $dbKey = PartnerAdminService::resolvePriceDbColumn($h) ?? $h;
+                $val = $item[$dbKey] ?? '';
                 $row[] = $val === null ? '' : (string) $val;
             }
             csv_put($out, $row);
@@ -636,11 +637,17 @@ final class ProductAdminService
 
             $rawCode = (string) ($data[$map['code']] ?? '');
             $fields = [];
-            foreach (['cost_price', 'catalog_price', 'public_price', 'price_cncm', 'price_partner_a', 'price_partner_b', 'price_partner_c'] as $col) {
+            foreach (['cost_price', 'catalog_price', 'public_price', 'price_cncm'] as $col) {
                 if (!isset($map[$col])) {
                     continue;
                 }
                 $fields[$col] = $data[$map[$col]] ?? '';
+            }
+            foreach (['price_partner_a', 'price_partner_b', 'price_partner_c'] as $dbCol) {
+                if (!self::csvHasPartnerPriceColumn($map, $dbCol)) {
+                    continue;
+                }
+                $fields[$dbCol] = PartnerAdminService::csvPartnerPriceValue($map, $data, $dbCol, '');
             }
 
             try {
@@ -832,9 +839,24 @@ final class ProductAdminService
                 'catalog_price' => $get('catalog_price', $existing['catalog_price'] ?? ''),
                 'cost_price' => $get('cost_price', $existing['cost_price'] ?? 0),
                 'price_cncm' => $get('price_cncm', $existing['price_cncm'] ?? ''),
-                'price_partner_a' => $get('price_partner_a', $existing['price_partner_a'] ?? ''),
-                'price_partner_b' => $get('price_partner_b', $existing['price_partner_b'] ?? ''),
-                'price_partner_c' => $get('price_partner_c', $existing['price_partner_c'] ?? ''),
+                'price_partner_a' => PartnerAdminService::csvPartnerPriceValue(
+                    $map,
+                    $data,
+                    'price_partner_a',
+                    $existing['price_partner_a'] ?? ''
+                ),
+                'price_partner_b' => PartnerAdminService::csvPartnerPriceValue(
+                    $map,
+                    $data,
+                    'price_partner_b',
+                    $existing['price_partner_b'] ?? ''
+                ),
+                'price_partner_c' => PartnerAdminService::csvPartnerPriceValue(
+                    $map,
+                    $data,
+                    'price_partner_c',
+                    $existing['price_partner_c'] ?? ''
+                ),
                 'product_group_id' => $existing['product_group_id'] ?? null,
                 // No reasignar proveedor en masa: conservar el existente salvo supplier_code
                 // o herencia desde product_group_code / alta nueva.
@@ -1002,29 +1024,31 @@ final class ProductAdminService
     /** @return list<string> */
     public static function productBulkCsvHeaders(): array
     {
-        return [
-            'code',
-            'name',
-            'type',
-            'category',
-            'audience',
-            'public_price',
-            'catalog_price',
-            'cost_price',
-            'price_cncm',
-            'price_partner_a',
-            'price_partner_b',
-            'price_partner_c',
-            'product_group_code',
-            'supplier_code',
-            'certifier_code',
-            'cenni_types',
-            'short_description',
-            'description',
-            'benefits_html',
-            'is_public',
-            'is_star',
-        ];
+        return array_merge(
+            [
+                'code',
+                'name',
+                'type',
+                'category',
+                'audience',
+                'public_price',
+                'catalog_price',
+                'cost_price',
+                'price_cncm',
+            ],
+            PartnerAdminService::priceCsvHeaders(),
+            [
+                'product_group_code',
+                'supplier_code',
+                'certifier_code',
+                'cenni_types',
+                'short_description',
+                'description',
+                'benefits_html',
+                'is_public',
+                'is_star',
+            ]
+        );
     }
 
     public function sendProductBulkTemplateCsv(string $filename = 'plantilla-certificaciones.csv'): void
@@ -2482,6 +2506,32 @@ final class ProductAdminService
         }
 
         return true;
+    }
+
+    /**
+     * ¿El CSV trae alguna columna (nueva o legacy) para ese precio partner?
+     *
+     * @param array<string, int> $map
+     */
+    private static function csvHasPartnerPriceColumn(array $map, string $dbColumn): bool
+    {
+        $csvHeader = PartnerAdminService::priceCsvHeaderForDb($dbColumn);
+        if (isset($map[$csvHeader]) || isset($map[$dbColumn])) {
+            return true;
+        }
+        $short = match ($dbColumn) {
+            'price_partner_a' => ['bronze', 'partner_bronze', 'partner_a', 'a'],
+            'price_partner_b' => ['silver', 'partner_silver', 'partner_b', 'b'],
+            'price_partner_c' => ['gold', 'partner_gold', 'partner_c', 'c'],
+            default => [],
+        };
+        foreach ($short as $alias) {
+            if (isset($map[$alias])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function nullableInt(mixed $value): ?int

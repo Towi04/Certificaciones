@@ -19,10 +19,7 @@ $priceFields = [
     'public_price' => 'Público *',
     'catalog_price' => 'Lista',
     'price_cncm' => 'CNCM',
-    'price_partner_a' => 'Partner Bronze',
-    'price_partner_b' => 'Partner Silver',
-    'price_partner_c' => 'Partner Gold',
-];
+] + \App\Services\PartnerAdminService::priceFieldLabels();
 $num = static function (mixed $v): string {
     if ($v === null || $v === '') {
         return '0';
@@ -81,9 +78,9 @@ $num = static function (mixed $v): string {
                        data-public="<?= e($num($p['public_price'] ?? 0)) ?>"
                        data-catalog="<?= e($num(($p['catalog_price'] ?? 0) > 0 ? $p['catalog_price'] : ($p['public_price'] ?? 0))) ?>"
                        data-cncm="<?= e($num($p['price_cncm'] ?? $p['public_price'] ?? 0)) ?>"
-                       data-partner-a="<?= e($num($p['price_partner_a'] ?? $p['public_price'] ?? 0)) ?>"
-                       data-partner-b="<?= e($num($p['price_partner_b'] ?? $p['public_price'] ?? 0)) ?>"
-                       data-partner-c="<?= e($num($p['price_partner_c'] ?? $p['public_price'] ?? 0)) ?>"
+                       data-partner-bronze="<?= e($num($p['price_partner_a'] ?? $p['public_price'] ?? 0)) ?>"
+                       data-partner-silver="<?= e($num($p['price_partner_b'] ?? $p['public_price'] ?? 0)) ?>"
+                       data-partner-gold="<?= e($num($p['price_partner_c'] ?? $p['public_price'] ?? 0)) ?>"
                        data-name="<?= e((string) $p['name']) ?>"
                     <?= in_array($pid, $selectedIds, true) ? 'checked' : '' ?>
                     style="margin-top:.25rem">
@@ -184,9 +181,9 @@ $num = static function (mixed $v): string {
     public_price: 'public',
     catalog_price: 'catalog',
     price_cncm: 'cncm',
-    price_partner_a: 'partner-a',
-    price_partner_b: 'partner-b',
-    price_partner_c: 'partner-c'
+    price_partner_a: 'partner-bronze',
+    price_partner_b: 'partner-silver',
+    price_partner_c: 'partner-gold'
   };
 
   function money(n) {
@@ -198,15 +195,15 @@ $num = static function (mixed $v): string {
   }
 
   function totals() {
-    const out = { public: 0, catalog: 0, cncm: 0, 'partner-a': 0, 'partner-b': 0, 'partner-c': 0, lines: [] };
+    const out = { public: 0, catalog: 0, cncm: 0, 'partner-bronze': 0, 'partner-silver': 0, 'partner-gold': 0, lines: [] };
     selected().forEach(function (c) {
       const pub = Number(c.getAttribute('data-public') || 0);
       out.public += pub;
       out.catalog += Number(c.getAttribute('data-catalog') || 0);
       out.cncm += Number(c.getAttribute('data-cncm') || 0);
-      out['partner-a'] += Number(c.getAttribute('data-partner-a') || 0);
-      out['partner-b'] += Number(c.getAttribute('data-partner-b') || 0);
-      out['partner-c'] += Number(c.getAttribute('data-partner-c') || 0);
+      out['partner-bronze'] += Number(c.getAttribute('data-partner-bronze') || 0);
+      out['partner-silver'] += Number(c.getAttribute('data-partner-silver') || 0);
+      out['partner-gold'] += Number(c.getAttribute('data-partner-gold') || 0);
       out.lines.push({ name: c.getAttribute('data-name') || '', price: pub });
     });
     Object.keys(out).forEach(function (k) {
@@ -273,9 +270,9 @@ $num = static function (mixed $v): string {
       setInput('public_price', t.public, false);
       setInput('catalog_price', t.catalog, false);
       setInput('price_cncm', t.cncm, false);
-      setInput('price_partner_a', t['partner-a'], false);
-      setInput('price_partner_b', t['partner-b'], false);
-      setInput('price_partner_c', t['partner-c'], false);
+      setInput('price_partner_a', t['partner-bronze'], false);
+      setInput('price_partner_b', t['partner-silver'], false);
+      setInput('price_partner_c', t['partner-gold'], false);
     }
     updateDiscountPreview(t);
   }
@@ -291,9 +288,9 @@ $num = static function (mixed $v): string {
     if (all) {
       setInput('catalog_price', t.catalog, true);
       setInput('price_cncm', t.cncm, true);
-      setInput('price_partner_a', t['partner-a'], true);
-      setInput('price_partner_b', t['partner-b'], true);
-      setInput('price_partner_c', t['partner-c'], true);
+      setInput('price_partner_a', t['partner-bronze'], true);
+      setInput('price_partner_b', t['partner-silver'], true);
+      setInput('price_partner_c', t['partner-gold'], true);
       dirty = {};
     }
     autoFill = false;

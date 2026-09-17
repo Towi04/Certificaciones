@@ -45,7 +45,7 @@ final class PartnerAdminService
     }
 
     /**
-     * Etiquetas de columnas de precio partner (códigos internos a/b/c se mantienen).
+     * Etiquetas de columnas de precio partner (BD: a/b/c → Bronze/Silver/Gold).
      *
      * @return array<string, string>
      */
@@ -56,6 +56,103 @@ final class PartnerAdminService
             'price_partner_b' => 'Partner Silver',
             'price_partner_c' => 'Partner Gold',
         ];
+    }
+
+    /**
+     * Encabezados CSV públicos → columnas de BD.
+     * Los CSV usan bronze/silver/gold; la BD mantiene price_partner_a/b/c.
+     *
+     * @return array<string, string>
+     */
+    public static function priceCsvFieldMap(): array
+    {
+        return [
+            'price_partner_bronze' => 'price_partner_a',
+            'price_partner_silver' => 'price_partner_b',
+            'price_partner_gold' => 'price_partner_c',
+        ];
+    }
+
+    /** @return list<string> */
+    public static function priceCsvHeaders(): array
+    {
+        return array_keys(self::priceCsvFieldMap());
+    }
+
+    /**
+     * Resuelve un encabezado CSV / alias de formulario a la columna de BD.
+     */
+    public static function resolvePriceDbColumn(string $key): ?string
+    {
+        $key = strtolower(trim($key));
+        if ($key === '') {
+            return null;
+        }
+        $map = self::priceCsvFieldMap();
+        if (isset($map[$key])) {
+            return $map[$key];
+        }
+        if (in_array($key, ['price_partner_a', 'price_partner_b', 'price_partner_c'], true)) {
+            return $key;
+        }
+        $aliases = [
+            'bronze' => 'price_partner_a',
+            'silver' => 'price_partner_b',
+            'gold' => 'price_partner_c',
+            'partner_bronze' => 'price_partner_a',
+            'partner_silver' => 'price_partner_b',
+            'partner_gold' => 'price_partner_c',
+            'partner_a' => 'price_partner_a',
+            'partner_b' => 'price_partner_b',
+            'partner_c' => 'price_partner_c',
+            'a' => 'price_partner_a',
+            'b' => 'price_partner_b',
+            'c' => 'price_partner_c',
+        ];
+
+        return $aliases[$key] ?? null;
+    }
+
+    /** Encabezado CSV público para una columna de BD. */
+    public static function priceCsvHeaderForDb(string $dbColumn): string
+    {
+        foreach (self::priceCsvFieldMap() as $csv => $db) {
+            if ($db === $dbColumn) {
+                return $csv;
+            }
+        }
+
+        return $dbColumn;
+    }
+
+    /**
+     * Lee un precio partner desde un mapa CSV (prioriza bronze/silver/gold; acepta a/b/c).
+     *
+     * @param array<string, int> $map
+     * @param list<mixed> $data
+     */
+    public static function csvPartnerPriceValue(array $map, array $data, string $dbColumn, mixed $default = ''): mixed
+    {
+        $csvHeader = self::priceCsvHeaderForDb($dbColumn);
+        if (isset($map[$csvHeader])) {
+            return $data[$map[$csvHeader]] ?? $default;
+        }
+        if (isset($map[$dbColumn])) {
+            return $data[$map[$dbColumn]] ?? $default;
+        }
+        $short = match ($dbColumn) {
+            'price_partner_a' => ['bronze', 'partner_bronze', 'partner_a', 'a'],
+            'price_partner_b' => ['silver', 'partner_silver', 'partner_b', 'b'],
+            'price_partner_c' => ['gold', 'partner_gold', 'partner_c', 'c'],
+            default => [],
+        };
+        foreach ($short as $alias) {
+            if (isset($map[$alias])) {
+                return $data[$map[$alias]] ?? $default;
+            }
+        }
+
+        return $default;
     }
 
     /**

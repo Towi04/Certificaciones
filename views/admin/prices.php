@@ -9,10 +9,8 @@ $priceFields = [
     'catalog_price' => 'Lista',
     'public_price' => 'Público',
     'price_cncm' => 'CNCM',
-    'price_partner_a' => 'Partner Bronze',
-    'price_partner_b' => 'Partner Silver',
-    'price_partner_c' => 'Partner Gold',
-];
+] + \App\Services\PartnerAdminService::priceFieldLabels();
+$partnerCsvHeaders = implode(',', \App\Services\PartnerAdminService::priceCsvHeaders());
 ?>
 <div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap">
     <div>
@@ -59,7 +57,7 @@ $priceFields = [
     <button class="btn btn-accent" type="submit">Subir e importar</button>
     <span class="muted" style="font-size:.78rem;max-width:28rem">
         Columnas:
-        <code>type,code,name,cost_price,catalog_price,public_price,price_cncm,price_partner_a,price_partner_b,price_partner_c</code>
+        <code>type,code,name,cost_price,catalog_price,public_price,price_cncm,<?= e($partnerCsvHeaders) ?></code>
         (<code>type</code>: <code>product</code> o <code>combo</code>; el costo no aplica a combos).
     </span>
 </form>
