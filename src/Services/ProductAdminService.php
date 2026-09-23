@@ -532,6 +532,9 @@ final class ProductAdminService
                 'type',
                 'code',
                 'name',
+                // Solo lectura en plantilla (identificación); la importación las ignora.
+                'supplier',
+                'certifier',
                 'cost_price',
                 'catalog_price',
                 'public_price',
@@ -568,6 +571,18 @@ final class ProductAdminService
                 }
                 if ($h === 'cost_price' && $kind === 'combo') {
                     $row[] = '';
+                    continue;
+                }
+                if ($h === 'supplier') {
+                    $row[] = $kind === 'combo'
+                        ? ''
+                        : (string) ($item['supplier_name'] ?? $item['supplier'] ?? '');
+                    continue;
+                }
+                if ($h === 'certifier') {
+                    $row[] = $kind === 'combo'
+                        ? ''
+                        : (string) ($item['certifier_name'] ?? $item['certifier'] ?? '');
                     continue;
                 }
                 $dbKey = PartnerAdminService::resolvePriceDbColumn($h) ?? $h;
