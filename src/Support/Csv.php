@@ -26,16 +26,18 @@ final class Csv
             throw new \InvalidArgumentException('El CSV no tiene encabezados.');
         }
         $trimFirst = trim(preg_replace('/^\xEF\xBB\xBF/', '', $rawFirst) ?? $rawFirst);
+        $trimFirst = self::cellToUtf8($trimFirst);
         if (preg_match('/^sep=(.)\s*$/i', $trimFirst, $m)) {
             $delimiter = $m[1];
         } else {
-            $delimiter = self::detectDelimiter($rawFirst);
+            $delimiter = self::detectDelimiter(self::cellToUtf8($rawFirst));
             fseek($handle, $start);
         }
         $header = csv_get($handle, null, $delimiter);
         if ($header === false) {
             throw new \InvalidArgumentException('El CSV no tiene encabezados.');
         }
+        $header = array_map(static fn ($h) => self::cellToUtf8($h), $header);
 
         return [$header, $delimiter];
     }
@@ -61,13 +63,47 @@ final class Csv
     }
 
     /**
-     * Escribe la pista de Excel para forzar separador de comas (locales MX/ES).
+     * Separador nativo de Excel en MX/ES. Con UTF-8 BOM (y sin línea sep=)
+     * los acentos se ven bien al abrir con doble clic.
+     */
+    public static function excelDelimiter(): string
+    {
+        return ';';
+    }
+
+    /**
+     * @deprecated Preferir excelDelimiter() + UTF-8 BOM sin pista sep=.
+     * La línea sep=, hace que Excel ignore el BOM y rompa acentos.
      *
      * @param resource $stream
      */
     public static function writeExcelSepHint($stream, string $separator = ','): void
     {
-        fwrite($stream, 'sep=' . $separator . "\r\n");
+        // No-op a propósito: mantener firma por si queda alguna llamada vieja.
+        unset($stream, $separator);
+    }
+
+    /**
+     * Normaliza texto de celdas CSV a UTF-8 (Excel a veces guarda Windows-1252).
+     */
+    public static function cellToUtf8(mixed $value): string
+    {
+        $s = (string) $value;
+        if ($s === '') {
+            return '';
+        }
+        // Quitar BOM suelto en celdas.
+        $s = preg_replace('/^\xEF\xBB\xBF/', '', $s) ?? $s;
+        if (mb_check_encoding($s, 'UTF-8')) {
+            return $s;
+        }
+        $converted = @mb_convert_encoding($s, 'UTF-8', 'Windows-1252');
+        if (is_string($converted) && $converted !== '') {
+            return $converted;
+        }
+        $converted = @iconv('Windows-1252', 'UTF-8//IGNORE', $s);
+
+        return is_string($converted) ? $converted : $s;
     }
 
     /**
