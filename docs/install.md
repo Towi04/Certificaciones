@@ -60,6 +60,24 @@ Opciones:
 
    Cada push/merge a `main` llamará al script de Neubox.
 
+### Si el deploy falla con «No se pudo descargar el repositorio desde GitHub»
+
+Eso **no** es un bug del merge: el `upload_version.php` del servidor no pudo
+bajar el ZIP de `main` (token vencido, revocado o sin permiso).
+
+1. En GitHub → Settings → Developer settings → Personal access tokens  
+   crea un token (classic con scope `repo`, o fine-grained con **Contents: Read**
+   sobre `Towi04/Certificaciones`).
+2. En el servidor Neubox edita `upload_version.php` y actualiza `$token = 'ghp_…'`.  
+   Puedes basarte en `upload_version.example.php` del repo (usa `Authorization: Bearer`).
+3. Prueba a mano:  
+   `https://pdv.institutodoceo.com/upload_version.php?key=TU_CLAVE_DEPLOY`  
+   Debe mostrar «Despliegue completado».
+4. En Actions → el run fallido → **Re-run jobs** (o haz un push vacío a `main`).
+
+Los secrets `DEPLOY_URL` / `DEPLOY_KEY` del workflow solo abren el script; el
+token de GitHub vive **solo** en el servidor (no en Actions).
+
 ## 4) Seguridad
 
 - No subas `upload_version.php` ni `.env` a Git (ya están en `.gitignore` / plantilla).

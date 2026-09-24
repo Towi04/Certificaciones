@@ -10,6 +10,8 @@ ob_implicit_flush(true);
 // CONFIGURACIÓN — copia este archivo como upload_version.php en el servidor
 $username   = 'Towi04';
 $repo       = 'Certificaciones';
+// Personal Access Token (classic) con scope "repo", o fine-grained con Contents: Read.
+// Si el deploy falla con «No se pudo descargar el repositorio», renueva este token.
 $token      = 'ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
 $secret_key = 'tu-clave-secreta-de-deploy';
 
@@ -21,7 +23,8 @@ if (!isset($_GET['key']) || $_GET['key'] !== $secret_key) {
 header('Content-Type: text/html; charset=UTF-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
-$repo_zip = "https://{$username}:{$token}@github.com/{$username}/{$repo}/archive/refs/heads/main.zip";
+// Preferir Bearer (más fiable que user:token en la URL).
+$repo_zip = "https://github.com/{$username}/{$repo}/archive/refs/heads/main.zip";
 $zip_file = 'repo.zip';
 
 echo '<h3>Iniciando actualización desde main…</h3>';
@@ -30,19 +33,30 @@ flush();
 $opts = [
     'http' => [
         'method' => 'GET',
-        'header' => "User-Agent: PHP\r\n",
+        'header' => "User-Agent: InstitutoDoceo-Deploy\r\n"
+            . "Authorization: Bearer {$token}\r\n"
+            . "Accept: application/vnd.github+json\r\n",
+        'ignore_errors' => true,
+        'timeout' => 240,
     ],
     'ssl' => [
-        'verify_peer' => false,
-        'verify_peer_name' => false,
+        'verify_peer' => true,
+        'verify_peer_name' => true,
     ],
 ];
 
 $context = stream_context_create($opts);
 $file_data = @file_get_contents($repo_zip, false, $context);
+$statusLine = is_array($http_response_header ?? null) ? (string) ($http_response_header[0] ?? '') : '';
 
-if ($file_data === false) {
-    die('Error: no se pudo descargar el repositorio desde GitHub. Revisa token, nombre del repo y permisos Contents: Read.');
+if ($file_data === false || $file_data === '' || !preg_match('/\s(200|302)\s/', $statusLine)) {
+    $hint = 'Revisa el Personal Access Token en upload_version.php '
+        . '(Contents: Read / scope repo), el usuario/repo, y que el token no esté vencido.';
+    die(
+        '❌ Error: No se pudo descargar el repositorio desde GitHub. '
+        . $hint
+        . ($statusLine !== '' ? ' HTTP: ' . htmlspecialchars($statusLine) : '')
+    );
 }
 
 file_put_contents($zip_file, $file_data);
