@@ -167,22 +167,50 @@ function smartCopy(string $source, string $dest): void
     }
 }
 
-// La API zipball usa carpeta tipo Certificaciones-<sha>/ (no siempre Certificaciones-main/).
+// GitHub puede nombrar la carpeta:
+//   Certificaciones-main / Certificaciones-<sha>
+//   Towi04-Certificaciones-<sha>  (zipball API)
 $extractedRoot = './extracted';
-$source_folder = null;
+$candidates = [];
+$fallback = null;
 foreach (scandir($extractedRoot) ?: [] as $item) {
     if ($item === '.' || $item === '..') {
         continue;
     }
     $path = $extractedRoot . '/' . $item;
-    if (is_dir($path) && str_starts_with($item, $repo . '-')) {
-        $source_folder = $path . '/';
-        break;
+    if (!is_dir($path)) {
+        continue;
+    }
+    if ($fallback === null) {
+        $fallback = $path . '/';
+    }
+    $prefixes = [
+        $repo . '-',
+        $username . '-' . $repo . '-',
+    ];
+    foreach ($prefixes as $prefix) {
+        if (str_starts_with($item, $prefix)) {
+            $candidates[] = $path . '/';
+            break;
+        }
     }
 }
+$source_folder = $candidates[0] ?? $fallback;
 if ($source_folder === null || !is_dir($source_folder)) {
-    die('No se encontró la carpeta extraída del ZIP (esperaba ' . htmlspecialchars($repo) . '-…).');
+    $found = [];
+    foreach (scandir($extractedRoot) ?: [] as $item) {
+        if ($item !== '.' && $item !== '..') {
+            $found[] = $item;
+        }
+    }
+    die(
+        'No se encontró la carpeta extraída del ZIP. '
+        . 'Contenido de extracted/: '
+        . htmlspecialchars($found === [] ? '(vacío)' : implode(', ', $found))
+    );
 }
+echo '• Carpeta fuente: ' . htmlspecialchars(basename(rtrim($source_folder, '/'))) . '.<br>';
+flush();
 
 foreach (scandir($source_folder) ?: [] as $item) {
     if ($item !== '.' && $item !== '..') {
