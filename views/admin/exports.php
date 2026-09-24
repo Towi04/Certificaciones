@@ -1,7 +1,8 @@
 <?php /** @var list<array<string,mixed>> $templates */ ?>
 <?php /** @var list<array<string,mixed>> $importTemplates */ ?>
 <h1 style="margin:.2rem 0 1rem;color:var(--doceo-blue)">Integración UKS</h1>
-<p class="muted">Exporta alumnos para registrar en UKS e importa reportes con resultados y estatus CENNI.</p>
+<p class="muted">La descarga diaria de alumnos se hace desde <a href="<?= e(url('/admin')) ?>">Operación</a>.
+Esta pantalla queda para <strong>importar el reporte UKS</strong> (resultados / CENNI) o descargas pendientes puntuales.</p>
 
 <?php if ($templates === []): ?>
     <div class="panel">
@@ -54,7 +55,7 @@
     <?php endforeach; ?>
 <?php endif; ?>
 
-<h2 style="margin:2rem 0 .75rem;color:var(--doceo-blue);font-size:1.15rem">Importar reporte UKS</h2>
+<h2 id="importar-uks" style="margin:2rem 0 .75rem;color:var(--doceo-blue);font-size:1.15rem">Importar reporte UKS</h2>
 <p class="muted">Sube el CSV <em>Reporte Instituto DOCEO ELET</em> que descargas de UKS. Actualiza resultados del examen, estatus de documentos CENNI y folio CENNI; el alumno lo ve en su panel y recibe correo si hay cambios relevantes.</p>
 
 <?php if (($importTemplates ?? []) === []): ?>

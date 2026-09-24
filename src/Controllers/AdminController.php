@@ -27,6 +27,7 @@ use App\Services\InventoryService;
 use App\Services\MailTemplateService;
 use App\Services\ProductAdminService;
 use App\Services\ExamScheduleService;
+use App\Services\PromoDoceoService;
 use App\Services\ProductMediaService;
 use App\Services\ResultsDeliveryService;
 use App\Services\DocumentService;
@@ -3033,21 +3034,24 @@ final class AdminController
         redirect('/admin/vacaciones');
     }
 
-public function promoCode(): void
+    public function promoCode(): void
     {
         Auth::requireRole(['admin']);
-        $pdo = Connection::get();
-        $currentCode = Settings::get('doceo_promo_code', 'DOCEO26') ?? 'DOCEO26';
-        $stmt = $pdo->prepare(
-            'SELECT * FROM discount_codes WHERE type = ? AND is_active = 1 ORDER BY id DESC LIMIT 1'
-        );
-        $stmt->execute(['promo_doceo']);
-        $active = $stmt->fetch() ?: null;
+        $year = (int) ($_GET['year'] ?? date('Y'));
+        if ($year < 2020 || $year > 2100) {
+            $year = (int) date('Y');
+        }
+        $calendar = PromoDoceoService::getCalendar($year);
+        $currentCode = PromoDoceoService::currentCode();
 
         view('admin/promo_code', [
-            'title' => 'Código promocional DOCEO',
-            'currentCode' => $active ? (string) $active['code'] : $currentCode,
-            'active' => $active,
+            'title' => 'Códigos promocionales DOCEO',
+            'year' => $calendar['year'],
+            'codes' => $calendar['codes'],
+            'monthLabels' => PromoDoceoService::monthLabels(),
+            'currentMonth' => (int) date('n'),
+            'currentYear' => (int) date('Y'),
+            'currentCode' => $currentCode !== '' ? $currentCode : '—',
             'whatsapp' => Settings::get('school_whatsapp', Env::get('SCHOOL_WHATSAPP', '')) ?? '',
             'layout' => 'admin',
         ]);
@@ -3058,47 +3062,29 @@ public function promoCode(): void
         Auth::requireRole(['admin']);
         csrf_verify();
 
-        $newCode = strtoupper(trim((string) ($_POST['code'] ?? '')));
-        if ($newCode === '' || !preg_match('/^[A-Z0-9_-]{3,40}$/', $newCode)) {
-            flash('error', 'El código debe tener entre 3 y 40 caracteres (letras, números, guión o guión bajo).');
-            redirect('/admin/promo');
+        $year = (int) ($_POST['year'] ?? date('Y'));
+        $codesRaw = $_POST['codes'] ?? [];
+        if (!is_array($codesRaw)) {
+            $codesRaw = [];
         }
 
-        $pdo = Connection::get();
-        $pdo->beginTransaction();
         try {
-            $pdo->prepare(
-                'UPDATE discount_codes SET is_active = 0 WHERE type = ? AND is_active = 1'
-            )->execute(['promo_doceo']);
-
-            $stmt = $pdo->prepare('SELECT id FROM discount_codes WHERE code = ? LIMIT 1');
-            $stmt->execute([$newCode]);
-            $existingId = $stmt->fetchColumn();
-
-            if ($existingId) {
-                $pdo->prepare(
-                    'UPDATE discount_codes SET type = ?, discount_mode = ?, is_active = 1, partner_id = NULL WHERE id = ?'
-                )->execute(['promo_doceo', 'to_public', (int) $existingId]);
-            } else {
-                $pdo->prepare(
-                    'INSERT INTO discount_codes (code, type, discount_mode, is_active) VALUES (?, ?, ?, 1)'
-                )->execute([$newCode, 'promo_doceo', 'to_public']);
+            PromoDoceoService::saveYear(
+                $year,
+                $codesRaw,
+                (string) ($_POST['school_whatsapp'] ?? '')
+            );
+            $current = PromoDoceoService::currentCode();
+            $msg = 'Calendario promocional ' . $year . ' guardado.';
+            if ($current !== '') {
+                $msg .= ' Código vigente este mes: ' . $current . '.';
             }
-
-            Settings::set('doceo_promo_code', $newCode);
-
-            $wa = preg_replace('/\D+/', '', (string) ($_POST['school_whatsapp'] ?? '')) ?? '';
-            Settings::set('school_whatsapp', $wa);
-            $pdo->commit();
-            flash('success', 'Código promocional actualizado a ' . $newCode . '.');
+            flash('success', $msg);
         } catch (\Throwable $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            flash('error', 'No se pudo actualizar el código: ' . $e->getMessage());
+            flash('error', 'No se pudo guardar: ' . $e->getMessage());
         }
 
-        redirect('/admin/promo');
+        redirect('/admin/promo?year=' . $year);
     }
 
     public function inventoryIndex(): void
@@ -3108,16 +3094,15 @@ public function promoCode(): void
         $invRepo = new \App\Repositories\InventoryRepository();
         $rows = [];
         foreach ($products as $p) {
-            $cfg = InventoryService::configForProduct($p);
-            if (empty($cfg['enabled'])) {
-                // También mostrar si ya tiene códigos aunque el flag se apagara.
-                $stock = $invRepo->stockCounts((int) $p['id']);
+            $enabled = InventoryService::isEnabledForProduct($p);
+            $stock = $invRepo->stockCounts((int) $p['id']);
+            if (!$enabled) {
+                // Solo mostrar si ya tiene códigos cargados (legado), aunque el tipo no use inventario.
                 if ($stock['total'] < 1) {
                     continue;
                 }
-            } else {
-                $stock = $invRepo->stockCounts((int) $p['id']);
             }
+            $cfg = InventoryService::configForProduct($p);
             $rows[] = $p + [
                 'stock' => $stock,
                 'low_stock_threshold' => (int) $cfg['low_stock_threshold'],

@@ -11,7 +11,7 @@
 
 <div class="panel" style="margin-top:1rem">
     <?php if ($products === []): ?>
-        <p class="muted">Ningún producto tiene inventario activo. Actívalo en <strong>Admin → Grupos → Fechas</strong> (sección Inventario) o en el JSON del grupo.</p>
+        <p class="muted">Ningún producto tiene inventario activo. Actívalo en <strong>Admin → Grupos → Inventario</strong>. Solo las <strong>certificaciones</strong> del grupo usan códigos (los cursos no).</p>
     <?php else: ?>
         <div class="table-wrap">
             <table class="data">

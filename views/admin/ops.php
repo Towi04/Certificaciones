@@ -49,6 +49,10 @@ $extraColHeader = count($extraColLabels) === 1
             <a class="btn btn-ghost btn-sm" href="<?= e(url('/admin/operacion/exportar?' . http_build_query(array_filter(['view' => $view, 'q' => $q ?: null])))) ?>">
                 Descargar Excel (CSV)
             </a>
+            <a class="btn btn-ghost btn-sm" href="<?= e(url('/admin/exportaciones')) ?>#importar-uks"
+               title="Importar reporte UKS (resultados / CENNI)">
+                Importar UKS
+            </a>
         </div>
     </div>
 

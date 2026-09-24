@@ -35,11 +35,11 @@ $configGroups = [
         'label' => 'Automatización',
         'items' => [
             ['href' => '/admin/correos', 'label' => 'Plantillas correo', 'icon' => 'mail', 'match' => '/correos'],
-            ['href' => '/admin/plantillas-csv', 'label' => 'Plantillas CSV', 'icon' => 'export', 'match' => '/plantillas-csv'],
+            // Plantillas CSV / UKS import-export: la descarga e importación viven en Operación;
+            // las rutas siguen activas por URL si hace falta editar una plantilla.
             ['href' => '/admin/inventario', 'label' => 'Inventario códigos', 'icon' => 'export', 'match' => '/inventario'],
             ['href' => '/admin/vacaciones', 'label' => 'Vacaciones', 'icon' => 'calendar', 'match' => '/vacaciones'],
             ['href' => '/admin/promo', 'label' => 'Promo DOCEO', 'icon' => 'promo', 'match' => '/promo'],
-            ['href' => '/admin/exportaciones', 'label' => 'UKS import/export', 'icon' => 'export', 'match' => '/exportaciones'],
             ['href' => '/admin/salud', 'label' => 'Salud', 'icon' => 'health', 'match' => '/salud'],
         ],
     ],

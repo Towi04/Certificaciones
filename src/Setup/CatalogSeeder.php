@@ -908,21 +908,45 @@ HTML;
         $log[] = 'Import template: uks_elet_reporte';
 
         $promoCode = Settings::get('doceo_promo_code', 'DOCEO26') ?? 'DOCEO26';
-        $stmt = $pdo->prepare('SELECT id FROM discount_codes WHERE code = ?');
-        $stmt->execute([$promoCode]);
-        $promoId = $stmt->fetchColumn();
-        if ($promoId) {
-            $pdo->prepare(
-                'UPDATE discount_codes SET type = ?, discount_mode = ?, is_active = 1, partner_id = NULL WHERE id = ?'
-            )->execute(['promo_doceo', 'to_public', (int) $promoId]);
-            $log[] = 'Código promo actualizado: ' . $promoCode;
+        $calendarRaw = Settings::get(\App\Services\PromoDoceoService::SETTINGS_KEY, '') ?? '';
+        if (trim((string) $calendarRaw) === '') {
+            // Sembrar calendario del año actual con el código legacy en el mes vigente.
+            $year = (int) date('Y');
+            $codes = [];
+            for ($m = 1; $m <= 12; $m++) {
+                $codes[$m] = '';
+            }
+            $codes[(int) date('n')] = strtoupper(trim((string) $promoCode));
+            try {
+                \App\Services\PromoDoceoService::saveYear($year, $codes);
+                $log[] = 'Calendario promo DOCEO ' . $year . ' inicializado (mes actual: ' . $promoCode . ')';
+            } catch (\Throwable $e) {
+                $log[] = 'Aviso: no se pudo inicializar calendario promo (' . $e->getMessage() . ')';
+                $stmt = $pdo->prepare('SELECT id FROM discount_codes WHERE code = ?');
+                $stmt->execute([$promoCode]);
+                $promoId = $stmt->fetchColumn();
+                if ($promoId) {
+                    $pdo->prepare(
+                        'UPDATE discount_codes SET type = ?, discount_mode = ?, is_active = 1, partner_id = NULL WHERE id = ?'
+                    )->execute(['promo_doceo', 'to_public', (int) $promoId]);
+                    $log[] = 'Código promo actualizado: ' . $promoCode;
+                } else {
+                    $pdo->prepare(
+                        'INSERT INTO discount_codes (code, type, discount_mode, is_active) VALUES (?, ?, ?, 1)'
+                    )->execute([$promoCode, 'promo_doceo', 'to_public']);
+                    $log[] = 'Código promo creado: ' . $promoCode;
+                }
+                Settings::set('doceo_promo_code', $promoCode);
+            }
         } else {
-            $pdo->prepare(
-                'INSERT INTO discount_codes (code, type, discount_mode, is_active) VALUES (?, ?, ?, 1)'
-            )->execute([$promoCode, 'promo_doceo', 'to_public']);
-            $log[] = 'Código promo creado: ' . $promoCode;
+            try {
+                $cal = \App\Services\PromoDoceoService::getCalendar((int) date('Y'));
+                \App\Services\PromoDoceoService::saveYear($cal['year'], $cal['codes']);
+                $log[] = 'Calendario promo DOCEO resincronizado: ' . $cal['year'];
+            } catch (\Throwable $e) {
+                $log[] = 'Aviso: no se pudo resincronizar calendario promo (' . $e->getMessage() . ')';
+            }
         }
-        Settings::set('doceo_promo_code', $promoCode);
 
         try {
             $synced = (new \App\Services\PartnerAdminService())->syncAllPartnerPromoCodes();
