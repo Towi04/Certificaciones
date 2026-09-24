@@ -82,7 +82,8 @@ $partnerCsvHeaders = implode(',', \App\Services\PartnerAdminService::priceCsvHea
         (<code>type</code>: <code>product</code> o <code>combo</code>; el costo no aplica a combos).
         <code>supplier</code> y <code>certifier</code> son solo lectura (identificación); al importar se ignoran.
         Edita los montos y vuelve a subir: si la celda tiene valor, se sobrescribe.
-        Preferible abrir/guardar como CSV UTF-8; la plantilla incluye <code>sep=,</code> para Excel.
+        La importación solo actualiza precios (no nombres); los acentos del catálogo no se borran.
+        Plantilla en UTF-8 con separador <code>;</code> para que Excel muestre bien tildes y ñ.
     </span>
 </form>
 

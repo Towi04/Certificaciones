@@ -550,14 +550,15 @@ final class ProductAdminService
     public function sendPriceTemplateCsv(array $rows, string $filename = 'plantilla-precios.csv'): void
     {
         $headers = self::priceCsvHeaders();
+        $delimiter = Csv::excelDelimiter();
         csv_download_headers($filename);
         $out = fopen('php://output', 'w');
         if ($out === false) {
             throw new \RuntimeException('No se pudo generar el CSV.');
         }
-        // Excel en MX/ES usa ; por defecto: esta pista fuerza comas al abrir.
-        Csv::writeExcelSepHint($out, ',');
-        csv_put($out, $headers);
+        // UTF-8 BOM (en csv_download_headers) + separador ; → Excel MX/ES muestra acentos.
+        // No usar sep=, : hace que Excel ignore el BOM y rompa tildes/ñ.
+        csv_put($out, $headers, $delimiter);
         foreach ($rows as $item) {
             $kind = strtolower((string) ($item['type'] ?? $item['_kind'] ?? 'product'));
             if ($kind !== 'combo') {
@@ -591,7 +592,7 @@ final class ProductAdminService
                     $row[] = '';
                     continue;
                 }
-                // Montos como texto plano con punto decimal (evita que Excel los rompa).
+                // Montos con punto decimal (el ; es el separador de columnas).
                 if (in_array($dbKey, [
                     'cost_price', 'catalog_price', 'public_price', 'price_cncm',
                     'price_partner_a', 'price_partner_b', 'price_partner_c',
@@ -601,7 +602,7 @@ final class ProductAdminService
                 }
                 $row[] = (string) $val;
             }
-            csv_put($out, $row);
+            csv_put($out, $row, $delimiter);
         }
         fclose($out);
         exit;
@@ -666,13 +667,13 @@ final class ProductAdminService
                 continue;
             }
 
-            $rawCode = (string) ($data[$map['code']] ?? '');
+            $rawCode = Csv::cellToUtf8((string) ($data[$map['code']] ?? ''));
             $fields = [];
             foreach (['cost_price', 'catalog_price', 'public_price', 'price_cncm'] as $col) {
                 if (!isset($map[$col])) {
                     continue;
                 }
-                $fields[$col] = $data[$map[$col]] ?? '';
+                $fields[$col] = Csv::cellToUtf8((string) ($data[$map[$col]] ?? ''));
             }
             foreach (['price_partner_a', 'price_partner_b', 'price_partner_c'] as $dbCol) {
                 if (!self::csvHasPartnerPriceColumn($map, $dbCol)) {
@@ -1085,13 +1086,13 @@ final class ProductAdminService
 
     public function sendProductBulkTemplateCsv(string $filename = 'plantilla-certificaciones.csv'): void
     {
+        $delimiter = Csv::excelDelimiter();
         csv_download_headers($filename);
         $out = fopen('php://output', 'w');
         if ($out === false) {
             throw new \RuntimeException('No se pudo generar el CSV.');
         }
-        Csv::writeExcelSepHint($out, ',');
-        csv_put($out, self::productBulkCsvHeaders());
+        csv_put($out, self::productBulkCsvHeaders(), $delimiter);
         csv_put($out, [
             'EJEMPLO-B1',
             'Certificación ejemplo B1',
@@ -1114,7 +1115,7 @@ final class ProductAdminService
             '<ul><li>Beneficio 1</li><li>Beneficio 2</li></ul>',
             '1',
             '0',
-        ]);
+        ], $delimiter);
         fclose($out);
         exit;
     }
@@ -1127,14 +1128,14 @@ final class ProductAdminService
     public function sendProductsExportCsv(?string $q = null, array $filters = [], string $filename = 'productos-export.csv'): void
     {
         $rows = $this->products->adminList($q, null, null, $filters);
+        $delimiter = Csv::excelDelimiter();
         csv_download_headers($filename);
         $out = fopen('php://output', 'w');
         if ($out === false) {
             throw new \RuntimeException('No se pudo generar el CSV.');
         }
-        Csv::writeExcelSepHint($out, ',');
         $headers = self::productBulkCsvHeaders();
-        csv_put($out, $headers);
+        csv_put($out, $headers, $delimiter);
         $filterSvc = new CatalogFilterService();
         foreach ($rows as $p) {
             $cenniTypes = '';
@@ -1172,7 +1173,7 @@ final class ProductAdminService
                 (string) ($p['benefits_html'] ?? ''),
                 !empty($p['is_public']) ? '1' : '0',
                 !empty($p['is_star']) ? '1' : '0',
-            ]);
+            ], $delimiter);
         }
         fclose($out);
         exit;
