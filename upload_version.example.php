@@ -1,4 +1,12 @@
 <?php
+/**
+ * Copia este archivo al servidor como upload_version.php (NO subir a Git).
+ *
+ * IMPORTANTE:
+ * - El token va en $token aquí abajo, NO en el .env de la app.
+ * - Los fine-grained PAT (github_pat_…) NO funcionan embebidos en la URL
+ *   (user:token@github.com/…). Hay que usar Authorization: Bearer + API zipball.
+ */
 set_time_limit(300);
 ini_set('memory_limit', '512M');
 ini_set('zlib.output_compression', '0');
@@ -7,10 +15,12 @@ while (ob_get_level() > 0) {
 }
 ob_implicit_flush(true);
 
-// CONFIGURACIÓN — copia este archivo como upload_version.php en el servidor
+// CONFIGURACIÓN
 $username   = 'Towi04';
 $repo       = 'Certificaciones';
-$token      = 'ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+// Fine-grained: github_pat_…  |  Classic: ghp_…
+// Permiso requerido: Contents → Read-only (sobre este repo).
+$token      = 'github_pat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
 $secret_key = 'tu-clave-secreta-de-deploy';
 
 if (!isset($_GET['key']) || $_GET['key'] !== $secret_key) {
@@ -21,28 +31,94 @@ if (!isset($_GET['key']) || $_GET['key'] !== $secret_key) {
 header('Content-Type: text/html; charset=UTF-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
-$repo_zip = "https://{$username}:{$token}@github.com/{$username}/{$repo}/archive/refs/heads/main.zip";
 $zip_file = 'repo.zip';
+// API zipball: funciona con classic y fine-grained PAT (github_pat_…).
+$repo_zip = "https://api.github.com/repos/{$username}/{$repo}/zipball/main";
 
 echo '<h3>Iniciando actualización desde main…</h3>';
 flush();
 
-$opts = [
-    'http' => [
-        'method' => 'GET',
-        'header' => "User-Agent: PHP\r\n",
-    ],
-    'ssl' => [
-        'verify_peer' => false,
-        'verify_peer_name' => false,
-    ],
-];
+/**
+ * Descarga el ZIP de main. Preferimos cURL: sigue el 302 a codeload.github.com
+ * de forma fiable (file_get_contents a veces pierde el redirect).
+ *
+ * @return array{0:?string,1:int,2:string} [body, httpCode, error]
+ */
+$downloadRepoZip = static function (string $url, string $token): array {
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 5,
+            CURLOPT_TIMEOUT => 240,
+            CURLOPT_HTTPHEADER => [
+                'User-Agent: InstitutoDoceo-Deploy',
+                'Authorization: Bearer ' . $token,
+                'Accept: application/vnd.github+json',
+                'X-GitHub-Api-Version: 2022-11-28',
+            ],
+        ]);
+        $body = curl_exec($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err = curl_error($ch);
+        curl_close($ch);
+        if ($body === false) {
+            return [null, $code > 0 ? $code : 0, $err !== '' ? $err : 'curl_exec falló'];
+        }
 
-$context = stream_context_create($opts);
-$file_data = @file_get_contents($repo_zip, false, $context);
+        return [$body, $code, $err];
+    }
 
-if ($file_data === false) {
-    die('Error: no se pudo descargar el repositorio desde GitHub. Revisa token, nombre del repo y permisos Contents: Read.');
+    $opts = [
+        'http' => [
+            'method' => 'GET',
+            'header' => "User-Agent: InstitutoDoceo-Deploy\r\n"
+                . "Authorization: Bearer {$token}\r\n"
+                . "Accept: application/vnd.github+json\r\n"
+                . "X-GitHub-Api-Version: 2022-11-28\r\n",
+            'follow_location' => 1,
+            'max_redirects' => 5,
+            'ignore_errors' => true,
+            'timeout' => 240,
+        ],
+        'ssl' => [
+            'verify_peer' => true,
+            'verify_peer_name' => true,
+        ],
+    ];
+    $context = stream_context_create($opts);
+    $body = @file_get_contents($url, false, $context);
+    $headers = is_array($http_response_header ?? null) ? $http_response_header : [];
+    $statusLine = (string) ($headers[0] ?? '');
+    $code = 0;
+    if (preg_match('/\s(\d{3})\s/', $statusLine, $m)) {
+        $code = (int) $m[1];
+    }
+    if ($body === false) {
+        return [null, $code, 'file_get_contents falló'];
+    }
+
+    return [$body, $code, ''];
+};
+
+[$file_data, $httpCode, $downloadError] = $downloadRepoZip($repo_zip, $token);
+$looksLikeZip = is_string($file_data)
+    && strlen($file_data) > 100
+    && str_starts_with($file_data, 'PK');
+
+if ($file_data === null || $file_data === '' || $httpCode !== 200 || !$looksLikeZip) {
+    $bodyPreview = is_string($file_data) ? substr(trim(strip_tags($file_data)), 0, 280) : '';
+    die(
+        '❌ Error: no se pudo descargar el repositorio desde GitHub. '
+        . 'Revisa que $token esté en upload_version.php (no en .env), '
+        . 'que sea un PAT con Contents: Read sobre ' . htmlspecialchars("{$username}/{$repo}") . ', '
+        . 'y que el script use Authorization: Bearer + API zipball '
+        . '(los fine-grained github_pat_… no funcionan en user:token@github.com).'
+        . ' HTTP: ' . (int) $httpCode . '.'
+        . ($downloadError !== '' ? ' Detalle: ' . htmlspecialchars($downloadError) . '.' : '')
+        . ($bodyPreview !== '' ? ' Respuesta: ' . htmlspecialchars($bodyPreview) : '')
+    );
 }
 
 file_put_contents($zip_file, $file_data);
@@ -91,9 +167,21 @@ function smartCopy(string $source, string $dest): void
     }
 }
 
-$source_folder = "./extracted/{$repo}-main/";
-if (!is_dir($source_folder)) {
-    die('No se encontró la carpeta extraída: ' . htmlspecialchars($source_folder));
+// La API zipball usa carpeta tipo Certificaciones-<sha>/ (no siempre Certificaciones-main/).
+$extractedRoot = './extracted';
+$source_folder = null;
+foreach (scandir($extractedRoot) ?: [] as $item) {
+    if ($item === '.' || $item === '..') {
+        continue;
+    }
+    $path = $extractedRoot . '/' . $item;
+    if (is_dir($path) && str_starts_with($item, $repo . '-')) {
+        $source_folder = $path . '/';
+        break;
+    }
+}
+if ($source_folder === null || !is_dir($source_folder)) {
+    die('No se encontró la carpeta extraída del ZIP (esperaba ' . htmlspecialchars($repo) . '-…).');
 }
 
 foreach (scandir($source_folder) ?: [] as $item) {
@@ -104,7 +192,6 @@ foreach (scandir($source_folder) ?: [] as $item) {
 echo '• Archivos actualizados.<br>';
 flush();
 
-// Marca de versión para verificar en /admin/salud
 @file_put_contents(
     __DIR__ . '/storage/DEPLOYED_AT.txt',
     date('c') . ' main zip deployed' . PHP_EOL
