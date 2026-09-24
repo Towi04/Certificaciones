@@ -65,6 +65,24 @@ final class PricingService
         $stmt->execute([$codeRaw]);
         $row = $stmt->fetch() ?: null;
 
+        // Fallback: código promo DOCEO desactivado o fuera de vigencia (mensaje claro).
+        if ($row === null) {
+            $promoStmt = $this->pdo->prepare(
+                'SELECT * FROM discount_codes WHERE code = ? AND type = ? ORDER BY id DESC LIMIT 1'
+            );
+            $promoStmt->execute([$codeRaw, 'promo_doceo']);
+            $promoRow = $promoStmt->fetch() ?: null;
+            if ($promoRow) {
+                if (!empty($promoRow['starts_at']) && strtotime((string) $promoRow['starts_at']) > time()) {
+                    throw new \InvalidArgumentException('Este código aún no está vigente.');
+                }
+                if (!empty($promoRow['ends_at']) && strtotime((string) $promoRow['ends_at']) < time()) {
+                    throw new \InvalidArgumentException('Este código ya venció.');
+                }
+                throw new \InvalidArgumentException('Este código promocional no está activo.');
+            }
+        }
+
         // Fallback: código guardado solo en partners (antes de sincronizar discount_codes).
         if ($row === null) {
             $partnerStmt = $this->pdo->prepare(
@@ -83,7 +101,10 @@ final class PricingService
             throw new \InvalidArgumentException('Este código aún no está vigente.');
         }
         if (!empty($row['ends_at']) && strtotime((string) $row['ends_at']) < time()) {
-            throw new \InvalidArgumentException('Este código ya expiró.');
+            $msg = ((string) ($row['type'] ?? '') === 'promo_doceo')
+                ? 'Este código ya venció.'
+                : 'Este código ya expiró.';
+            throw new \InvalidArgumentException($msg);
         }
 
         $out['discount_code_id'] = (int) $row['id'];

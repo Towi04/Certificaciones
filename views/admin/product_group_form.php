@@ -484,6 +484,10 @@ $pageHeading = $isEdit
                 <?= !empty($extras['inventory_enabled']) ? 'checked' : '' ?>>
             <span>Activar inventario automático en este grupo</span>
         </label>
+        <p class="muted" style="font-size:.82rem;margin:-.35rem 0 .75rem;max-width:40rem">
+            Solo aplica a <strong>certificaciones</strong> del grupo (folios/claves de examen).
+            Los cursos u otros productos del mismo grupo <strong>no</strong> aparecen en Inventario de códigos.
+        </p>
         <div id="inventory-controls" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem">
             <label class="muted" style="<?= e($labelStyle) ?>">
                 Enviar acceso N días antes

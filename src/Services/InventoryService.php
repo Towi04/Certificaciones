@@ -34,9 +34,13 @@ final class InventoryService
     {
         $cfg = CheckoutRequirements::config($product);
         $inv = is_array($cfg['inventory'] ?? null) ? $cfg['inventory'] : [];
+        $type = (string) ($product['type'] ?? '');
+        // El flag del grupo activa inventario, pero solo aplica a certificaciones
+        // (un curso del mismo grupo no usa folios/claves).
+        $typeAllowed = in_array($type, self::productTypesUsingInventory(), true);
 
         return [
-            'enabled' => !empty($inv['enabled']),
+            'enabled' => $typeAllowed && !empty($inv['enabled']),
             'assign_within_days' => max(0, (int) ($inv['assign_within_days'] ?? 3)),
             'send_access_days_before' => max(0, (int) ($inv['send_access_days_before'] ?? 3)),
             'low_stock_threshold' => max(0, (int) ($inv['low_stock_threshold'] ?? 5)),
@@ -54,6 +58,16 @@ final class InventoryService
             // Legacy: email fijo (solo fallback si no hay plantilla).
             'low_stock_notify_email' => trim((string) ($inv['low_stock_notify_email'] ?? '')),
         ];
+    }
+
+    /**
+     * Tipos de producto que usan inventario de folios/claves cuando el grupo lo activa.
+     *
+     * @return list<string>
+     */
+    public static function productTypesUsingInventory(): array
+    {
+        return ['certification'];
     }
 
     public static function isEnabledForProduct(array $product): bool
