@@ -197,7 +197,10 @@ $stepLabels = [
                         <?php else: ?>
                             <div class="form-grid" style="max-width:480px">
                                 <label>Fecha del examen *
-                                    <input type="date" id="exam_date_select" min="<?= e($examMinDate ?? '') ?>">
+                                    <input type="date" id="exam_date_select" lang="es-MX"
+                                           min="<?= e($examMinDate ?? '') ?>"
+                                           title="Formato del sistema: elige el día en el calendario. Abajo verás la fecha en español.">
+                                    <span id="exam-date-human" class="muted" style="display:block;font-size:.82rem;font-weight:500;margin-top:.35rem" aria-live="polite"></span>
                                 </label>
                                 <label>Hora *
                                     <select id="exam_time_select" disabled>
@@ -1234,6 +1237,7 @@ $stepLabels = [
   }
 
   const examDateWarn = document.getElementById('exam-date-warn');
+  const examDateHuman = document.getElementById('exam-date-human');
   function setExamDateWarn(msg) {
     if (!examDateWarn) return;
     if (msg) {
@@ -1245,16 +1249,60 @@ $stepLabels = [
     }
   }
 
+  /** Confirma la fecha en español para evitar confusión 08/10 (ago) vs 8 oct en Chrome en inglés. */
+  function formatExamDateEs(iso) {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
+    const parts = iso.split('-').map(Number);
+    const dt = new Date(parts[0], parts[1] - 1, parts[2]);
+    if (Number.isNaN(dt.getTime())) return '';
+    try {
+      return dt.toLocaleDateString('es-MX', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+      });
+    } catch (e) {
+      return iso;
+    }
+  }
+
+  function syncExamDateHuman(iso) {
+    if (!examDateHuman) return;
+    if (!iso) {
+      examDateHuman.textContent = '';
+      return;
+    }
+    const label = formatExamDateEs(iso);
+    examDateHuman.textContent = label ? ('Fecha elegida: ' + label) : '';
+  }
+
   function loadExamSlots(date) {
     if (!examTimeSelect) return;
     examTimeSelect.innerHTML = '<option value="">— elige hora —</option>';
     examTimeSelect.disabled = true;
     setExamDateWarn('');
+    syncExamDateHuman(date || '');
     if (!date) return;
+
+    const min = examDateSelect && examDateSelect.min ? examDateSelect.min : '';
+    if (min && date < min) {
+      const minLabel = formatExamDateEs(min) || min;
+      const chosenLabel = formatExamDateEs(date) || date;
+      const todayIso = (function () {
+        const n = new Date();
+        return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0');
+      })();
+      if (date < todayIso) {
+        setExamDateWarn('Esa fecha ya pasó (' + chosenLabel + '). Elige una fecha a partir del ' + minLabel + '.');
+      } else {
+        setExamDateWarn('Esa fecha no cumple el anticipo mínimo. La más próxima es el ' + minLabel + '.');
+      }
+      return;
+    }
+
     fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(slug) + '?date=' + encodeURIComponent(date))
       .then(r => r.json())
       .then(data => {
         if (!data.ok || !data.slots) return;
+        if (data.min_date && examDateSelect) examDateSelect.min = data.min_date;
         data.slots.forEach(s => {
           const opt = document.createElement('option');
           opt.value = s.value;
@@ -1280,6 +1328,9 @@ $stepLabels = [
       if (examTimeHidden) examTimeHidden.value = '';
       if (examKindHidden) examKindHidden.value = 'regular';
       loadExamSlots(d);
+    });
+    examDateSelect.addEventListener('input', () => {
+      syncExamDateHuman(examDateSelect.value || '');
     });
   }
   if (examTimeSelect) {
