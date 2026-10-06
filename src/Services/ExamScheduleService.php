@@ -589,10 +589,12 @@ final class ExamScheduleService
     public function checkoutPayload(array $product, string $date = ''): array
     {
         $rules = self::scheduleRules($product);
+        $minDate = $this->minSelectableDate($product);
         $base = [
             'ok' => true,
             'mode' => $rules['mode'],
-            'min_date' => $this->minSelectableDate($product),
+            'min_date' => $minDate,
+            'min_date_label' => self::formatDateEs($minDate),
             'min_advance_days' => (int) $rules['min_advance_days'],
             'checkout_help' => (string) ($rules['checkout_help'] ?? ''),
             'extraordinary' => $rules['extraordinary'],
