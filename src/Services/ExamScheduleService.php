@@ -430,15 +430,24 @@ final class ExamScheduleService
             return 'Esa fecha no está en las convocatorias abiertas del proveedor. Elige otra opción.';
         }
 
-        if ($date < $this->minSelectableDate($product)) {
+        $minDate = $this->minSelectableDate($product);
+        if ($date < $minDate) {
+            $today = (new \DateTimeImmutable('today'))->format('Y-m-d');
+            $minLabel = self::formatDateEs($minDate);
+            // Fecha en el pasado (p. ej. confusión día/mes del navegador en inglés):
+            // no hablar de «anticipo» — confunde cuando el alumno creía elegir otra fecha.
+            if ($date < $today) {
+                return 'Esa fecha ya pasó (' . self::formatDateEs($date) . '). '
+                    . 'Elige una fecha a partir del ' . $minLabel . '.';
+            }
             $days = (int) ($rules['min_advance_days'] ?? 0);
             if ($days <= 0) {
-                return 'Esa fecha ya no está disponible. Elige una fecha a partir de hoy.';
+                return 'Esa fecha ya no está disponible. Elige una fecha a partir del ' . $minLabel . '.';
             }
 
             return $days === 1
-                ? 'Esa fecha no cumple el anticipo mínimo (1 día). Elige otra fecha.'
-                : ('Esa fecha no cumple el anticipo mínimo (' . $days . ' días). Elige otra fecha.');
+                ? ('Esa fecha no cumple el anticipo mínimo (1 día). La más próxima es el ' . $minLabel . '.')
+                : ('Esa fecha no cumple el anticipo mínimo (' . $days . ' días). La más próxima es el ' . $minLabel . '.');
         }
 
         if (in_array($date, $rules['blocked_dates'], true)) {
@@ -534,8 +543,12 @@ final class ExamScheduleService
         }
 
         $allowShort = !empty($options['allow_short_advance']);
-        if ($date < $this->minSelectableDate($product) && !$allowShort) {
-            throw new \InvalidArgumentException('La fecha de examen no cumple el anticipo mínimo requerido.');
+        $minDate = $this->minSelectableDate($product);
+        if ($date < $minDate && !$allowShort) {
+            $reason = $this->unavailabilityReason($product, $date)
+                ?? ('La fecha de examen no cumple el anticipo mínimo. La más próxima es el '
+                    . self::formatDateEs($minDate) . '.');
+            throw new \InvalidArgumentException($reason);
         }
         if (in_array($date, $rules['blocked_dates'], true)) {
             throw new \InvalidArgumentException('Esa fecha de aplicación no está disponible (bloqueada / vacaciones).');
@@ -576,10 +589,12 @@ final class ExamScheduleService
     public function checkoutPayload(array $product, string $date = ''): array
     {
         $rules = self::scheduleRules($product);
+        $minDate = $this->minSelectableDate($product);
         $base = [
             'ok' => true,
             'mode' => $rules['mode'],
-            'min_date' => $this->minSelectableDate($product),
+            'min_date' => $minDate,
+            'min_date_label' => self::formatDateEs($minDate),
             'min_advance_days' => (int) $rules['min_advance_days'],
             'checkout_help' => (string) ($rules['checkout_help'] ?? ''),
             'extraordinary' => $rules['extraordinary'],
@@ -622,6 +637,31 @@ final class ExamScheduleService
         $dt = \DateTimeImmutable::createFromFormat('Y-m-d', $raw);
 
         return $dt && $dt->format('Y-m-d') === $raw ? $raw : null;
+    }
+
+    /** Fecha legible en español (evita ambigüedad 08/10 vs 10/08 del navegador). */
+    public static function formatDateEs(string $ymd): string
+    {
+        $dt = \DateTimeImmutable::createFromFormat('Y-m-d', $ymd);
+        if (!$dt || $dt->format('Y-m-d') !== $ymd) {
+            return $ymd;
+        }
+        $months = [
+            1 => 'enero', 2 => 'febrero', 3 => 'marzo', 4 => 'abril',
+            5 => 'mayo', 6 => 'junio', 7 => 'julio', 8 => 'agosto',
+            9 => 'septiembre', 10 => 'octubre', 11 => 'noviembre', 12 => 'diciembre',
+        ];
+        $days = [
+            0 => 'domingo', 1 => 'lunes', 2 => 'martes', 3 => 'miércoles',
+            4 => 'jueves', 5 => 'viernes', 6 => 'sábado',
+        ];
+        $dow = (int) $dt->format('w');
+        $day = (int) $dt->format('j');
+        $month = $months[(int) $dt->format('n')] ?? $dt->format('m');
+        $year = $dt->format('Y');
+        $weekday = $days[$dow] ?? '';
+
+        return trim($weekday . ' ' . $day . ' de ' . $month . ' de ' . $year);
     }
 
     private function normalizeTime(?string $raw): ?string
