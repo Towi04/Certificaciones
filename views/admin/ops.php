@@ -33,29 +33,14 @@ $extraColHeader = count($extraColLabels) === 1
     <div class="ops-header">
         <div>
             <h1 style="margin:0;color:var(--doceo-blue)">Operación</h1>
-            <?php if (isset($partnerCreditTotal)): ?>
-                <p style="margin:.4rem 0 0;font-size:.92rem">
-                    Crédito partners (apartado):
-                    <strong style="color:var(--doceo-blue)"><?= money((float) $partnerCreditTotal) ?></strong>
-                    <span class="muted" style="font-size:.8rem">· suma de saldos a favor activos</span>
-                </p>
-            <?php endif; ?>
         </div>
-        <div class="ops-header-actions" style="display:flex;flex-wrap:wrap;gap:.45rem;align-items:center">
-            <?php if ($hasAccessEditors): ?>
-                <button class="btn btn-accent btn-sm" type="submit" form="ops-bulk-form" id="ops-save-all-btn"
-                        title="Guarda folio, clave y dato extra de todas las filas visibles">
-                    Guardar folio/clave/extra
-                </button>
-            <?php endif; ?>
-            <a class="btn btn-ghost btn-sm" href="<?= e(url('/admin/operacion/exportar?' . http_build_query(array_filter(['view' => $view, 'q' => $q ?: null])))) ?>">
-                Descargar Excel (CSV)
-            </a>
-            <a class="btn btn-ghost btn-sm" href="<?= e(url('/admin/exportaciones')) ?>#importar-uks"
-               title="Importar reporte UKS (resultados / CENNI)">
-                Importar UKS
-            </a>
-        </div>
+        <?php if (isset($partnerCreditTotal)): ?>
+            <div class="ops-credit-card" title="Suma de saldos a favor activos de partners">
+                <span class="ops-credit-card-label">Crédito partners (apartado)</span>
+                <span class="ops-credit-card-amount"><?= money((float) $partnerCreditTotal) ?></span>
+                <span class="ops-credit-card-hint">Saldos a favor activos</span>
+            </div>
+        <?php endif; ?>
     </div>
 
     <div class="ops-legend" aria-label="Leyenda">
@@ -91,6 +76,19 @@ $extraColHeader = count($extraColLabels) === 1
             <input type="hidden" name="view" value="<?= e($view) ?>">
             <input type="search" name="q" value="<?= e($q) ?>" placeholder="Buscar matrícula, alumno, folio, producto…">
             <button class="btn btn-primary btn-sm" type="submit">Buscar</button>
+            <?php if ($hasAccessEditors): ?>
+                <button class="btn btn-accent btn-sm ops-icon-btn" type="submit" form="ops-bulk-form" id="ops-save-all-btn"
+                        title="Guardar folio/clave/extra de las filas visibles (opcional: al enviar accesos ya se guarda solo)"
+                        aria-label="Guardar folio, clave y extra">
+                    <?= icon('save') ?>
+                </button>
+            <?php endif; ?>
+            <a class="btn btn-ghost btn-sm ops-icon-btn"
+               href="<?= e(url('/admin/operacion/exportar?' . http_build_query(array_filter(['view' => $view, 'q' => $q ?: null])))) ?>"
+               title="Descargar Excel (CSV) de la vista actual"
+               aria-label="Descargar Excel CSV">
+                <?= icon('download') ?>
+            </a>
         </div>
     </form>
 
@@ -612,7 +610,7 @@ $extraColHeader = count($extraColLabels) === 1
 
                             <?php
                             // Si el grupo no tiene botón de accesos pero sí campos folio/Zoom,
-                            // el guardado va por «Guardar folio/clave/Zoom» del encabezado.
+                            // el guardado va por el icono guardar (junto a Buscar) o al enviar accesos.
                             $hasExamAccessBtn = !empty(array_filter(
                                 $opsButtons,
                                 static fn ($b) => ($b['action'] ?? '') === \App\Services\GroupStepConfig::ACTION_EXAM_ACCESS
@@ -741,7 +739,31 @@ $extraColHeader = count($extraColLabels) === 1
 
 <style>
 .ops-page { margin-bottom: 2rem; }
-.ops-header { display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap; align-items:flex-start; margin-bottom:1rem; }
+.ops-header {
+  display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap;
+  align-items:center; margin-bottom:1rem;
+}
+.ops-credit-card {
+  display:flex; flex-direction:column; gap:.1rem;
+  min-width:11rem; padding:.7rem 1.05rem;
+  border-radius:14px; border:2px solid #f0d78c;
+  background:linear-gradient(145deg, #fff8e6 0%, #ffefc2 100%);
+  box-shadow:0 2px 8px rgba(180, 120, 20, .12);
+}
+.ops-credit-card-label {
+  font-size:.72rem; font-weight:700; letter-spacing:.02em;
+  text-transform:uppercase; color:#9a3412;
+}
+.ops-credit-card-amount {
+  font-size:1.55rem; font-weight:800; line-height:1.15;
+  color:var(--doceo-blue); font-variant-numeric:tabular-nums;
+}
+.ops-credit-card-hint { font-size:.72rem; color:#7c5a1e; }
+.ops-icon-btn {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:2.15rem; height:2.15rem; padding:0; flex:0 0 auto;
+}
+.ops-icon-btn svg { display:block; }
 .ops-toolbar { display:flex; flex-direction:column; gap:.75rem; margin-bottom:.85rem; }
 .ops-tabs { display:flex; flex-wrap:wrap; gap:.4rem; }
 .ops-tab {
@@ -756,7 +778,7 @@ $extraColHeader = count($extraColLabels) === 1
   background:rgba(0,0,0,.08); font-size:.75rem;
 }
 .ops-tab.active .ops-tab-count { background:rgba(255,255,255,.22); }
-.ops-search { display:flex; gap:.45rem; flex-wrap:wrap; max-width:34rem; }
+.ops-search { display:flex; gap:.45rem; flex-wrap:wrap; align-items:center; max-width:42rem; }
 .ops-search input[type="search"] {
   flex:1; min-width:12rem; font:inherit; padding:.55rem .7rem; border:1px solid #cfd8e6; border-radius:10px;
 }
