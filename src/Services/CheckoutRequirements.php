@@ -560,6 +560,9 @@ final class CheckoutRequirements
         'payments',
         'card_msi',
         'deferred',
+        // Progreso / botones de Operación viven en el grupo.
+        'step_defs',
+        'pipeline_code',
     ];
 
     /** @return array<string, mixed> */

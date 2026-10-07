@@ -1306,47 +1306,29 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
     });
   });
 
-  /** Un solo clic confirma el pago (sin segundo botón ni nota obligatoria). */
-  function submitOpsConfirmPay(btn) {
-    var url = btn.getAttribute('data-confirm-url') || '';
-    if (!url) return;
-    var creditWarn = btn.getAttribute('data-credit-warn') || '';
-    if (creditWarn) {
-      // Aviso no bloqueante: el POST sigue al aceptar o si el navegador no soporta confirm bien.
-      if (!window.confirm(creditWarn + '\n\n¿Confirmar el pago ahora?')) {
-        return;
-      }
-    }
-    var hasProof = btn.getAttribute('data-has-proof') === '1';
-    var proofUrl = btn.getAttribute('data-proof-url') || '';
-    if (hasProof && proofUrl) {
-      try { window.open(proofUrl, '_blank', 'noopener'); } catch (e) { /* ignore */ }
-    }
-    var form = document.createElement('form');
-    form.method = 'POST';
-    form.action = url;
-    form.style.display = 'none';
-    function add(name, value) {
-      var input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = name;
-      input.value = value == null ? '' : String(value);
-      form.appendChild(input);
-    }
-    add('_csrf', btn.getAttribute('data-csrf') || '');
-    add('return_ops', '1');
-    add('return_view', btn.getAttribute('data-return-view') || '');
-    add('return_q', btn.getAttribute('data-return-q') || '');
-    if (creditWarn) {
-      add('notes', creditWarn.length > 180 ? creditWarn.slice(0, 180) : creditWarn);
-    }
-    document.body.appendChild(form);
-    btn.disabled = true;
-    form.submit();
-  }
+  /** Abre el popup del comprobante; el admin confirma el pago desde el modal. */
   document.querySelectorAll('.ops-confirm-pay-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      submitOpsConfirmPay(btn);
+      var hasProof = btn.getAttribute('data-has-proof') === '1';
+      var creditUsed = btn.getAttribute('data-credit-used') === '1';
+      var creditWarn = btn.getAttribute('data-credit-warn') || '';
+      var warnText = creditUsed && !hasProof
+        ? (creditWarn || 'Pago con crédito a favor (sin comprobante). Confirma el uso del saldo.')
+        : (hasProof
+          ? ''
+          : 'No hay comprobante del alumno cargado. Confirma solo si verificaste el pago por otro medio.');
+      openProof(
+        hasProof ? (btn.getAttribute('data-proof-url') || '') : '',
+        btn.getAttribute('data-title') || 'Confirmar pago',
+        {
+          confirmUrl: btn.getAttribute('data-confirm-url') || '',
+          csrf: btn.getAttribute('data-csrf') || '',
+          returnView: btn.getAttribute('data-return-view') || '',
+          returnQ: btn.getAttribute('data-return-q') || '',
+          warnText: warnText || undefined,
+          creditWarn: creditWarn || ''
+        }
+      );
     });
   });
   proofClose && proofClose.addEventListener('click', closeProof);
