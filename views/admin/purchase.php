@@ -151,6 +151,21 @@ $canConfirm = in_array($purchase['status'], ['awaiting_payment', 'payment_review
 
 <?php if (!$canConfirm && $purchase['status'] === 'paid'): ?>
     <p class="flash flash-success" style="margin-top:1rem">Pago confirmado<?= !empty($purchase['paid_at']) ? ' el ' . e($purchase['paid_at']) : '' ?>.</p>
+    <?php
+    $pendingCredit = (float) ($purchase['partner_credit_earned'] ?? 0) > 0
+        && !empty($purchase['partner_id'])
+        && empty($purchase['partner_credit_applied_at']);
+    $canRecompute = !empty($purchase['partner_id'])
+        && empty($purchase['partner_credit_applied_at'])
+        && (float) ($purchase['partner_price_amount'] ?? 0) > 0;
+    if ($pendingCredit || $canRecompute):
+        ?>
+        <form method="post" action="<?= e(url('/admin/compras/' . $purchase['id'] . '/confirmar-pago')) ?>" class="panel" style="margin-top:1rem">
+            <?= csrf_field() ?>
+            <p style="margin:0 0 .75rem">Esta compra tiene crédito partner pendiente de abonar al saldo.</p>
+            <button class="btn btn-accent" type="submit">Abonar crédito al partner</button>
+        </form>
+    <?php endif; ?>
 <?php endif; ?>
 
 <?php
