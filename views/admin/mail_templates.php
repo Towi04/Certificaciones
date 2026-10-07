@@ -32,7 +32,9 @@ $audienceLabels = is_array($audienceLabels ?? null)
             Las de tipo <strong>Publicidad</strong> no piden destinatario: la campaña elige a quién enviar.
         </p>
     </div>
-    <a class="btn btn-accent" href="<?= e(url('/admin/correos/nueva')) ?>" id="mail-new-template-btn">
+    <a class="btn btn-accent"
+       href="<?= e(url('/admin/correos/nueva' . ($filterAudience !== '' ? ('?audience=' . urlencode($filterAudience)) : ''))) ?>"
+       id="mail-new-template-btn">
         Nueva plantilla
     </a>
 </div>
