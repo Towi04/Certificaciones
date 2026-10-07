@@ -19,16 +19,45 @@ $youtubeThumb = static function (array $item): ?string {
 
     return null;
 };
+$isAdminViewer = (\App\Auth\Auth::role() === 'admin');
+$adminEditBase = $isAdminViewer
+    ? url('/admin/productos/' . (int) ($product['id'] ?? 0)
+        . '?return_to=' . rawurlencode('/producto/' . (string) ($product['slug'] ?? '')))
+    : '';
+$adminEditContent = $adminEditBase !== '' ? $adminEditBase . '#contenido' : '';
+$adminEditGeneral = $adminEditBase !== '' ? $adminEditBase . '#general' : '';
 ?>
 <article class="panel" style="margin:1.25rem 0 2rem">
     <div style="display:flex;gap:1.25rem;flex-wrap:wrap;align-items:flex-start">
-        <div style="width:min(180px,100%);background:#f4f7fb;border-radius:16px;padding:1rem;text-align:center">
+        <div style="width:min(180px,100%);background:#f4f7fb;border-radius:16px;padding:1rem;text-align:center;position:relative">
             <img src="<?= e(asset(!empty($product['logo_path']) ? (string) $product['logo_path'] : '/assets/brand/logo.png')) ?>" alt="" style="max-height:120px;max-width:100%;object-fit:contain">
+            <?php if ($isAdminViewer && $adminEditBase !== ''): ?>
+                <a class="catalog-admin-edit" href="<?= e($adminEditBase . '#galeria') ?>"
+                   title="Editar logo / galería" aria-label="Editar logo / galería"><?= icon('edit') ?></a>
+            <?php endif; ?>
         </div>
         <div style="flex:1;min-width:240px">
-            <h1 style="margin:.25rem 0 .5rem;color:var(--doceo-blue)"><?= e($product['name']) ?></h1>
+            <h1 style="margin:.25rem 0 .5rem;color:var(--doceo-blue);display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+                <span><?= e($product['name']) ?></span>
+                <?php if ($isAdminViewer && $adminEditGeneral !== ''): ?>
+                    <a class="catalog-admin-edit catalog-admin-edit--inline" href="<?= e($adminEditGeneral) ?>"
+                       title="Editar producto" aria-label="Editar producto"><?= icon('edit') ?></a>
+                <?php endif; ?>
+            </h1>
             <?php if (!empty($product['short_description'])): ?>
-                <div class="muted product-richtext" style="margin:.25rem 0 .5rem"><?= rich_text((string) $product['short_description']) ?></div>
+                <div class="muted product-richtext" style="margin:.25rem 0 .5rem;position:relative;padding-right:<?= $isAdminViewer ? '2rem' : '0' ?>">
+                    <?php if ($isAdminViewer && $adminEditContent !== ''): ?>
+                        <a class="catalog-admin-edit catalog-admin-edit--inline" href="<?= e($adminEditContent) ?>"
+                           title="Editar descripción breve" aria-label="Editar descripción breve"
+                           style="position:absolute;top:0;right:0"><?= icon('edit') ?></a>
+                    <?php endif; ?>
+                    <?= rich_text((string) $product['short_description']) ?>
+                </div>
+            <?php elseif ($isAdminViewer && $adminEditContent !== ''): ?>
+                <p class="muted" style="margin:.25rem 0 .5rem;font-size:.85rem">
+                    Sin descripción breve.
+                    <a href="<?= e($adminEditContent) ?>"><?= icon('edit') ?> Agregar</a>
+                </p>
             <?php endif; ?>
             <?php
             $isPartnerView = !empty($partner);
@@ -48,20 +77,44 @@ $youtubeThumb = static function (array $item): ?string {
                     <?= $isPartnerView ? 'Registrar alumno' : 'Adquirir' ?>
                 </a>
                 <a class="btn btn-ghost" href="<?= e(url('/catalogo')) ?>">Volver al catálogo</a>
+                <?php if ($isAdminViewer && $adminEditContent !== ''): ?>
+                    <a class="btn btn-ghost" href="<?= e($adminEditContent) ?>" title="Editar textos del producto">
+                        <?= icon('edit') ?> Editar contenido
+                    </a>
+                <?php endif; ?>
             </div>
         </div>
     </div>
 
-    <?php if (!empty($product['description']) || !empty($product['benefits_html']) || $media !== []): ?>
+    <?php if (!empty($product['description']) || !empty($product['benefits_html']) || $media !== [] || $isAdminViewer): ?>
         <hr style="border:0;border-top:1px solid #e6ebf2;margin:1.25rem 0">
         <div class="product-detail-layout">
             <section>
                 <?php if (!empty($product['description'])): ?>
-                    <h2 style="color:var(--doceo-blue);font-size:1.05rem;margin-top:0">Descripción</h2>
+                    <h2 style="color:var(--doceo-blue);font-size:1.05rem;margin-top:0;display:flex;align-items:center;gap:.45rem">
+                        Descripción
+                        <?php if ($isAdminViewer && $adminEditContent !== ''): ?>
+                            <a class="catalog-admin-edit catalog-admin-edit--inline" href="<?= e($adminEditContent) ?>"
+                               title="Editar descripción" aria-label="Editar descripción"><?= icon('edit') ?></a>
+                        <?php endif; ?>
+                    </h2>
                     <div class="product-richtext"><?= rich_text((string) $product['description']) ?></div>
+                <?php elseif ($isAdminViewer && $adminEditContent !== ''): ?>
+                    <h2 style="color:var(--doceo-blue);font-size:1.05rem;margin-top:0;display:flex;align-items:center;gap:.45rem">
+                        Descripción
+                        <a class="catalog-admin-edit catalog-admin-edit--inline" href="<?= e($adminEditContent) ?>"
+                           title="Agregar descripción" aria-label="Agregar descripción"><?= icon('edit') ?></a>
+                    </h2>
+                    <p class="muted" style="font-size:.88rem">Aún no hay descripción larga.</p>
                 <?php endif; ?>
                 <?php if (!empty($product['benefits_html'])): ?>
-                    <h2 style="color:var(--doceo-blue);font-size:1.05rem;margin-top:1rem">Beneficios</h2>
+                    <h2 style="color:var(--doceo-blue);font-size:1.05rem;margin-top:1rem;display:flex;align-items:center;gap:.45rem">
+                        Beneficios
+                        <?php if ($isAdminViewer && $adminEditContent !== ''): ?>
+                            <a class="catalog-admin-edit catalog-admin-edit--inline" href="<?= e($adminEditContent) ?>"
+                               title="Editar beneficios" aria-label="Editar beneficios"><?= icon('edit') ?></a>
+                        <?php endif; ?>
+                    </h2>
                     <div class="product-richtext"><?= rich_text((string) $product['benefits_html']) ?></div>
                 <?php endif; ?>
             </section>
@@ -140,6 +193,15 @@ $youtubeThumb = static function (array $item): ?string {
 <?php endif; ?>
 
 <style>
+.catalog-admin-edit {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:1.85rem; height:1.85rem; border-radius:999px;
+    border:1px solid #cfd8e6; background:#fff; color:var(--doceo-blue);
+    text-decoration:none; box-shadow:0 2px 8px rgba(15,23,42,.08);
+}
+.catalog-admin-edit:hover { background:#eef4ff; text-decoration:none; }
+.catalog-admin-edit--inline { width:1.55rem; height:1.55rem; flex:0 0 auto; }
+.catalog-admin-edit svg { width:14px; height:14px; display:block; }
 .product-richtext { line-height:1.55; color:#243247; }
 .product-richtext p { margin:.55rem 0; }
 .product-richtext ul, .product-richtext ol { margin:.55rem 0 .55rem 1.1rem; padding:0; }

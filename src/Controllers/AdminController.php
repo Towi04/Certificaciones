@@ -539,10 +539,15 @@ final class AdminController
         Auth::requireRole(['admin']);
         csrf_verify();
         $productId = (int) $id;
-        if ((new ProductRepository())->find($productId) === null) {
+        $product = (new ProductRepository())->find($productId);
+        if ($product === null) {
             flash('error', 'Producto no encontrado.');
             redirect('/admin/productos');
         }
+
+        $returnTo = self::safeCatalogReturnPath((string) ($_POST['return_to'] ?? ''));
+        $editUrl = '/admin/productos/' . $productId
+            . ($returnTo !== null ? ('?return_to=' . rawurlencode($returnTo)) : '');
 
         try {
             (new ProductAdminService())->updateProduct($productId, $_POST);
@@ -552,10 +557,34 @@ final class AdminController
                 array_values((array) ($_POST['cenni_types'] ?? []))
             );
             flash('success', 'Producto actualizado.');
+            if ($returnTo !== null) {
+                redirect($returnTo);
+            }
         } catch (\Throwable $e) {
             $this->formError($e->getMessage());
+            redirect($editUrl);
         }
-        redirect('/admin/productos/' . $productId);
+        redirect($editUrl);
+    }
+
+    /**
+     * Solo permite volver a rutas públicas del catálogo (anti open-redirect).
+     */
+    public static function safeCatalogReturnPath(string $raw): ?string
+    {
+        $raw = trim($raw);
+        if ($raw === '' || str_contains($raw, '://') || str_contains($raw, "\n") || str_contains($raw, "\r")) {
+            return null;
+        }
+        if (!str_starts_with($raw, '/')) {
+            return null;
+        }
+        // Acepta /producto/{slug} o /catalogo... (con query/hash opcionales).
+        if (preg_match('#^/(producto/[a-zA-Z0-9][a-zA-Z0-9_\-]{0,120}|catalogo)(/|\?|#|$)#', $raw) !== 1) {
+            return null;
+        }
+
+        return $raw;
     }
 
 

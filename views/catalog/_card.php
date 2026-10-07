@@ -1,9 +1,15 @@
 <?php /** @var array<string,mixed> $p */ ?>
 <?php
 $isPartner = !empty($partner) || (($user['role'] ?? '') === 'partner');
+$isAdminViewer = (\App\Auth\Auth::role() === 'admin');
 $productUrl = $isPartner
     ? url('/adquirir/' . $p['slug'])
     : url('/producto/' . $p['slug']);
+$adminEditUrl = $isAdminViewer
+    ? url('/admin/productos/' . (int) ($p['id'] ?? 0)
+        . '?return_to=' . rawurlencode('/producto/' . (string) ($p['slug'] ?? ''))
+        . '#contenido')
+    : '';
 // Preferir precio de nivel; si falta anotación, no mostrar lista como si fuera partner price.
 $hasPartnerPrice = $isPartner && array_key_exists('partner_price', $p) && $p['partner_price'] !== null && $p['partner_price'] !== '';
 $displayPrice = $hasPartnerPrice
@@ -20,30 +26,37 @@ $searchBlob = mb_strtolower(trim(implode(' ', array_filter([
     trim(strip_tags((string) ($p['short_description'] ?? ''))),
 ]))));
 ?>
-<a class="product-card product-card-link" href="<?= e($productUrl) ?>"
-   data-search="<?= e($searchBlob) ?>">
-    <div class="thumb">
-        <?php if (!empty($p['is_star'])): ?><span class="badge-star" aria-label="Producto estrella">⭐</span><?php endif; ?>
-        <?php if (!empty($p['logo_path'])): ?>
-            <img src="<?= e(asset($p['logo_path'])) ?>" alt="">
-        <?php else: ?>
-            <img src="<?= e(asset('/assets/brand/logo.png')) ?>" alt="" style="opacity:.55">
-        <?php endif; ?>
-    </div>
-    <div class="body">
-        <div class="meta"><?= e($p['certifier_name'] ?? category_label((string) $p['category'])) ?></div>
-        <h3><?= e($p['name']) ?></h3>
-        <?php if (!empty($p['short_description'])): ?>
-            <div class="meta product-richtext"><?= rich_text((string) $p['short_description']) ?></div>
-        <?php endif; ?>
-        <div class="price">
-            <?= money($displayPrice) ?>
-            <?php if ($hasPartnerPrice): ?>
-                <span class="muted" style="font-size:.72rem;font-weight:600"> · tu nivel</span>
+<div class="product-card-shell">
+    <?php if ($isAdminViewer && $adminEditUrl !== ''): ?>
+        <a class="catalog-admin-edit catalog-admin-edit--card"
+           href="<?= e($adminEditUrl) ?>"
+           title="Editar producto" aria-label="Editar producto"><?= icon('edit') ?></a>
+    <?php endif; ?>
+    <a class="product-card product-card-link" href="<?= e($productUrl) ?>"
+       data-search="<?= e($searchBlob) ?>">
+        <div class="thumb">
+            <?php if (!empty($p['is_star'])): ?><span class="badge-star" aria-label="Producto estrella">⭐</span><?php endif; ?>
+            <?php if (!empty($p['logo_path'])): ?>
+                <img src="<?= e(asset($p['logo_path'])) ?>" alt="">
+            <?php else: ?>
+                <img src="<?= e(asset('/assets/brand/logo.png')) ?>" alt="" style="opacity:.55">
             <?php endif; ?>
         </div>
-        <div class="actions">
-            <span class="btn btn-primary btn-sm"><?= $isPartner ? 'Registrar alumno' : 'Ver más' ?></span>
+        <div class="body">
+            <div class="meta"><?= e($p['certifier_name'] ?? category_label((string) $p['category'])) ?></div>
+            <h3><?= e($p['name']) ?></h3>
+            <?php if (!empty($p['short_description'])): ?>
+                <div class="meta product-richtext"><?= rich_text((string) $p['short_description']) ?></div>
+            <?php endif; ?>
+            <div class="price">
+                <?= money($displayPrice) ?>
+                <?php if ($hasPartnerPrice): ?>
+                    <span class="muted" style="font-size:.72rem;font-weight:600"> · tu nivel</span>
+                <?php endif; ?>
+            </div>
+            <div class="actions">
+                <span class="btn btn-primary btn-sm"><?= $isPartner ? 'Registrar alumno' : 'Ver más' ?></span>
+            </div>
         </div>
-    </div>
-</a>
+    </a>
+</div>
