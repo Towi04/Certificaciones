@@ -535,12 +535,14 @@ final class MailProductCardService
         }
 
         if ($layout === 'row') {
+            // Imagen izquierda + texto derecha.
             return $this->htmlRowCard(
                 $safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc,
                 $discountOverlay, $discountPos, $bannerHtml, $cta, $accent, false
             );
         }
         if ($layout === 'row_flip') {
+            // Texto izquierda + imagen derecha.
             return $this->htmlRowCard(
                 $safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc,
                 $discountOverlay, $discountPos, $bannerHtml, $cta, $accent, true
