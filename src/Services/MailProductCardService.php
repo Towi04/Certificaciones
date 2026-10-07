@@ -42,6 +42,7 @@ final class MailProductCardService
                 layout ENUM('square','wide','row') NOT NULL DEFAULT 'wide',
                 badge_mode ENUM('discount','banner','both','none') NOT NULL DEFAULT 'discount',
                 badge_text VARCHAR(80) NULL,
+                custom_image_path VARCHAR(255) NULL,
                 show_description TINYINT(1) NOT NULL DEFAULT 0,
                 is_active TINYINT(1) NOT NULL DEFAULT 1,
                 sort_order INT NOT NULL DEFAULT 0,
@@ -52,6 +53,16 @@ final class MailProductCardService
                 KEY idx_mail_product_cards_active (is_active, sort_order)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+        try {
+            $cols = $this->pdo->query('SHOW COLUMNS FROM mail_product_cards LIKE \'custom_image_path\'');
+            if ($cols && !$cols->fetch()) {
+                $this->pdo->exec(
+                    'ALTER TABLE mail_product_cards ADD COLUMN custom_image_path VARCHAR(255) NULL AFTER badge_text'
+                );
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
     }
 
     /** @return array{default_layout:string,default_badge:string,banner_text:string,accent_color:string,cta_label:string} */
@@ -137,14 +148,22 @@ final class MailProductCardService
         return $row ?: null;
     }
 
-    /** @param array<string, mixed> $input */
-    public function create(array $input): int
+    /**
+     * @param array<string, mixed> $input
+     * @param array<string, mixed>|null $imageFile $_FILES['custom_image']
+     */
+    public function create(array $input, ?array $imageFile = null): int
     {
         $data = $this->normalizeCardInput($input);
+        $customImage = null;
+        if ($imageFile !== null && (int) ($imageFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            $customImage = self::storeCardImageUpload($imageFile);
+        }
         $stmt = $this->pdo->prepare(
             'INSERT INTO mail_product_cards
-                (placeholder, product_id, layout, badge_mode, badge_text, show_description, is_active, sort_order)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+                (placeholder, product_id, layout, badge_mode, badge_text, custom_image_path,
+                 show_description, is_active, sort_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $data['placeholder'],
@@ -152,6 +171,7 @@ final class MailProductCardService
             $data['layout'],
             $data['badge_mode'],
             $data['badge_text'],
+            $customImage,
             $data['show_description'],
             $data['is_active'],
             $data['sort_order'],
@@ -160,17 +180,34 @@ final class MailProductCardService
         return (int) $this->pdo->lastInsertId();
     }
 
-    /** @param array<string, mixed> $input */
-    public function update(int $id, array $input): void
+    /**
+     * @param array<string, mixed> $input
+     * @param array<string, mixed>|null $imageFile $_FILES['custom_image']
+     */
+    public function update(int $id, array $input, ?array $imageFile = null): void
     {
-        if ($this->find($id) === null) {
+        $existing = $this->find($id);
+        if ($existing === null) {
             throw new \InvalidArgumentException('Tarjeta no encontrada.');
         }
         $data = $this->normalizeCardInput($input, $id);
+        $customImage = ($existing['custom_image_path'] ?? null) !== null && $existing['custom_image_path'] !== ''
+            ? (string) $existing['custom_image_path']
+            : null;
+
+        if (!empty($input['clear_custom_image'])) {
+            $this->deleteStoredImage($customImage);
+            $customImage = null;
+        }
+        if ($imageFile !== null && (int) ($imageFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            $this->deleteStoredImage($customImage);
+            $customImage = self::storeCardImageUpload($imageFile);
+        }
+
         $this->pdo->prepare(
             'UPDATE mail_product_cards
              SET placeholder = ?, product_id = ?, layout = ?, badge_mode = ?, badge_text = ?,
-                 show_description = ?, is_active = ?, sort_order = ?
+                 custom_image_path = ?, show_description = ?, is_active = ?, sort_order = ?
              WHERE id = ?'
         )->execute([
             $data['placeholder'],
@@ -178,6 +215,7 @@ final class MailProductCardService
             $data['layout'],
             $data['badge_mode'],
             $data['badge_text'],
+            $customImage,
             $data['show_description'],
             $data['is_active'],
             $data['sort_order'],
@@ -187,7 +225,109 @@ final class MailProductCardService
 
     public function delete(int $id): void
     {
+        $existing = $this->find($id);
+        if ($existing !== null) {
+            $this->deleteStoredImage(
+                ($existing['custom_image_path'] ?? null) !== null ? (string) $existing['custom_image_path'] : null
+            );
+        }
         $this->pdo->prepare('DELETE FROM mail_product_cards WHERE id = ?')->execute([$id]);
+    }
+
+    /**
+     * Vista previa sin guardar (admin).
+     *
+     * @param array<string, mixed> $input
+     */
+    public function previewFromInput(array $input): string
+    {
+        $productId = (int) ($input['product_id'] ?? 0);
+        if ($productId < 1) {
+            return '<p class="muted" style="margin:0;font-size:.85rem">Elige un producto para ver la vista previa.</p>';
+        }
+        $product = (new ProductRepository())->find($productId);
+        if ($product === null) {
+            return '<p class="muted" style="margin:0;font-size:.85rem">Producto no encontrado.</p>';
+        }
+
+        $card = [
+            'product_name' => (string) ($product['name'] ?? ''),
+            'product_slug' => (string) ($product['slug'] ?? ''),
+            'logo_path' => (string) ($product['logo_path'] ?? ''),
+            'custom_image_path' => trim((string) ($input['custom_image_path'] ?? '')),
+            'short_description' => (string) ($product['short_description'] ?? ''),
+            'catalog_price' => $product['catalog_price'] ?? 0,
+            'public_price' => $product['public_price'] ?? 0,
+            'layout' => (string) ($input['layout'] ?? 'wide'),
+            'badge_mode' => (string) ($input['badge_mode'] ?? 'discount'),
+            'badge_text' => (string) ($input['badge_text'] ?? ''),
+            'show_description' => !empty($input['show_description']) ? 1 : 0,
+        ];
+        if ($card['custom_image_path'] === '') {
+            $card['custom_image_path'] = null;
+        }
+
+        $previewUrl = trim((string) ($input['preview_image_url'] ?? ''));
+        if ($previewUrl !== '' && self::isAllowedPreviewImageUrl($previewUrl)) {
+            $card['_preview_image_url'] = $previewUrl;
+        }
+
+        // Defaults temporales desde el formulario de diseño (sin guardar).
+        $defaults = self::defaults();
+        if (isset($input['accent_color']) || isset($input['banner_text']) || isset($input['cta_label'])) {
+            $defaults['accent_color'] = self::normalizeColor((string) ($input['accent_color'] ?? $defaults['accent_color']));
+            $defaults['banner_text'] = trim((string) ($input['banner_text'] ?? $defaults['banner_text'])) ?: $defaults['banner_text'];
+            $defaults['cta_label'] = trim((string) ($input['cta_label'] ?? $defaults['cta_label'])) ?: $defaults['cta_label'];
+        }
+
+        return $this->renderCard($card, $defaults);
+    }
+
+    /**
+     * @param array{tmp_name?:string,name?:string,error?:int,size?:int,type?:string} $file
+     */
+    public static function storeCardImageUpload(array $file): string
+    {
+        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            throw new \InvalidArgumentException('Selecciona una imagen válida para la tarjeta.');
+        }
+        $tmp = (string) ($file['tmp_name'] ?? '');
+        if ($tmp === '' || (!is_uploaded_file($tmp) && !is_readable($tmp))) {
+            throw new \InvalidArgumentException('Archivo de imagen inválido.');
+        }
+        $size = (int) ($file['size'] ?? 0);
+        if ($size <= 0 || $size > 4 * 1024 * 1024) {
+            throw new \InvalidArgumentException('La imagen no debe superar 4 MB.');
+        }
+
+        $original = basename((string) ($file['name'] ?? 'card.png'));
+        $extension = strtolower(pathinfo($original, PATHINFO_EXTENSION));
+        if (!in_array($extension, ['png', 'jpg', 'jpeg', 'webp', 'gif'], true)) {
+            throw new \InvalidArgumentException('Usa PNG, JPG, WEBP o GIF.');
+        }
+
+        $finfo = new \finfo(FILEINFO_MIME_TYPE);
+        $mime = (string) ($finfo->file($tmp) ?: ($file['type'] ?? ''));
+        if (!in_array($mime, ['image/png', 'image/jpeg', 'image/webp', 'image/gif'], true)) {
+            throw new \InvalidArgumentException('Tipo de imagen no permitido.');
+        }
+
+        $relativeDir = '/uploads/mail/product-cards';
+        $targetDir = BASE_PATH . '/public' . $relativeDir;
+        if (!is_dir($targetDir) && !@mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+            throw new \RuntimeException('No se pudo crear el directorio de imágenes de tarjetas.');
+        }
+
+        $filename = 'card-' . bin2hex(random_bytes(8)) . '.' . $extension;
+        $dest = $targetDir . '/' . $filename;
+        if (!@move_uploaded_file($tmp, $dest)) {
+            if (!@rename($tmp, $dest) && !@copy($tmp, $dest)) {
+                throw new \RuntimeException('No se pudo guardar la imagen de la tarjeta.');
+            }
+            @unlink($tmp);
+        }
+
+        return $relativeDir . '/' . $filename;
     }
 
     /**
@@ -297,16 +437,16 @@ final class MailProductCardService
         $discountPct = self::discountPercent($list, $public);
 
         $productUrl = $this->absoluteUrl($slug !== '' ? '/producto/' . $slug : '/catalogo');
-        $logoPath = trim((string) ($card['logo_path'] ?? ''));
-        $logoUrl = $logoPath !== ''
-            ? $this->absoluteUrl(asset($logoPath))
-            : $this->absoluteUrl('/assets/brand/logo.png');
+        $logoUrl = $this->resolveCardImageUrl($card);
 
         $accent = $defaults['accent_color'];
         $cta = htmlspecialchars($defaults['cta_label'], ENT_QUOTES, 'UTF-8');
         $safeName = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
         $safeUrl = htmlspecialchars($productUrl, ENT_QUOTES, 'UTF-8');
-        $safeLogo = htmlspecialchars($logoUrl, ENT_QUOTES, 'UTF-8');
+        // data: URLs en preview admin; el resto se escapa normal.
+        $safeLogo = str_starts_with($logoUrl, 'data:image/')
+            ? $logoUrl
+            : htmlspecialchars($logoUrl, ENT_QUOTES, 'UTF-8');
         $safeBanner = htmlspecialchars($bannerText, ENT_QUOTES, 'UTF-8');
         $safeDesc = htmlspecialchars($desc, ENT_QUOTES, 'UTF-8');
 
@@ -484,6 +624,59 @@ final class MailProductCardService
         }
 
         return '#315285';
+    }
+
+    /** @param array<string, mixed> $card */
+    private function resolveCardImageUrl(array $card): string
+    {
+        $preview = trim((string) ($card['_preview_image_url'] ?? ''));
+        if ($preview !== '' && self::isAllowedPreviewImageUrl($preview)) {
+            return $preview;
+        }
+        $custom = trim((string) ($card['custom_image_path'] ?? ''));
+        if ($custom !== '') {
+            return $this->absoluteUrl(asset($custom));
+        }
+        $logoPath = trim((string) ($card['logo_path'] ?? ''));
+        if ($logoPath !== '') {
+            return $this->absoluteUrl(asset($logoPath));
+        }
+
+        return $this->absoluteUrl('/assets/brand/logo.png');
+    }
+
+    private static function isAllowedPreviewImageUrl(string $url): bool
+    {
+        if (str_starts_with($url, 'data:image/png;base64,')
+            || str_starts_with($url, 'data:image/jpeg;base64,')
+            || str_starts_with($url, 'data:image/jpg;base64,')
+            || str_starts_with($url, 'data:image/webp;base64,')
+            || str_starts_with($url, 'data:image/gif;base64,')
+        ) {
+            return strlen($url) < 3_500_000;
+        }
+        if (preg_match('#^https?://#i', $url) === 1) {
+            return filter_var($url, FILTER_VALIDATE_URL) !== false;
+        }
+        if (str_starts_with($url, '/')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function deleteStoredImage(?string $relativePath): void
+    {
+        if ($relativePath === null || $relativePath === '') {
+            return;
+        }
+        if (!str_starts_with($relativePath, '/uploads/mail/product-cards/')) {
+            return;
+        }
+        $full = BASE_PATH . '/public' . $relativePath;
+        if (is_file($full)) {
+            @unlink($full);
+        }
     }
 
     private function absoluteUrl(string $pathOrUrl): string
