@@ -24,6 +24,7 @@ use App\Services\GroupStepConfig;
 use App\Services\ImportService;
 use App\Integrations\Mailer;
 use App\Services\InventoryService;
+use App\Services\MailProductCardService;
 use App\Services\MailTemplateService;
 use App\Services\ProductAdminService;
 use App\Services\ExamScheduleService;
@@ -3269,6 +3270,7 @@ final class AdminController
         $pagination = Pagination::fromRequest(count($filtered));
         $page = array_slice($filtered, $pagination['offset'], $pagination['limit']);
         $branding = \App\Mail\MailBranding::config();
+        $cardSvc = new MailProductCardService();
         view('admin/mail_templates', [
             'title' => 'Plantillas de correo',
             'templates' => $page,
@@ -3285,6 +3287,9 @@ final class AdminController
                 '<p style="margin:0 0 8px"><strong>Vista previa</strong></p>'
                 . '<p style="margin:0">El contenido de cada plantilla aparece aquí, entre el encabezado y el pie globales.</p>'
             ),
+            'mailCards' => $cardSvc->all(),
+            'mailCardDefaults' => MailProductCardService::defaults(),
+            'mailCardProducts' => (new ProductRepository())->adminList(null, 500, 0, []),
             'layout' => 'admin',
         ]);
     }
@@ -3312,6 +3317,59 @@ final class AdminController
             flash('error', $e->getMessage());
         }
         redirect('/admin/correos#branding');
+    }
+
+    public function mailProductCardDefaults(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            (new MailProductCardService())->saveDefaults($_POST);
+            flash('success', 'Diseño por defecto de tarjetas de correo guardado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/correos#cards');
+    }
+
+    public function mailProductCardStore(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            $ph = MailProductCardService::normalizePlaceholder((string) ($_POST['placeholder'] ?? ''));
+            (new MailProductCardService())->create($_POST);
+            flash('success', 'Tarjeta creada. Úsala en plantillas con el placeholder ' . $ph . '.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/correos#cards');
+    }
+
+    public function mailProductCardUpdate(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            (new MailProductCardService())->update((int) $id, $_POST);
+            flash('success', 'Tarjeta actualizada.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/correos#cards');
+    }
+
+    public function mailProductCardDelete(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            (new MailProductCardService())->delete((int) $id);
+            flash('success', 'Tarjeta eliminada.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/correos#cards');
     }
 
     public function catalogFilters(): void

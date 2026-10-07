@@ -142,7 +142,9 @@ final class MailTemplateService
         }
 
         $subject = self::interpolate((string) $tpl['subject'], $vars);
-        $bodyHtml = self::interpolate((string) $tpl['body_html'], $vars);
+        // Tarjetas de producto ({{elet}}, {{cards:a,b}}) antes de variables normales.
+        $bodyHtml = (new MailProductCardService())->expandInHtml((string) $tpl['body_html'], $vars);
+        $bodyHtml = self::interpolate($bodyHtml, $vars);
 
         return [
             'subject' => $subject,
@@ -638,7 +640,17 @@ final class MailTemplateService
     /** @return array<string, array<string, string>> */
     public static function availablePlaceholderOptions(): array
     {
-        return self::PLACEHOLDER_OPTIONS;
+        $opts = self::PLACEHOLDER_OPTIONS;
+        try {
+            $cards = (new MailProductCardService())->placeholderCatalog();
+            if ($cards !== []) {
+                $opts['Tarjetas de catálogo'] = $cards;
+            }
+        } catch (\Throwable) {
+            // Sin BD / tabla aún: ignorar.
+        }
+
+        return $opts;
     }
 
     /** @return list<string> */
