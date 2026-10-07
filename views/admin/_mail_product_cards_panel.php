@@ -14,7 +14,6 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;fon
 $layoutOptions = [
     'wide' => 'Rectangular grande (banner)',
     'square' => 'Cuadro pequeño',
-    'square_desc' => 'Cuadro pequeño + descripción',
     'row' => 'Horizontal: imagen izq. + texto der.',
     'row_flip' => 'Horizontal: texto izq. + imagen der.',
 ];
@@ -24,8 +23,8 @@ $layoutOptions = [
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Tarjetas de catálogo para correos</h2>
         <p class="muted" style="margin:0 0 1rem;font-size:.88rem;max-width:52rem">
             Cada tarjeta define su propio diseño (color del botón, texto, badge, layout e imagen).
+            La descripción breve se activa solo con el check «Mostrar descripción breve».
             Usa placeholders como <code>{{elet}}</code> o un grid <code>{{cards:elet,toefl}}</code>.
-            Si reutilizas un placeholder existente al crear, se actualiza esa tarjeta.
         </p>
 
         <div class="mail-card-editor" style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(260px,.85fr);gap:1rem;align-items:start;margin-bottom:1.25rem">
@@ -151,6 +150,12 @@ $layoutOptions = [
                     $previewId = 'mail-card-preview-' . $cid;
                     $accent = (string) ($card['accent_color'] ?? '#315285');
                     $cta = (string) ($card['cta_label'] ?? 'Ver en catálogo');
+                    $cardLayout = (string) ($card['layout'] ?? 'wide');
+                    if ($cardLayout === 'square_desc') {
+                        $cardLayout = 'square';
+                    }
+                    $showDescChecked = !empty($card['show_description'])
+                        || ((string) ($card['layout'] ?? '') === 'square_desc');
                     ?>
                     <div class="mail-card-editor" style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(260px,.85fr);gap:1rem;align-items:start;padding:1rem;border:1px solid #e6ebf2;border-radius:12px;background:#fff">
                         <form method="post" action="<?= e(url('/admin/correos/tarjetas/' . $cid)) ?>"
@@ -187,7 +192,7 @@ $layoutOptions = [
                                     Layout
                                     <select name="layout" class="mail-card-layout" style="<?= e($inputStyle) ?>">
                                         <?php foreach ($layoutOptions as $val => $lab): ?>
-                                            <option value="<?= e($val) ?>" <?= ($card['layout'] ?? '') === $val ? 'selected' : '' ?>><?= e($lab) ?></option>
+                                            <option value="<?= e($val) ?>" <?= $cardLayout === $val ? 'selected' : '' ?>><?= e($lab) ?></option>
                                         <?php endforeach; ?>
                                     </select>
                                 </label>
@@ -250,8 +255,8 @@ $layoutOptions = [
 
                             <label style="display:flex;gap:.4rem;align-items:center;font-size:.85rem">
                                 <input type="checkbox" name="show_description" value="1"
-                                    <?= !empty($card['show_description']) ? 'checked' : '' ?>>
-                                Mostrar descripción
+                                    <?= $showDescChecked ? 'checked' : '' ?>>
+                                Mostrar descripción breve
                             </label>
                             <label style="display:flex;gap:.4rem;align-items:center;font-size:.85rem">
                                 <input type="checkbox" name="is_active" value="1"
