@@ -546,8 +546,9 @@ final class CheckoutRequirements
 
 
     /**
-     * Claves de inscripción que define el grupo de proceso.
-     * Un producto no debe vaciarlas ni reducirlas con leftovers viejos en config_json.
+     * Claves del proceso de compra que define el grupo.
+     * Un producto no debe vaciarlas ni reducirlas con leftovers viejos en config_json
+     * (p. ej. card_msi con solo 1/3/6 meses de cuando MSI vivía en el producto).
      *
      * @var list<string>
      */
@@ -556,6 +557,9 @@ final class CheckoutRequirements
         'checkout_field_required',
         'required_docs',
         'registration_docs',
+        'payments',
+        'card_msi',
+        'deferred',
     ];
 
     /** @return array<string, mixed> */
@@ -564,8 +568,8 @@ final class CheckoutRequirements
         $group = self::decodeJson($product['group_config_json'] ?? null);
         $own = self::decodeJson($product['config_json'] ?? null);
 
-        // El proceso de compra (qué datos se piden al alumno) vive en el grupo.
-        // Si el producto trae checkout_fields viejos/vacíos, no deben tapar al grupo.
+        // Pagos, MSI y datos de inscripción viven en el grupo.
+        // Si el producto trae leftovers viejos, no deben tapar al grupo.
         foreach (self::GROUP_OWNED_CHECKOUT_KEYS as $key) {
             if (!array_key_exists($key, $group)) {
                 continue;

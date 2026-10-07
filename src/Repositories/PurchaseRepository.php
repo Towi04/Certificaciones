@@ -160,6 +160,7 @@ final class PurchaseRepository
     public function create(array $data): int
     {
         $this->ensurePartnerCreditUsedColumn();
+        $this->ensureOpenPayStoreColumns();
         $msi = isset($data['card_msi_months']) ? (int) $data['card_msi_months'] : null;
         if ($msi !== null && $msi <= 1) {
             $msi = null;
@@ -213,6 +214,60 @@ final class PurchaseRepository
         }
     }
 
+    /**
+     * Migración 20260822_openpay_store: columnas OXXO + enum payment_method.
+     * Se asegura en runtime por si el ALTER no corrió en producción.
+     */
+    private function ensureOpenPayStoreColumns(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        try {
+            $this->ensurePurchasesColumn(
+                'openpay_store_reference',
+                'VARCHAR(50) NULL AFTER openpay_clabe'
+            );
+            $this->ensurePurchasesColumn(
+                'openpay_barcode_url',
+                'VARCHAR(512) NULL AFTER openpay_store_reference'
+            );
+            $this->ensurePaymentMethodAllowsStore();
+        } catch (\Throwable $e) {
+            error_log('[Doceo] ensureOpenPayStoreColumns: ' . $e->getMessage());
+        }
+    }
+
+    private function ensurePurchasesColumn(string $name, string $definition): void
+    {
+        $stmt = $this->pdo->query('SHOW COLUMNS FROM purchases LIKE ' . $this->pdo->quote($name));
+        if ($stmt && $stmt->fetch()) {
+            return;
+        }
+        $this->pdo->exec('ALTER TABLE purchases ADD COLUMN ' . $name . ' ' . $definition);
+    }
+
+    private function ensurePaymentMethodAllowsStore(): void
+    {
+        $stmt = $this->pdo->query("SHOW COLUMNS FROM purchases LIKE 'payment_method'");
+        $col = $stmt ? $stmt->fetch() : false;
+        if (!is_array($col)) {
+            return;
+        }
+        $type = strtolower((string) ($col['Type'] ?? ''));
+        if (str_contains($type, 'openpay_store')) {
+            return;
+        }
+        $this->pdo->exec(
+            "ALTER TABLE purchases MODIFY payment_method ENUM(
+                'none','openpay_spei','openpay_card','openpay_store',
+                'transfer_proof','partner_account','credit'
+             ) NOT NULL DEFAULT 'none'"
+        );
+    }
+
     public function addItem(int $purchaseId, int $productId, float $public, float $charged): int
     {
         $stmt = $this->pdo->prepare(
@@ -243,6 +298,7 @@ final class PurchaseRepository
         ?string $storeReference = null,
         ?string $barcodeUrl = null
     ): void {
+        $this->ensureOpenPayStoreColumns();
         $this->pdo->prepare(
             'UPDATE purchases SET openpay_charge_id = ?, openpay_clabe = ?,
              openpay_store_reference = ?, openpay_barcode_url = ?,

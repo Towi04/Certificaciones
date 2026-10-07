@@ -1603,13 +1603,16 @@ final class ProductAdminService
             unset($cfg['level_exam']);
         }
 
-        // Datos del alumno / docs de inscripción se configuran en el grupo de proceso.
+        // Datos del alumno, pagos y MSI se configuran en el grupo de proceso.
         // Limpiar leftovers en el producto para que no tapen al grupo en el merge.
         unset(
             $cfg['checkout_fields'],
             $cfg['checkout_field_required'],
             $cfg['required_docs'],
-            $cfg['registration_docs']
+            $cfg['registration_docs'],
+            $cfg['payments'],
+            $cfg['card_msi'],
+            $cfg['deferred']
         );
 
         if ($cfg === []) {
