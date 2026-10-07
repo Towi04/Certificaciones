@@ -3,18 +3,43 @@
 /** @var array<string,mixed> $audience */
 /** @var list<array<string,mixed>> $templates */
 /** @var list<array<string,mixed>> $products */
-/** @var list<array<string,mixed>> $suppliers */
 /** @var list<array<string,mixed>> $certifiers */
 $isEdit = $campaign !== null;
 $action = $isEdit
     ? url('/admin/publicidad/' . (int) $campaign['id'] . '/editar')
     : url('/admin/publicidad/nueva');
-$intervalMin = $isEdit
-    ? max(1, (int) round(((int) ($campaign['interval_seconds'] ?? 120)) / 60))
-    : 2;
-$includeStudents = $isEdit ? !empty($audience['include_students']) : true;
+
 $includePartners = $isEdit ? !empty($audience['include_partners']) : false;
-$includeLegacy = $isEdit ? !empty($audience['include_legacy']) : true;
+$includeClients = true;
+if ($isEdit) {
+    if (array_key_exists('include_clients', $audience)) {
+        $includeClients = !empty($audience['include_clients']);
+    } else {
+        // Campañas antiguas: estudiantes o legacy = clientes.
+        $includeClients = !empty($audience['include_students']) || !empty($audience['include_legacy'])
+            || (!$includePartners);
+    }
+}
+if (!$includeClients && !$includePartners) {
+    $includeClients = true;
+}
+
+$audienceMode = 'clients';
+if ($includeClients && $includePartners) {
+    $audienceMode = 'both';
+} elseif ($includePartners && !$includeClients) {
+    $audienceMode = 'partners';
+}
+
+$promoMonth = 0;
+if ($isEdit) {
+    if (isset($audience['promo_month'])) {
+        $promoMonth = (int) $audience['promo_month'];
+    }
+}
+$promoMonth = max(0, min(12, $promoMonth));
+$monthLabels = \App\Services\PromoDoceoService::monthLabels();
+
 $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;width:100%;box-sizing:border-box';
 $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600';
 ?>
@@ -77,66 +102,60 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                 <?php endif; ?>
             </select>
         </label>
-        <p class="muted" style="margin:-.4rem 0 0;font-size:.8rem">
-            Preferible crear la plantilla con destinatario <strong>Publicidad</strong>
-            (así no pide correo fijo; la campaña define a quién llega).
-            <a href="<?= e(url('/admin/correos/nueva?audience=marketing')) ?>">Nueva plantilla de publicidad</a>
-            · <a href="<?= e(url('/admin/correos?audience=marketing')) ?>">Ver plantillas de publicidad</a>.
-            Placeholders: <code>{{name}}</code>, <code>{{full_name}}</code>,
-            <code>{{product_name}}</code>, <code>{{catalog_url}}</code>, <code>{{promo_code}}</code>.
-        </p>
 
         <label class="muted" style="<?= e($labelStyle) ?>">
-            Código promocional (opcional, para <code>{{promo_code}}</code>)
-            <input type="text" name="promo_code" maxlength="40" style="<?= e($inputStyle) ?>"
-                   value="<?= e((string) ($campaign['promo_code'] ?? '')) ?>"
-                   placeholder="Ej. ANTIGUO15">
+            Código Promo DOCEO (para <code>{{promo_code}}</code>)
+            <select name="promo_month" style="<?= e($inputStyle) ?>">
+                <option value="0" <?= $promoMonth === 0 ? 'selected' : '' ?>>
+                    Mes actual (al momento del envío)
+                </option>
+                <?php foreach ($monthLabels as $m => $label): ?>
+                    <option value="<?= (int) $m ?>" <?= $promoMonth === (int) $m ? 'selected' : '' ?>>
+                        <?= e($label) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
         </label>
+        <p class="muted" style="margin:-.4rem 0 0;font-size:.8rem">
+            Usa el código del mes definido en Promo DOCEO. Puedes fijar un mes
+            (p. ej. Diciembre) para programar campañas futuras o reutilizar la plantilla cada año.
+        </p>
 
         <fieldset style="border:1px solid #e6ebf2;border-radius:12px;padding:.85rem 1rem;margin:0">
             <legend style="padding:0 .35rem;font-weight:700;color:var(--doceo-blue)">Audiencia</legend>
-            <div style="display:flex;flex-wrap:wrap;gap:.85rem 1.25rem;margin-bottom:.75rem">
-                <label style="display:flex;gap:.4rem;align-items:center;font-size:.9rem">
-                    <input type="checkbox" name="include_students" value="1" <?= $includeStudents ? 'checked' : '' ?>>
-                    Compradores del sistema (pagados)
+            <div style="display:grid;gap:.55rem;margin-bottom:.85rem">
+                <label style="display:flex;gap:.45rem;align-items:flex-start;font-size:.9rem">
+                    <input type="radio" name="audience_mode" value="clients"
+                           <?= $audienceMode === 'clients' ? 'checked' : '' ?> style="margin-top:.2rem">
+                    <span>
+                        <strong>Todos los clientes</strong>
+                        <span class="muted" style="display:block;font-size:.8rem;font-weight:400">
+                            Alumnos del sistema (pagados o pendientes) + clientes anteriores (CSV).
+                        </span>
+                    </span>
                 </label>
-                <label style="display:flex;gap:.4rem;align-items:center;font-size:.9rem">
-                    <input type="checkbox" name="include_partners" value="1" <?= $includePartners ? 'checked' : '' ?>>
-                    Partners activos
+                <label style="display:flex;gap:.45rem;align-items:flex-start;font-size:.9rem">
+                    <input type="radio" name="audience_mode" value="partners"
+                           <?= $audienceMode === 'partners' ? 'checked' : '' ?> style="margin-top:.2rem">
+                    <span>
+                        <strong>Solo partners</strong>
+                        <span class="muted" style="display:block;font-size:.8rem;font-weight:400">
+                            Partners activos del sistema.
+                        </span>
+                    </span>
                 </label>
-                <label style="display:flex;gap:.4rem;align-items:center;font-size:.9rem">
-                    <input type="checkbox" name="include_legacy" value="1" <?= $includeLegacy ? 'checked' : '' ?>>
-                    Clientes anteriores (CSV)
+                <label style="display:flex;gap:.45rem;align-items:flex-start;font-size:.9rem">
+                    <input type="radio" name="audience_mode" value="both"
+                           <?= $audienceMode === 'both' ? 'checked' : '' ?> style="margin-top:.2rem">
+                    <span>
+                        <strong>Clientes y partners</strong>
+                    </span>
                 </label>
             </div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem">
                 <label class="muted" style="<?= e($labelStyle) ?>">
-                    Solo producto
-                    <select name="product_id" style="<?= e($inputStyle) ?>">
-                        <option value="">Todos</option>
-                        <?php foreach ($products as $p): ?>
-                            <option value="<?= (int) $p['id'] ?>"
-                                <?= ((int) ($audience['product_id'] ?? 0) === (int) $p['id']) ? 'selected' : '' ?>>
-                                <?= e((string) $p['name']) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </label>
-                <label class="muted" style="<?= e($labelStyle) ?>">
-                    Solo proveedor
-                    <select name="supplier_id" style="<?= e($inputStyle) ?>">
-                        <option value="">Todos</option>
-                        <?php foreach ($suppliers as $s): ?>
-                            <option value="<?= (int) $s['id'] ?>"
-                                <?= ((int) ($audience['supplier_id'] ?? 0) === (int) $s['id']) ? 'selected' : '' ?>>
-                                <?= e((string) $s['name']) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </label>
-                <label class="muted" style="<?= e($labelStyle) ?>">
-                    Solo certificadora
-                    <select name="certifier_id" style="<?= e($inputStyle) ?>">
+                    Filtrar por certificadora
+                    <select name="certifier_id" style="<?= e($inputStyle) ?>" id="mkt-certifier">
                         <option value="">Todas</option>
                         <?php foreach ($certifiers as $c): ?>
                             <option value="<?= (int) $c['id'] ?>"
@@ -146,17 +165,30 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                         <?php endforeach; ?>
                     </select>
                 </label>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Filtrar por certificación / producto
+                    <select name="product_id" style="<?= e($inputStyle) ?>" id="mkt-product">
+                        <option value="">Todas</option>
+                        <?php foreach ($products as $p): ?>
+                            <option value="<?= (int) $p['id'] ?>"
+                                data-certifier="<?= (int) ($p['certifier_id'] ?? 0) ?>"
+                                <?= ((int) ($audience['product_id'] ?? 0) === (int) $p['id']) ? 'selected' : '' ?>>
+                                <?= e((string) $p['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
             </div>
             <p class="muted" style="margin:.65rem 0 0;font-size:.8rem">
-                Ej.: compradores de TOEFL → elige el producto. Certificaciones de un proveedor → elige proveedor.
-                Los filtros de producto/proveedor aplican a compradores y a contactos CSV emparejados.
+                Los filtros aplican a clientes (compras del sistema y clientes anteriores enlazados).
+                Si eliges una certificación concreta, esa tiene prioridad sobre la certificadora.
             </p>
             <p id="mkt-audience-preview" class="muted" style="margin:.55rem 0 0;font-size:.85rem;font-weight:600;color:#334155"></p>
         </fieldset>
 
         <fieldset style="border:1px solid #e6ebf2;border-radius:12px;padding:.85rem 1rem;margin:0">
-            <legend style="padding:0 .35rem;font-weight:700;color:var(--doceo-blue)">Programación anti-spam</legend>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem">
+            <legend style="padding:0 .35rem;font-weight:700;color:var(--doceo-blue)">Programación</legend>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem">
                 <label class="muted" style="<?= e($labelStyle) ?>">
                     Fecha inicio *
                     <input type="date" name="window_start" required style="<?= e($inputStyle) ?>"
@@ -167,30 +199,10 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                     <input type="date" name="window_end" required style="<?= e($inputStyle) ?>"
                            value="<?= e((string) ($campaign['window_end'] ?? date('Y-m-d', strtotime('+7 days')))) ?>">
                 </label>
-                <label class="muted" style="<?= e($labelStyle) ?>">
-                    Intervalo entre correos (minutos)
-                    <input type="number" name="interval_minutes" min="1" max="1440" required
-                           value="<?= (int) $intervalMin ?>" style="<?= e($inputStyle) ?>">
-                </label>
-                <label class="muted" style="<?= e($labelStyle) ?>">
-                    Hora inicio (día)
-                    <input type="number" name="day_hour_start" min="0" max="23"
-                           value="<?= (int) ($campaign['day_hour_start'] ?? 9) ?>" style="<?= e($inputStyle) ?>">
-                </label>
-                <label class="muted" style="<?= e($labelStyle) ?>">
-                    Hora fin (día)
-                    <input type="number" name="day_hour_end" min="1" max="24"
-                           value="<?= (int) ($campaign['day_hour_end'] ?? 18) ?>" style="<?= e($inputStyle) ?>">
-                </label>
-                <label class="muted" style="<?= e($labelStyle) ?>">
-                    Máx. por corrida del cron
-                    <input type="number" name="max_per_run" min="1" max="50"
-                           value="<?= (int) ($campaign['max_per_run'] ?? 15) ?>" style="<?= e($inputStyle) ?>">
-                </label>
             </div>
             <p class="muted" style="margin:.65rem 0 0;font-size:.8rem">
-                Ejemplo fiestas: del 3 al 20 de diciembre, cada 30–60 minutos entre 9:00 y 18:00.
-                No se mandan todos el mismo día ni fuera de ese horario.
+                El sistema reparte los envíos automáticamente en ese rango (horario laboral y ritmo
+                anti-spam) para evitar que nos marquen como spam. No hace falta configurar intervalos.
             </p>
         </fieldset>
 
@@ -212,13 +224,29 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
   var out = document.getElementById('mkt-audience-preview');
   if (!form || !out) return;
   var timer = null;
+  var certSel = document.getElementById('mkt-certifier');
+  var prodSel = document.getElementById('mkt-product');
+
+  function filterProducts() {
+    if (!certSel || !prodSel) return;
+    var cid = certSel.value;
+    var opts = prodSel.querySelectorAll('option[data-certifier]');
+    opts.forEach(function (opt) {
+      var show = !cid || opt.getAttribute('data-certifier') === cid;
+      opt.hidden = !show;
+      if (!show && opt.selected) {
+        prodSel.value = '';
+      }
+    });
+  }
+
   function refresh() {
     var params = new URLSearchParams();
-    ['include_students','include_partners','include_legacy'].forEach(function (name) {
-      var el = form.querySelector('[name="' + name + '"]');
-      if (el && el.checked) params.set(name, '1');
-    });
-    ['product_id','supplier_id','certifier_id'].forEach(function (name) {
+    var modeEl = form.querySelector('input[name="audience_mode"]:checked');
+    var mode = modeEl ? modeEl.value : 'clients';
+    if (mode === 'clients' || mode === 'both') params.set('include_clients', '1');
+    if (mode === 'partners' || mode === 'both') params.set('include_partners', '1');
+    ['product_id','certifier_id'].forEach(function (name) {
       var el = form.querySelector('[name="' + name + '"]');
       if (el && el.value) params.set(name, el.value);
     });
@@ -238,9 +266,12 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
     clearTimeout(timer);
     timer = setTimeout(refresh, 250);
   }
+  if (certSel) certSel.addEventListener('change', function () { filterProducts(); schedule(); });
   form.querySelectorAll('input,select').forEach(function (el) {
+    if (el === certSel) return;
     el.addEventListener('change', schedule);
   });
+  filterProducts();
   refresh();
 })();
 </script>

@@ -7,7 +7,6 @@ namespace App\Controllers;
 use App\Auth\Auth;
 use App\Repositories\CertifierRepository;
 use App\Repositories\ProductRepository;
-use App\Repositories\SupplierRepository;
 use App\Services\MailTemplateService;
 use App\Services\MarketingCampaignService;
 use App\Services\MarketingContactService;
@@ -88,7 +87,6 @@ final class MarketingController
             'pagination' => $pagination,
             'templates' => (new MailTemplateService())->all(),
             'products' => (new ProductRepository())->adminList(null, 500, 0, []),
-            'suppliers' => (new SupplierRepository())->all(),
             'certifiers' => (new CertifierRepository())->all(),
         ]);
     }
@@ -183,12 +181,17 @@ final class MarketingController
     {
         Auth::requireRole(['admin']);
         header('Content-Type: application/json; charset=utf-8');
+        $includeClients = !empty($_GET['include_clients'])
+            || !empty($_GET['include_students'])
+            || !empty($_GET['include_legacy']);
+        $includePartners = !empty($_GET['include_partners']);
+        if (!$includeClients && !$includePartners) {
+            $includeClients = true;
+        }
         $audience = [
-            'include_students' => !empty($_GET['include_students']),
-            'include_partners' => !empty($_GET['include_partners']),
-            'include_legacy' => !empty($_GET['include_legacy']),
+            'include_clients' => $includeClients,
+            'include_partners' => $includePartners,
             'product_id' => (int) ($_GET['product_id'] ?? 0) ?: null,
-            'supplier_id' => (int) ($_GET['supplier_id'] ?? 0) ?: null,
             'certifier_id' => (int) ($_GET['certifier_id'] ?? 0) ?: null,
         ];
         try {
@@ -276,7 +279,6 @@ final class MarketingController
             'audience' => $audience,
             'templates' => (new MailTemplateService())->all(),
             'products' => (new ProductRepository())->adminList(null, 500, 0, []),
-            'suppliers' => (new SupplierRepository())->all(),
             'certifiers' => (new CertifierRepository())->all(),
         ];
     }
