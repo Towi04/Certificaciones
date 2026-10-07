@@ -3338,7 +3338,9 @@ final class AdminController
         csrf_verify();
         try {
             $ph = MailProductCardService::normalizePlaceholder((string) ($_POST['placeholder'] ?? ''));
-            (new MailProductCardService())->create($_POST);
+            $file = isset($_FILES['custom_image']) && is_array($_FILES['custom_image'])
+                ? $_FILES['custom_image'] : null;
+            (new MailProductCardService())->create($_POST, $file);
             flash('success', 'Tarjeta creada. Úsala en plantillas con el placeholder ' . $ph . '.');
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
@@ -3351,7 +3353,9 @@ final class AdminController
         Auth::requireRole(['admin']);
         csrf_verify();
         try {
-            (new MailProductCardService())->update((int) $id, $_POST);
+            $file = isset($_FILES['custom_image']) && is_array($_FILES['custom_image'])
+                ? $_FILES['custom_image'] : null;
+            (new MailProductCardService())->update((int) $id, $_POST, $file);
             flash('success', 'Tarjeta actualizada.');
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
@@ -3370,6 +3374,19 @@ final class AdminController
             flash('error', $e->getMessage());
         }
         redirect('/admin/correos#cards');
+    }
+
+    public function mailProductCardPreview(): void
+    {
+        Auth::requireRole(['admin']);
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            // Solo lectura (sesión admin). No muta BD ni archivos.
+            $html = (new MailProductCardService())->previewFromInput($_POST);
+            echo json_encode(['ok' => true, 'html' => $html], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
     }
 
     public function catalogFilters(): void
