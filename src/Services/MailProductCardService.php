@@ -16,6 +16,12 @@ use PDO;
  */
 final class MailProductCardService
 {
+    /** Banner rectangular (layout wide): ancho recomendado en px. */
+    public const WIDE_BANNER_WIDTH = 600;
+
+    /** Banner rectangular (layout wide): alto recomendado en px (ratio 2.5:1). */
+    public const WIDE_BANNER_HEIGHT = 240;
+
     private PDO $pdo;
 
     public function __construct()
@@ -36,7 +42,7 @@ final class MailProductCardService
                 id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                 placeholder VARCHAR(60) NOT NULL,
                 product_id BIGINT UNSIGNED NOT NULL,
-                layout ENUM('square','wide','row') NOT NULL DEFAULT 'wide',
+                layout ENUM('square','square_desc','wide','row','row_flip') NOT NULL DEFAULT 'wide',
                 badge_mode ENUM('discount','banner','both','none') NOT NULL DEFAULT 'discount',
                 badge_text VARCHAR(80) NULL,
                 custom_image_path VARCHAR(255) NULL,
@@ -55,6 +61,32 @@ final class MailProductCardService
         $this->ensureColumn('custom_image_path', 'VARCHAR(255) NULL AFTER badge_text');
         $this->ensureColumn('accent_color', "VARCHAR(7) NOT NULL DEFAULT '#315285' AFTER custom_image_path");
         $this->ensureColumn('cta_label', "VARCHAR(80) NOT NULL DEFAULT 'Ver en catálogo' AFTER accent_color");
+        $this->ensureLayoutEnum();
+    }
+
+    private function ensureLayoutEnum(): void
+    {
+        try {
+            $col = $this->pdo->query("SHOW COLUMNS FROM mail_product_cards LIKE 'layout'");
+            $row = $col ? $col->fetch() : false;
+            $type = is_array($row) ? (string) ($row['Type'] ?? '') : '';
+            $needed = ['square_desc', 'row_flip'];
+            $missing = false;
+            foreach ($needed as $token) {
+                if ($type !== '' && !str_contains($type, $token)) {
+                    $missing = true;
+                    break;
+                }
+            }
+            if ($missing) {
+                $this->pdo->exec(
+                    "ALTER TABLE mail_product_cards
+                     MODIFY COLUMN layout ENUM('square','square_desc','wide','row','row_flip') NOT NULL DEFAULT 'wide'"
+                );
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
     }
 
     private function ensureColumn(string $name, string $definition): void
@@ -471,10 +503,19 @@ final class MailProductCardService
         }
 
         if ($layout === 'row') {
-            return $this->htmlRowCard($safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc, $badgeHtml, $cta, $accent);
+            // Imagen izquierda + texto/descripción derecha.
+            return $this->htmlRowCard($safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc, $badgeHtml, $cta, $accent, false);
+        }
+        if ($layout === 'row_flip') {
+            // Texto/descripción izquierda + imagen derecha.
+            return $this->htmlRowCard($safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc, $badgeHtml, $cta, $accent, true);
+        }
+        if ($layout === 'square_desc') {
+            // Este layout siempre incluye descripción (si el producto la tiene).
+            return $this->htmlSquareCard($safeUrl, $safeLogo, $safeName, $badgeHtml, $cta, $accent, $safeDesc, true);
         }
         if ($layout === 'square') {
-            return $this->htmlSquareCard($safeUrl, $safeLogo, $safeName, $badgeHtml, $cta, $accent);
+            return $this->htmlSquareCard($safeUrl, $safeLogo, $safeName, $badgeHtml, $cta, $accent, $safeDesc, $showDesc);
         }
 
         return $this->htmlWideCard($safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc, $badgeHtml, $cta, $accent);
@@ -620,7 +661,24 @@ final class MailProductCardService
 
     private static function normalizeLayout(string $layout): string
     {
-        return in_array($layout, ['square', 'wide', 'row'], true) ? $layout : 'wide';
+        return in_array($layout, ['square', 'square_desc', 'wide', 'row', 'row_flip'], true) ? $layout : 'wide';
+    }
+
+    /** @return array{width:int,height:int,label:string,hint:string} */
+    public static function wideBannerSpec(): array
+    {
+        $w = self::WIDE_BANNER_WIDTH;
+        $h = self::WIDE_BANNER_HEIGHT;
+
+        return [
+            'width' => $w,
+            'height' => $h,
+            'label' => $w . ' × ' . $h . ' px',
+            'hint' => 'Para «Rectangular grande» sube un banner de '
+                . $w . '×' . $h . ' px (ratio 2.5:1). También sirve el doble ('
+                . ($w * 2) . '×' . ($h * 2) . ') para pantallas retina. '
+                . 'La imagen cubre todo el ancho de la tarjeta sin márgenes.',
+        ];
     }
 
     private static function normalizeBadge(string $badge): string
@@ -726,19 +784,24 @@ final class MailProductCardService
             ? '<p style="margin:0 0 10px;font-size:13px;line-height:1.4;color:#64748b;">' . $desc . '</p>'
             : '';
 
+        $bw = self::WIDE_BANNER_WIDTH;
+        $bh = self::WIDE_BANNER_HEIGHT;
+
+        // Banner a sangre: sin padding; la imagen cubre todo el ancho del bloque.
+        // Medida ideal: 600×240 (o 1200×480). object-fit:cover recorta sin deformar.
         return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
             . 'style="border-collapse:collapse;margin:10px 0;border:1px solid #e6ebf2;border-radius:14px;'
-            . 'overflow:hidden;background:#ffffff;">'
-            . '<tr><td style="padding:0;background:linear-gradient(160deg,#f7f9fc,#e8eef7);text-align:center;'
-            . 'height:140px;vertical-align:middle;position:relative;">'
-            . '<a href="' . $url . '" style="text-decoration:none;display:block;padding:16px;">'
-            . '<img src="' . $logo . '" alt="' . $name . '" width="220" '
-            . 'style="max-width:220px;max-height:100px;width:auto;height:auto;border:0;display:inline-block;">'
+            . 'overflow:hidden;background:#ffffff;max-width:' . $bw . 'px;">'
+            . '<tr><td style="padding:0;line-height:0;font-size:0;background:#e8eef7;">'
+            . '<a href="' . $url . '" style="text-decoration:none;display:block;line-height:0;">'
+            . '<img src="' . $logo . '" alt="' . $name . '" width="' . $bw . '" height="' . $bh . '" '
+            . 'style="display:block;width:100%;max-width:' . $bw . 'px;height:auto;aspect-ratio:'
+            . $bw . ' / ' . $bh . ';object-fit:cover;object-position:center;border:0;">'
             . '</a>'
-            . ($badgeHtml !== ''
-                ? '<div style="padding:0 12px 12px 12px;text-align:left;">' . $badgeHtml . '</div>'
-                : '')
             . '</td></tr>'
+            . ($badgeHtml !== ''
+                ? '<tr><td style="padding:10px 14px 0 14px;background:#ffffff;">' . $badgeHtml . '</td></tr>'
+                : '')
             . '<tr><td style="padding:14px 16px 16px;">'
             . '<p style="margin:0 0 6px;font-size:16px;font-weight:800;color:' . $accent . ';line-height:1.3;">'
             . '<a href="' . $url . '" style="color:' . $accent . ';text-decoration:none;">' . $name . '</a></p>'
@@ -755,8 +818,14 @@ final class MailProductCardService
         string $name,
         string $badgeHtml,
         string $cta,
-        string $accent
+        string $accent,
+        string $desc = '',
+        bool $showDesc = false
     ): string {
+        $descBlock = ($showDesc && $desc !== '')
+            ? '<p style="margin:0 0 8px;font-size:12px;line-height:1.35;color:#64748b;text-align:left;">' . $desc . '</p>'
+            : '';
+
         return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
             . 'style="border-collapse:collapse;border:1px solid #e6ebf2;border-radius:12px;'
             . 'overflow:hidden;background:#ffffff;max-width:260px;">'
@@ -770,6 +839,7 @@ final class MailProductCardService
             . ($badgeHtml !== '' ? '<div style="margin:0 0 8px;">' . $badgeHtml . '</div>' : '')
             . '<p style="margin:0 0 8px;font-size:13px;font-weight:800;color:' . $accent . ';line-height:1.25;">'
             . '<a href="' . $url . '" style="color:' . $accent . ';text-decoration:none;">' . $name . '</a></p>'
+            . $descBlock
             . '<a href="' . $url . '" style="display:inline-block;background:' . $accent . ';color:#ffffff;'
             . 'text-decoration:none;font-weight:700;font-size:12px;padding:7px 10px;border-radius:8px;">'
             . $cta . '</a>'
@@ -784,23 +854,21 @@ final class MailProductCardService
         bool $showDesc,
         string $badgeHtml,
         string $cta,
-        string $accent
+        string $accent,
+        bool $imageOnRight = false
     ): string {
         $descBlock = ($showDesc && $desc !== '')
             ? '<p style="margin:0 0 8px;font-size:12px;line-height:1.4;color:#64748b;">' . $desc . '</p>'
             : '';
 
-        return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
-            . 'style="border-collapse:collapse;margin:10px 0;border:1px solid #e6ebf2;border-radius:12px;'
-            . 'overflow:hidden;background:#ffffff;">'
-            . '<tr>'
-            . '<td width="38%" style="padding:12px;background:linear-gradient(160deg,#f7f9fc,#e8eef7);'
+        $imageCell = '<td width="38%" style="padding:12px;background:linear-gradient(160deg,#f7f9fc,#e8eef7);'
             . 'text-align:center;vertical-align:middle;">'
             . '<a href="' . $url . '" style="text-decoration:none;">'
             . '<img src="' . $logo . '" alt="' . $name . '" width="150" '
             . 'style="max-width:150px;max-height:90px;width:auto;height:auto;border:0;">'
-            . '</a></td>'
-            . '<td width="62%" style="padding:14px 16px;vertical-align:middle;">'
+            . '</a></td>';
+
+        $textCell = '<td width="62%" style="padding:14px 16px;vertical-align:middle;">'
             . ($badgeHtml !== '' ? '<div style="margin:0 0 8px;">' . $badgeHtml . '</div>' : '')
             . '<p style="margin:0 0 6px;font-size:15px;font-weight:800;color:' . $accent . ';">'
             . '<a href="' . $url . '" style="color:' . $accent . ';text-decoration:none;">' . $name . '</a></p>'
@@ -808,6 +876,13 @@ final class MailProductCardService
             . '<a href="' . $url . '" style="display:inline-block;background:' . $accent . ';color:#ffffff;'
             . 'text-decoration:none;font-weight:700;font-size:12px;padding:8px 12px;border-radius:8px;">'
             . $cta . '</a>'
-            . '</td></tr></table>';
+            . '</td>';
+
+        $cells = $imageOnRight ? ($textCell . $imageCell) : ($imageCell . $textCell);
+
+        return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
+            . 'style="border-collapse:collapse;margin:10px 0;border:1px solid #e6ebf2;border-radius:12px;'
+            . 'overflow:hidden;background:#ffffff;">'
+            . '<tr>' . $cells . '</tr></table>';
     }
 }
