@@ -97,7 +97,7 @@ final class MailTemplateService
         ],
         'Publicidad / campañas' => [
             'catalog_url' => 'URL del catálogo público',
-            'promo_code' => 'Código promocional de la campaña',
+            'promo_code' => 'Código Promo DOCEO del mes (campaña)',
         ],
     ];
 
@@ -957,7 +957,9 @@ final class MailTemplateService
             'partner_code' => 'PARTNER01',
             'partner_email' => 'partner@ejemplo.com',
             'catalog_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/catalogo',
-            'promo_code' => 'ANTIGUO15',
+            'promo_code' => PromoDoceoService::currentCode() !== ''
+                ? PromoDoceoService::currentCode()
+                : 'PROMOMES',
         ]);
 
         $out = [];

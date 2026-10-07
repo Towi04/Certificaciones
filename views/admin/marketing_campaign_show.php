@@ -24,8 +24,16 @@ $cid = (int) $campaign['id'];
         <p class="muted" style="margin:.2rem 0 0">
             Estado: <span class="pill"><?= e($statusLabels[$st] ?? $st) ?></span>
             · Plantilla <code><?= e((string) $campaign['mail_template_code']) ?></code>
+            <?php
+            $promoMonthShow = (int) ($audience['promo_month'] ?? 0);
+            $promoLabels = \App\Services\PromoDoceoService::monthLabels();
+            $promoMonthLabel = $promoMonthShow > 0
+                ? ($promoLabels[$promoMonthShow] ?? ('Mes ' . $promoMonthShow))
+                : 'Mes actual';
+            ?>
+            · Promo DOCEO: <strong><?= e($promoMonthLabel) ?></strong>
             <?php if (!empty($campaign['promo_code'])): ?>
-                · Promo <code><?= e((string) $campaign['promo_code']) ?></code>
+                (<code><?= e((string) $campaign['promo_code']) ?></code>)
             <?php endif; ?>
         </p>
     </div>
@@ -89,20 +97,22 @@ $cid = (int) $campaign['id'];
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin:.2rem 0 .75rem;font-size:1.05rem;color:var(--doceo-blue)">Programación</h2>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;font-size:.9rem">
-        <div><span class="muted">Ventana</span><br>
+        <div><span class="muted">Rango de fechas</span><br>
             <strong><?= e((string) $campaign['window_start']) ?></strong>
             → <strong><?= e((string) $campaign['window_end']) ?></strong>
         </div>
-        <div><span class="muted">Intervalo</span><br>
-            <strong><?= max(1, (int) round(((int) $campaign['interval_seconds']) / 60)) ?> min</strong>
-            entre correos
-        </div>
-        <div><span class="muted">Horario diario</span><br>
-            <strong><?= (int) $campaign['day_hour_start'] ?>:00 – <?= (int) $campaign['day_hour_end'] ?>:00</strong>
-        </div>
-        <div><span class="muted">Máx. por cron</span><br>
-            <strong><?= (int) $campaign['max_per_run'] ?></strong> correos
-        </div>
+        <?php if (in_array($st, ['running', 'scheduled', 'paused', 'completed'], true)): ?>
+            <div><span class="muted">Ritmo automático</span><br>
+                <strong><?= max(1, (int) round(((int) $campaign['interval_seconds']) / 60)) ?> min</strong>
+                entre correos
+                · <?= (int) $campaign['day_hour_start'] ?>:00–<?= (int) $campaign['day_hour_end'] ?>:00
+            </div>
+        <?php else: ?>
+            <div><span class="muted">Anti-spam</span><br>
+                <strong>Automático</strong>
+                <span class="muted" style="display:block;font-size:.8rem">Se calcula al iniciar el envío</span>
+            </div>
+        <?php endif; ?>
     </div>
     <?php if (!empty($campaign['notes'])): ?>
         <p class="muted" style="margin:.85rem 0 0;font-size:.85rem"><?= e((string) $campaign['notes']) ?></p>
@@ -111,18 +121,39 @@ $cid = (int) $campaign['id'];
 
 <div class="panel" style="margin-top:.85rem">
     <h2 style="margin:.2rem 0 .75rem;font-size:1.05rem;color:var(--doceo-blue)">Audiencia</h2>
+    <?php
+    $incClients = array_key_exists('include_clients', $audience)
+        ? !empty($audience['include_clients'])
+        : (!empty($audience['include_students']) || !empty($audience['include_legacy']));
+    $incPartners = !empty($audience['include_partners']);
+    if (!$incClients && !$incPartners) {
+        $incClients = true;
+    }
+    $productNames = [];
+    foreach ($products ?? [] as $p) {
+        $productNames[(int) $p['id']] = (string) $p['name'];
+    }
+    $certifierNames = [];
+    foreach ($certifiers ?? [] as $c) {
+        $certifierNames[(int) $c['id']] = (string) $c['name'];
+    }
+    ?>
     <ul class="muted" style="margin:0;padding-left:1.1rem;font-size:.88rem;line-height:1.5">
-        <li><?= !empty($audience['include_students']) ? 'Incluye' : 'No incluye' ?> compradores del sistema</li>
-        <li><?= !empty($audience['include_partners']) ? 'Incluye' : 'No incluye' ?> partners</li>
-        <li><?= !empty($audience['include_legacy']) ? 'Incluye' : 'No incluye' ?> clientes anteriores (CSV)</li>
+        <?php if ($incClients && $incPartners): ?>
+            <li>Clientes (alumnos + anteriores) y partners</li>
+        <?php elseif ($incPartners): ?>
+            <li>Solo partners</li>
+        <?php else: ?>
+            <li>Todos los clientes (alumnos del sistema + clientes anteriores)</li>
+        <?php endif; ?>
         <?php if (!empty($audience['product_id'])): ?>
-            <li>Filtro producto #<?= (int) $audience['product_id'] ?></li>
-        <?php endif; ?>
-        <?php if (!empty($audience['supplier_id'])): ?>
-            <li>Filtro proveedor #<?= (int) $audience['supplier_id'] ?></li>
-        <?php endif; ?>
-        <?php if (!empty($audience['certifier_id'])): ?>
-            <li>Filtro certificadora #<?= (int) $audience['certifier_id'] ?></li>
+            <li>Certificación:
+                <?= e($productNames[(int) $audience['product_id']] ?? ('#' . (int) $audience['product_id'])) ?>
+            </li>
+        <?php elseif (!empty($audience['certifier_id'])): ?>
+            <li>Certificadora:
+                <?= e($certifierNames[(int) $audience['certifier_id']] ?? ('#' . (int) $audience['certifier_id'])) ?>
+            </li>
         <?php endif; ?>
     </ul>
     <?php if (in_array($st, ['draft', 'paused'], true)): ?>

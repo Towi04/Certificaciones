@@ -138,6 +138,31 @@ final class PromoDoceoService
     }
 
     /**
+     * Código del mes indicado (1–12). Si $year es null usa el año actual.
+     */
+    public static function codeForMonth(int $month, ?int $year = null): string
+    {
+        $month = max(1, min(12, $month));
+        $year = $year ?? (int) date('Y');
+        $cal = self::getCalendar($year);
+
+        return $cal['codes'][$month] ?? '';
+    }
+
+    /**
+     * Resuelve el código Promo DOCEO: mes 0 = actual al momento de la consulta.
+     */
+    public static function resolveCampaignCode(int $promoMonth, ?int $year = null, ?\DateTimeInterface $now = null): string
+    {
+        $now = $now ?? new \DateTimeImmutable('now');
+        if ($promoMonth <= 0) {
+            return self::currentCode($now);
+        }
+
+        return self::codeForMonth($promoMonth, $year ?? (int) $now->format('Y'));
+    }
+
+    /**
      * Guarda el calendario anual y sincroniza filas en discount_codes con vigencia mensual.
      *
      * @param array<int|string, string> $codesByMonth mes => código

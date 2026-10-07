@@ -9,8 +9,8 @@ use App\Database\Connection;
 use PDO;
 
 /**
- * Campañas de publicidad: audiencia (compradores / partners / legacy),
- * programación en ventana de fechas e intervalo anti-spam.
+ * Campañas de publicidad: audiencia (clientes unificados + partners),
+ * Promo DOCEO por mes y programación anti-spam automática en un rango de fechas.
  */
 final class MarketingCampaignService
 {
@@ -251,12 +251,19 @@ final class MarketingCampaignService
             throw new \InvalidArgumentException('La audiencia no tiene destinatarios con correo válido.');
         }
 
+        $auto = $this->autoAntiSpamParams(
+            (string) $campaign['window_start'],
+            (string) $campaign['window_end'],
+            count($recipients)
+        );
+        $promoCode = $this->resolvePromoCode($audience, (string) $campaign['window_start']);
+
         $times = $this->buildSchedule(
             (string) $campaign['window_start'],
             (string) $campaign['window_end'],
-            (int) $campaign['interval_seconds'],
-            (int) $campaign['day_hour_start'],
-            (int) $campaign['day_hour_end'],
+            $auto['interval_seconds'],
+            $auto['day_hour_start'],
+            $auto['day_hour_end'],
             count($recipients)
         );
 
@@ -303,9 +310,19 @@ final class MarketingCampaignService
 
             $this->pdo->prepare(
                 'UPDATE marketing_campaigns
-                 SET status = ?, started_at = COALESCE(started_at, NOW()), completed_at = NULL
+                 SET status = ?, started_at = COALESCE(started_at, NOW()), completed_at = NULL,
+                     interval_seconds = ?, day_hour_start = ?, day_hour_end = ?, max_per_run = ?,
+                     promo_code = ?
                  WHERE id = ?'
-            )->execute([$status, $id]);
+            )->execute([
+                $status,
+                $auto['interval_seconds'],
+                $auto['day_hour_start'],
+                $auto['day_hour_end'],
+                $auto['max_per_run'],
+                $promoCode !== '' ? $promoCode : null,
+                $id,
+            ]);
 
             $this->pdo->commit();
         } catch (\Throwable $e) {
@@ -366,7 +383,8 @@ final class MarketingCampaignService
         );
 
         $stmt = $this->pdo->query(
-            "SELECT id, mail_template_code, promo_code, max_per_run, window_end, day_hour_start, day_hour_end
+            "SELECT id, mail_template_code, promo_code, audience_json, max_per_run, window_start, window_end,
+                    day_hour_start, day_hour_end
              FROM marketing_campaigns
              WHERE status = 'running'"
         );
@@ -434,26 +452,26 @@ final class MarketingCampaignService
      */
     public function resolveAudience(array $audience): array
     {
-        $includeStudents = !empty($audience['include_students']);
         $includePartners = !empty($audience['include_partners']);
-        $includeLegacy = !empty($audience['include_legacy']);
-        if (!$includeStudents && !$includePartners && !$includeLegacy) {
-            // Por defecto: compradores del sistema.
-            $includeStudents = true;
+        $includeClients = $this->audienceIncludesClients($audience);
+        if (!$includeClients && !$includePartners) {
+            $includeClients = true;
         }
 
         $productId = isset($audience['product_id']) && (int) $audience['product_id'] > 0
             ? (int) $audience['product_id'] : null;
-        $supplierId = isset($audience['supplier_id']) && (int) $audience['supplier_id'] > 0
-            ? (int) $audience['supplier_id'] : null;
         $certifierId = isset($audience['certifier_id']) && (int) $audience['certifier_id'] > 0
             ? (int) $audience['certifier_id'] : null;
+        // Si hay producto concreto, el filtro de certificadora es redundante.
+        if ($productId !== null) {
+            $certifierId = null;
+        }
 
         /** @var array<string, array<string, mixed>> $byEmail */
         $byEmail = [];
 
-        if ($includeStudents) {
-            foreach ($this->fetchStudentBuyers($productId, $supplierId, $certifierId) as $row) {
+        if ($includeClients) {
+            foreach ($this->fetchStudentBuyers($productId, $certifierId) as $row) {
                 $email = strtolower(trim((string) ($row['email'] ?? '')));
                 if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                     continue;
@@ -468,6 +486,30 @@ final class MarketingCampaignService
                         ? (string) $row['product_label'] : null,
                     'source' => 'student',
                     'source_ref' => isset($row['user_id']) ? ('user:' . (int) $row['user_id']) : null,
+                ];
+            }
+
+            foreach ($this->fetchLegacy($productId, $certifierId) as $row) {
+                $email = strtolower(trim((string) ($row['email'] ?? '')));
+                if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    continue;
+                }
+                if (!empty($row['opted_out_at'])) {
+                    continue;
+                }
+                if (isset($byEmail[$email])) {
+                    continue;
+                }
+                $byEmail[$email] = [
+                    'email' => $email,
+                    'full_name' => (string) ($row['full_name'] ?? ''),
+                    'first_name' => (string) ($row['first_name'] ?? ''),
+                    'phone' => ($row['phone'] ?? null) !== null && $row['phone'] !== ''
+                        ? (string) $row['phone'] : null,
+                    'product_label' => ($row['product_name'] ?? null) !== null
+                        ? (string) $row['product_name'] : null,
+                    'source' => 'legacy',
+                    'source_ref' => isset($row['id']) ? ('legacy:' . (int) $row['id']) : null,
                 ];
             }
         }
@@ -490,32 +532,6 @@ final class MarketingCampaignService
                     'product_label' => 'Partner',
                     'source' => 'partner',
                     'source_ref' => isset($row['partner_id']) ? ('partner:' . (int) $row['partner_id']) : null,
-                ];
-            }
-        }
-
-        if ($includeLegacy) {
-            foreach ($this->fetchLegacy($productId, $supplierId) as $row) {
-                $email = strtolower(trim((string) ($row['email'] ?? '')));
-                if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    continue;
-                }
-                if (!empty($row['opted_out_at'])) {
-                    continue;
-                }
-                if (isset($byEmail[$email])) {
-                    continue;
-                }
-                $byEmail[$email] = [
-                    'email' => $email,
-                    'full_name' => (string) ($row['full_name'] ?? ''),
-                    'first_name' => (string) ($row['first_name'] ?? ''),
-                    'phone' => ($row['phone'] ?? null) !== null && $row['phone'] !== ''
-                        ? (string) $row['phone'] : null,
-                    'product_label' => ($row['product_name'] ?? null) !== null
-                        ? (string) $row['product_name'] : null,
-                    'source' => 'legacy',
-                    'source_ref' => isset($row['id']) ? ('legacy:' . (int) $row['id']) : null,
                 ];
             }
         }
@@ -616,35 +632,50 @@ final class MarketingCampaignService
             throw new \InvalidArgumentException('La fecha fin no puede ser anterior al inicio.');
         }
 
-        $intervalSeconds = (int) ($input['interval_seconds'] ?? 0);
-        if ($intervalSeconds <= 0 && isset($input['interval_minutes'])) {
-            $intervalSeconds = (int) round(((float) $input['interval_minutes']) * 60);
-        }
-        if ($intervalSeconds < 30) {
-            $intervalSeconds = 120;
-        }
-        $intervalSeconds = min(86400, $intervalSeconds);
+        // Anti-spam: el admin solo define el rango; el ritmo se calcula al iniciar.
+        $auto = $this->autoAntiSpamParams($windowStart, $windowEnd, 100);
 
-        $dayHourStart = (int) ($input['day_hour_start'] ?? 9);
-        $dayHourEnd = (int) ($input['day_hour_end'] ?? 18);
-        $dayHourStart = max(0, min(23, $dayHourStart));
-        $dayHourEnd = max($dayHourStart + 1, min(24, $dayHourEnd));
+        $mode = trim((string) ($input['audience_mode'] ?? ''));
+        $includeClients = true;
+        $includePartners = false;
+        if ($mode === 'partners') {
+            $includeClients = false;
+            $includePartners = true;
+        } elseif ($mode === 'both') {
+            $includeClients = true;
+            $includePartners = true;
+        } elseif ($mode === 'clients') {
+            $includeClients = true;
+            $includePartners = false;
+        } else {
+            // Compatibilidad con formularios antiguos / API.
+            $includePartners = !empty($input['include_partners']);
+            if (array_key_exists('include_clients', $input)) {
+                $includeClients = !empty($input['include_clients']);
+            } else {
+                $includeClients = !empty($input['include_students'])
+                    || !empty($input['include_legacy'])
+                    || !$includePartners;
+            }
+        }
+        if (!$includeClients && !$includePartners) {
+            $includeClients = true;
+        }
 
-        $maxPerRun = max(1, min(50, (int) ($input['max_per_run'] ?? 15)));
+        $promoMonth = max(0, min(12, (int) ($input['promo_month'] ?? 0)));
 
         $audience = [
-            'include_students' => !empty($input['include_students']),
-            'include_partners' => !empty($input['include_partners']),
-            'include_legacy' => !empty($input['include_legacy']),
+            'include_clients' => $includeClients,
+            'include_partners' => $includePartners,
+            // Compat para campañas/vistas antiguas.
+            'include_students' => $includeClients,
+            'include_legacy' => $includeClients,
             'product_id' => (int) ($input['product_id'] ?? 0) ?: null,
-            'supplier_id' => (int) ($input['supplier_id'] ?? 0) ?: null,
             'certifier_id' => (int) ($input['certifier_id'] ?? 0) ?: null,
+            'promo_month' => $promoMonth,
         ];
-        if (!$audience['include_students'] && !$audience['include_partners'] && !$audience['include_legacy']) {
-            $audience['include_students'] = true;
-        }
 
-        $promo = strtoupper(trim((string) ($input['promo_code'] ?? '')));
+        $promo = $this->resolvePromoCode($audience, $windowStart);
         $notes = trim((string) ($input['notes'] ?? ''));
 
         return [
@@ -654,16 +685,93 @@ final class MarketingCampaignService
             'audience' => $audience,
             'window_start' => $windowStart,
             'window_end' => $windowEnd,
-            'interval_seconds' => $intervalSeconds,
-            'day_hour_start' => $dayHourStart,
-            'day_hour_end' => $dayHourEnd,
-            'max_per_run' => $maxPerRun,
+            'interval_seconds' => $auto['interval_seconds'],
+            'day_hour_start' => $auto['day_hour_start'],
+            'day_hour_end' => $auto['day_hour_end'],
+            'max_per_run' => $auto['max_per_run'],
             'notes' => $notes !== '' ? $notes : null,
         ];
     }
 
+    /**
+     * Parámetros anti-spam derivados solo del rango de fechas y el tamaño de audiencia.
+     *
+     * @return array{interval_seconds:int,day_hour_start:int,day_hour_end:int,max_per_run:int}
+     */
+    public function autoAntiSpamParams(string $windowStart, string $windowEnd, int $recipientCount): array
+    {
+        $dayHourStart = 9;
+        $dayHourEnd = 18;
+        $maxPerRun = 15;
+        $recipientCount = max(1, $recipientCount);
+
+        try {
+            $start = new \DateTimeImmutable($windowStart . ' 00:00:00');
+            $end = new \DateTimeImmutable($windowEnd . ' 00:00:00');
+        } catch (\Throwable) {
+            return [
+                'interval_seconds' => 180,
+                'day_hour_start' => $dayHourStart,
+                'day_hour_end' => $dayHourEnd,
+                'max_per_run' => $maxPerRun,
+            ];
+        }
+
+        if ($end < $start) {
+            $end = $start;
+        }
+        $days = (int) $start->diff($end)->days + 1;
+        $hoursPerDay = max(1, $dayHourEnd - $dayHourStart);
+        $usableSeconds = max(3600, $days * $hoursPerDay * 3600);
+
+        // Reparto uniforme; mínimo ~90s entre correos, máximo 1h.
+        $interval = (int) max(90, min(3600, (int) floor($usableSeconds / $recipientCount)));
+
+        // Si hay pocos destinatarios en muchos días, no alargar más de ~20 min.
+        if ($recipientCount <= max(1, $days * 3)) {
+            $interval = min($interval, 1200);
+        }
+
+        return [
+            'interval_seconds' => $interval,
+            'day_hour_start' => $dayHourStart,
+            'day_hour_end' => $dayHourEnd,
+            'max_per_run' => $maxPerRun,
+        ];
+    }
+
+    /** @param array<string, mixed> $audience */
+    private function audienceIncludesClients(array $audience): bool
+    {
+        if (array_key_exists('include_clients', $audience)) {
+            return !empty($audience['include_clients']);
+        }
+        // Campañas antiguas: estudiantes o legacy cuentan como clientes.
+        if (array_key_exists('include_students', $audience) || array_key_exists('include_legacy', $audience)) {
+            return !empty($audience['include_students']) || !empty($audience['include_legacy']);
+        }
+
+        return true;
+    }
+
+    /** @param array<string, mixed> $audience */
+    private function resolvePromoCode(array $audience, string $windowStart): string
+    {
+        $promoMonth = (int) ($audience['promo_month'] ?? 0);
+        $year = null;
+        if (preg_match('/^(\d{4})-\d{2}-\d{2}$/', $windowStart, $m)) {
+            $year = (int) $m[1];
+        }
+        // Mes actual: se resuelve al enviar (año/mes de “ahora”).
+        if ($promoMonth <= 0) {
+            return PromoDoceoService::currentCode();
+        }
+
+        return PromoDoceoService::codeForMonth($promoMonth, $year);
+    }
+
     /** @return list<array<string, mixed>> */
-    private function fetchStudentBuyers(?int $productId, ?int $supplierId, ?int $certifierId): array
+    private function fetchStudentBuyers(?int $productId, ?int $certifierId): array
     {
         $sql = 'SELECT u.id AS user_id, u.email, u.first_name, u.last_name_p, u.last_name_m, u.phone,
                        TRIM(CONCAT(u.first_name, \' \', u.last_name_p, \' \', u.last_name_m)) AS full_name,
@@ -672,17 +780,13 @@ final class MarketingCampaignService
                 INNER JOIN users u ON u.id = pu.student_user_id
                 INNER JOIN purchase_items pi ON pi.purchase_id = pu.id
                 INNER JOIN products pr ON pr.id = pi.product_id
-                WHERE pu.status = \'paid\'
+                WHERE pu.status NOT IN (\'cancelled\', \'refunded\', \'draft\')
                   AND u.email IS NOT NULL AND u.email != \'\'
                   AND u.is_active = 1';
         $params = [];
         if ($productId !== null) {
             $sql .= ' AND pr.id = ?';
             $params[] = $productId;
-        }
-        if ($supplierId !== null) {
-            $sql .= ' AND pr.supplier_id = ?';
-            $params[] = $supplierId;
         }
         if ($certifierId !== null) {
             $sql .= ' AND pr.certifier_id = ?';
@@ -711,16 +815,18 @@ final class MarketingCampaignService
     }
 
     /** @return list<array<string, mixed>> */
-    private function fetchLegacy(?int $productId, ?int $supplierId): array
+    private function fetchLegacy(?int $productId, ?int $certifierId): array
     {
-        $sql = 'SELECT * FROM marketing_contacts WHERE opted_out_at IS NULL';
+        $sql = 'SELECT mc.* FROM marketing_contacts mc';
         $params = [];
+        if ($certifierId !== null) {
+            $sql .= ' INNER JOIN products pr ON pr.id = mc.product_id AND pr.certifier_id = ?';
+            $params[] = $certifierId;
+        }
+        $sql .= ' WHERE mc.opted_out_at IS NULL';
         if ($productId !== null) {
-            $sql .= ' AND product_id = ?';
+            $sql .= ' AND mc.product_id = ?';
             $params[] = $productId;
-        } elseif ($supplierId !== null) {
-            $sql .= ' AND supplier_id = ?';
-            $params[] = $supplierId;
         }
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
@@ -746,6 +852,21 @@ final class MarketingCampaignService
             $parts = preg_split('/\s+/', $full) ?: [];
             $first = (string) ($parts[0] ?? $full);
         }
+
+        $audience = json_decode((string) ($campaign['audience_json'] ?? '{}'), true);
+        if (!is_array($audience)) {
+            $audience = [];
+        }
+        $promoMonth = (int) ($audience['promo_month'] ?? 0);
+        if ($promoMonth <= 0) {
+            $promoCode = PromoDoceoService::currentCode();
+        } else {
+            $promoCode = (string) ($campaign['promo_code'] ?? '');
+            if ($promoCode === '') {
+                $promoCode = $this->resolvePromoCode($audience, (string) ($campaign['window_start'] ?? date('Y-m-d')));
+            }
+        }
+
         $vars = [
             'name' => $first !== '' ? $first : $full,
             'first_name' => $first,
@@ -756,7 +877,7 @@ final class MarketingCampaignService
             'certificacion' => (string) ($row['product_label'] ?? ''),
             'catalog_url' => $base !== '' ? $base . '/catalogo' : '/catalogo',
             'login_url' => $base !== '' ? $base . '/login' : '/login',
-            'promo_code' => (string) ($campaign['promo_code'] ?? ''),
+            'promo_code' => $promoCode,
             'partner_name' => '',
             'partner_code' => '',
             'partner_email' => '',
