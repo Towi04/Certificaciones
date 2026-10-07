@@ -57,7 +57,8 @@ final class CheckoutService
         ?string $promoCode,
         int $cardMsiMonths = 1,
         ?array $exam = null,
-        ?int $comboId = null
+        ?int $comboId = null,
+        bool $usePartnerCredit = false
     ): array {
         $product = $this->products->find($productId);
         if ($product === null || !(int) $product['is_active'] || !(int) $product['is_public']) {
@@ -85,9 +86,9 @@ final class CheckoutService
         $openpayConfigured = trim((string) (Env::get('OPENPAY_MERCHANT_ID', '') ?? '')) !== ''
             && trim((string) (Env::get('OPENPAY_PRIVATE_KEY', '') ?? '')) !== '';
 
-        $allowedPay = ['transfer_proof', 'openpay_spei', 'openpay_card', 'openpay_store'];
+        $allowedPay = ['transfer_proof', 'openpay_spei', 'openpay_card', 'openpay_store', 'credit'];
         if (!$openpayConfigured) {
-            $allowedPay = ['transfer_proof', 'openpay_store'];
+            $allowedPay = ['transfer_proof', 'openpay_store', 'credit'];
         }
         if (!in_array($paymentMethod, $allowedPay, true)) {
             throw new \InvalidArgumentException('Método de pago inválido.');
@@ -165,9 +166,23 @@ final class CheckoutService
             $quote['base'] = $baseAmount;
         }
         $pricingProduct = $combo ?? $product;
-        $pricing = $this->resolvePaymentAmount($baseAmount, $pricingProduct, $paymentMethod, $cardMsiMonths);
+        // El crédito partner solo aplica en transferencia (o pago 100% con crédito).
+        if ($usePartnerCredit && $paymentMethod === 'credit') {
+            // ok
+        } elseif ($usePartnerCredit && $paymentMethod !== 'transfer_proof') {
+            throw new \InvalidArgumentException(
+                'El crédito a favor solo se puede usar con transferencia o para cubrir el total.'
+            );
+        }
+        if ($paymentMethod === 'credit' && !$usePartnerCredit) {
+            $usePartnerCredit = true;
+        }
+
+        $pricingMethod = $paymentMethod === 'credit' ? 'transfer_proof' : $paymentMethod;
+        $pricing = $this->resolvePaymentAmount($baseAmount, $pricingProduct, $pricingMethod, $cardMsiMonths);
         $chargeAmount = $pricing['gross'];
         $storedMsiMonths = $pricing['msi'];
+        $orderTotal = $chargeAmount;
 
         $account = null;
         $purchaseId = 0;
@@ -177,6 +192,7 @@ final class CheckoutService
         $openpay = null;
         $redirectUrl = null;
         $cardPaymentUrl = null;
+        $creditUsed = 0.0;
 
         $this->pdo->beginTransaction();
         try {
@@ -184,9 +200,6 @@ final class CheckoutService
             $studentUserId = (int) $account['user']['id'];
 
             $matricula = $this->purchases->nextMatricula();
-            $status = in_array($paymentMethod, ['transfer_proof', 'openpay_store'], true)
-                ? 'payment_review'
-                : 'awaiting_payment';
 
             $partnerCredit = round((float) ($quote['partner_credit'] ?? 0), 2);
             $partnerPriceAmt = isset($quote['partner_price']) && $quote['partner_price'] !== null
@@ -196,6 +209,28 @@ final class CheckoutService
             if ($partnerId && $partnerCredit <= 0 && $partnerPriceAmt !== null && $partnerPriceAmt > 0) {
                 $partnerCredit = max(0.0, round($baseAmount - $partnerPriceAmt, 2));
             }
+
+            // Partner logueado: puede descontar su saldo a favor del monto a pagar.
+            if ($usePartnerCredit) {
+                if (!$isPartnerSession || !$partnerId) {
+                    throw new \InvalidArgumentException('Solo un partner puede usar crédito a favor.');
+                }
+                $creditUsed = $this->consumePartnerCredit((int) $partnerId, $orderTotal);
+                $chargeAmount = max(0.0, round($orderTotal - $creditUsed, 2));
+                if ($chargeAmount <= 0.009) {
+                    $chargeAmount = 0.0;
+                    $paymentMethod = 'credit';
+                    $storedMsiMonths = null;
+                } else {
+                    $paymentMethod = 'transfer_proof';
+                }
+                // Partner registrando no genera crédito ganado.
+                $partnerCredit = 0.0;
+            }
+
+            $status = in_array($paymentMethod, ['transfer_proof', 'openpay_store', 'credit'], true)
+                ? 'payment_review'
+                : 'awaiting_payment';
 
             $purchaseId = $this->purchases->create([
                 'matricula' => $matricula,
@@ -211,12 +246,13 @@ final class CheckoutService
                 'card_msi_months' => $storedMsiMonths,
                 'partner_price_amount' => $partnerPriceAmt,
                 'partner_credit_earned' => $partnerCredit,
+                'partner_credit_used' => $creditUsed,
             ]);
 
             $lineProducts = $comboItems !== [] ? $comboItems : [$product];
             $sharesById = [];
             if (count($lineProducts) > 1) {
-                $breakdown = ComboAdminService::priceBreakdown($lineProducts, $chargeAmount);
+                $breakdown = ComboAdminService::priceBreakdown($lineProducts, $orderTotal);
                 foreach ($breakdown['items'] as $row) {
                     $sharesById[(int) $row['id']] = (float) $row['combo_share'];
                 }
@@ -224,15 +260,21 @@ final class CheckoutService
             $n = count($lineProducts);
             $allocated = 0.0;
             $firstTrackingId = 0;
+            $creditNote = $creditUsed > 0
+                ? (' · crédito partner $' . number_format($creditUsed, 2)
+                    . ($chargeAmount > 0
+                        ? (' · transferir $' . number_format($chargeAmount, 2))
+                        : ' · cubierto al 100% con crédito'))
+                : '';
             foreach ($lineProducts as $idx => $lineProduct) {
                 $lineProductId = (int) $lineProduct['id'];
                 if ($idx === $n - 1) {
-                    $lineCharge = round($chargeAmount - $allocated, 2);
+                    $lineCharge = round($orderTotal - $allocated, 2);
                 } elseif (isset($sharesById[$lineProductId])) {
                     $lineCharge = round($sharesById[$lineProductId], 2);
                     $allocated += $lineCharge;
                 } else {
-                    $lineCharge = round($chargeAmount / $n, 2);
+                    $lineCharge = round($orderTotal / $n, 2);
                     $allocated += $lineCharge;
                 }
                 $itemId = $this->purchases->addItem(
@@ -244,7 +286,9 @@ final class CheckoutService
 
                 $pipelineId = $this->resolvePipelineId($lineProduct);
                 $stepCode = TrackingService::initialStepCode($lineProduct, (string) $lineProduct['type'], $required);
-                $trackStatus = TrackingService::initialStatus($paymentMethod);
+                $trackStatus = TrackingService::initialStatus(
+                    $paymentMethod === 'credit' ? 'transfer_proof' : $paymentMethod
+                );
                 $tid = $this->trackings->create([
                     'purchase_id' => $purchaseId,
                     'purchase_item_id' => $itemId,
@@ -268,7 +312,7 @@ final class CheckoutService
                     $tid,
                     $stepCode,
                     ($combo !== null ? ('Combo ' . $combo['code'] . ' · ') : '')
-                        . 'Compra registrada · matrícula ' . $matricula,
+                        . 'Compra registrada · matrícula ' . $matricula . $creditNote,
                     $studentUserId,
                 ]);
             }
@@ -278,10 +322,16 @@ final class CheckoutService
                 $this->saveReglamentoFirmado($reglamento, $files, $purchaseId, $firstTrackingId, $studentUserId);
             }
 
-            if (in_array($paymentMethod, ['transfer_proof', 'openpay_store'], true)) {
+            if ($paymentMethod === 'credit') {
+                // Cubierto solo con crédito: sin comprobante; admin confirma el uso del saldo.
+            } elseif (in_array($paymentMethod, ['transfer_proof', 'openpay_store'], true)) {
                 $proof = $files['payment_proof'] ?? null;
                 if ($proof === null || ($proof['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
-                    throw new \InvalidArgumentException('Sube el comprobante de pago.');
+                    throw new \InvalidArgumentException(
+                        $creditUsed > 0
+                            ? 'Sube el comprobante por el restante a transferir (' . money($chargeAmount) . ').'
+                            : 'Sube el comprobante de pago.'
+                    );
                 }
                 $stored = $this->documents->storeUploaded($proof, 'payments/' . $purchaseId, '.pdf,.jpg,.jpeg,.png');
                 $this->purchases->setPaymentProof($purchaseId, $stored['path']);
@@ -488,6 +538,38 @@ final class CheckoutService
         }
 
         throw new \InvalidArgumentException('Método de pago inválido.');
+    }
+
+    /**
+     * Descuenta del saldo del partner (con bloqueo de fila) hasta $maxAmount.
+     */
+    private function consumePartnerCredit(int $partnerId, float $maxAmount): float
+    {
+        $maxAmount = max(0.0, round($maxAmount, 2));
+        if ($partnerId < 1 || $maxAmount <= 0) {
+            return 0.0;
+        }
+        $stmt = $this->pdo->prepare(
+            'SELECT credit_balance FROM partners WHERE id = ? AND is_active = 1 FOR UPDATE'
+        );
+        $stmt->execute([$partnerId]);
+        $balance = round((float) ($stmt->fetchColumn() ?: 0), 2);
+        if ($balance <= 0) {
+            throw new \InvalidArgumentException('No tienes saldo a favor disponible.');
+        }
+        $use = min($balance, $maxAmount);
+        if ($use <= 0) {
+            return 0.0;
+        }
+        $upd = $this->pdo->prepare(
+            'UPDATE partners SET credit_balance = credit_balance - ? WHERE id = ? AND credit_balance >= ?'
+        );
+        $upd->execute([$use, $partnerId, $use]);
+        if ($upd->rowCount() < 1) {
+            throw new \InvalidArgumentException('No se pudo aplicar el crédito; intenta de nuevo.');
+        }
+
+        return round($use, 2);
     }
 
     /**

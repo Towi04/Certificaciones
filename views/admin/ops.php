@@ -33,11 +33,13 @@ $extraColHeader = count($extraColLabels) === 1
     <div class="ops-header">
         <div>
             <h1 style="margin:0;color:var(--doceo-blue)">Operación</h1>
-            <p class="muted" style="margin:.35rem 0 0;max-width:48rem">
-                Una sola tabla con los casos. Los botones salen de la configuración del grupo
-                (confirmar pago, solicitud al proveedor, accesos, etc.). El comprobante DOCEO→proveedor
-                se sube en el detalle del caso (clic en la matrícula).
-            </p>
+            <?php if (isset($partnerCreditTotal)): ?>
+                <p style="margin:.4rem 0 0;font-size:.92rem">
+                    Crédito partners (apartado):
+                    <strong style="color:var(--doceo-blue)"><?= money((float) $partnerCreditTotal) ?></strong>
+                    <span class="muted" style="font-size:.8rem">· suma de saldos a favor activos</span>
+                </p>
+            <?php endif; ?>
         </div>
         <div class="ops-header-actions" style="display:flex;flex-wrap:wrap;gap:.45rem;align-items:center">
             <?php if ($hasAccessEditors): ?>
@@ -281,18 +283,33 @@ $extraColHeader = count($extraColLabels) === 1
                                         ? url('/admin/compras/' . $pid . '/comprobante')
                                         : '';
                                     ?>
+                                    <?php
+                                    $creditUsedOps = (float) ($r['partner_credit_used'] ?? 0);
+                                    $cashDueOps = (float) ($r['charged_amount'] ?? 0);
+                                    $orderTotalOps = $cashDueOps + $creditUsedOps;
+                                    $creditWarn = $creditUsedOps > 0.009
+                                        ? ('Se usó crédito a favor: ' . money($creditUsedOps)
+                                            . ($cashDueOps > 0.009
+                                                ? (' · verifica transferencia por ' . money($cashDueOps)
+                                                    . ' (orden ' . money($orderTotalOps) . ')')
+                                                : ' · sin transferencia (100% crédito)'))
+                                        : '';
+                                    ?>
                                     <button type="button"
                                             class="<?= e($btnClass) ?> ops-confirm-pay-btn"
                                             data-confirm-url="<?= e(url('/admin/compras/' . $pid . '/confirmar-pago')) ?>"
                                             data-proof-url="<?= e($proofUrl) ?>"
                                             data-has-proof="<?= $hasProof ? '1' : '0' ?>"
+                                            data-credit-used="<?= $creditUsedOps > 0.009 ? '1' : '0' ?>"
+                                            data-credit-warn="<?= e($creditWarn) ?>"
                                             data-return-view="<?= e($view) ?>"
                                             data-return-q="<?= e($q) ?>"
                                             data-csrf="<?= e(csrf_token()) ?>"
                                             data-title="<?= e((!empty($r['is_package'])
                                                 ? 'Confirmar pago del paquete'
                                                 : 'Confirmar pago') . ' · ' . (string) ($r['matricula'] ?? '')) ?>"
-                                            title="<?= e((!empty($r['is_package'])
+                                            title="<?= e(($creditWarn !== '' ? $creditWarn . ' · ' : '')
+                                                . (!empty($r['is_package'])
                                                 ? 'Confirma el pago único del paquete; aplica a todos los productos de la matrícula'
                                                 : 'Confirmar pago (ver comprobante)') . ' · ' . $label) ?>"
                                             aria-label="<?= e($label) ?>">
@@ -639,7 +656,14 @@ $extraColHeader = count($extraColLabels) === 1
                         </td>
                         <td>
                             <span class="pill"><?= e((string) ($r['purchase_status'] ?? '')) ?></span>
-                            <div class="muted" style="font-size:.72rem;margin-top:.2rem"><?= money($r['charged_amount'] ?? 0) ?></div>
+                            <div class="muted" style="font-size:.72rem;margin-top:.2rem">
+                                <?= money($r['charged_amount'] ?? 0) ?>
+                                <?php if ((float) ($r['partner_credit_used'] ?? 0) > 0.009): ?>
+                                    <span title="Incluye crédito partner" style="color:#176b3a;font-weight:600">
+                                        · créd. <?= money($r['partner_credit_used']) ?>
+                                    </span>
+                                <?php endif; ?>
+                            </div>
                         </td>
                         <td>
                             <span class="pill"><?= e((string) ($r['current_step_code'] ?? '—')) ?></span>
@@ -1034,6 +1058,7 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
             <div class="ops-proof-empty" id="ops-proof-empty" hidden>
                 No hay comprobante del alumno. Puedes confirmar el pago de todas formas.
             </div>
+            <div class="ops-proof-credit-warn" id="ops-proof-credit-warn" hidden style="margin:0;padding:.65rem .9rem;background:#fff8e6;border-top:1px solid #f0d78c;color:#9a3412;font-size:.85rem;font-weight:600"></div>
         </div>
         <form method="post" id="ops-proof-confirm" class="ops-proof-confirm" hidden>
             <input type="hidden" name="_csrf" id="ops-proof-csrf" value="">
@@ -1157,6 +1182,7 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
   var proofReturnView = document.getElementById('ops-proof-return-view');
   var proofReturnQ = document.getElementById('ops-proof-return-q');
   var proofNotes = document.getElementById('ops-proof-notes');
+  var proofCreditWarn = document.getElementById('ops-proof-credit-warn');
 
   function closeProof() {
     if (!proofModal) return;
@@ -1166,6 +1192,10 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
       proofFrame.hidden = false;
     }
     if (proofEmpty) proofEmpty.hidden = true;
+    if (proofCreditWarn) {
+      proofCreditWarn.hidden = true;
+      proofCreditWarn.textContent = '';
+    }
     if (proofConfirm) proofConfirm.hidden = true;
     if (proofNotes) proofNotes.value = '';
   }
@@ -1195,6 +1225,15 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
         else proofEmpty.textContent = 'No hay comprobante del alumno. Puedes confirmar el pago de todas formas.';
       }
     }
+    if (proofCreditWarn) {
+      if (opts.creditWarn) {
+        proofCreditWarn.hidden = false;
+        proofCreditWarn.textContent = opts.creditWarn;
+      } else {
+        proofCreditWarn.hidden = true;
+        proofCreditWarn.textContent = '';
+      }
+    }
     if (proofConfirm) {
       if (opts.confirmUrl) {
         proofConfirm.action = opts.confirmUrl;
@@ -1216,6 +1255,13 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
   document.querySelectorAll('.ops-confirm-pay-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var hasProof = btn.getAttribute('data-has-proof') === '1';
+      var creditUsed = btn.getAttribute('data-credit-used') === '1';
+      var creditWarn = btn.getAttribute('data-credit-warn') || '';
+      var warnText = creditUsed && !hasProof
+        ? (creditWarn || 'Pago con crédito a favor (sin comprobante). Confirma el uso del saldo.')
+        : (hasProof
+          ? ''
+          : 'No hay comprobante del alumno cargado. Confirma solo si verificaste el pago por otro medio.');
       openProof(
         hasProof ? (btn.getAttribute('data-proof-url') || '') : '',
         btn.getAttribute('data-title') || 'Confirmar pago',
@@ -1224,7 +1270,8 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
           csrf: btn.getAttribute('data-csrf') || '',
           returnView: btn.getAttribute('data-return-view') || '',
           returnQ: btn.getAttribute('data-return-q') || '',
-          warnText: 'No hay comprobante del alumno cargado. Confirma solo si verificaste el pago por otro medio.'
+          warnText: warnText || undefined,
+          creditWarn: creditWarn || ''
         }
       );
     });

@@ -72,6 +72,18 @@ final class PartnerRepository
         return $row ?: null;
     }
 
+    /** Suma de saldos a favor de partners (activos por defecto). */
+    public function totalCreditBalance(bool $activeOnly = true): float
+    {
+        $sql = 'SELECT COALESCE(SUM(credit_balance), 0) FROM partners';
+        if ($activeOnly) {
+            $sql .= ' WHERE is_active = 1';
+        }
+        $val = $this->pdo->query($sql)->fetchColumn();
+
+        return round((float) $val, 2);
+    }
+
     public function codeExists(string $code, ?int $exceptId = null): bool
     {
         if ($exceptId === null) {

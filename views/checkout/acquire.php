@@ -270,7 +270,28 @@ $stepLabels = [
                     <h2 class="step-title">Forma de pago</h2>
                     <p class="muted" style="margin-top:0;font-size:.88rem">Elige cómo realizarás tu pago.</p>
 
-                    <div class="pay-tiles" role="group" aria-label="Método de pago">
+                    <?php
+                    $partnerCreditBalance = $isPartnerCheckout && $partner
+                        ? (float) ($partner['credit_balance'] ?? 0)
+                        : 0.0;
+                    ?>
+                    <?php if ($isPartnerCheckout && $partnerCreditBalance > 0.009): ?>
+                        <div class="panel" id="partner-credit-box" style="margin:0 0 1rem;padding:.85rem 1rem;border:1px solid #b7e0c5;background:#f3fbf6;max-width:560px">
+                            <label style="display:flex;gap:.55rem;align-items:flex-start;font-size:.9rem;font-weight:600;color:var(--doceo-blue);cursor:pointer">
+                                <input type="checkbox" name="use_partner_credit" id="use_partner_credit" value="1" style="margin-top:.2rem">
+                                <span>
+                                    Usar mi crédito a favor
+                                    <span class="muted" style="display:block;font-weight:500;font-size:.82rem;margin-top:.2rem">
+                                        Saldo disponible: <strong id="partner-credit-balance-label"><?= money($partnerCreditBalance) ?></strong>
+                                        · Puedes cubrir el total o solo una parte (el restante se transfiere con comprobante).
+                                    </span>
+                                    <span id="partner-credit-summary" class="muted" style="display:none;font-weight:500;font-size:.82rem;margin-top:.35rem;color:#176b3a"></span>
+                                </span>
+                            </label>
+                        </div>
+                    <?php endif; ?>
+
+                    <div class="pay-tiles" role="group" aria-label="Método de pago" id="pay-tiles">
                         <button type="button" class="pay-tile active" data-method="transfer_proof" data-ui="transfer" aria-pressed="true">
                             <span class="pay-tile-icon" aria-hidden="true">🏦</span>
                             <span class="pay-tile-label">Transferencia</span>
@@ -291,7 +312,7 @@ $stepLabels = [
                     </div>
 
                     <div id="pay-transfer-panel" class="pay-panel">
-                        <p class="muted" style="font-size:.88rem;margin:.75rem 0 .5rem">
+                        <p class="muted" style="font-size:.88rem;margin:.75rem 0 .5rem" id="pay-transfer-hint">
                             Transfiere el monto indicado en el panel derecho y sube tu comprobante.
                         </p>
                         <?php if (!empty($bank['clabe'])): ?>
@@ -635,10 +656,15 @@ $stepLabels = [
   const comboSidebarTeaser = document.getElementById('combo-sidebar-teaser');
   const depositCard = <?= json_encode($depositCard, JSON_UNESCAPED_UNICODE) ?>;
   const isPartnerCheckout = <?= $isPartnerCheckout ? 'true' : 'false' ?>;
+  const partnerCreditBalance = <?= json_encode((float) ($partnerCreditBalance ?? 0)) ?>;
 
   let quoteData = <?= json_encode($quote, JSON_UNESCAPED_UNICODE) ?>;
   let payUi = 'transfer';
   let stepIndex = 0;
+  const useCreditChk = document.getElementById('use_partner_credit');
+  const creditSummary = document.getElementById('partner-credit-summary');
+  const payTransferHint = document.getElementById('pay-transfer-hint');
+  const proofHint = document.querySelector('#payment-proof-panel .file-picker-hint');
 
   const form = document.getElementById('checkout-form');
   const codeInput = document.getElementById('promo_code');
@@ -709,24 +735,107 @@ $stepLabels = [
     return plan ? Number(plan.total || plan.base || baseAmount()) : baseAmount();
   }
 
+  function creditApplication() {
+    const order = selectedPayTotal();
+    if (!useCreditChk || !useCreditChk.checked || partnerCreditBalance <= 0) {
+      return { used: 0, due: order, coversAll: false };
+    }
+    const used = Math.min(partnerCreditBalance, order);
+    const due = Math.max(0, Math.round((order - used) * 100) / 100);
+    return { used, due, coversAll: due <= 0.009 };
+  }
+
+  function syncPartnerCreditUi() {
+    const app = creditApplication();
+    const using = !!(useCreditChk && useCreditChk.checked);
+    if (using && payUi !== 'transfer') {
+      payUi = 'transfer';
+      document.querySelectorAll('.pay-tile').forEach(t => {
+        const on = t.getAttribute('data-ui') === 'transfer';
+        t.classList.toggle('active', on);
+        t.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      if (transferPanel) transferPanel.hidden = false;
+      if (oxxoPanel) oxxoPanel.hidden = true;
+      if (msiPanel) msiPanel.hidden = true;
+    }
+    if (methodInput) {
+      if (using && app.coversAll) methodInput.value = 'credit';
+      else if (using) methodInput.value = 'transfer_proof';
+    }
+    if (creditSummary) {
+      if (app.used > 0) {
+        creditSummary.style.display = 'block';
+        creditSummary.textContent = app.coversAll
+          ? ('Se usarán ' + money(app.used) + ' de crédito. No necesitas transferir ni subir comprobante; admin confirmará el uso del saldo.')
+          : ('Crédito a aplicar: ' + money(app.used) + ' · Restante a transferir: ' + money(app.due));
+      } else {
+        creditSummary.style.display = 'none';
+        creditSummary.textContent = '';
+      }
+    }
+    if (payTransferHint) {
+      payTransferHint.textContent = app.coversAll
+        ? 'El total se cubre con tu crédito a favor. Admin revisará y confirmará.'
+        : (app.used > 0
+          ? ('Transfiere solo el restante (' + money(app.due) + ') y sube el comprobante.')
+          : 'Transfiere el monto indicado en el panel derecho y sube tu comprobante.');
+    }
+    if (proofHint) {
+      proofHint.textContent = app.coversAll
+        ? 'No requerido (pago con crédito)'
+        : (app.used > 0 ? ('PDF o imagen · restante ' + money(app.due)) : 'PDF o imagen · obligatorio');
+    }
+    const proofPanelEl = document.getElementById('payment-proof-panel');
+    if (proofPanelEl) {
+      proofPanelEl.hidden = false;
+      proofPanelEl.style.opacity = app.coversAll ? '0.45' : '';
+      if (proofInput) {
+        proofInput.required = !app.coversAll && (payUi === 'transfer' || payUi === 'oxxo');
+        if (app.coversAll) proofInput.value = '';
+      }
+    }
+    document.querySelectorAll('#pay-tiles .pay-tile').forEach(function (btn) {
+      const m = btn.getAttribute('data-method');
+      if (!using) {
+        btn.disabled = false;
+        btn.style.opacity = '';
+        return;
+      }
+      const allow = m === 'transfer_proof';
+      btn.disabled = !allow;
+      btn.style.opacity = allow ? '' : '0.4';
+    });
+  }
+
   function updatePriceSummary() {
     const catalog = catalogAmount();
-    const total = selectedPayTotal();
-    const hasAdjustment = Math.abs(total - catalog) > 0.009;
+    const order = selectedPayTotal();
+    const app = creditApplication();
+    const displayTotal = app.used > 0 ? app.due : order;
+    const hasAdjustment = Math.abs(displayTotal - catalog) > 0.009 || app.used > 0;
     priceList.textContent = money(catalog);
     if (hasAdjustment) {
       priceList.classList.add('price-strike');
       priceArrow.style.display = '';
       priceFinal.style.display = '';
-      priceFinal.textContent = money(total);
+      priceFinal.textContent = money(displayTotal);
     } else {
       priceList.classList.remove('price-strike');
       priceArrow.style.display = 'none';
       priceFinal.style.display = 'none';
     }
     if (sidebarPayNote) {
-      sidebarPayNote.textContent = 'Total a pagar';
+      sidebarPayNote.textContent = app.coversAll
+        ? 'Cubierto con crédito a favor'
+        : (app.used > 0 ? 'Restante a transferir' : 'Total a pagar');
     }
+    if (labelEl && app.used > 0) {
+      labelEl.textContent = app.coversAll
+        ? 'Pago con crédito partner'
+        : ('Crédito ' + money(app.used) + ' + transferencia');
+    }
+    syncPartnerCreditUi();
   }
 
   function currentStep() { return wizardSteps[stepIndex]; }
@@ -807,8 +916,14 @@ $stepLabels = [
       }
     }
     if (step === 'pago') {
+      const app = creditApplication();
+      if (app.coversAll) {
+        return true;
+      }
       if ((payUi === 'transfer' || payUi === 'oxxo') && proofInput && !proofInput.files.length) {
-        alert('Sube el comprobante de pago.');
+        alert(app.used > 0
+          ? ('Sube el comprobante por el restante (' + money(app.due) + ').')
+          : 'Sube el comprobante de pago.');
         if (proofPicker) proofPicker.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return false;
       }
@@ -852,8 +967,14 @@ $stepLabels = [
       html += '<dt>Paquete</dt><dd>' + comboLabel + '</dd>';
     }
     html += '<dt>Forma de pago</dt><dd>' + payMethodLabel() + '</dd>';
-    html += '<dt>Monto</dt><dd><strong>' + money(selectedPayTotal()) + '</strong></dd>';
-    if ((payUi === 'transfer' || payUi === 'oxxo') && proofInput && proofInput.files.length) {
+    const app = creditApplication();
+    if (app.used > 0) {
+      html += '<dt>Crédito a favor</dt><dd>' + money(app.used) + '</dd>';
+      html += '<dt>Monto</dt><dd><strong>' + (app.coversAll ? 'Cubierto con crédito' : money(app.due) + ' (restante)') + '</strong></dd>';
+    } else {
+      html += '<dt>Monto</dt><dd><strong>' + money(selectedPayTotal()) + '</strong></dd>';
+    }
+    if (!app.coversAll && (payUi === 'transfer' || payUi === 'oxxo') && proofInput && proofInput.files.length) {
       html += '<dt>Comprobante</dt><dd>' + proofInput.files[0].name + '</dd>';
     }
     html += '</dl>';
@@ -916,11 +1037,12 @@ $stepLabels = [
     if (oxxoPanel) oxxoPanel.hidden = ui !== 'oxxo';
     if (msiPanel) msiPanel.hidden = ui !== 'msi';
     if (proofInput) {
-      const needsProof = ui === 'transfer' || ui === 'oxxo';
-      if (proofPanel) proofPanel.hidden = !needsProof;
+      const app = creditApplication();
+      const needsProof = (ui === 'transfer' || ui === 'oxxo') && !app.coversAll;
+      if (proofPanel) proofPanel.hidden = !needsProof && ui !== 'transfer';
       proofInput.required = needsProof && currentStep() === 'pago';
       if (!needsProof) proofInput.value = '';
-      if (proofFilename) proofFilename.textContent = 'Ningún archivo seleccionado';
+      if (proofFilename && !needsProof) proofFilename.textContent = 'Ningún archivo seleccionado';
     }
     if (ui === 'msi' && msiChips) {
       const chip = msiChips.querySelector('.msi-chip.active') || msiChips.querySelector('.msi-chip');
@@ -934,8 +1056,14 @@ $stepLabels = [
   }
 
   document.querySelectorAll('.pay-tile').forEach(btn => {
-    btn.addEventListener('click', () => selectPayUi(btn.getAttribute('data-ui'), btn.getAttribute('data-method')));
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      selectPayUi(btn.getAttribute('data-ui'), btn.getAttribute('data-method'));
+    });
   });
+  if (useCreditChk) {
+    useCreditChk.addEventListener('change', updatePriceSummary);
+  }
 
   if (msiChips) {
     msiChips.addEventListener('click', e => {

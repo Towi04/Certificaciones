@@ -311,6 +311,7 @@ CREATE TABLE IF NOT EXISTS purchases (
   card_msi_months TINYINT UNSIGNED NULL,
   partner_price_amount DECIMAL(12,2) NULL,
   partner_credit_earned DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  partner_credit_used DECIMAL(12,2) NOT NULL DEFAULT 0.00,
   partner_credit_applied_at DATETIME NULL,
   openpay_charge_id VARCHAR(80) NULL,
   openpay_clabe VARCHAR(30) NULL,

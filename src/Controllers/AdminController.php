@@ -77,6 +77,13 @@ final class AdminController
             flash('error', 'No se pudo cargar el tablero: ' . $e->getMessage());
         }
 
+        $partnerCreditTotal = 0.0;
+        try {
+            $partnerCreditTotal = (new \App\Repositories\PartnerRepository())->totalCreditBalance(true);
+        } catch (\Throwable) {
+            $partnerCreditTotal = 0.0;
+        }
+
         view('admin/ops', [
             'title' => 'Operación',
             'rows' => $rows,
@@ -85,6 +92,7 @@ final class AdminController
             'viewHints' => AdminOpsBoardService::VIEW_HINTS,
             'counts' => $counts,
             'pagination' => $pagination,
+            'partnerCreditTotal' => $partnerCreditTotal,
             'layout' => 'admin',
         ]);
     }

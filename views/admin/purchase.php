@@ -7,11 +7,27 @@ $canConfirm = in_array($purchase['status'], ['awaiting_payment', 'payment_review
 ?>
 <p class="meta"><a href="<?= e(url('/admin/maestra')) ?>">← Tabla maestra</a></p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">Matrícula <?= e($purchase['matricula']) ?></h1>
+<?php
+$creditUsedPurchase = (float) ($purchase['partner_credit_used'] ?? 0);
+$cashDuePurchase = (float) ($purchase['charged_amount'] ?? 0);
+$orderTotalPurchase = $cashDuePurchase + $creditUsedPurchase;
+?>
 <p>
     <span class="pill"><?= e($purchase['status']) ?></span>
-    · <?= money($purchase['charged_amount']) ?>
+    · <?= money($cashDuePurchase) ?><?= $creditUsedPurchase > 0.009 ? ' a verificar' : '' ?>
     · <?= e($purchase['payment_method']) ?>
 </p>
+<?php if ($creditUsedPurchase > 0.009): ?>
+    <div class="flash flash-info" style="margin:.75rem 0 0">
+        <strong>Crédito a favor utilizado:</strong> <?= money($creditUsedPurchase) ?>
+        <?php if ($cashDuePurchase > 0.009): ?>
+            · Orden <?= money($orderTotalPurchase) ?> ·
+            Confirma solo la transferencia por <strong><?= money($cashDuePurchase) ?></strong>.
+        <?php else: ?>
+            · Cubrió el total (sin transferencia). Confirma el uso del saldo.
+        <?php endif; ?>
+    </div>
+<?php endif; ?>
 
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Alumno</h2>
