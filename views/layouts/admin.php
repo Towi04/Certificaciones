@@ -96,9 +96,9 @@ if (!$configOpen && str_contains($path, '/certificadoras')) {
         <nav class="side-nav-links" id="admin-side-nav-links">
             <a class="side-nav-link<?= $isOps ? ' active' : '' ?>"
                href="<?= e(url('/admin')) ?>"
-               title="Operación">
+               title="Operaciones">
                 <span class="side-nav-icon"><?= icon('table') ?></span>
-                <span class="side-nav-label">Operación</span>
+                <span class="side-nav-label">Operaciones</span>
             </a>
 
             <div class="side-nav-section<?= $configOpen ? ' is-open' : '' ?>" id="admin-config-section">
