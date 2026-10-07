@@ -2727,14 +2727,26 @@ final class ProductAdminService
             $time = ExamScheduleService::normalizeClock((string) ($session['exam_time'] ?? '00:00')) ?? '00:00';
             $deadline = ExamScheduleService::normalizeDateStatic((string) ($session['registration_deadline'] ?? '')) ?? '';
             $label = trim((string) ($session['label'] ?? ''));
-            $lines[] = $date . '|' . $time . '|' . $deadline . ($label !== '' ? '|' . $label : '');
+            $venue = trim((string) ($session['venue'] ?? $session['sede'] ?? ''));
+            $city = trim((string) ($session['city'] ?? $session['ciudad'] ?? ''));
+            $address = trim((string) ($session['address'] ?? $session['direccion'] ?? ''));
+            $line = $date . '|' . $time . '|' . $deadline . '|' . $label;
+            if ($venue !== '' || $city !== '' || $address !== '') {
+                $line .= '|' . $venue . '|' . $city . '|' . $address;
+            } elseif ($label === '') {
+                $line = $date . '|' . $time . '|' . $deadline;
+            }
+            $lines[] = $line;
         }
 
         return implode("\n", $lines);
     }
 
     /**
-     * @return list<array{id:string,exam_date:string,exam_time:string,registration_deadline:?string,label:string}>
+     * @return list<array{
+     *   id:string,exam_date:string,exam_time:string,registration_deadline:?string,
+     *   label:string,venue:string,city:string,address:string
+     * }>
      */
     public static function parseSessionsText(string $raw): array
     {
@@ -2752,12 +2764,18 @@ final class ProductAdminService
             $time = ExamScheduleService::normalizeClock((string) ($parts[1] ?? '00:00')) ?? '00:00';
             $deadline = ExamScheduleService::normalizeDateStatic((string) ($parts[2] ?? ''));
             $label = (string) ($parts[3] ?? '');
+            $venue = (string) ($parts[4] ?? '');
+            $city = (string) ($parts[5] ?? '');
+            $address = (string) ($parts[6] ?? '');
             $out[] = [
                 'id' => $date . '_' . str_replace(':', '', $time) . '_' . $i,
                 'exam_date' => $date,
                 'exam_time' => $time,
                 'registration_deadline' => $deadline,
                 'label' => $label,
+                'venue' => $venue,
+                'city' => $city,
+                'address' => $address,
             ];
         }
 

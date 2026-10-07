@@ -15,10 +15,15 @@ Siempre se guarda en `trackings.exam_date` / `exam_time` (placeholders `{{exam_d
 - Seed: sábados 11:00 y 13:00.
 - Opcional `extraordinary`: el alumno pide otra fecha, paga `surcharge_amount` y queda `waiting_admin` hasta autorizar.
 
-### `dated_list` (Cambridge convocatorias)
-- Lista `sessions[]` con `exam_date`, `exam_time`, `registration_deadline`, `label`.
-- El alumno elige solo convocatorias con inscripción abierta.
-- El admin actualiza la lista cada ~6 meses en el grupo.
+### `dated_list` (Cambridge / UKS presencial por sedes)
+- Lista `sessions[]` con `exam_date`, `exam_time`, `registration_deadline`, `label`
+  y opcionales `venue`, `city`, `address` (sede).
+- En Admin → Grupos → Fechas: una línea
+  `fecha|hora|límite|etiqueta|sede|ciudad|dirección`.
+- El alumno elige solo convocatorias con inscripción abierta; ve la sede en el selector.
+- Al comprar se guarda la sede en `trackings.extra_json.exam_schedule`
+  (placeholders `{{exam_venue}}`, `{{exam_city}}`, `{{exam_address}}`, `{{exam_venue_line}}`).
+- Cutover UKS online → presencial: ver `docs/products/uks-presencial-cutover.md`.
 
 ## Admin
 - **Grupos → Fechas y horarios**: selector de modo + textareas de slots/convocatorias.

@@ -108,12 +108,18 @@ final class ExamScheduleService
             if ($id === '') {
                 $id = $examDate . '_' . str_replace(':', '', $examTime) . '_' . $i;
             }
+            $venue = trim((string) ($session['venue'] ?? $session['sede'] ?? ''));
+            $city = trim((string) ($session['city'] ?? $session['ciudad'] ?? ''));
+            $address = trim((string) ($session['address'] ?? $session['direccion'] ?? ''));
             $sessions[] = [
                 'id' => $id,
                 'exam_date' => $examDate,
                 'exam_time' => $examTime,
                 'registration_deadline' => $deadline,
                 'label' => trim((string) ($session['label'] ?? '')),
+                'venue' => $venue,
+                'city' => $city,
+                'address' => $address,
                 'capacity' => isset($session['capacity']) && $session['capacity'] !== ''
                     ? (int) $session['capacity']
                     : null,
@@ -483,7 +489,10 @@ final class ExamScheduleService
      *
      * @param array<string, mixed> $product
      * @param array{kind?:string,session_id?:string,allow_short_advance?:bool} $options
-     * @return array{kind:string,session_id:?string,surcharge:float,requires_admin:bool}
+     * @return array{
+     *   kind:string,session_id:?string,surcharge:float,requires_admin:bool,
+     *   venue?:string,city?:string,address?:string,label?:string
+     * }
      */
     public function validateSelection(array $product, string $dateRaw, string $timeRaw, array $options = []): array
     {
@@ -514,6 +523,10 @@ final class ExamScheduleService
                         'session_id' => (string) ($session['id'] ?? ''),
                         'surcharge' => 0.0,
                         'requires_admin' => false,
+                        'label' => (string) ($session['label'] ?? ''),
+                        'venue' => (string) ($session['venue'] ?? ''),
+                        'city' => (string) ($session['city'] ?? ''),
+                        'address' => (string) ($session['address'] ?? ''),
                     ];
                 }
             }

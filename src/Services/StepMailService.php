@@ -188,6 +188,20 @@ final class StepMailService
         $extraValues = GroupExtraFields::valuesFromTracking($tracking);
         $extraMailVars = GroupExtraFields::mailVars($extraFields, $extraValues);
 
+        $examScheduleMeta = [];
+        if (!empty($tracking['extra_json']) && is_string($tracking['extra_json'])) {
+            $decodedExtra = json_decode($tracking['extra_json'], true);
+            if (is_array($decodedExtra) && is_array($decodedExtra['exam_schedule'] ?? null)) {
+                $examScheduleMeta = $decodedExtra['exam_schedule'];
+            }
+        } elseif (is_array($tracking['extra_json'] ?? null) && is_array($tracking['extra_json']['exam_schedule'] ?? null)) {
+            $examScheduleMeta = $tracking['extra_json']['exam_schedule'];
+        }
+        $examVenue = trim((string) ($examScheduleMeta['venue'] ?? ''));
+        $examCity = trim((string) ($examScheduleMeta['city'] ?? ''));
+        $examAddress = trim((string) ($examScheduleMeta['address'] ?? ''));
+        $examVenueLine = trim(implode(', ', array_filter([$examVenue, $examCity, $examAddress], static fn ($v) => $v !== '')));
+
         $vars = [
             'name' => $name,
             'full_name' => $fullName !== '' ? $fullName : $name,
@@ -203,6 +217,11 @@ final class StepMailService
             'exam_time' => !empty($tracking['exam_time'])
                 ? substr((string) $tracking['exam_time'], 0, 5)
                 : '',
+            'exam_venue' => $examVenue,
+            'exam_city' => $examCity,
+            'exam_address' => $examAddress,
+            'exam_venue_line' => $examVenueLine,
+            'sede' => $examVenue,
             'folio' => (string) ($tracking['folio'] ?? ''),
             'access_key' => (string) ($tracking['access_key'] ?? ''),
             'zoom_url' => (string) ($tracking['zoom_url'] ?? ''),

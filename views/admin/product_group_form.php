@@ -342,7 +342,7 @@ $pageHeading = $isEdit
                 $modeOptions = [
                     'window' => 'Ventana continua (ELeT / Cambridge flexible Lun–Vie)',
                     'fixed_slots' => 'Horarios fijos por día (TOEFL sábados 11:00 / 13:00)',
-                    'dated_list' => 'Lista de fechas del proveedor (Cambridge convocatorias)',
+                    'dated_list' => 'Lista de convocatorias / sedes (Cambridge, UKS presencial…)',
                 ];
                 foreach ($modeOptions as $modeVal => $modeLabel):
                 ?>
@@ -466,14 +466,16 @@ $pageHeading = $isEdit
         </div>
 
         <div id="schedule-mode-dated" style="margin-top:1.1rem" <?= $scheduleMode === 'dated_list' ? '' : 'hidden' ?>>
-            <h3 style="margin:0 0 .45rem;font-size:.98rem;color:var(--doceo-blue)">Convocatorias del proveedor (Cambridge)</h3>
+            <h3 style="margin:0 0 .45rem;font-size:.98rem;color:var(--doceo-blue)">Convocatorias / sedes del proveedor</h3>
             <p class="muted" style="font-size:.8rem;margin:0 0 .55rem">
-                Una línea por fecha: <code>fecha examen|hora|fecha límite inscripción|etiqueta</code>.
-                Ejemplo: <code>2026-11-15|10:00|2026-10-20|Noviembre</code>
+                Una línea por convocatoria:<br>
+                <code>fecha|hora|límite inscripción|etiqueta|sede|ciudad|dirección</code><br>
+                Los últimos 3 campos (sede/ciudad/dirección) son opcionales. Ejemplo:<br>
+                <code>2026-11-15|10:00|2026-10-20|Noviembre|Campus Centro|León, Gto.|Av. Ejemplo 123</code>
             </p>
             <textarea name="schedule_sessions_text" rows="6"
                       style="<?= e($inputStyle) ?>;font-family:ui-monospace,monospace;font-size:.82rem;width:100%;resize:vertical"
-                      placeholder="2026-11-15|10:00|2026-10-20|Noviembre&#10;2027-03-12|10:00|2027-02-15|Marzo"><?= e((string) ($extras['schedule_sessions_text'] ?? '')) ?></textarea>
+                      placeholder="2026-11-15|10:00|2026-10-20|Noviembre|Campus Centro|León, Gto.|Av. Ejemplo 123&#10;2027-03-12|10:00|2027-02-15|Marzo|Sede Norte|Guanajuato, Gto.|Calle Falsa 456"><?= e((string) ($extras['schedule_sessions_text'] ?? '')) ?></textarea>
         </div>
     </div>
 

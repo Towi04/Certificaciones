@@ -382,6 +382,10 @@ final class CheckoutService
                 'requires_admin' => !empty($examMeta['requires_admin']),
                 'status' => !empty($examMeta['requires_admin']) ? 'pending_admin' : 'confirmed',
                 'requested_at' => date('c'),
+                'label' => (string) ($examMeta['label'] ?? ''),
+                'venue' => (string) ($examMeta['venue'] ?? ''),
+                'city' => (string) ($examMeta['city'] ?? ''),
+                'address' => (string) ($examMeta['address'] ?? ''),
             ]);
             if (!empty($examMeta['requires_admin'])) {
                 $this->pdo->prepare('UPDATE trackings SET status = ? WHERE id = ?')
