@@ -3502,7 +3502,10 @@ final class AdminController
             'audience' => $audience,
             'requiresFixedRecipient' => $audience === 'provider',
             'testEmailDefault' => trim((string) (Auth::user()['email'] ?? '')),
-            'previewVars' => MailTemplateService::sampleVarsForPlaceholders($selectedPlaceholders),
+            'previewVars' => array_merge(
+                MailTemplateService::sampleVarsForPlaceholders($selectedPlaceholders),
+                (new MailProductCardService())->samplePreviewVars()
+            ),
             'isUksSolicitud' => false,
             'isNew' => true,
             'layout' => 'admin',
@@ -3581,7 +3584,8 @@ final class AdminController
         );
         $previewVars = array_merge(
             MailTemplateService::sampleVarsForCode($code),
-            MailTemplateService::sampleVarsForPlaceholders($selectedPlaceholders)
+            MailTemplateService::sampleVarsForPlaceholders($selectedPlaceholders),
+            (new MailProductCardService())->samplePreviewVars()
         );
 
         view('admin/mail_template_edit', [
