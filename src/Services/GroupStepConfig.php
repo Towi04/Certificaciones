@@ -317,11 +317,16 @@ final class GroupStepConfig
 
         $buttons = [];
         foreach ($merged as $step) {
-            if (empty($step['ops_button'])) {
-                continue;
-            }
             $action = self::effectiveOpsAction($step);
             if ($action === self::ACTION_NONE) {
+                continue;
+            }
+            $isConfirmPay = in_array($action, [
+                self::ACTION_CONFIRM_PAYMENT,
+                self::ACTION_CONFIRM_PAYMENT_POPUP,
+            ], true);
+            // Confirmar pago siempre sale en Operación si el paso lo define (aunque falte el check).
+            if (empty($step['ops_button']) && !$isConfirmPay) {
                 continue;
             }
             $done = self::isActionDone($action, $row, $step);
@@ -797,15 +802,21 @@ final class GroupStepConfig
                 $n++;
             }
             $rawAction = (string) ($row['action'] ?? self::ACTION_NONE);
+            $mappedAction = self::LEGACY_ACTION_MAP[$rawAction] ?? $rawAction;
+            $forceOps = in_array($mappedAction, [
+                self::ACTION_CONFIRM_EXAM,
+                self::ACTION_CONFIRM_PAYMENT,
+                self::ACTION_CONFIRM_PAYMENT_POPUP,
+            ], true);
             $defs[$code] = self::normalizeDef($code, [
                 'code' => $code,
                 'label' => (string) ($row['label'] ?? $code),
                 'actor' => (string) ($row['actor'] ?? 'admin'),
                 'admin_only' => !empty($row['admin_only']),
-                'ops_button' => !empty($row['ops_button']),
+                'ops_button' => !empty($row['ops_button']) || $forceOps,
                 'ops_label' => trim((string) ($row['ops_label'] ?? '')),
                 'ops_icon' => trim((string) ($row['ops_icon'] ?? '')),
-                'action' => self::LEGACY_ACTION_MAP[$rawAction] ?? $rawAction,
+                'action' => $mappedAction,
                 'requires_results' => !empty($row['requires_results'])
                     || $rawAction === self::ACTION_SEND_RESULTS,
                 'email' => [
@@ -955,8 +966,11 @@ final class GroupStepConfig
                 ? (string) ($row['actor'] ?? 'admin')
                 : 'admin',
             'admin_only' => !empty($row['admin_only']),
-            // Confirmación de examen siempre visible en Operación (✓ / ✗).
-            'ops_button' => !empty($row['ops_button']) || $action === self::ACTION_CONFIRM_EXAM,
+            // Confirmación de examen y confirmar pago siempre visibles en Operación.
+            'ops_button' => !empty($row['ops_button'])
+                || $action === self::ACTION_CONFIRM_EXAM
+                || $action === self::ACTION_CONFIRM_PAYMENT
+                || $action === self::ACTION_CONFIRM_PAYMENT_POPUP,
             'ops_label' => trim((string) ($row['ops_label'] ?? '')),
             'ops_icon' => $opsIcon,
             'action' => $action,
