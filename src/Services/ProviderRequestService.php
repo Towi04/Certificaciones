@@ -289,9 +289,11 @@ final class ProviderRequestService
             if ($audience !== '' && $audience !== 'provider') {
                 continue;
             }
+            // Solo tratar como solicitud a proveedor si el paso lo declara (audience=provider)
+            // o usa plantilla UKS/solicitud. Un correo genérico sin audiencia no debe
+            // activar provider_request (evita p. ej. OOPT heredando solicitud_uks).
             $isProvider = $audience === 'provider'
-                || ($tpl !== '' && MailTemplateService::isUksSolicitudCode($tpl))
-                || $tpl === '';
+                || ($tpl !== '' && MailTemplateService::isUksSolicitudCode($tpl));
             if (!$isProvider) {
                 continue;
             }
@@ -338,17 +340,35 @@ final class ProviderRequestService
         return !empty($pr['required']) && empty($pr['sent_at']);
     }
 
-    public function onPaymentConfirmed(int $trackingId, int $purchaseId, int $adminUserId): void
+    /**
+     * @return bool true si avanzó al paso de solicitud proveedor; false si el grupo
+     *              no tiene ese paso (p. ej. OOPT/iTEP sin solicitud_uks) y debe
+     *              usarse el avance genérico tras el pago.
+     */
+    public function onPaymentConfirmed(int $trackingId, int $purchaseId, int $adminUserId): bool
     {
         $tracking = $this->tracking->find($trackingId);
         if ($tracking === null) {
-            return;
+            return false;
         }
 
         $product = $this->productRowForTracking($tracking);
         $config = self::configForProduct($product);
         if ($config === null) {
-            return;
+            return false;
+        }
+
+        $step = (string) ($config['step_code'] ?? '');
+        if ($step === '' || !$this->tracking->progressHasStep($tracking, $step)) {
+            // Config legado/heurística apuntó a un paso que no está en el progreso
+            // de este grupo (p. ej. solicitud_uks en iTEP/OOPT).
+            error_log(sprintf(
+                '[Doceo] provider_request step «%s» no está en el progreso del tracking %d; se omite.',
+                $step !== '' ? $step : '(vacío)',
+                $trackingId
+            ));
+
+            return false;
         }
 
         $this->markRequired($trackingId, $tracking, $config);
@@ -363,18 +383,16 @@ final class ProviderRequestService
         }
         $this->tracking->setStep(
             $trackingId,
-            (string) $config['step_code'],
+            $step,
             $adminUserId,
             $note,
             $auto ? 'waiting_provider' : 'waiting_admin'
         );
 
-        if (!$auto) {
-            return;
-        }
-
         // El envío automático lo dispara GroupEmailAutomation al entrar al paso
         // (trigger=auto en Progreso). No reenviar aquí para evitar duplicados.
+
+        return true;
     }
 
     /**

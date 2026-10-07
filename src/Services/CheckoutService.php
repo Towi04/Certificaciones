@@ -603,9 +603,19 @@ final class CheckoutService
             return ['already_paid' => true, 'partner_credit_applied' => $creditApplied];
         }
 
-        (new TrackingService())->onPaymentConfirmed($purchaseId, $adminUserId, $notes);
-        // Confirmación de pago: alumno o partner (precio de nivel), no ambos.
-        GroupEmailAutomation::sendPaymentConfirmedEmails($purchaseId);
+        // El pago ya quedó en BD; un fallo de avance de pasos no debe mostrarse como
+        // «error al confirmar pago» (el admin ya marcó pagado / crédito abonado).
+        try {
+            (new TrackingService())->onPaymentConfirmed($purchaseId, $adminUserId, $notes);
+        } catch (\Throwable $e) {
+            error_log('[Doceo] onPaymentConfirmed tras marcar pagado: ' . $e->getMessage());
+        }
+        try {
+            // Confirmación de pago: alumno o partner (precio de nivel), no ambos.
+            GroupEmailAutomation::sendPaymentConfirmedEmails($purchaseId);
+        } catch (\Throwable $e) {
+            error_log('[Doceo] emails tras pago: ' . $e->getMessage());
+        }
 
         return ['already_paid' => false, 'partner_credit_applied' => $creditApplied];
     }
