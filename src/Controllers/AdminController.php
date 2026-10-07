@@ -3288,7 +3288,7 @@ final class AdminController
                 . '<p style="margin:0">El contenido de cada plantilla aparece aquí, entre el encabezado y el pie globales.</p>'
             ),
             'mailCards' => $cardSvc->all(),
-            'mailCardDefaults' => MailProductCardService::defaults(),
+            'mailCardSeed' => MailProductCardService::formSeed(),
             'mailCardProducts' => (new ProductRepository())->adminList(null, 500, 0, []),
             'layout' => 'admin',
         ]);
@@ -3319,19 +3319,6 @@ final class AdminController
         redirect('/admin/correos#branding');
     }
 
-    public function mailProductCardDefaults(): void
-    {
-        Auth::requireRole(['admin']);
-        csrf_verify();
-        try {
-            (new MailProductCardService())->saveDefaults($_POST);
-            flash('success', 'Diseño por defecto de tarjetas de correo guardado.');
-        } catch (\Throwable $e) {
-            flash('error', $e->getMessage());
-        }
-        redirect('/admin/correos#cards');
-    }
-
     public function mailProductCardStore(): void
     {
         Auth::requireRole(['admin']);
@@ -3340,8 +3327,12 @@ final class AdminController
             $ph = MailProductCardService::normalizePlaceholder((string) ($_POST['placeholder'] ?? ''));
             $file = isset($_FILES['custom_image']) && is_array($_FILES['custom_image'])
                 ? $_FILES['custom_image'] : null;
-            (new MailProductCardService())->create($_POST, $file);
-            flash('success', 'Tarjeta creada. Úsala en plantillas con el placeholder ' . $ph . '.');
+            $result = (new MailProductCardService())->create($_POST, $file);
+            if (!empty($result['updated'])) {
+                flash('success', 'Tarjeta «' . $ph . '» actualizada (ese placeholder ya existía).');
+            } else {
+                flash('success', 'Tarjeta creada. Úsala en plantillas con el placeholder ' . $ph . '.');
+            }
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }

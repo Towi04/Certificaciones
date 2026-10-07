@@ -179,7 +179,6 @@ $router->post('/admin/plantillas-csv/{code}', fn (string $code) => $admin->csvTe
 
 $router->get('/admin/correos', fn () => $admin->mailTemplates());
 $router->post('/admin/correos/marca', fn () => $admin->mailBrandingUpdate());
-$router->post('/admin/correos/tarjetas/defaults', fn () => $admin->mailProductCardDefaults());
 $router->post('/admin/correos/tarjetas/preview', fn () => $admin->mailProductCardPreview());
 $router->post('/admin/correos/tarjetas', fn () => $admin->mailProductCardStore());
 $router->post('/admin/correos/tarjetas/{id}/eliminar', fn (string $id) => $admin->mailProductCardDelete($id));
