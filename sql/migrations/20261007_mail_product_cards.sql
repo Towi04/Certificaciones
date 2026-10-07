@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS mail_product_cards (
   layout ENUM('square','square_desc','wide','row','row_flip') NOT NULL DEFAULT 'wide',
   badge_mode ENUM('discount','banner','both','none') NOT NULL DEFAULT 'discount',
   badge_text VARCHAR(80) NULL,
+  discount_badge_position ENUM('top_right','top_left','bottom_right','bottom_left') NOT NULL DEFAULT 'top_right',
   custom_image_path VARCHAR(255) NULL,
   accent_color VARCHAR(7) NOT NULL DEFAULT '#315285',
   cta_label VARCHAR(80) NOT NULL DEFAULT 'Ver en catálogo',
