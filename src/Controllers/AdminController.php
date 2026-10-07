@@ -86,7 +86,7 @@ final class AdminController
         }
 
         view('admin/ops', [
-            'title' => 'Operación',
+            'title' => 'Operaciones',
             'rows' => $rows,
             'filters' => $filters,
             'views' => AdminOpsBoardService::VIEWS,

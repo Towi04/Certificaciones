@@ -20,7 +20,7 @@ final class AdminOpsBoardService
         'all' => 'Todos',
     ];
 
-    /** Texto corto bajo las pestañas. */
+    /** Texto corto bajo el título de Operaciones (antes de pestañas/filtro). */
     public const VIEW_HINTS = [
         'action' => 'Casos que requieren acción tuya: pago por confirmar, solicitud a proveedor pendiente o accesos incompletos.',
         'provider' => 'Pagados con solicitud al proveedor pendiente de enviar (p. ej. UKS / Lingua Franca).',

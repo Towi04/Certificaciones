@@ -30,18 +30,66 @@ $extraColHeader = count($extraColLabels) === 1
     : 'Extra';
 ?>
 <div class="ops-page">
-    <div class="ops-header">
-        <div>
-            <h1 style="margin:0;color:var(--doceo-blue)">Operación</h1>
-        </div>
-        <?php if (isset($partnerCreditTotal)): ?>
-            <div class="ops-credit-card" title="Suma de saldos a favor activos de partners">
-                <span class="ops-credit-card-label">Crédito partners (apartado)</span>
-                <span class="ops-credit-card-amount"><?= money((float) $partnerCreditTotal) ?></span>
-                <span class="ops-credit-card-hint">Saldos a favor activos</span>
-            </div>
+    <header class="ops-header">
+        <h1 class="ops-title">Operaciones</h1>
+        <?php if (!empty($viewHints[$view])): ?>
+            <p class="muted ops-view-hint"><?= e((string) $viewHints[$view]) ?></p>
         <?php endif; ?>
-    </div>
+    </header>
+
+    <form method="get" class="ops-toolbar" action="<?= e(url('/admin')) ?>">
+        <table class="ops-controls" role="presentation">
+            <tr>
+                <td class="ops-controls-main">
+                    <div class="ops-tabs" role="tablist">
+                        <?php foreach ($views as $key => $label): ?>
+                            <?php
+                            $href = url('/admin?' . http_build_query(array_filter(['view' => $key, 'q' => $q ?: null])));
+                            $active = $view === $key;
+                            $n = (int) ($counts[$key] ?? 0);
+                            ?>
+                            <a class="ops-tab<?= $active ? ' active' : '' ?>" href="<?= e($href) ?>"
+                               title="<?= e((string) ($viewHints[$key] ?? '')) ?>">
+                                <?= e($label) ?>
+                                <span class="ops-tab-count"><?= $n ?></span>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                </td>
+                <td class="ops-controls-credit" rowspan="2">
+                    <?php if (isset($partnerCreditTotal)): ?>
+                        <div class="ops-credit-card" title="Suma de saldos a favor activos de partners">
+                            <span class="ops-credit-card-label">Crédito partners (apartado)</span>
+                            <span class="ops-credit-card-amount"><?= money((float) $partnerCreditTotal) ?></span>
+                            <span class="ops-credit-card-hint">Saldos a favor activos</span>
+                        </div>
+                    <?php endif; ?>
+                </td>
+            </tr>
+            <tr>
+                <td class="ops-controls-main">
+                    <div class="ops-search">
+                        <input type="hidden" name="view" value="<?= e($view) ?>">
+                        <input type="search" name="q" value="<?= e($q) ?>" placeholder="Buscar matrícula, alumno, folio, producto…">
+                        <button class="btn btn-primary btn-sm" type="submit">Buscar</button>
+                        <?php if ($hasAccessEditors): ?>
+                            <button class="btn btn-accent btn-sm ops-icon-btn" type="submit" form="ops-bulk-form" id="ops-save-all-btn"
+                                    title="Guardar folio/clave/extra de las filas visibles (opcional: al enviar accesos ya se guarda solo)"
+                                    aria-label="Guardar folio, clave y extra">
+                                <?= icon('save') ?>
+                            </button>
+                        <?php endif; ?>
+                        <a class="btn btn-ghost btn-sm ops-icon-btn"
+                           href="<?= e(url('/admin/operacion/exportar?' . http_build_query(array_filter(['view' => $view, 'q' => $q ?: null])))) ?>"
+                           title="Descargar Excel (CSV) de la vista actual"
+                           aria-label="Descargar Excel CSV">
+                            <?= icon('download') ?>
+                        </a>
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </form>
 
     <div class="ops-legend" aria-label="Leyenda">
         <span class="ops-legend-item"><span class="ops-status-badge ops-status-badge--pending" style="position:static"><?= icon('clock') ?></span> Pendiente</span>
@@ -53,44 +101,6 @@ $extraColHeader = count($extraColLabels) === 1
         <span class="ops-legend-item"><span class="ops-exam-pill ops-exam-pill--future">Futuro</span></span>
         <span class="ops-legend-item"><span class="ops-exam-pill ops-exam-pill--overdue">Vencido / sin presentar</span></span>
     </div>
-
-    <form method="get" class="ops-toolbar" action="<?= e(url('/admin')) ?>">
-        <div class="ops-tabs" role="tablist">
-            <?php foreach ($views as $key => $label): ?>
-                <?php
-                $href = url('/admin?' . http_build_query(array_filter(['view' => $key, 'q' => $q ?: null])));
-                $active = $view === $key;
-                $n = (int) ($counts[$key] ?? 0);
-                ?>
-                <a class="ops-tab<?= $active ? ' active' : '' ?>" href="<?= e($href) ?>"
-                   title="<?= e((string) ($viewHints[$key] ?? '')) ?>">
-                    <?= e($label) ?>
-                    <span class="ops-tab-count"><?= $n ?></span>
-                </a>
-            <?php endforeach; ?>
-        </div>
-        <?php if (!empty($viewHints[$view])): ?>
-            <p class="muted ops-view-hint"><?= e((string) $viewHints[$view]) ?></p>
-        <?php endif; ?>
-        <div class="ops-search">
-            <input type="hidden" name="view" value="<?= e($view) ?>">
-            <input type="search" name="q" value="<?= e($q) ?>" placeholder="Buscar matrícula, alumno, folio, producto…">
-            <button class="btn btn-primary btn-sm" type="submit">Buscar</button>
-            <?php if ($hasAccessEditors): ?>
-                <button class="btn btn-accent btn-sm ops-icon-btn" type="submit" form="ops-bulk-form" id="ops-save-all-btn"
-                        title="Guardar folio/clave/extra de las filas visibles (opcional: al enviar accesos ya se guarda solo)"
-                        aria-label="Guardar folio, clave y extra">
-                    <?= icon('save') ?>
-                </button>
-            <?php endif; ?>
-            <a class="btn btn-ghost btn-sm ops-icon-btn"
-               href="<?= e(url('/admin/operacion/exportar?' . http_build_query(array_filter(['view' => $view, 'q' => $q ?: null])))) ?>"
-               title="Descargar Excel (CSV) de la vista actual"
-               aria-label="Descargar Excel CSV">
-                <?= icon('download') ?>
-            </a>
-        </div>
-    </form>
 
     <?php require BASE_PATH . '/views/shared/pagination.php'; ?>
 
@@ -739,13 +749,24 @@ $extraColHeader = count($extraColLabels) === 1
 
 <style>
 .ops-page { margin-bottom: 2rem; }
-.ops-header {
-  display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap;
-  align-items:center; margin-bottom:1rem;
+.ops-header { margin:0 0 .85rem; }
+.ops-title { margin:0 0 .35rem; color:var(--doceo-blue); font-size:1.55rem; line-height:1.2; }
+.ops-view-hint { margin:0; font-size:.88rem; max-width:52rem; line-height:1.4; }
+.ops-toolbar { margin:0 0 .75rem; }
+.ops-controls {
+  width:100%; border-collapse:separate; border-spacing:0 .55rem;
+  table-layout:fixed;
+}
+.ops-controls-main {
+  width:auto; vertical-align:middle; padding:0 .85rem 0 0;
+}
+.ops-controls-credit {
+  width:13.5rem; vertical-align:stretch; padding:0;
 }
 .ops-credit-card {
-  display:flex; flex-direction:column; gap:.1rem;
-  min-width:11rem; padding:.7rem 1.05rem;
+  display:flex; flex-direction:column; justify-content:center; gap:.15rem;
+  height:100%; min-height:5.5rem; min-width:11.5rem; box-sizing:border-box;
+  padding:.75rem 1.05rem;
   border-radius:14px; border:2px solid #f0d78c;
   background:linear-gradient(145deg, #fff8e6 0%, #ffefc2 100%);
   box-shadow:0 2px 8px rgba(180, 120, 20, .12);
@@ -764,7 +785,6 @@ $extraColHeader = count($extraColLabels) === 1
   width:2.15rem; height:2.15rem; padding:0; flex:0 0 auto;
 }
 .ops-icon-btn svg { display:block; }
-.ops-toolbar { display:flex; flex-direction:column; gap:.75rem; margin-bottom:.85rem; }
 .ops-tabs { display:flex; flex-wrap:wrap; gap:.4rem; }
 .ops-tab {
   display:inline-flex; align-items:center; gap:.4rem;
@@ -778,11 +798,29 @@ $extraColHeader = count($extraColLabels) === 1
   background:rgba(0,0,0,.08); font-size:.75rem;
 }
 .ops-tab.active .ops-tab-count { background:rgba(255,255,255,.22); }
-.ops-search { display:flex; gap:.45rem; flex-wrap:wrap; align-items:center; max-width:42rem; }
+.ops-search { display:flex; gap:.45rem; flex-wrap:wrap; align-items:center; max-width:100%; }
 .ops-search input[type="search"] {
   flex:1; min-width:12rem; font:inherit; padding:.55rem .7rem; border:1px solid #cfd8e6; border-radius:10px;
 }
+.ops-legend {
+  display:flex; flex-wrap:wrap; gap:.55rem .9rem; align-items:center;
+  margin:0 0 .85rem; padding:.55rem .75rem;
+  border:1px solid #e6ebf2; border-radius:12px; background:#f8fafc;
+}
+.ops-legend-item {
+  display:inline-flex; align-items:center; gap:.35rem;
+  font-size:.78rem; color:#475569; white-space:nowrap;
+}
 .ops-panel { padding:0; overflow:hidden; }
+@media (max-width: 820px) {
+  .ops-controls, .ops-controls tbody, .ops-controls tr, .ops-controls td {
+    display:block; width:100%;
+  }
+  .ops-controls { border-spacing:0; }
+  .ops-controls-main { padding:0 0 .55rem; }
+  .ops-controls-credit { width:100%; }
+  .ops-credit-card { min-width:0; width:100%; }
+}
 .ops-table-wrap { max-height: min(70vh, 820px); overflow:auto; }
 .ops-table { margin:0; border-collapse:separate; border-spacing:0; min-width:1100px; }
 .ops-table th {
@@ -815,7 +853,6 @@ $extraColHeader = count($extraColLabels) === 1
 .ops-table tr.ops-row--pay td.ops-actions { background:#fffbeb; }
 .ops-table tr.ops-row--provider td.ops-actions { background:#fff7ed; }
 .ops-table tr.ops-row--access td.ops-actions { background:#f0f7ff; }
-.ops-view-hint { margin:0; font-size:.82rem; max-width:52rem; }
 .ops-exam-pill {
   display:inline-flex; align-items:center; gap:.25rem;
   padding:.2rem .5rem; border-radius:999px; font-weight:700; font-size:.78rem;
@@ -861,12 +898,6 @@ $extraColHeader = count($extraColLabels) === 1
   background:#102a56; color:#fff; box-shadow:0 8px 24px rgba(16,42,86,.18);
 }
 .ops-bulk-bar[hidden] { display:none !important; }
-.ops-legend {
-  display:flex; flex-wrap:wrap; gap:.75rem 1.25rem; margin:0 0 .85rem;
-  padding:.55rem .8rem; border-radius:12px; background:#f7fafc; border:1px solid #e6ebf2;
-  font-size:.8rem; color:#445; font-weight:600;
-}
-.ops-legend-item { display:inline-flex; align-items:center; gap:.4rem; }
 .ops-swatch {
   width:.85rem; height:.85rem; border-radius:4px; display:inline-block; border:1px solid rgba(0,0,0,.08);
 }
