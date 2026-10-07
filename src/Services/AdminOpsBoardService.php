@@ -62,6 +62,7 @@ final class AdminOpsBoardService
      */
     public function list(array $filters, ?int $limit = 50, ?int $offset = 0): array
     {
+        $this->ensurePartnerCreditUsedColumn();
         [$where, $params] = $this->whereClause($filters);
         $sql = 'SELECT t.id, t.purchase_id, t.product_id, t.pipeline_template_id, t.current_step_code, t.status AS tracking_status,
                     t.exam_date, t.exam_time, t.exam_date_2, t.exam_time_2, t.zoom_url,
@@ -73,6 +74,7 @@ final class AdminOpsBoardService
                     pg.config_json AS group_config_json,
                     pu.matricula, pu.status AS purchase_status, pu.charged_amount, pu.payment_method,
                     pu.payment_proof_path, pu.paid_at, pu.combo_id,
+                    pu.partner_credit_used, pu.partner_price_amount,
                     u.first_name, u.last_name_p, u.last_name_m, u.email AS student_email, u.phone AS student_phone,
                     st.curp, st.birth_date, st.sex, st.nationality,
                     pt.code AS pipeline_code,
@@ -681,5 +683,25 @@ final class AdminOpsBoardService
         }
 
         return [implode(' AND ', $parts), $params];
+    }
+
+    private function ensurePartnerCreditUsedColumn(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        try {
+            $stmt = $this->pdo->query("SHOW COLUMNS FROM purchases LIKE 'partner_credit_used'");
+            if ($stmt && $stmt->fetch()) {
+                return;
+            }
+            $this->pdo->exec(
+                'ALTER TABLE purchases ADD COLUMN partner_credit_used DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER partner_credit_earned'
+            );
+        } catch (\Throwable $e) {
+            error_log('[Doceo] AdminOpsBoard ensurePartnerCreditUsedColumn: ' . $e->getMessage());
+        }
     }
 }

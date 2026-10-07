@@ -76,15 +76,6 @@ $partnerCsvHeaders = implode(',', \App\Services\PartnerAdminService::priceCsvHea
         <input type="file" name="csv" accept=".csv,text/csv" required>
     </label>
     <button class="btn btn-accent" type="submit">Subir e importar</button>
-    <span class="muted" style="font-size:.78rem;max-width:28rem">
-        Columnas:
-        <code>type,code,name,supplier,certifier,cost_price,catalog_price,public_price,price_cncm,<?= e($partnerCsvHeaders) ?></code>
-        (<code>type</code>: <code>product</code> o <code>combo</code>; el costo no aplica a combos).
-        <code>supplier</code> y <code>certifier</code> son solo lectura (identificación); al importar se ignoran.
-        Edita los montos y vuelve a subir: si la celda tiene valor, se sobrescribe.
-        La importación solo actualiza precios (no nombres); los acentos del catálogo no se borran.
-        Plantilla en UTF-8 con separador <code>;</code> para que Excel muestre bien tildes y ñ.
-    </span>
 </form>
 
 <form method="post" action="<?= e(url('/admin/precios')) ?>" class="panel" style="margin-top:1rem" id="prices-bulk-form">

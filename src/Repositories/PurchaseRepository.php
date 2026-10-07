@@ -154,22 +154,24 @@ final class PurchaseRepository
      *   matricula:string,student_user_id:int,partner_id:?int,discount_code_id:?int,combo_id:?int,
      *   status:string,payment_method:string,currency:string,catalog_amount:float,charged_amount:float,
      *   card_msi_months:?int,
-     *   partner_price_amount:?float,partner_credit_earned:float
+     *   partner_price_amount:?float,partner_credit_earned:float,partner_credit_used?:float
      * } $data
      */
     public function create(array $data): int
     {
+        $this->ensurePartnerCreditUsedColumn();
         $msi = isset($data['card_msi_months']) ? (int) $data['card_msi_months'] : null;
         if ($msi !== null && $msi <= 1) {
             $msi = null;
         }
+        $creditUsed = round((float) ($data['partner_credit_used'] ?? 0), 2);
 
         $stmt = $this->pdo->prepare(
             'INSERT INTO purchases (
                 matricula, student_user_id, partner_id, discount_code_id, combo_id,
                 status, payment_method, currency, catalog_amount, charged_amount,
-                card_msi_months, partner_price_amount, partner_credit_earned
-             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                card_msi_months, partner_price_amount, partner_credit_earned, partner_credit_used
+             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         );
         $stmt->execute([
             $data['matricula'],
@@ -185,9 +187,30 @@ final class PurchaseRepository
             $msi,
             $data['partner_price_amount'],
             $data['partner_credit_earned'],
+            $creditUsed,
         ]);
 
         return (int) $this->pdo->lastInsertId();
+    }
+
+    private function ensurePartnerCreditUsedColumn(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        try {
+            $stmt = $this->pdo->query("SHOW COLUMNS FROM purchases LIKE 'partner_credit_used'");
+            if ($stmt && $stmt->fetch()) {
+                return;
+            }
+            $this->pdo->exec(
+                'ALTER TABLE purchases ADD COLUMN partner_credit_used DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER partner_credit_earned'
+            );
+        } catch (\Throwable $e) {
+            error_log('[Doceo] ensurePartnerCreditUsedColumn: ' . $e->getMessage());
+        }
     }
 
     public function addItem(int $purchaseId, int $productId, float $public, float $charged): int

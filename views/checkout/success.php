@@ -21,7 +21,10 @@ $methodLabels = [
     'openpay_spei' => 'SPEI',
     'openpay_store' => 'OXXO / tienda',
     'transfer_proof' => 'Transferencia DOCEO',
+    'credit' => 'Crédito a favor (partner)',
 ];
+$creditUsedSuccess = (float) ($purchase['partner_credit_used'] ?? 0);
+$cashDueSuccess = (float) ($purchase['charged_amount'] ?? 0);
 ?>
 <article class="panel" style="margin:1.25rem 0 2.5rem">
     <p class="meta">Compra registrada</p>
@@ -30,8 +33,11 @@ $methodLabels = [
 
     <div class="price-box" style="margin:1rem 0;display:flex;gap:2rem;flex-wrap:wrap">
         <div>
-            <div class="muted" style="font-size:.85rem">Monto</div>
-            <div class="price" style="font-size:1.5rem"><?= money($purchase['charged_amount']) ?></div>
+            <div class="muted" style="font-size:.85rem"><?= $creditUsedSuccess > 0.009 && $cashDueSuccess > 0.009 ? 'Restante a transferir' : 'Monto' ?></div>
+            <div class="price" style="font-size:1.5rem"><?= money($cashDueSuccess) ?></div>
+            <?php if ($creditUsedSuccess > 0.009): ?>
+                <div class="muted" style="font-size:.82rem;margin-top:.25rem">Crédito aplicado: <?= money($creditUsedSuccess) ?></div>
+            <?php endif; ?>
         </div>
         <div>
             <div class="muted" style="font-size:.85rem">Método</div>
@@ -68,10 +74,21 @@ $methodLabels = [
         <hr style="border:0;border-top:1px solid #e6ebf2;margin:1.25rem 0">
         <h2 style="font-size:1.05rem;color:var(--doceo-blue)">Instrucciones de pago</h2>
 
-        <?php if ((string) ($purchase['status'] ?? '') === 'payment_review'
+        <?php if ($method === 'credit' || ($creditUsedSuccess > 0.009 && $cashDueSuccess <= 0.009)): ?>
+            <p>
+                Registramos el uso de tu <strong>crédito a favor</strong> (<?= money($creditUsedSuccess) ?>).
+                Administración confirmará el pago; no es necesario transferir.
+            </p>
+
+        <?php elseif ((string) ($purchase['status'] ?? '') === 'payment_review'
             && !empty($purchase['payment_proof_path'])
             && in_array($method, ['transfer_proof', 'openpay_store'], true)): ?>
-            <p>Recibimos tu comprobante de pago. Lo revisaremos y te avisaremos por correo.</p>
+            <p>
+                Recibimos tu comprobante<?= $creditUsedSuccess > 0.009
+                    ? ' por el restante (' . money($cashDueSuccess) . '); también aplicamos ' . money($creditUsedSuccess) . ' de crédito a favor'
+                    : ' de pago' ?>.
+                Lo revisaremos y te avisaremos por correo.
+            </p>
 
         <?php elseif (!empty($purchase['openpay_clabe'])): ?>
             <p>Realiza una transferencia SPEI por el <strong>monto total</strong> a esta CLABE única:</p>

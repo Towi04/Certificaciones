@@ -159,6 +159,14 @@ final class CheckoutController
                 }
             }
 
+            $usePartnerCredit = (Auth::user()['role'] ?? '') === 'partner'
+                && !empty($_POST['use_partner_credit']);
+            if ($usePartnerCredit && $paymentMethod === 'credit') {
+                // Cubrir 100% con crédito.
+            } elseif ($usePartnerCredit) {
+                $paymentMethod = 'transfer_proof';
+            }
+
             $result = (new CheckoutService())->complete(
                 (int) $product['id'],
                 $buyer,
@@ -175,7 +183,8 @@ final class CheckoutController
                         'exam_allow_short_advance' => !empty($_POST['exam_allow_short_advance']),
                     ]
                     : null,
-                !empty($_POST['combo_id']) ? (int) $_POST['combo_id'] : null
+                !empty($_POST['combo_id']) ? (int) $_POST['combo_id'] : null,
+                $usePartnerCredit
             );
 
             $matricula = (string) $result['purchase']['matricula'];
