@@ -1396,7 +1396,12 @@ $stepLabels = [
           data.sessions.forEach(function (s) {
             const opt = document.createElement('option');
             opt.value = s.id || s.value || '';
-            opt.textContent = s.label || ((s.exam_date || '') + ' ' + (s.exam_time || ''));
+            var bits = [];
+            if (s.label) bits.push(s.label);
+            bits.push(((s.exam_date || '') + ' ' + (s.exam_time || '')).trim());
+            if (s.venue) bits.push(s.venue);
+            else if (s.city) bits.push(s.city);
+            opt.textContent = bits.filter(Boolean).join(' · ');
             opt.dataset.date = s.exam_date || '';
             opt.dataset.time = s.exam_time || '';
             if (s.registration_deadline) {
