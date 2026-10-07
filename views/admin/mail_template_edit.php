@@ -108,6 +108,9 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
                 Los correos (alumnos, partners o clientes anteriores) se eligen al crear la campaña en
                 <a href="<?= e(url('/admin/publicidad')) ?>">Publicidad</a>.
                 Placeholders útiles: <code>{{name}}</code>, <code>{{catalog_url}}</code>, <code>{{promo_code}}</code>.
+                Tarjetas de producto: configura placeholders en
+                <a href="<?= e(url('/admin/correos#cards')) ?>">Tarjetas de catálogo</a>
+                (ej. <code>{{elet}}</code> o <code>{{cards:elet,toefl}}</code>).
             </div>
 
             <div id="mail-provider-to" style="<?= $showProviderTo ? 'display:grid;gap:.75rem;margin-top:.85rem' : 'display:none;margin-top:.85rem' ?>">
