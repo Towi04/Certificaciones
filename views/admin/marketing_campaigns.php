@@ -64,15 +64,20 @@ $statusLabels = [
                                 </div>
                             </td>
                             <td><span class="pill"><?= e($statusLabels[$st] ?? $st) ?></span></td>
-                            <td style="font-size:.85rem">
-                                <?php if ($total > 0): ?>
-                                    <?= $sent ?>/<?= $total ?> enviados
-                                    <?php if ($pending > 0): ?>
-                                        <span class="muted">· <?= $pending ?> pendientes</span>
-                                    <?php endif; ?>
-                                <?php else: ?>
-                                    <span class="muted">Sin cola</span>
-                                <?php endif; ?>
+                            <td style="min-width:180px">
+                                <?php
+                                $counts = [
+                                    'total' => $total,
+                                    'sent' => $sent,
+                                    'pending' => $pending,
+                                    'failed' => (int) ($c['recipients_failed'] ?? 0),
+                                    'cancelled' => (int) ($c['recipients_cancelled'] ?? 0),
+                                    'skipped' => 0,
+                                ];
+                                $status = $st;
+                                $compact = true;
+                                require __DIR__ . '/_marketing_progress.php';
+                                ?>
                             </td>
                             <td>
                                 <a class="btn btn-ghost btn-sm" href="<?= e(url('/admin/publicidad/' . (int) $c['id'])) ?>">Ver</a>

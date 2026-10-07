@@ -60,6 +60,32 @@ $cid = (int) $campaign['id'];
     </div>
 </div>
 
+<?php if (($counts['total'] ?? 0) > 0 || in_array($st, ['running', 'scheduled', 'paused', 'completed', 'cancelled'], true)): ?>
+<div class="panel" style="margin-top:1rem">
+    <h2 style="margin:.2rem 0 .75rem;font-size:1.05rem;color:var(--doceo-blue)">Progreso del envío</h2>
+    <?php
+    $compact = false;
+    $status = $st;
+    require __DIR__ . '/_marketing_progress.php';
+    ?>
+    <div style="display:flex;flex-wrap:wrap;gap:.75rem 1.25rem;margin-top:.75rem;font-size:.85rem">
+        <span><strong style="color:#16a34a"><?= (int) ($counts['sent'] ?? 0) ?></strong> enviados</span>
+        <span><strong style="color:#2563eb"><?= (int) ($counts['pending'] ?? 0) ?></strong> pendientes</span>
+        <span><strong style="color:#dc2626"><?= (int) ($counts['failed'] ?? 0) ?></strong> fallidos</span>
+        <?php if ((int) ($counts['cancelled'] ?? 0) > 0): ?>
+            <span><strong><?= (int) $counts['cancelled'] ?></strong> cancelados</span>
+        <?php endif; ?>
+        <span class="muted">Total cola: <?= (int) ($counts['total'] ?? 0) ?></span>
+    </div>
+    <?php if (in_array($st, ['running', 'scheduled', 'paused'], true)): ?>
+        <p class="muted" style="margin:.65rem 0 0;font-size:.8rem">
+            El progreso se actualiza cuando corre el cron
+            (<code>php bin/process-scheduled-mails.php</code>). Recarga esta página para ver el avance.
+        </p>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin:.2rem 0 .75rem;font-size:1.05rem;color:var(--doceo-blue)">Programación</h2>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;font-size:.9rem">

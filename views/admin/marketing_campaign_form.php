@@ -32,23 +32,57 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                    placeholder="Ej. Cupón antiguas clientes · diciembre">
         </label>
 
+        <?php
+        $mktTemplates = [];
+        $otherTemplates = [];
+        foreach ($templates as $t) {
+            if (empty($t['is_active'])) {
+                continue;
+            }
+            $code = (string) ($t['code'] ?? '');
+            if (\App\Services\MailTemplateService::isMarketingTemplate($code)) {
+                $mktTemplates[] = $t;
+            } else {
+                $otherTemplates[] = $t;
+            }
+        }
+        $selectedTpl = (string) ($campaign['mail_template_code'] ?? '');
+        ?>
         <label class="muted" style="<?= e($labelStyle) ?>">
             Plantilla de correo *
             <select name="mail_template_code" required style="<?= e($inputStyle) ?>">
                 <option value="">— elige plantilla —</option>
-                <?php foreach ($templates as $t): ?>
-                    <?php if (empty($t['is_active'])) continue; ?>
-                    <option value="<?= e((string) $t['code']) ?>"
-                        <?= ((string) ($campaign['mail_template_code'] ?? '') === (string) $t['code']) ? 'selected' : '' ?>>
-                        <?= e((string) ($t['name'] ?? $t['code'])) ?> (<?= e((string) $t['code']) ?>)
-                    </option>
-                <?php endforeach; ?>
+                <?php if ($mktTemplates !== []): ?>
+                    <optgroup label="Publicidad">
+                        <?php foreach ($mktTemplates as $t): ?>
+                            <option value="<?= e((string) $t['code']) ?>"
+                                <?= $selectedTpl === (string) $t['code'] ? 'selected' : '' ?>>
+                                <?= e((string) ($t['name'] ?? $t['code'])) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </optgroup>
+                <?php endif; ?>
+                <?php if ($otherTemplates !== []): ?>
+                    <optgroup label="Otras (operativas)">
+                        <?php foreach ($otherTemplates as $t): ?>
+                            <option value="<?= e((string) $t['code']) ?>"
+                                <?= $selectedTpl === (string) $t['code'] ? 'selected' : '' ?>>
+                                <?= e((string) ($t['name'] ?? $t['code'])) ?>
+                                · <?= e(\App\Services\MailTemplateService::audienceLabel(
+                                    \App\Services\MailTemplateService::audienceForTemplate((string) $t['code'])
+                                )) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </optgroup>
+                <?php endif; ?>
             </select>
         </label>
         <p class="muted" style="margin:-.4rem 0 0;font-size:.8rem">
-            Crea o edita plantillas en
-            <a href="<?= e(url('/admin/correos')) ?>">Plantillas correo</a>.
-            Placeholders útiles: <code>{{name}}</code>, <code>{{full_name}}</code>,
+            Preferible crear la plantilla con destinatario <strong>Publicidad</strong>
+            (así no pide correo fijo; la campaña define a quién llega).
+            <a href="<?= e(url('/admin/correos/nueva?audience=marketing')) ?>">Nueva plantilla de publicidad</a>
+            · <a href="<?= e(url('/admin/correos?audience=marketing')) ?>">Ver plantillas de publicidad</a>.
+            Placeholders: <code>{{name}}</code>, <code>{{full_name}}</code>,
             <code>{{product_name}}</code>, <code>{{catalog_url}}</code>, <code>{{promo_code}}</code>.
         </p>
 

@@ -86,7 +86,8 @@ final class MarketingCampaignService
                     (SELECT COUNT(*) FROM marketing_campaign_recipients r WHERE r.campaign_id = c.id) AS recipients_total,
                     (SELECT COUNT(*) FROM marketing_campaign_recipients r WHERE r.campaign_id = c.id AND r.status = \'sent\') AS recipients_sent,
                     (SELECT COUNT(*) FROM marketing_campaign_recipients r WHERE r.campaign_id = c.id AND r.status = \'pending\') AS recipients_pending,
-                    (SELECT COUNT(*) FROM marketing_campaign_recipients r WHERE r.campaign_id = c.id AND r.status = \'failed\') AS recipients_failed
+                    (SELECT COUNT(*) FROM marketing_campaign_recipients r WHERE r.campaign_id = c.id AND r.status = \'failed\') AS recipients_failed,
+                    (SELECT COUNT(*) FROM marketing_campaign_recipients r WHERE r.campaign_id = c.id AND r.status = \'cancelled\') AS recipients_cancelled
              FROM marketing_campaigns c
              ORDER BY c.id DESC
              LIMIT ' . max(1, min(200, $limit))
