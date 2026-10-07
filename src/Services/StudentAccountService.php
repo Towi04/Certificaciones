@@ -193,11 +193,17 @@ final class StudentAccountService
         return (string) json_encode($clean, JSON_UNESCAPED_UNICODE);
     }
 
+    /**
+     * Sesión tras compra / alta: el alumno puede navegar el sitio.
+     * El cambio de contraseña temporal se exige solo cuando entre por /login.
+     */
     public function loginAs(array $user): void
     {
         session_regenerate_id(true);
         $_SESSION['user_id'] = (int) $user['id'];
         $_SESSION['user_role'] = (string) $user['role'];
         $_SESSION['user_name'] = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name_p'] ?? ''));
+        $_SESSION['force_password_change'] = false;
+        unset($_SESSION['must_change_password']);
     }
 }

@@ -50,7 +50,10 @@ final class Auth
         $_SESSION['user_id'] = (int) $user['id'];
         $_SESSION['user_role'] = (string) $user['role'];
         $_SESSION['user_name'] = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name_p'] ?? ''));
-        $_SESSION['must_change_password'] = !empty($user['must_change_password']);
+        // Solo tras login con contraseña se exige el cambio de temporal.
+        // El auto-login post-compra no debe bloquear la navegación.
+        $_SESSION['force_password_change'] = !empty($user['must_change_password']);
+        unset($_SESSION['must_change_password']);
 
         $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')->execute([(int) $user['id']]);
 
@@ -82,24 +85,20 @@ final class Auth
         return isset($_SESSION['user_role']) ? (string) $_SESSION['user_role'] : null;
     }
 
+    /**
+     * ¿Esta sesión debe obligar el cambio de contraseña temporal?
+     * Solo true tras Auth::attempt() con must_change_password en BD.
+     * No se activa por auto-login de checkout (loginAs).
+     */
     public static function mustChangePassword(): bool
     {
-        if (!empty($_SESSION['must_change_password'])) {
-            return true;
-        }
-        $user = self::user();
-        if ($user === null) {
-            return false;
-        }
-        $must = !empty($user['must_change_password']);
-        $_SESSION['must_change_password'] = $must;
-
-        return $must;
+        return !empty($_SESSION['force_password_change']);
     }
 
     public static function clearMustChangeFlag(): void
     {
-        $_SESSION['must_change_password'] = false;
+        $_SESSION['force_password_change'] = false;
+        unset($_SESSION['must_change_password']);
     }
 
     public static function user(): ?array
@@ -136,7 +135,8 @@ final class Auth
     }
 
     /**
-     * Obliga a cambiar la contraseña temporal antes de usar el resto del sitio.
+     * Obliga a cambiar la contraseña temporal tras el primer login con ella.
+     * No aplica al auto-login inmediato después de crear la cuenta en checkout.
      */
     public static function enforcePasswordChange(): void
     {
