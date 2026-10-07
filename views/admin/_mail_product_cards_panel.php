@@ -17,6 +17,7 @@ $layoutOptions = [
     'row' => 'Horizontal: imagen izq. + texto der.',
     'row_flip' => 'Horizontal: texto izq. + imagen der.',
 ];
+$discountPosOptions = \App\Services\MailProductCardService::discountBadgePositionOptions();
 ?>
 <div class="mail-panel" data-panel="cards" hidden id="mail-cards">
     <div class="panel" style="margin-top:.75rem">
@@ -70,6 +71,17 @@ $layoutOptions = [
                             <option value="both">Ambos</option>
                             <option value="none">Ninguno</option>
                         </select>
+                    </label>
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Posición del %
+                        <select name="discount_badge_position" style="<?= e($inputStyle) ?>">
+                            <?php foreach ($discountPosOptions as $val => $lab): ?>
+                                <option value="<?= e($val) ?>" <?= ($mailCardSeed['discount_badge_position'] ?? 'top_right') === $val ? 'selected' : '' ?>>
+                                    <?= e($lab) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <span style="font-weight:500;font-size:.75rem">El % va encima de la imagen, no en el texto.</span>
                     </label>
                     <label class="muted" style="<?= e($labelStyle) ?>">
                         Texto franja
@@ -203,6 +215,21 @@ $layoutOptions = [
                                             <option value="<?= e($val) ?>" <?= ($card['badge_mode'] ?? '') === $val ? 'selected' : '' ?>><?= e($lab) ?></option>
                                         <?php endforeach; ?>
                                     </select>
+                                </label>
+                                <label class="muted" style="<?= e($labelStyle) ?>">
+                                    Posición del %
+                                    <select name="discount_badge_position" style="<?= e($inputStyle) ?>">
+                                        <?php
+                                        $cardDiscPos = (string) ($card['discount_badge_position'] ?? 'top_right');
+                                        if (!isset($discountPosOptions[$cardDiscPos])) {
+                                            $cardDiscPos = 'top_right';
+                                        }
+                                        foreach ($discountPosOptions as $val => $lab):
+                                        ?>
+                                            <option value="<?= e($val) ?>" <?= $cardDiscPos === $val ? 'selected' : '' ?>><?= e($lab) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <span style="font-weight:500;font-size:.72rem">Encima de la imagen.</span>
                                 </label>
                                 <label class="muted" style="<?= e($labelStyle) ?>">
                                     Texto franja
@@ -342,7 +369,7 @@ $layoutOptions = [
 
     var body = new URLSearchParams();
     body.set('product_id', productId);
-    ['layout','badge_mode','badge_text','accent_color','cta_label'].forEach(function (name) {
+    ['layout','badge_mode','badge_text','discount_badge_position','accent_color','cta_label'].forEach(function (name) {
       var el = form.querySelector('[name="' + name + '"]');
       if (el && el.value != null) body.set(name, el.value);
     });

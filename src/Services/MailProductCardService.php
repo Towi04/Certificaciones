@@ -45,6 +45,7 @@ final class MailProductCardService
                 layout ENUM('square','square_desc','wide','row','row_flip') NOT NULL DEFAULT 'wide',
                 badge_mode ENUM('discount','banner','both','none') NOT NULL DEFAULT 'discount',
                 badge_text VARCHAR(80) NULL,
+                discount_badge_position ENUM('top_right','top_left','bottom_right','bottom_left') NOT NULL DEFAULT 'top_right',
                 custom_image_path VARCHAR(255) NULL,
                 accent_color VARCHAR(7) NOT NULL DEFAULT '#315285',
                 cta_label VARCHAR(80) NOT NULL DEFAULT 'Ver en catálogo',
@@ -59,6 +60,10 @@ final class MailProductCardService
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
         $this->ensureColumn('custom_image_path', 'VARCHAR(255) NULL AFTER badge_text');
+        $this->ensureColumn(
+            'discount_badge_position',
+            "ENUM('top_right','top_left','bottom_right','bottom_left') NOT NULL DEFAULT 'top_right' AFTER badge_text"
+        );
         $this->ensureColumn('accent_color', "VARCHAR(7) NOT NULL DEFAULT '#315285' AFTER custom_image_path");
         $this->ensureColumn('cta_label', "VARCHAR(80) NOT NULL DEFAULT 'Ver en catálogo' AFTER accent_color");
         $this->ensureLayoutEnum();
@@ -118,8 +123,20 @@ final class MailProductCardService
             'layout' => 'wide',
             'badge_mode' => 'discount',
             'badge_text' => 'Solicita tu descuento',
+            'discount_badge_position' => 'top_right',
             'accent_color' => '#315285',
             'cta_label' => 'Ver en catálogo',
+        ];
+    }
+
+    /** @return array<string, string> */
+    public static function discountBadgePositionOptions(): array
+    {
+        return [
+            'top_right' => 'Arriba derecha',
+            'top_left' => 'Arriba izquierda',
+            'bottom_right' => 'Abajo derecha',
+            'bottom_left' => 'Abajo izquierda',
         ];
     }
 
@@ -201,9 +218,9 @@ final class MailProductCardService
         }
         $stmt = $this->pdo->prepare(
             'INSERT INTO mail_product_cards
-                (placeholder, product_id, layout, badge_mode, badge_text, custom_image_path,
-                 accent_color, cta_label, show_description, is_active, sort_order)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                (placeholder, product_id, layout, badge_mode, badge_text, discount_badge_position,
+                 custom_image_path, accent_color, cta_label, show_description, is_active, sort_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $data['placeholder'],
@@ -211,6 +228,7 @@ final class MailProductCardService
             $data['layout'],
             $data['badge_mode'],
             $data['badge_text'],
+            $data['discount_badge_position'],
             $customImage,
             $data['accent_color'],
             $data['cta_label'],
@@ -249,7 +267,7 @@ final class MailProductCardService
         $this->pdo->prepare(
             'UPDATE mail_product_cards
              SET placeholder = ?, product_id = ?, layout = ?, badge_mode = ?, badge_text = ?,
-                 custom_image_path = ?, accent_color = ?, cta_label = ?,
+                 discount_badge_position = ?, custom_image_path = ?, accent_color = ?, cta_label = ?,
                  show_description = ?, is_active = ?, sort_order = ?
              WHERE id = ?'
         )->execute([
@@ -258,6 +276,7 @@ final class MailProductCardService
             $data['layout'],
             $data['badge_mode'],
             $data['badge_text'],
+            $data['discount_badge_position'],
             $customImage,
             $data['accent_color'],
             $data['cta_label'],
@@ -320,6 +339,7 @@ final class MailProductCardService
             'layout' => (string) ($input['layout'] ?? $seed['layout']),
             'badge_mode' => (string) ($input['badge_mode'] ?? $seed['badge_mode']),
             'badge_text' => (string) ($input['badge_text'] ?? $seed['badge_text']),
+            'discount_badge_position' => (string) ($input['discount_badge_position'] ?? $seed['discount_badge_position']),
             'accent_color' => (string) ($input['accent_color'] ?? $seed['accent_color']),
             'cta_label' => (string) ($input['cta_label'] ?? $seed['cta_label']),
             'show_description' => !empty($input['show_description']) ? 1 : 0,
@@ -474,6 +494,9 @@ final class MailProductCardService
         $layout = self::normalizeLayout((string) ($card['layout'] ?? $seed['layout']));
         $badgeMode = self::normalizeBadge((string) ($card['badge_mode'] ?? $seed['badge_mode']));
         $bannerText = trim((string) ($card['badge_text'] ?? '')) ?: $seed['badge_text'];
+        $discountPos = self::normalizeDiscountBadgePosition(
+            (string) ($card['discount_badge_position'] ?? $seed['discount_badge_position'])
+        );
         $showDesc = !empty($card['show_description']);
         $desc = trim(strip_tags((string) ($card['short_description'] ?? '')));
         if (mb_strlen($desc) > 140) {
@@ -499,32 +522,43 @@ final class MailProductCardService
         $safeBanner = htmlspecialchars($bannerText, ENT_QUOTES, 'UTF-8');
         $safeDesc = htmlspecialchars($desc, ENT_QUOTES, 'UTF-8');
 
-        $badgeHtml = '';
+        // % descuento va encima de la imagen; la franja de texto queda en el cuerpo.
+        $discountOverlay = '';
         if (($badgeMode === 'discount' || $badgeMode === 'both') && $discountPct > 0) {
-            $badgeHtml .= '<span style="display:inline-block;background:#dc2626;color:#fff;font-weight:800;'
-                . 'font-size:12px;line-height:1;padding:6px 8px;border-radius:999px;">-'
-                . (int) $discountPct . '%</span>';
+            $discountOverlay = self::renderDiscountBadgeHtml($discountPct);
         }
+        $bannerHtml = '';
         if ($badgeMode === 'banner' || $badgeMode === 'both') {
-            $badgeHtml .= ($badgeHtml !== '' ? '&nbsp;' : '')
-                . '<span style="display:inline-block;background:' . $accent . ';color:#fff;font-weight:700;'
+            $bannerHtml = '<span style="display:inline-block;background:' . $accent . ';color:#fff;font-weight:700;'
                 . 'font-size:11px;line-height:1.2;padding:5px 8px;border-radius:6px;">'
                 . $safeBanner . '</span>';
         }
 
         if ($layout === 'row') {
             // Imagen izquierda + texto derecha.
-            return $this->htmlRowCard($safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc, $badgeHtml, $cta, $accent, false);
+            return $this->htmlRowCard(
+                $safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc,
+                $discountOverlay, $discountPos, $bannerHtml, $cta, $accent, false
+            );
         }
         if ($layout === 'row_flip') {
             // Texto izquierda + imagen derecha.
-            return $this->htmlRowCard($safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc, $badgeHtml, $cta, $accent, true);
+            return $this->htmlRowCard(
+                $safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc,
+                $discountOverlay, $discountPos, $bannerHtml, $cta, $accent, true
+            );
         }
         if ($layout === 'square') {
-            return $this->htmlSquareCard($safeUrl, $safeLogo, $safeName, $badgeHtml, $cta, $accent, $safeDesc, $showDesc);
+            return $this->htmlSquareCard(
+                $safeUrl, $safeLogo, $safeName, $discountOverlay, $discountPos,
+                $bannerHtml, $cta, $accent, $safeDesc, $showDesc
+            );
         }
 
-        return $this->htmlWideCard($safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc, $badgeHtml, $cta, $accent);
+        return $this->htmlWideCard(
+            $safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc,
+            $discountOverlay, $discountPos, $bannerHtml, $cta, $accent
+        );
     }
 
     /** @param list<string> $placeholders */
@@ -616,7 +650,7 @@ final class MailProductCardService
      * @param array<string, mixed> $input
      * @return array{
      *   placeholder:string,product_id:int,layout:string,badge_mode:string,
-     *   badge_text:?string,accent_color:string,cta_label:string,
+     *   badge_text:?string,discount_badge_position:string,accent_color:string,cta_label:string,
      *   show_description:int,is_active:int,sort_order:int
      * }
      */
@@ -657,6 +691,9 @@ final class MailProductCardService
             'layout' => self::normalizeLayout((string) ($input['layout'] ?? $seed['layout'])),
             'badge_mode' => self::normalizeBadge((string) ($input['badge_mode'] ?? $seed['badge_mode'])),
             'badge_text' => $badgeText !== '' ? mb_substr($badgeText, 0, 80) : null,
+            'discount_badge_position' => self::normalizeDiscountBadgePosition(
+                (string) ($input['discount_badge_position'] ?? $seed['discount_badge_position'])
+            ),
             'accent_color' => self::normalizeColor((string) ($input['accent_color'] ?? $seed['accent_color'])),
             'cta_label' => mb_substr($ctaLabel, 0, 80),
             'show_description' => !empty($input['show_description']) ? 1 : 0,
@@ -697,6 +734,13 @@ final class MailProductCardService
         return in_array($badge, ['discount', 'banner', 'both', 'none'], true) ? $badge : 'discount';
     }
 
+    private static function normalizeDiscountBadgePosition(string $position): string
+    {
+        return array_key_exists($position, self::discountBadgePositionOptions())
+            ? $position
+            : 'top_right';
+    }
+
     private static function normalizeColor(string $color): string
     {
         $color = trim($color);
@@ -705,6 +749,47 @@ final class MailProductCardService
         }
 
         return '#315285';
+    }
+
+    /** Badge de % grande, pensado para overlay sobre la imagen. */
+    private static function renderDiscountBadgeHtml(int $pct): string
+    {
+        return '<span style="display:inline-block;background:#dc2626;color:#ffffff;font-weight:800;'
+            . 'font-size:18px;line-height:1;padding:10px 12px;border-radius:999px;'
+            . 'box-shadow:0 2px 8px rgba(0,0,0,.28);letter-spacing:.02em;">-'
+            . (int) $pct . '%</span>';
+    }
+
+    /** Estilo absolute del badge según esquina configurada. */
+    private static function discountBadgeAbsoluteStyle(string $position): string
+    {
+        $base = 'position:absolute;z-index:2;line-height:1.2;';
+        return match (self::normalizeDiscountBadgePosition($position)) {
+            'top_left' => $base . 'top:10px;left:10px;',
+            'bottom_left' => $base . 'bottom:10px;left:10px;',
+            'bottom_right' => $base . 'bottom:10px;right:10px;',
+            default => $base . 'top:10px;right:10px;',
+        };
+    }
+
+    /**
+     * Envuelve la imagen con el % de descuento encima (esquina configurable).
+     * position:relative/absolute funciona en la vista previa y en la mayoría de clientes modernos.
+     */
+    private static function wrapImageWithDiscountOverlay(
+        string $imageInnerHtml,
+        string $discountOverlayHtml,
+        string $position
+    ): string {
+        if ($discountOverlayHtml === '') {
+            return $imageInnerHtml;
+        }
+
+        return '<div style="position:relative;display:block;line-height:0;font-size:0;">'
+            . $imageInnerHtml
+            . '<div style="' . self::discountBadgeAbsoluteStyle($position) . '">'
+            . $discountOverlayHtml
+            . '</div></div>';
     }
 
     /** @param array<string, mixed> $card */
@@ -787,7 +872,9 @@ final class MailProductCardService
         string $name,
         string $desc,
         bool $showDesc,
-        string $badgeHtml,
+        string $discountOverlay,
+        string $discountPos,
+        string $bannerHtml,
         string $cta,
         string $accent
     ): string {
@@ -798,22 +885,23 @@ final class MailProductCardService
         $bw = self::WIDE_BANNER_WIDTH;
         $bh = self::WIDE_BANNER_HEIGHT;
 
+        $imageInner = '<a href="' . $url . '" style="text-decoration:none;display:block;line-height:0;">'
+            . '<img src="' . $logo . '" alt="' . $name . '" width="' . $bw . '" height="' . $bh . '" '
+            . 'style="display:block;width:100%;max-width:' . $bw . 'px;height:auto;aspect-ratio:'
+            . $bw . ' / ' . $bh . ';object-fit:cover;object-position:center;border:0;">'
+            . '</a>';
+        $imageBlock = self::wrapImageWithDiscountOverlay($imageInner, $discountOverlay, $discountPos);
+
         // Banner a sangre: sin padding; la imagen cubre todo el ancho del bloque.
         // Medida ideal: 600×240 (o 1200×480). object-fit:cover recorta sin deformar.
         return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
             . 'style="border-collapse:collapse;margin:10px 0;border:1px solid #e6ebf2;border-radius:14px;'
             . 'overflow:hidden;background:#ffffff;max-width:' . $bw . 'px;">'
             . '<tr><td style="padding:0;line-height:0;font-size:0;background:#e8eef7;">'
-            . '<a href="' . $url . '" style="text-decoration:none;display:block;line-height:0;">'
-            . '<img src="' . $logo . '" alt="' . $name . '" width="' . $bw . '" height="' . $bh . '" '
-            . 'style="display:block;width:100%;max-width:' . $bw . 'px;height:auto;aspect-ratio:'
-            . $bw . ' / ' . $bh . ';object-fit:cover;object-position:center;border:0;">'
-            . '</a>'
+            . $imageBlock
             . '</td></tr>'
-            . ($badgeHtml !== ''
-                ? '<tr><td style="padding:10px 14px 0 14px;background:#ffffff;">' . $badgeHtml . '</td></tr>'
-                : '')
             . '<tr><td style="padding:14px 16px 16px;">'
+            . ($bannerHtml !== '' ? '<div style="margin:0 0 8px;">' . $bannerHtml . '</div>' : '')
             . '<p style="margin:0 0 6px;font-size:16px;font-weight:800;color:' . $accent . ';line-height:1.3;">'
             . '<a href="' . $url . '" style="color:' . $accent . ';text-decoration:none;">' . $name . '</a></p>'
             . $descBlock
@@ -827,7 +915,9 @@ final class MailProductCardService
         string $url,
         string $logo,
         string $name,
-        string $badgeHtml,
+        string $discountOverlay,
+        string $discountPos,
+        string $bannerHtml,
         string $cta,
         string $accent,
         string $desc = '',
@@ -837,17 +927,27 @@ final class MailProductCardService
             ? '<p style="margin:0 0 8px;font-size:12px;line-height:1.35;color:#64748b;text-align:left;">' . $desc . '</p>'
             : '';
 
+        $imageInner = '<a href="' . $url . '" style="text-decoration:none;display:block;">'
+            . '<img src="' . $logo . '" alt="' . $name . '" width="140" '
+            . 'style="max-width:140px;max-height:80px;width:auto;height:auto;border:0;">'
+            . '</a>';
+        // Overlay sobre toda el área de imagen (no solo el logo centrado).
+        $imageArea = '<div style="position:relative;display:block;min-height:110px;line-height:0;">'
+            . $imageInner
+            . ($discountOverlay !== ''
+                ? '<div style="' . self::discountBadgeAbsoluteStyle($discountPos) . '">' . $discountOverlay . '</div>'
+                : '')
+            . '</div>';
+
         return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
             . 'style="border-collapse:collapse;border:1px solid #e6ebf2;border-radius:12px;'
             . 'overflow:hidden;background:#ffffff;max-width:260px;">'
             . '<tr><td style="padding:12px;background:linear-gradient(160deg,#f7f9fc,#e8eef7);text-align:center;'
             . 'height:110px;vertical-align:middle;">'
-            . '<a href="' . $url . '" style="text-decoration:none;">'
-            . '<img src="' . $logo . '" alt="' . $name . '" width="140" '
-            . 'style="max-width:140px;max-height:80px;width:auto;height:auto;border:0;">'
-            . '</a></td></tr>'
+            . $imageArea
+            . '</td></tr>'
             . '<tr><td style="padding:10px 12px 12px;text-align:center;">'
-            . ($badgeHtml !== '' ? '<div style="margin:0 0 8px;">' . $badgeHtml . '</div>' : '')
+            . ($bannerHtml !== '' ? '<div style="margin:0 0 8px;">' . $bannerHtml . '</div>' : '')
             . '<p style="margin:0 0 8px;font-size:13px;font-weight:800;color:' . $accent . ';line-height:1.25;">'
             . '<a href="' . $url . '" style="color:' . $accent . ';text-decoration:none;">' . $name . '</a></p>'
             . $descBlock
@@ -863,7 +963,9 @@ final class MailProductCardService
         string $name,
         string $desc,
         bool $showDesc,
-        string $badgeHtml,
+        string $discountOverlay,
+        string $discountPos,
+        string $bannerHtml,
         string $cta,
         string $accent,
         bool $imageOnRight = false
@@ -872,15 +974,24 @@ final class MailProductCardService
             ? '<p style="margin:0 0 8px;font-size:12px;line-height:1.4;color:#64748b;">' . $desc . '</p>'
             : '';
 
-        $imageCell = '<td width="38%" style="padding:12px;background:linear-gradient(160deg,#f7f9fc,#e8eef7);'
-            . 'text-align:center;vertical-align:middle;">'
-            . '<a href="' . $url . '" style="text-decoration:none;">'
+        $imageInner = '<a href="' . $url . '" style="text-decoration:none;display:block;">'
             . '<img src="' . $logo . '" alt="' . $name . '" width="150" '
             . 'style="max-width:150px;max-height:90px;width:auto;height:auto;border:0;">'
-            . '</a></td>';
+            . '</a>';
+        $imageArea = '<div style="position:relative;display:block;min-height:100px;">'
+            . '<div style="text-align:center;line-height:0;padding-top:8px;">' . $imageInner . '</div>'
+            . ($discountOverlay !== ''
+                ? '<div style="' . self::discountBadgeAbsoluteStyle($discountPos) . '">' . $discountOverlay . '</div>'
+                : '')
+            . '</div>';
+
+        $imageCell = '<td width="38%" style="padding:12px;background:linear-gradient(160deg,#f7f9fc,#e8eef7);'
+            . 'text-align:center;vertical-align:middle;">'
+            . $imageArea
+            . '</td>';
 
         $textCell = '<td width="62%" style="padding:14px 16px;vertical-align:middle;">'
-            . ($badgeHtml !== '' ? '<div style="margin:0 0 8px;">' . $badgeHtml . '</div>' : '')
+            . ($bannerHtml !== '' ? '<div style="margin:0 0 8px;">' . $bannerHtml . '</div>' : '')
             . '<p style="margin:0 0 6px;font-size:15px;font-weight:800;color:' . $accent . ';">'
             . '<a href="' . $url . '" style="color:' . $accent . ';text-decoration:none;">' . $name . '</a></p>'
             . $descBlock
