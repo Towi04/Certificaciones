@@ -89,6 +89,10 @@ $stepLabels = [
                 <?= csrf_field() ?>
                 <input type="hidden" name="payment_method" id="payment_method" value="transfer_proof">
                 <input type="hidden" name="card_msi_months" id="card_msi_months" value="1">
+                <?php if (!$isPartnerCheckout): ?>
+                    <?php /* Dentro del form: el input visible está en el aside y a veces no viaja con multipart. */ ?>
+                    <input type="hidden" name="promo_code" id="promo_code_hidden" value="">
+                <?php endif; ?>
                 <?php if ($needsExam): ?>
                     <input type="hidden" name="exam_date" id="exam_date" value="">
                     <input type="hidden" name="exam_time" id="exam_time" value="">
@@ -401,7 +405,7 @@ $stepLabels = [
             <div class="sidebar-promo">
                 <label for="promo_code">Código promocional</label>
                 <div class="sidebar-promo-row">
-                    <input type="text" name="promo_code" id="promo_code" placeholder="CÓDIGO PROMOCIONAL" form="checkout-form" style="text-transform:uppercase" autocomplete="off">
+                    <input type="text" id="promo_code" placeholder="CÓDIGO PROMOCIONAL" style="text-transform:uppercase" autocomplete="off">
                     <button type="button" class="btn btn-primary btn-sm" id="apply-promo">Aplicar</button>
                 </div>
                 <?php
@@ -638,7 +642,12 @@ $stepLabels = [
 
   const form = document.getElementById('checkout-form');
   const codeInput = document.getElementById('promo_code');
+  const codeHidden = document.getElementById('promo_code_hidden');
   const applyBtn = document.getElementById('apply-promo');
+  function syncPromoCodeHidden() {
+    if (!codeHidden) return;
+    codeHidden.value = codeInput && codeInput.value ? String(codeInput.value).trim().toUpperCase() : '';
+  }
   const priceList = document.getElementById('price-list');
   const priceFinal = document.getElementById('price-final');
   const priceArrow = document.getElementById('price-arrow');
@@ -1110,12 +1119,18 @@ $stepLabels = [
     });
   });
 
-  applyBtn?.addEventListener('click', refreshQuote);
   if (codeInput) {
     codeInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); refreshQuote(); }
+      if (e.key === 'Enter') { e.preventDefault(); syncPromoCodeHidden(); refreshQuote(); }
     });
+    codeInput.addEventListener('input', syncPromoCodeHidden);
+    codeInput.addEventListener('change', syncPromoCodeHidden);
+    syncPromoCodeHidden();
   }
+  applyBtn?.addEventListener('click', function () {
+    syncPromoCodeHidden();
+    refreshQuote();
+  });
 
   if (proofPicker && proofInput) {
     const pickBtn = proofPicker.querySelector('.file-picker-btn');
@@ -1156,6 +1171,7 @@ $stepLabels = [
 
   if (!window.reglamentoWizard) {
     form.addEventListener('submit', function (e) {
+      syncPromoCodeHidden();
       if (!validateAllBeforeSubmit()) e.preventDefault();
     });
   }

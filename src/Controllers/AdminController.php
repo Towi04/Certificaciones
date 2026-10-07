@@ -1053,15 +1053,30 @@ final class AdminController
         csrf_verify();
         $purchaseId = (int) $id;
         try {
-            (new CheckoutService())->confirmPayment($purchaseId, (int) Auth::id(), trim((string) ($_POST['notes'] ?? '')) ?: null);
-            $trackingCount = (new TrackingRepository())->forPurchase($purchaseId);
-            $n = is_array($trackingCount) ? count($trackingCount) : 0;
-            flash(
-                'success',
-                $n > 1
-                    ? 'Pago del paquete confirmado · aplica a ' . $n . ' productos de la matrícula.'
-                    : 'Pago confirmado.'
+            $result = (new CheckoutService())->confirmPayment(
+                $purchaseId,
+                (int) Auth::id(),
+                trim((string) ($_POST['notes'] ?? '')) ?: null
             );
+            $creditApplied = (float) ($result['partner_credit_applied'] ?? 0);
+            if (!empty($result['already_paid'])) {
+                flash(
+                    'success',
+                    $creditApplied > 0
+                        ? 'Crédito partner abonado: ' . money($creditApplied) . '.'
+                        : 'La compra ya estaba pagada; no había crédito pendiente.'
+                );
+            } else {
+                $trackingCount = (new TrackingRepository())->forPurchase($purchaseId);
+                $n = is_array($trackingCount) ? count($trackingCount) : 0;
+                $msg = $n > 1
+                    ? 'Pago del paquete confirmado · aplica a ' . $n . ' productos de la matrícula.'
+                    : 'Pago confirmado.';
+                if ($creditApplied > 0) {
+                    $msg .= ' Crédito partner: ' . money($creditApplied) . '.';
+                }
+                flash('success', $msg);
+            }
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }

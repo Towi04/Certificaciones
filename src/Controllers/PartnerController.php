@@ -23,6 +23,22 @@ final class PartnerController
         $partner = $stmt->fetch() ?: null;
         $trackings = [];
         if ($partner) {
+            // Repara créditos de compras pagadas con tu código que aún no se abonaron.
+            try {
+                $sync = (new \App\Services\CheckoutService())
+                    ->applyPendingPartnerCreditsForPartner((int) $partner['id']);
+                if (($sync['applied'] ?? 0) > 0) {
+                    $stmt->execute([Auth::id()]);
+                    $partner = $stmt->fetch() ?: $partner;
+                    flash(
+                        'success',
+                        'Se abonó crédito pendiente por ' . money((float) $sync['amount'])
+                        . ' (' . (int) $sync['applied'] . ' compra(s)).'
+                    );
+                }
+            } catch (\Throwable $e) {
+                error_log('[Doceo] Partner credit sync: ' . $e->getMessage());
+            }
             $trackings = (new TrackingRepository())->forPartner((int) $partner['id']);
         }
         view('partner/dashboard', [

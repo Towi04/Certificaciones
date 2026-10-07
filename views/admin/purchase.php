@@ -20,11 +20,33 @@ $canConfirm = in_array($purchase['status'], ['awaiting_payment', 'payment_review
         <?= e($purchase['student_email']) ?>
         <?php if (!empty($purchase['student_phone'])): ?> · <?= e($purchase['student_phone']) ?><?php endif; ?>
     </p>
-    <?php if (!empty($purchase['partner_code'])): ?>
-        <p class="muted">Partner: <?= e($purchase['partner_name'] ?? '') ?> (<?= e($purchase['partner_code']) ?>)</p>
-    <?php endif; ?>
-    <?php if ((float) $purchase['partner_credit_earned'] > 0): ?>
-        <p>Crédito partner al confirmar: <strong><?= money($purchase['partner_credit_earned']) ?></strong></p>
+    <?php if (!empty($purchase['partner_code']) || !empty($purchase['partner_id'])): ?>
+        <p class="muted">Partner: <?= e($purchase['partner_name'] ?? '—') ?>
+            <?php if (!empty($purchase['partner_code'])): ?>
+                (<?= e($purchase['partner_code']) ?>)
+            <?php endif; ?>
+        </p>
+        <?php if ($purchase['partner_price_amount'] !== null && $purchase['partner_price_amount'] !== ''): ?>
+            <p class="muted" style="margin:.25rem 0 0">Precio nivel partner: <?= money($purchase['partner_price_amount']) ?></p>
+        <?php endif; ?>
+        <?php
+        $creditEarned = (float) ($purchase['partner_credit_earned'] ?? 0);
+        $creditApplied = !empty($purchase['partner_credit_applied_at']);
+        ?>
+        <?php if ($creditEarned > 0): ?>
+            <p style="margin:.35rem 0 0">
+                Crédito partner: <strong><?= money($creditEarned) ?></strong>
+                <?php if ($creditApplied): ?>
+                    <span class="muted">· abonado <?= e((string) $purchase['partner_credit_applied_at']) ?></span>
+                <?php elseif ((string) ($purchase['status'] ?? '') === 'paid'): ?>
+                    <span class="muted">· pendiente de abonar (se aplica al abrir el portal partner o al reconfirmar)</span>
+                <?php else: ?>
+                    <span class="muted">· se abona al confirmar el pago</span>
+                <?php endif; ?>
+            </p>
+        <?php elseif (!empty($purchase['partner_id'])): ?>
+            <p class="muted" style="margin:.35rem 0 0">Sin crédito partner (precio cobrado ≤ precio de nivel).</p>
+        <?php endif; ?>
     <?php endif; ?>
 </div>
 
@@ -129,6 +151,21 @@ $canConfirm = in_array($purchase['status'], ['awaiting_payment', 'payment_review
 
 <?php if (!$canConfirm && $purchase['status'] === 'paid'): ?>
     <p class="flash flash-success" style="margin-top:1rem">Pago confirmado<?= !empty($purchase['paid_at']) ? ' el ' . e($purchase['paid_at']) : '' ?>.</p>
+    <?php
+    $pendingCredit = (float) ($purchase['partner_credit_earned'] ?? 0) > 0
+        && !empty($purchase['partner_id'])
+        && empty($purchase['partner_credit_applied_at']);
+    $canRecompute = !empty($purchase['partner_id'])
+        && empty($purchase['partner_credit_applied_at'])
+        && (float) ($purchase['partner_price_amount'] ?? 0) > 0;
+    if ($pendingCredit || $canRecompute):
+        ?>
+        <form method="post" action="<?= e(url('/admin/compras/' . $purchase['id'] . '/confirmar-pago')) ?>" class="panel" style="margin-top:1rem">
+            <?= csrf_field() ?>
+            <p style="margin:0 0 .75rem">Esta compra tiene crédito partner pendiente de abonar al saldo.</p>
+            <button class="btn btn-accent" type="submit">Abonar crédito al partner</button>
+        </form>
+    <?php endif; ?>
 <?php endif; ?>
 
 <?php

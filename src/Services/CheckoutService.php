@@ -188,6 +188,15 @@ final class CheckoutService
                 ? 'payment_review'
                 : 'awaiting_payment';
 
+            $partnerCredit = round((float) ($quote['partner_credit'] ?? 0), 2);
+            $partnerPriceAmt = isset($quote['partner_price']) && $quote['partner_price'] !== null
+                ? round((float) $quote['partner_price'], 2)
+                : null;
+            // Precio de nivel del partner y crédito se basan en el monto del producto (sin comisión TDC).
+            if ($partnerId && $partnerCredit <= 0 && $partnerPriceAmt !== null && $partnerPriceAmt > 0) {
+                $partnerCredit = max(0.0, round($baseAmount - $partnerPriceAmt, 2));
+            }
+
             $purchaseId = $this->purchases->create([
                 'matricula' => $matricula,
                 'student_user_id' => $studentUserId,
@@ -200,8 +209,8 @@ final class CheckoutService
                 'catalog_amount' => $quote['catalog'],
                 'charged_amount' => $chargeAmount,
                 'card_msi_months' => $storedMsiMonths,
-                'partner_price_amount' => $quote['partner_price'],
-                'partner_credit_earned' => $quote['partner_credit'],
+                'partner_price_amount' => $partnerPriceAmt,
+                'partner_credit_earned' => $partnerCredit,
             ]);
 
             $lineProducts = $comboItems !== [] ? $comboItems : [$product];
@@ -481,27 +490,25 @@ final class CheckoutService
         throw new \InvalidArgumentException('Método de pago inválido.');
     }
 
-    public function confirmPayment(int $purchaseId, int $adminUserId, ?string $notes = null): void
+    /**
+     * @return array{already_paid:bool, partner_credit_applied:float}
+     */
+    public function confirmPayment(int $purchaseId, int $adminUserId, ?string $notes = null): array
     {
         $purchase = $this->purchases->find($purchaseId);
         if ($purchase === null) {
             throw new \InvalidArgumentException('Compra no encontrada.');
         }
-        if ((string) $purchase['status'] === 'paid') {
-            return;
-        }
+        $alreadyPaid = (string) $purchase['status'] === 'paid';
+        $creditApplied = 0.0;
 
         $this->pdo->beginTransaction();
         try {
-            $this->purchases->markPaid($purchaseId);
-
-            $credit = (float) $purchase['partner_credit_earned'];
-            if ($credit > 0 && !empty($purchase['partner_id'])) {
-                $this->pdo->prepare(
-                    'UPDATE partners SET credit_balance = credit_balance + ? WHERE id = ?'
-                )->execute([$credit, (int) $purchase['partner_id']]);
+            if (!$alreadyPaid) {
+                $this->purchases->markPaid($purchaseId);
             }
-
+            // Abono idempotente: también repara compras ya pagadas sin crédito aplicado.
+            $creditApplied = $this->applyPartnerCreditIfPending($purchaseId);
             $this->pdo->commit();
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
@@ -510,9 +517,173 @@ final class CheckoutService
             throw $e;
         }
 
+        if ($alreadyPaid) {
+            return ['already_paid' => true, 'partner_credit_applied' => $creditApplied];
+        }
+
         (new TrackingService())->onPaymentConfirmed($purchaseId, $adminUserId, $notes);
         // Confirmación de pago: alumno o partner (precio de nivel), no ambos.
         GroupEmailAutomation::sendPaymentConfirmedEmails($purchaseId);
+
+        return ['already_paid' => false, 'partner_credit_applied' => $creditApplied];
+    }
+
+    /**
+     * Asegura columna de idempotencia en instalaciones ya desplegadas.
+     */
+    private function ensurePartnerCreditAppliedColumn(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        try {
+            $stmt = $this->pdo->query("SHOW COLUMNS FROM purchases LIKE 'partner_credit_applied_at'");
+            if ($stmt && $stmt->fetch()) {
+                return;
+            }
+            $this->pdo->exec(
+                'ALTER TABLE purchases ADD COLUMN partner_credit_applied_at DATETIME NULL AFTER partner_credit_earned'
+            );
+        } catch (\Throwable $e) {
+            error_log('[Doceo] ensurePartnerCreditAppliedColumn: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Abona partner_credit_earned al saldo del partner (una sola vez por compra).
+     * Si el crédito quedó en 0 pero hay partner_price_amount, lo recalcula.
+     *
+     * @return float Monto abonado en esta llamada (0 si ya estaba aplicado o no aplica)
+     */
+    public function applyPartnerCreditIfPending(int $purchaseId): float
+    {
+        $this->ensurePartnerCreditAppliedColumn();
+        $purchase = $this->purchases->find($purchaseId);
+        if ($purchase === null) {
+            return 0.0;
+        }
+        if ((string) ($purchase['status'] ?? '') !== 'paid') {
+            return 0.0;
+        }
+        if (!empty($purchase['partner_credit_applied_at'])) {
+            return 0.0;
+        }
+
+        $partnerId = (int) ($purchase['partner_id'] ?? 0);
+        $credit = round((float) ($purchase['partner_credit_earned'] ?? 0), 2);
+
+        // Reparar compras donde el código partner sí ligó partner_id/precio pero el crédito quedó en 0.
+        if ($credit <= 0 && $partnerId > 0) {
+            $credit = $this->recomputePartnerCredit($purchase);
+            if ($credit > 0) {
+                $this->pdo->prepare(
+                    'UPDATE purchases SET partner_credit_earned = ? WHERE id = ? AND partner_credit_earned <= 0'
+                )->execute([$credit, $purchaseId]);
+            }
+        }
+
+        if ($partnerId < 1 || $credit <= 0) {
+            $this->pdo->prepare(
+                'UPDATE purchases SET partner_credit_applied_at = COALESCE(partner_credit_applied_at, NOW()) WHERE id = ?'
+            )->execute([$purchaseId]);
+
+            return 0.0;
+        }
+
+        $this->pdo->prepare(
+            'UPDATE partners SET credit_balance = credit_balance + ? WHERE id = ?'
+        )->execute([$credit, $partnerId]);
+        $this->pdo->prepare(
+            'UPDATE purchases SET partner_credit_applied_at = NOW(), partner_credit_earned = ? WHERE id = ?'
+        )->execute([$credit, $purchaseId]);
+
+        error_log(sprintf(
+            '[Doceo] Crédito partner +%0.2f aplicado (purchase=%d partner=%d)',
+            $credit,
+            $purchaseId,
+            $partnerId
+        ));
+
+        return $credit;
+    }
+
+    /**
+     * Recalcula crédito = cobrado (sin MSI) − precio de nivel del partner.
+     *
+     * @param array<string, mixed> $purchase
+     */
+    private function recomputePartnerCredit(array $purchase): float
+    {
+        $partnerPrice = (float) ($purchase['partner_price_amount'] ?? 0);
+        if ($partnerPrice <= 0) {
+            return 0.0;
+        }
+        $charged = (float) ($purchase['charged_amount'] ?? 0);
+        $msi = (int) ($purchase['card_msi_months'] ?? 0);
+        // Con MSI el charged incluye comisión; usar precio público del primer ítem si existe.
+        if ($msi > 1) {
+            $items = $this->purchases->items((int) $purchase['id']);
+            $sumPublic = 0.0;
+            foreach ($items as $item) {
+                $sumPublic += (float) ($item['unit_public_price'] ?? 0);
+            }
+            if ($sumPublic > 0) {
+                $charged = $sumPublic;
+            }
+        }
+
+        return max(0.0, round($charged - $partnerPrice, 2));
+    }
+
+    /**
+     * Aplica créditos pendientes de un partner (compras pagadas sin abono).
+     *
+     * @return array{applied:int, amount:float}
+     */
+    public function applyPendingPartnerCreditsForPartner(int $partnerId): array
+    {
+        $this->ensurePartnerCreditAppliedColumn();
+        if ($partnerId < 1) {
+            return ['applied' => 0, 'amount' => 0.0];
+        }
+
+        $stmt = $this->pdo->prepare(
+            "SELECT id FROM purchases
+             WHERE partner_id = ?
+               AND status = 'paid'
+               AND partner_credit_applied_at IS NULL
+             ORDER BY id ASC"
+        );
+        $stmt->execute([$partnerId]);
+        $ids = array_map(static fn ($r) => (int) $r['id'], $stmt->fetchAll() ?: []);
+
+        $applied = 0;
+        $amount = 0.0;
+        foreach ($ids as $id) {
+            $ownTx = !$this->pdo->inTransaction();
+            if ($ownTx) {
+                $this->pdo->beginTransaction();
+            }
+            try {
+                $added = $this->applyPartnerCreditIfPending($id);
+                if ($ownTx) {
+                    $this->pdo->commit();
+                }
+                if ($added > 0) {
+                    $applied++;
+                    $amount += $added;
+                }
+            } catch (\Throwable $e) {
+                if ($ownTx && $this->pdo->inTransaction()) {
+                    $this->pdo->rollBack();
+                }
+                error_log('[Doceo] applyPendingPartnerCreditsForPartner #' . $id . ': ' . $e->getMessage());
+            }
+        }
+
+        return ['applied' => $applied, 'amount' => round($amount, 2)];
     }
 
     /**
