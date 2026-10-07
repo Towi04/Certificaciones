@@ -147,6 +147,26 @@ final class TrackingService
         return $row ?: null;
     }
 
+    /** ¿El código existe en el progreso configurado del grupo/producto? */
+    public function progressHasStep(array $tracking, string $stepCode): bool
+    {
+        $stepCode = trim($stepCode);
+        if ($stepCode === '') {
+            return false;
+        }
+        $steps = $this->progressStepsForTracking($tracking);
+        if ($steps === []) {
+            return true; // sin progreso definido: no bloquear
+        }
+        foreach ($steps as $s) {
+            if ((string) ($s['code'] ?? '') === $stepCode) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function setStep(
         int $trackingId,
         string $stepCode,
@@ -714,22 +734,34 @@ final class TrackingService
                 ? CheckoutRequirements::pipelineCode($productRow)
                 : null;
 
+            $handledProvider = false;
             if ($productRow && ProviderRequestService::configForProduct($productRow) !== null) {
                 try {
-                    (new ProviderRequestService())->onPaymentConfirmed($trackingId, $purchaseId, $adminUserId);
+                    $handledProvider = (new ProviderRequestService())
+                        ->onPaymentConfirmed($trackingId, $purchaseId, $adminUserId);
                 } catch (\Throwable $e) {
                     error_log('[Doceo] Solicitud proveedor tras pago: ' . $e->getMessage());
                     $cfg = ProviderRequestService::configForProduct($productRow) ?? [];
                     $step = (string) ($cfg['step_code'] ?? 'solicitud_proveedor');
-                    $this->setStep(
-                        $trackingId,
-                        $step,
-                        $adminUserId,
-                        'Pago confirmado (solicitud al proveedor falló: ' . $e->getMessage() . ')',
-                        'waiting_admin'
-                    );
+                    $full = $this->find($trackingId) ?? [];
+                    if ($this->progressHasStep($full, $step)) {
+                        try {
+                            $this->setStep(
+                                $trackingId,
+                                $step,
+                                $adminUserId,
+                                'Pago confirmado (solicitud al proveedor falló: ' . $e->getMessage() . ')',
+                                'waiting_admin'
+                            );
+                            $handledProvider = true;
+                        } catch (\Throwable $e2) {
+                            error_log('[Doceo] Solicitud proveedor setStep: ' . $e2->getMessage());
+                        }
+                    }
                 }
-                continue;
+                if ($handledProvider) {
+                    continue;
+                }
             }
 
             if ($pipelineCode === 'elet_uks') {
@@ -737,42 +769,30 @@ final class TrackingService
                     (new UksEletService())->onPaymentConfirmed($trackingId, $purchaseId, $adminUserId);
                 } catch (\Throwable $e) {
                     error_log('[Doceo] UKS solicitud tras pago: ' . $e->getMessage());
-                    $this->setStep(
-                        $trackingId,
-                        'solicitud_uks',
-                        $adminUserId,
-                        'Pago confirmado (correo UKS falló: ' . $e->getMessage() . ')',
-                        'waiting_provider'
-                    );
+                    $full = $this->find($trackingId) ?? [];
+                    if ($this->progressHasStep($full, 'solicitud_uks')) {
+                        try {
+                            $this->setStep(
+                                $trackingId,
+                                'solicitud_uks',
+                                $adminUserId,
+                                'Pago confirmado (correo UKS falló: ' . $e->getMessage() . ')',
+                                'waiting_provider'
+                            );
+                        } catch (\Throwable $e2) {
+                            error_log('[Doceo] UKS setStep: ' . $e2->getMessage());
+                            $this->safeAdvanceAfterPayment($trackingId, $adminUserId);
+                        }
+                    } else {
+                        $this->safeAdvanceAfterPayment($trackingId, $adminUserId);
+                    }
                 }
                 continue;
             }
 
+            $this->safeAdvanceAfterPayment($trackingId, $adminUserId, $productId);
+
             $productType = $this->productType($productId);
-            $target = match ($productType) {
-                'course' => 'alta_moodle',
-                'procedure' => $this->hasPendingDocs($trackingId) ? 'docs' : 'revision',
-                default => 'asignacion',
-            };
-
-            try {
-                $this->setStep(
-                    $trackingId,
-                    $target,
-                    $adminUserId,
-                    'Tras pago confirmado → ' . $target,
-                    'waiting_admin'
-                );
-            } catch (\Throwable $e) {
-                // Si el pipeline no tiene ese código, avanza un paso desde el actual
-                error_log('[Doceo] onPaymentConfirmed step: ' . $e->getMessage());
-                try {
-                    $this->advance($trackingId, $adminUserId, 'Avance automático tras pago');
-                } catch (\Throwable $e2) {
-                    error_log('[Doceo] onPaymentConfirmed advance: ' . $e2->getMessage());
-                }
-            }
-
             if ($productType === 'course') {
                 try {
                     $result = (new MoodleEnrolmentService())->syncTracking($trackingId, $adminUserId, false);
@@ -823,6 +843,59 @@ final class TrackingService
                     );
                 }
             }
+        }
+    }
+
+    /**
+     * Avanza tras pago sin romper si el paso preferido no existe en el progreso del grupo.
+     */
+    private function safeAdvanceAfterPayment(int $trackingId, int $adminUserId, ?int $productId = null): void
+    {
+        $tracking = $this->find($trackingId);
+        if ($tracking === null) {
+            return;
+        }
+        if ($productId === null) {
+            $productId = (int) ($tracking['product_id'] ?? 0);
+        }
+        $productType = $productId > 0 ? $this->productType($productId) : 'other';
+        $candidates = match ($productType) {
+            'course' => ['alta_moodle', 'codigos', 'asignacion'],
+            'procedure' => $this->hasPendingDocs($trackingId)
+                ? ['docs', 'revision', 'asignacion']
+                : ['revision', 'asignacion', 'codigos'],
+            default => ['codigos', 'asignacion', 'revision'],
+        };
+
+        foreach ($candidates as $target) {
+            if (!$this->progressHasStep($tracking, $target)) {
+                continue;
+            }
+            try {
+                $this->setStep(
+                    $trackingId,
+                    $target,
+                    $adminUserId,
+                    'Tras pago confirmado → ' . $target,
+                    'waiting_admin'
+                );
+
+                return;
+            } catch (\Throwable $e) {
+                error_log('[Doceo] onPaymentConfirmed step ' . $target . ': ' . $e->getMessage());
+            }
+        }
+
+        try {
+            $this->advance($trackingId, $adminUserId, 'Avance automático tras pago');
+        } catch (\Throwable $e2) {
+            error_log('[Doceo] onPaymentConfirmed advance: ' . $e2->getMessage());
+            $this->log(
+                $trackingId,
+                (string) ($tracking['current_step_code'] ?? 'confirm_pago'),
+                'Pago confirmado (sin cambio de paso: ' . $e2->getMessage() . ')',
+                $adminUserId
+            );
         }
     }
 
