@@ -7,7 +7,6 @@ namespace App\Services;
 use App\Config\Env;
 use App\Database\Connection;
 use App\Repositories\ProductRepository;
-use App\Support\Settings;
 use PDO;
 
 /**
@@ -17,8 +16,6 @@ use PDO;
  */
 final class MailProductCardService
 {
-    public const SETTINGS_KEY = 'mail_product_card_defaults';
-
     private PDO $pdo;
 
     public function __construct()
@@ -43,6 +40,8 @@ final class MailProductCardService
                 badge_mode ENUM('discount','banner','both','none') NOT NULL DEFAULT 'discount',
                 badge_text VARCHAR(80) NULL,
                 custom_image_path VARCHAR(255) NULL,
+                accent_color VARCHAR(7) NOT NULL DEFAULT '#315285',
+                cta_label VARCHAR(80) NOT NULL DEFAULT 'Ver en catálogo',
                 show_description TINYINT(1) NOT NULL DEFAULT 0,
                 is_active TINYINT(1) NOT NULL DEFAULT 1,
                 sort_order INT NOT NULL DEFAULT 0,
@@ -53,45 +52,33 @@ final class MailProductCardService
                 KEY idx_mail_product_cards_active (is_active, sort_order)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+        $this->ensureColumn('custom_image_path', 'VARCHAR(255) NULL AFTER badge_text');
+        $this->ensureColumn('accent_color', "VARCHAR(7) NOT NULL DEFAULT '#315285' AFTER custom_image_path");
+        $this->ensureColumn('cta_label', "VARCHAR(80) NOT NULL DEFAULT 'Ver en catálogo' AFTER accent_color");
+    }
+
+    private function ensureColumn(string $name, string $definition): void
+    {
         try {
-            $cols = $this->pdo->query('SHOW COLUMNS FROM mail_product_cards LIKE \'custom_image_path\'');
+            $cols = $this->pdo->query('SHOW COLUMNS FROM mail_product_cards LIKE ' . $this->pdo->quote($name));
             if ($cols && !$cols->fetch()) {
-                $this->pdo->exec(
-                    'ALTER TABLE mail_product_cards ADD COLUMN custom_image_path VARCHAR(255) NULL AFTER badge_text'
-                );
+                $this->pdo->exec('ALTER TABLE mail_product_cards ADD COLUMN ' . $name . ' ' . $definition);
             }
         } catch (\Throwable) {
             // ignore
         }
     }
 
-    /** @return array{default_layout:string,default_badge:string,banner_text:string,accent_color:string,cta_label:string} */
-    public static function defaults(): array
+    /** Valores iniciales del formulario “nueva tarjeta” (no se aplican a tarjetas ya guardadas). */
+    public static function formSeed(): array
     {
-        $raw = Settings::get(self::SETTINGS_KEY, '');
-        $decoded = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
-        $decoded = is_array($decoded) ? $decoded : [];
-
         return [
-            'default_layout' => self::normalizeLayout((string) ($decoded['default_layout'] ?? 'wide')),
-            'default_badge' => self::normalizeBadge((string) ($decoded['default_badge'] ?? 'discount')),
-            'banner_text' => trim((string) ($decoded['banner_text'] ?? 'Solicita tu descuento')) ?: 'Solicita tu descuento',
-            'accent_color' => self::normalizeColor((string) ($decoded['accent_color'] ?? '#315285')),
-            'cta_label' => trim((string) ($decoded['cta_label'] ?? 'Ver en catálogo')) ?: 'Ver en catálogo',
+            'layout' => 'wide',
+            'badge_mode' => 'discount',
+            'badge_text' => 'Solicita tu descuento',
+            'accent_color' => '#315285',
+            'cta_label' => 'Ver en catálogo',
         ];
-    }
-
-    /** @param array<string, mixed> $input */
-    public function saveDefaults(array $input): void
-    {
-        $data = [
-            'default_layout' => self::normalizeLayout((string) ($input['default_layout'] ?? 'wide')),
-            'default_badge' => self::normalizeBadge((string) ($input['default_badge'] ?? 'discount')),
-            'banner_text' => trim((string) ($input['banner_text'] ?? 'Solicita tu descuento')) ?: 'Solicita tu descuento',
-            'accent_color' => self::normalizeColor((string) ($input['accent_color'] ?? '#315285')),
-            'cta_label' => trim((string) ($input['cta_label'] ?? 'Ver en catálogo')) ?: 'Ver en catálogo',
-        ];
-        Settings::set(self::SETTINGS_KEY, json_encode($data, JSON_UNESCAPED_UNICODE));
     }
 
     /** @return list<array<string, mixed>> */
@@ -149,11 +136,22 @@ final class MailProductCardService
     }
 
     /**
+     * Crea o actualiza si el placeholder ya existe (evita error al “reeditar” desde el formulario nuevo).
+     *
      * @param array<string, mixed> $input
      * @param array<string, mixed>|null $imageFile $_FILES['custom_image']
+     * @return array{id:int,updated:bool}
      */
-    public function create(array $input, ?array $imageFile = null): int
+    public function create(array $input, ?array $imageFile = null): array
     {
+        $placeholder = self::normalizePlaceholder((string) ($input['placeholder'] ?? ''));
+        $existingId = $this->idByPlaceholder($placeholder);
+        if ($existingId !== null) {
+            $this->update($existingId, $input, $imageFile);
+
+            return ['id' => $existingId, 'updated' => true];
+        }
+
         $data = $this->normalizeCardInput($input);
         $customImage = null;
         if ($imageFile !== null && (int) ($imageFile['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
@@ -162,8 +160,8 @@ final class MailProductCardService
         $stmt = $this->pdo->prepare(
             'INSERT INTO mail_product_cards
                 (placeholder, product_id, layout, badge_mode, badge_text, custom_image_path,
-                 show_description, is_active, sort_order)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                 accent_color, cta_label, show_description, is_active, sort_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $data['placeholder'],
@@ -172,12 +170,14 @@ final class MailProductCardService
             $data['badge_mode'],
             $data['badge_text'],
             $customImage,
+            $data['accent_color'],
+            $data['cta_label'],
             $data['show_description'],
             $data['is_active'],
             $data['sort_order'],
         ]);
 
-        return (int) $this->pdo->lastInsertId();
+        return ['id' => (int) $this->pdo->lastInsertId(), 'updated' => false];
     }
 
     /**
@@ -207,7 +207,8 @@ final class MailProductCardService
         $this->pdo->prepare(
             'UPDATE mail_product_cards
              SET placeholder = ?, product_id = ?, layout = ?, badge_mode = ?, badge_text = ?,
-                 custom_image_path = ?, show_description = ?, is_active = ?, sort_order = ?
+                 custom_image_path = ?, accent_color = ?, cta_label = ?,
+                 show_description = ?, is_active = ?, sort_order = ?
              WHERE id = ?'
         )->execute([
             $data['placeholder'],
@@ -216,11 +217,26 @@ final class MailProductCardService
             $data['badge_mode'],
             $data['badge_text'],
             $customImage,
+            $data['accent_color'],
+            $data['cta_label'],
             $data['show_description'],
             $data['is_active'],
             $data['sort_order'],
             $id,
         ]);
+    }
+
+    public function idByPlaceholder(string $placeholder): ?int
+    {
+        $key = self::normalizePlaceholder($placeholder);
+        if ($key === '') {
+            return null;
+        }
+        $stmt = $this->pdo->prepare('SELECT id FROM mail_product_cards WHERE placeholder = ? LIMIT 1');
+        $stmt->execute([$key]);
+        $id = $stmt->fetchColumn();
+
+        return $id !== false ? (int) $id : null;
     }
 
     public function delete(int $id): void
@@ -250,6 +266,7 @@ final class MailProductCardService
             return '<p class="muted" style="margin:0;font-size:.85rem">Producto no encontrado.</p>';
         }
 
+        $seed = self::formSeed();
         $card = [
             'product_name' => (string) ($product['name'] ?? ''),
             'product_slug' => (string) ($product['slug'] ?? ''),
@@ -258,29 +275,18 @@ final class MailProductCardService
             'short_description' => (string) ($product['short_description'] ?? ''),
             'catalog_price' => $product['catalog_price'] ?? 0,
             'public_price' => $product['public_price'] ?? 0,
-            'layout' => (string) ($input['layout'] ?? 'wide'),
-            'badge_mode' => (string) ($input['badge_mode'] ?? 'discount'),
-            'badge_text' => (string) ($input['badge_text'] ?? ''),
+            'layout' => (string) ($input['layout'] ?? $seed['layout']),
+            'badge_mode' => (string) ($input['badge_mode'] ?? $seed['badge_mode']),
+            'badge_text' => (string) ($input['badge_text'] ?? $seed['badge_text']),
+            'accent_color' => (string) ($input['accent_color'] ?? $seed['accent_color']),
+            'cta_label' => (string) ($input['cta_label'] ?? $seed['cta_label']),
             'show_description' => !empty($input['show_description']) ? 1 : 0,
         ];
         if ($card['custom_image_path'] === '') {
             $card['custom_image_path'] = null;
         }
 
-        $previewUrl = trim((string) ($input['preview_image_url'] ?? ''));
-        if ($previewUrl !== '' && self::isAllowedPreviewImageUrl($previewUrl)) {
-            $card['_preview_image_url'] = $previewUrl;
-        }
-
-        // Defaults temporales desde el formulario de diseño (sin guardar).
-        $defaults = self::defaults();
-        if (isset($input['accent_color']) || isset($input['banner_text']) || isset($input['cta_label'])) {
-            $defaults['accent_color'] = self::normalizeColor((string) ($input['accent_color'] ?? $defaults['accent_color']));
-            $defaults['banner_text'] = trim((string) ($input['banner_text'] ?? $defaults['banner_text'])) ?: $defaults['banner_text'];
-            $defaults['cta_label'] = trim((string) ($input['cta_label'] ?? $defaults['cta_label'])) ?: $defaults['cta_label'];
-        }
-
-        return $this->renderCard($card, $defaults);
+        return $this->renderCard($card);
     }
 
     /**
@@ -420,12 +426,12 @@ final class MailProductCardService
      */
     public function renderCard(array $card, ?array $defaults = null): string
     {
-        $defaults = $defaults ?? self::defaults();
+        $seed = self::formSeed();
         $name = trim((string) ($card['product_name'] ?? 'Certificación'));
         $slug = trim((string) ($card['product_slug'] ?? ''));
-        $layout = self::normalizeLayout((string) ($card['layout'] ?? $defaults['default_layout']));
-        $badgeMode = self::normalizeBadge((string) ($card['badge_mode'] ?? $defaults['default_badge']));
-        $bannerText = trim((string) ($card['badge_text'] ?? '')) ?: $defaults['banner_text'];
+        $layout = self::normalizeLayout((string) ($card['layout'] ?? $seed['layout']));
+        $badgeMode = self::normalizeBadge((string) ($card['badge_mode'] ?? $seed['badge_mode']));
+        $bannerText = trim((string) ($card['badge_text'] ?? '')) ?: $seed['badge_text'];
         $showDesc = !empty($card['show_description']);
         $desc = trim(strip_tags((string) ($card['short_description'] ?? '')));
         if (mb_strlen($desc) > 140) {
@@ -439,8 +445,9 @@ final class MailProductCardService
         $productUrl = $this->absoluteUrl($slug !== '' ? '/producto/' . $slug : '/catalogo');
         $logoUrl = $this->resolveCardImageUrl($card);
 
-        $accent = $defaults['accent_color'];
-        $cta = htmlspecialchars($defaults['cta_label'], ENT_QUOTES, 'UTF-8');
+        $accent = self::normalizeColor((string) ($card['accent_color'] ?? $seed['accent_color']));
+        $ctaLabel = trim((string) ($card['cta_label'] ?? '')) ?: $seed['cta_label'];
+        $cta = htmlspecialchars($ctaLabel, ENT_QUOTES, 'UTF-8');
         $safeName = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
         $safeUrl = htmlspecialchars($productUrl, ENT_QUOTES, 'UTF-8');
         // data: URLs en preview admin; el resto se escapa normal.
@@ -562,7 +569,8 @@ final class MailProductCardService
      * @param array<string, mixed> $input
      * @return array{
      *   placeholder:string,product_id:int,layout:string,badge_mode:string,
-     *   badge_text:?string,show_description:int,is_active:int,sort_order:int
+     *   badge_text:?string,accent_color:string,cta_label:string,
+     *   show_description:int,is_active:int,sort_order:int
      * }
      */
     private function normalizeCardInput(array $input, ?int $ignoreId = null): array
@@ -582,24 +590,28 @@ final class MailProductCardService
             throw new \InvalidArgumentException('Elige un producto del catálogo.');
         }
 
-        $stmt = $this->pdo->prepare(
-            'SELECT id FROM mail_product_cards WHERE placeholder = ?'
-            . ($ignoreId !== null ? ' AND id != ' . (int) $ignoreId : '')
-            . ' LIMIT 1'
-        );
-        $stmt->execute([$placeholder]);
-        if ($stmt->fetch()) {
-            throw new \InvalidArgumentException('Ya existe una tarjeta con {{' . $placeholder . '}}.');
+        if ($ignoreId !== null) {
+            $stmt = $this->pdo->prepare(
+                'SELECT id FROM mail_product_cards WHERE placeholder = ? AND id != ? LIMIT 1'
+            );
+            $stmt->execute([$placeholder, $ignoreId]);
+            if ($stmt->fetch()) {
+                throw new \InvalidArgumentException('Ya existe otra tarjeta con {{' . $placeholder . '}}.');
+            }
         }
 
+        $seed = self::formSeed();
         $badgeText = trim((string) ($input['badge_text'] ?? ''));
+        $ctaLabel = trim((string) ($input['cta_label'] ?? '')) ?: $seed['cta_label'];
 
         return [
             'placeholder' => $placeholder,
             'product_id' => $productId,
-            'layout' => self::normalizeLayout((string) ($input['layout'] ?? 'wide')),
-            'badge_mode' => self::normalizeBadge((string) ($input['badge_mode'] ?? 'discount')),
+            'layout' => self::normalizeLayout((string) ($input['layout'] ?? $seed['layout'])),
+            'badge_mode' => self::normalizeBadge((string) ($input['badge_mode'] ?? $seed['badge_mode'])),
             'badge_text' => $badgeText !== '' ? mb_substr($badgeText, 0, 80) : null,
+            'accent_color' => self::normalizeColor((string) ($input['accent_color'] ?? $seed['accent_color'])),
+            'cta_label' => mb_substr($ctaLabel, 0, 80),
             'show_description' => !empty($input['show_description']) ? 1 : 0,
             'is_active' => !empty($input['is_active']) ? 1 : 0,
             'sort_order' => max(0, min(9999, (int) ($input['sort_order'] ?? 0))),
