@@ -194,6 +194,9 @@ final class CheckoutService
         $cardPaymentUrl = null;
         $creditUsed = 0.0;
 
+        // DDL (ALTER) hace COMMIT implícito en MySQL: asegurar esquema antes del TX.
+        $this->purchases->ensureSchema();
+
         $this->pdo->beginTransaction();
         try {
             $account = $this->students->findOrCreate($buyer);
@@ -355,7 +358,9 @@ final class CheckoutService
                 $cardPaymentUrl = (string) ($openpay['redirect_url'] ?? '');
             }
 
-            $this->pdo->commit();
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->commit();
+            }
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
@@ -588,6 +593,8 @@ final class CheckoutService
         $alreadyPaid = (string) $purchase['status'] === 'paid';
         $creditApplied = 0.0;
 
+        $this->ensurePartnerCreditAppliedColumn();
+
         $this->pdo->beginTransaction();
         try {
             if (!$alreadyPaid) {
@@ -595,7 +602,9 @@ final class CheckoutService
             }
             // Abono idempotente: también repara compras ya pagadas sin crédito aplicado.
             $creditApplied = $this->applyPartnerCreditIfPending($purchaseId);
-            $this->pdo->commit();
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->commit();
+            }
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
@@ -633,17 +642,27 @@ final class CheckoutService
         if ($done) {
             return;
         }
-        $done = true;
         try {
             $stmt = $this->pdo->query("SHOW COLUMNS FROM purchases LIKE 'partner_credit_applied_at'");
             if ($stmt && $stmt->fetch()) {
+                $done = true;
+
                 return;
+            }
+            if ($this->pdo->inTransaction()) {
+                throw new \RuntimeException(
+                    'Esquema de compras incompleto (partner_credit_applied_at). Reintenta la operación.'
+                );
             }
             $this->pdo->exec(
                 'ALTER TABLE purchases ADD COLUMN partner_credit_applied_at DATETIME NULL AFTER partner_credit_earned'
             );
+            $done = true;
+        } catch (\RuntimeException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             error_log('[Doceo] ensurePartnerCreditAppliedColumn: ' . $e->getMessage());
+            throw $e;
         }
     }
 
