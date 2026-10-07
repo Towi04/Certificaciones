@@ -36,6 +36,7 @@ final class FileLinkController
             }
             $path = $docs->absolutePath((string) $doc['storage_path']);
             $name = (string) ($doc['original_name'] ?? 'documento');
+            $mime = isset($doc['mime_type']) ? (string) $doc['mime_type'] : null;
         } else {
             $purchase = (new PurchaseRepository())->find($resolved['id']);
             if ($purchase === null || empty($purchase['payment_proof_path'])) {
@@ -44,19 +45,9 @@ final class FileLinkController
             }
             $path = $docs->absolutePath((string) $purchase['payment_proof_path']);
             $name = basename((string) $purchase['payment_proof_path']);
+            $mime = null;
         }
 
-        if (!is_file($path)) {
-            http_response_code(404);
-            exit('Archivo no disponible en el servidor');
-        }
-
-        $mime = mime_content_type($path) ?: 'application/octet-stream';
-        header('Content-Type: ' . $mime);
-        header('Content-Disposition: inline; filename="' . basename($name) . '"');
-        header('Content-Length: ' . (string) filesize($path));
-        header('X-Content-Type-Options: nosniff');
-        readfile($path);
-        exit;
+        DocumentService::streamFile($path, $name, $mime);
     }
 }
