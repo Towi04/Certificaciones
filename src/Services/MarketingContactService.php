@@ -145,37 +145,95 @@ final class MarketingContactService
         return compact('imported', 'updated', 'skipped', 'errors');
     }
 
-    /** Plantilla CSV sugerida (UTF-8 con BOM para Excel). */
+    /**
+     * Guía de nombres históricos → qué escribir en la columna producto.
+     * maps_to = código de catálogo actual si existe; null = solo texto libre.
+     *
+     * @return list<array{label:string,write_as:string,maps_to:?string,note:string}>
+     */
+    public static function historicalProductHints(): array
+    {
+        return [
+            [
+                'label' => 'ELET + CENNI',
+                'write_as' => 'ELET + CENNI',
+                'maps_to' => 'ELET-UKS',
+                'note' => 'Se enlaza al examen ELET actual (el CENNI iba empaquetado).',
+            ],
+            [
+                'label' => 'CENNI',
+                'write_as' => 'CENNI',
+                'maps_to' => 'CENNI-TRAMITE',
+                'note' => 'Trámite CENNI ante SEP.',
+            ],
+            [
+                'label' => 'Elet Plus',
+                'write_as' => 'Elet Plus',
+                'maps_to' => null,
+                'note' => 'Ya no está en catálogo; se guarda el texto tal cual.',
+            ],
+            [
+                'label' => 'Elet Reading',
+                'write_as' => 'Elet Reading',
+                'maps_to' => null,
+                'note' => 'Ya no está en catálogo; se guarda el texto tal cual.',
+            ],
+            [
+                'label' => 'English Course',
+                'write_as' => 'English Course',
+                'maps_to' => null,
+                'note' => 'Curso antiguo; se guarda el texto (sin enlace a producto actual).',
+            ],
+            [
+                'label' => 'Excel',
+                'write_as' => 'Excel',
+                'maps_to' => 'MOS-EXCEL-2016',
+                'note' => 'Se enlaza a Microsoft Office Specialist Excel 2016.',
+            ],
+            [
+                'label' => 'ITEP + CENNI',
+                'write_as' => 'ITEP + CENNI',
+                'maps_to' => 'ITEP-CENNI',
+                'note' => 'Coincide con el producto actual iTEP + CENNI.',
+            ],
+            [
+                'label' => 'Linguaskill 4 bundle + CENNI',
+                'write_as' => 'Linguaskill 4 bundle + CENNI',
+                'maps_to' => null,
+                'note' => 'Paquete antiguo; se guarda el texto tal cual.',
+            ],
+            [
+                'label' => 'OOPT',
+                'write_as' => 'OOPT',
+                'maps_to' => 'OOPT',
+                'note' => 'Coincide con Oxford Online Placement Test.',
+            ],
+            [
+                'label' => 'TOEFL ITP',
+                'write_as' => 'TOEFL ITP',
+                'maps_to' => 'TOEFL-ITP',
+                'note' => 'Coincide con el producto actual.',
+            ],
+        ];
+    }
+
+    /** Plantilla CSV sencilla (UTF-8 con BOM para Excel). */
     public function csvTemplate(): string
     {
-        $headers = [
-            'email',
-            'first_name',
-            'last_name_p',
-            'last_name_m',
-            'full_name',
-            'phone',
-            'product_name',
-            'product_code',
-            'purchased_at',
-            'notes',
-        ];
-        $sample = [
-            'ana.ejemplo@correo.com',
-            'Ana',
-            'García',
-            'López',
-            'Ana García López',
-            '5512345678',
-            'TOEFL ITP',
-            'TOEFL-ITP',
-            '2024-11-15',
-            'Cliente anterior',
+        // Formato corto: no hace falta product_code ni apellidos separados.
+        $headers = ['email', 'full_name', 'phone', 'producto', 'purchased_at'];
+        $samples = [
+            ['ana.ejemplo@correo.com', 'Ana García López', '5512345678', 'TOEFL ITP', '2024-11-15'],
+            ['juan@correo.com', 'Juan Pérez', '5587654321', 'ELET + CENNI', '2023-05-10'],
+            ['maria@correo.com', 'María Ruiz', '', 'Excel', ''],
+            ['luis@correo.com', 'Luis Gómez', '5511223344', 'Elet Plus', '2022-08-01'],
         ];
         $out = "\xEF\xBB\xBF" . implode(',', $headers) . "\n";
-        $out .= implode(',', array_map(static function (string $v): string {
-            return '"' . str_replace('"', '""', $v) . '"';
-        }, $sample)) . "\n";
+        foreach ($samples as $sample) {
+            $out .= implode(',', array_map(static function (string $v): string {
+                return '"' . str_replace('"', '""', $v) . '"';
+            }, $sample)) . "\n";
+        }
 
         return $out;
     }
@@ -210,6 +268,19 @@ final class MarketingContactService
         $phone = trim((string) ($data['phone'] ?? $data['telefono'] ?? '')) ?: null;
         $productName = trim((string) ($data['product_name'] ?? $data['certificacion'] ?? $data['producto'] ?? '')) ?: null;
         $productCode = trim((string) ($data['product_code'] ?? $data['codigo_producto'] ?? '')) ?: null;
+        // Si solo pusieron el nombre histórico (ej. "Excel", "ELET + CENNI"),
+        // resolver al código de catálogo cuando exista; si no, dejar texto libre.
+        if (($productCode === null || $productCode === '') && $productName !== null) {
+            $aliasCode = self::resolveHistoricalCode(null, $productName);
+            if ($aliasCode !== null) {
+                $productCode = $aliasCode;
+            }
+        } elseif ($productCode !== null && $productCode !== '') {
+            $aliasCode = self::resolveHistoricalCode($productCode, null);
+            if ($aliasCode !== null) {
+                $productCode = $aliasCode;
+            }
+        }
         $purchasedAt = $this->parseDate((string) ($data['purchased_at'] ?? $data['fecha_compra'] ?? ''));
         $notes = trim((string) ($data['notes'] ?? $data['notas'] ?? '')) ?: null;
 
@@ -253,9 +324,85 @@ final class MarketingContactService
         return 'inserted';
     }
 
+    /**
+     * Resuelve alias histórico → código de catálogo (o null si solo es texto libre).
+     */
+    public static function resolveHistoricalCode(?string $code, ?string $name): ?string
+    {
+        $aliases = self::historicalAliasMap();
+        if ($code !== null && $code !== '') {
+            $key = self::normalizeProductKey($code);
+            if (isset($aliases[$key])) {
+                return $aliases[$key];
+            }
+            // Ya es un código tipo TOEFL-ITP / ELET-UKS
+            if (preg_match('/^[A-Z0-9][A-Z0-9_-]{1,59}$/i', $code)) {
+                return strtoupper($code);
+            }
+        }
+        if ($name !== null && $name !== '') {
+            $key = self::normalizeProductKey($name);
+            if (isset($aliases[$key])) {
+                return $aliases[$key];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Clave normalizada → código catálogo (null = no mapear / producto discontinuado).
+     * Valores null en el mapa se omiten: el texto se guarda sin product_id.
+     *
+     * @return array<string, string>
+     */
+    public static function historicalAliasMap(): array
+    {
+        return [
+            'elet' => 'ELET-UKS',
+            'elet_uks' => 'ELET-UKS',
+            'elet_cenni' => 'ELET-UKS',
+            'elet_+_cenni' => 'ELET-UKS',
+            'elet_plus_cenni' => 'ELET-UKS',
+            'cenni' => 'CENNI-TRAMITE',
+            'tramite_cenni' => 'CENNI-TRAMITE',
+            'cenni_tramite' => 'CENNI-TRAMITE',
+            'excel' => 'MOS-EXCEL-2016',
+            'mos_excel' => 'MOS-EXCEL-2016',
+            'mos_excel_2016' => 'MOS-EXCEL-2016',
+            'microsoft_excel' => 'MOS-EXCEL-2016',
+            'microsoft_office_specialist_excel_2016' => 'MOS-EXCEL-2016',
+            'itep' => 'ITEP-CENNI',
+            'itep_cenni' => 'ITEP-CENNI',
+            'itep_+_cenni' => 'ITEP-CENNI',
+            'oopt' => 'OOPT',
+            'oxford' => 'OOPT',
+            'oxford_online_placement_test' => 'OOPT',
+            'oxford_online_placement_test_oopt' => 'OOPT',
+            'toefl' => 'TOEFL-ITP',
+            'toefl_itp' => 'TOEFL-ITP',
+        ];
+    }
+
+    private static function normalizeProductKey(string $raw): string
+    {
+        $h = mb_strtolower(trim($raw));
+        $h = strtr($h, [
+            'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ñ' => 'n',
+            '+' => ' + ',
+        ]);
+        $h = preg_replace('/[^a-z0-9]+/', '_', $h) ?? $h;
+
+        return trim($h, '_');
+    }
+
     /** @return array{0:?int,1:?int} product_id, supplier_id */
     private function matchProduct(?string $code, ?string $name): array
     {
+        $resolved = self::resolveHistoricalCode($code, $name);
+        if ($resolved !== null) {
+            $code = $resolved;
+        }
         if ($code !== null && $code !== '') {
             $stmt = $this->pdo->prepare(
                 'SELECT id, supplier_id FROM products WHERE UPPER(code) = UPPER(?) LIMIT 1'
