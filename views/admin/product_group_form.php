@@ -328,17 +328,21 @@ $pageHeading = $isEdit
     <div class="group-panel" data-panel="schedule" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Fechas y horarios de aplicación</h2>
 
-        <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:.65rem">
-            <input type="checkbox" name="exam_choose_at_checkout" value="1"
+        <?php $scheduleMode = (string) ($extras['schedule_mode'] ?? 'window'); ?>
+        <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:.65rem">
+            <input type="checkbox" name="exam_choose_at_checkout" id="exam_choose_at_checkout" value="1" style="margin-top:.2rem"
                 <?= !empty($extras['exam_choose_at_checkout']) ? 'checked' : '' ?>>
-            Pedir fecha y hora de aplicación en el checkout
+            <span id="exam-choose-at-checkout-label">
+                <?= $scheduleMode === 'dated_list'
+                    ? 'Pedir convocatoria / sede en el checkout'
+                    : 'Pedir fecha y hora de aplicación en el checkout' ?>
+            </span>
         </label>
 
         <label class="muted" style="<?= e($labelStyle) ?>;margin-bottom:.85rem">
             Modo de agenda
             <select name="schedule_mode" id="schedule_mode" style="<?= e($inputStyle) ?>">
                 <?php
-                $scheduleMode = (string) ($extras['schedule_mode'] ?? 'window');
                 $modeOptions = [
                     'window' => 'Ventana continua (ELeT / Cambridge flexible Lun–Vie)',
                     'fixed_slots' => 'Horarios fijos por día (TOEFL sábados 11:00 / 13:00)',
@@ -352,81 +356,95 @@ $pageHeading = $isEdit
                 <?php endforeach; ?>
             </select>
         </label>
+        <p class="muted" id="schedule-mode-hint" style="font-size:.8rem;margin:-.45rem 0 .85rem;max-width:40rem">
+            <?php if ($scheduleMode === 'dated_list'): ?>
+                El alumno solo elige una convocatoria abierta; fecha, hora y sede las defines abajo.
+            <?php elseif ($scheduleMode === 'fixed_slots'): ?>
+                El alumno elige entre horarios fijos (p. ej. sábados 11:00 / 13:00). Opcional: fecha extraordinaria.
+            <?php else: ?>
+                El alumno elige fecha y hora dentro de la ventana (días, bloques y horarios).
+            <?php endif; ?>
+        </p>
 
         <label class="muted" style="<?= e($labelStyle) ?>;margin-bottom:.85rem">
             Texto de ayuda en checkout (opcional)
-            <input type="text" name="schedule_checkout_help"
+            <input type="text" name="schedule_checkout_help" id="schedule_checkout_help"
                    value="<?= e((string) ($extras['schedule_checkout_help'] ?? '')) ?>"
-                   placeholder="Ej. Elige un sábado a las 11:00 o 13:00…"
+                   placeholder="<?= $scheduleMode === 'dated_list'
+                       ? 'Ej. Elige la sede y convocatoria con inscripción abierta…'
+                       : 'Ej. Elige un sábado a las 11:00 o 13:00…' ?>"
                    style="<?= e($inputStyle) ?>">
         </label>
 
-        <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:1rem">
-            <input type="checkbox" name="schedule_available_365" value="1" style="margin-top:.2rem"
-                <?= !empty($extras['schedule_available_365']) ? 'checked' : '' ?>>
-            <span>Disponible los 365 días del año</span>
+        <label class="muted" style="<?= e($labelStyle) ?>;margin-bottom:1rem;max-width:12rem">
+            Caducidad (meses)
+            <input type="number" name="exam_validity_months" min="1" max="36" step="1"
+                   value="<?= (int) ($extras['exam_validity_months'] ?? 6) ?>"
+                   style="<?= e($inputStyle) ?>">
         </label>
 
-        <div style="margin-bottom:1rem">
-            <div class="muted" style="font-size:.88rem;font-weight:600;margin-bottom:.45rem">Días en que se puede aplicar</div>
-            <div style="display:flex;flex-wrap:wrap;gap:.55rem">
-                <?php foreach ($dayLabels as $dow => $label): ?>
-                    <label class="day-check">
-                        <input type="checkbox" name="schedule_days[<?= (int) $dow ?>]" value="1"
-                            <?= !empty($days[$dow]) || !empty($days[(string) $dow]) ? 'checked' : '' ?>>
-                        <?= e($label) ?>
-                    </label>
-                <?php endforeach; ?>
-            </div>
-        </div>
+        <div id="schedule-mode-window" <?= $scheduleMode === 'window' ? '' : 'hidden' ?>>
+            <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:1rem">
+                <input type="checkbox" name="schedule_available_365" value="1" style="margin-top:.2rem"
+                    <?= !empty($extras['schedule_available_365']) ? 'checked' : '' ?>>
+                <span>Disponible los 365 días del año</span>
+            </label>
 
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.75rem">
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Minutos por bloque
-                <input type="number" name="exam_slot_minutes" min="15" step="5"
-                       value="<?= (int) ($extras['exam_slot_minutes'] ?? 30) ?>"
-                       style="<?= e($inputStyle) ?>">
-            </label>
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Antelación (días)
-                <input type="number" name="schedule_min_advance_days" min="0" step="1"
-                       value="<?= (int) ($extras['schedule_min_advance_days'] ?? 2) ?>"
-                       style="<?= e($inputStyle) ?>">
-            </label>
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Caducidad
-                <input type="number" name="exam_validity_months" min="1" max="36" step="1"
-                       value="<?= (int) ($extras['exam_validity_months'] ?? 6) ?>"
-                       style="<?= e($inputStyle) ?>">
-            </label>
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Lun–Vie desde
-                <input type="text" name="schedule_weekdays_start" placeholder="10:00"
-                       value="<?= e((string) ($extras['schedule_weekdays_start'] ?? '10:00')) ?>"
-                       style="<?= e($inputStyle) ?>">
-            </label>
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Lun–Vie hasta
-                <input type="text" name="schedule_weekdays_end" placeholder="17:30"
-                       value="<?= e((string) ($extras['schedule_weekdays_end'] ?? '17:30')) ?>"
-                       style="<?= e($inputStyle) ?>">
-            </label>
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Fin de semana desde
-                <input type="text" name="schedule_saturday_start" placeholder="08:00"
-                       value="<?= e((string) ($extras['schedule_saturday_start'] ?? '08:00')) ?>"
-                       style="<?= e($inputStyle) ?>">
-            </label>
-            <label class="muted" style="<?= e($labelStyle) ?>">
-                Fin de semana hasta
-                <input type="text" name="schedule_saturday_end" placeholder="12:00"
-                       value="<?= e((string) ($extras['schedule_saturday_end'] ?? '12:00')) ?>"
-                       style="<?= e($inputStyle) ?>">
-            </label>
+            <div style="margin-bottom:1rem">
+                <div class="muted" style="font-size:.88rem;font-weight:600;margin-bottom:.45rem">Días en que se puede aplicar</div>
+                <div style="display:flex;flex-wrap:wrap;gap:.55rem">
+                    <?php foreach ($dayLabels as $dow => $label): ?>
+                        <label class="day-check">
+                            <input type="checkbox" name="schedule_days[<?= (int) $dow ?>]" value="1"
+                                <?= !empty($days[$dow]) || !empty($days[(string) $dow]) ? 'checked' : '' ?>>
+                            <?= e($label) ?>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.75rem">
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Minutos por bloque
+                    <input type="number" name="exam_slot_minutes" min="15" step="5"
+                           value="<?= (int) ($extras['exam_slot_minutes'] ?? 30) ?>"
+                           style="<?= e($inputStyle) ?>">
+                </label>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Antelación (días)
+                    <input type="number" name="schedule_min_advance_days" min="0" step="1"
+                           value="<?= (int) ($extras['schedule_min_advance_days'] ?? 2) ?>"
+                           style="<?= e($inputStyle) ?>">
+                </label>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Lun–Vie desde
+                    <input type="text" name="schedule_weekdays_start" placeholder="10:00"
+                           value="<?= e((string) ($extras['schedule_weekdays_start'] ?? '10:00')) ?>"
+                           style="<?= e($inputStyle) ?>">
+                </label>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Lun–Vie hasta
+                    <input type="text" name="schedule_weekdays_end" placeholder="17:30"
+                           value="<?= e((string) ($extras['schedule_weekdays_end'] ?? '17:30')) ?>"
+                           style="<?= e($inputStyle) ?>">
+                </label>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Fin de semana desde
+                    <input type="text" name="schedule_saturday_start" placeholder="08:00"
+                           value="<?= e((string) ($extras['schedule_saturday_start'] ?? '08:00')) ?>"
+                           style="<?= e($inputStyle) ?>">
+                </label>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Fin de semana hasta
+                    <input type="text" name="schedule_saturday_end" placeholder="12:00"
+                           value="<?= e((string) ($extras['schedule_saturday_end'] ?? '12:00')) ?>"
+                           style="<?= e($inputStyle) ?>">
+                </label>
+            </div>
+            <p class="muted" style="font-size:.78rem;margin:.75rem 0 0">
+                Vacaciones DOCEO: <a href="<?= e(url('/admin/vacaciones')) ?>">Administrar fechas globales</a>
+            </p>
         </div>
-        <p class="muted" style="font-size:.78rem;margin:.75rem 0 0">
-            Vacaciones DOCEO: <a href="<?= e(url('/admin/vacaciones')) ?>">Administrar fechas globales</a>
-        </p>
 
         <div id="schedule-mode-fixed" style="margin-top:1.1rem" <?= $scheduleMode === 'fixed_slots' ? '' : 'hidden' ?>>
             <h3 style="margin:0 0 .45rem;font-size:.98rem;color:var(--doceo-blue)">Horarios fijos (TOEFL)</h3>
@@ -465,11 +483,11 @@ $pageHeading = $isEdit
             </div>
         </div>
 
-        <div id="schedule-mode-dated" style="margin-top:1.1rem" <?= $scheduleMode === 'dated_list' ? '' : 'hidden' ?>>
+        <div id="schedule-mode-dated" style="margin-top:.35rem" <?= $scheduleMode === 'dated_list' ? '' : 'hidden' ?>>
             <h3 style="margin:0 0 .45rem;font-size:.98rem;color:var(--doceo-blue)">Convocatorias / sedes del proveedor</h3>
             <p class="muted" style="font-size:.8rem;margin:0 0 .55rem">
-                Una línea por convocatoria:<br>
-                <code>fecha|hora|límite inscripción|etiqueta|sede|ciudad|dirección</code><br>
+                Aquí defines los únicos días y horas disponibles. El alumno no elige libremente.<br>
+                Formato: <code>fecha|hora|límite inscripción|etiqueta|sede|ciudad|dirección</code><br>
                 Los últimos 3 campos (sede/ciudad/dirección) son opcionales. Ejemplo:<br>
                 <code>2026-11-15|10:00|2026-10-20|Noviembre|Campus Centro|León, Gto.|Av. Ejemplo 123</code>
             </p>
@@ -1228,10 +1246,34 @@ $pageHeading = $isEdit
   function syncScheduleModePanels() {
     var modeEl = document.getElementById('schedule_mode');
     var mode = modeEl ? String(modeEl.value || 'window') : 'window';
+    var windowPanel = document.getElementById('schedule-mode-window');
     var fixed = document.getElementById('schedule-mode-fixed');
     var dated = document.getElementById('schedule-mode-dated');
+    var chooseLabel = document.getElementById('exam-choose-at-checkout-label');
+    var modeHint = document.getElementById('schedule-mode-hint');
+    var helpInput = document.getElementById('schedule_checkout_help');
+    if (windowPanel) windowPanel.hidden = mode !== 'window';
     if (fixed) fixed.hidden = mode !== 'fixed_slots';
     if (dated) dated.hidden = mode !== 'dated_list';
+    if (chooseLabel) {
+      chooseLabel.textContent = mode === 'dated_list'
+        ? 'Pedir convocatoria / sede en el checkout'
+        : 'Pedir fecha y hora de aplicación en el checkout';
+    }
+    if (modeHint) {
+      if (mode === 'dated_list') {
+        modeHint.textContent = 'El alumno solo elige una convocatoria abierta; fecha, hora y sede las defines abajo.';
+      } else if (mode === 'fixed_slots') {
+        modeHint.textContent = 'El alumno elige entre horarios fijos (p. ej. sábados 11:00 / 13:00). Opcional: fecha extraordinaria.';
+      } else {
+        modeHint.textContent = 'El alumno elige fecha y hora dentro de la ventana (días, bloques y horarios).';
+      }
+    }
+    if (helpInput) {
+      helpInput.placeholder = mode === 'dated_list'
+        ? 'Ej. Elige la sede y convocatoria con inscripción abierta…'
+        : 'Ej. Elige un sábado a las 11:00 o 13:00…';
+    }
   }
   var scheduleModeSelect = document.getElementById('schedule_mode');
   if (scheduleModeSelect) {
