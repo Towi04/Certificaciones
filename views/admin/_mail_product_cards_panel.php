@@ -8,8 +8,16 @@ $mailCardSeed = is_array($mailCardSeed ?? null)
     : \App\Services\MailProductCardService::formSeed();
 $mailCardProducts = is_array($mailCardProducts ?? null) ? $mailCardProducts : [];
 $cardSvc = new \App\Services\MailProductCardService();
+$wideBanner = \App\Services\MailProductCardService::wideBannerSpec();
 $inputStyle = 'padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px;width:100%;box-sizing:border-box';
 $labelStyle = 'display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600';
+$layoutOptions = [
+    'wide' => 'Rectangular grande (banner)',
+    'square' => 'Cuadro pequeño',
+    'square_desc' => 'Cuadro pequeño + descripción',
+    'row' => 'Horizontal: imagen izq. + texto der.',
+    'row_flip' => 'Horizontal: texto izq. + imagen der.',
+];
 ?>
 <div class="mail-panel" data-panel="cards" hidden id="mail-cards">
     <div class="panel" style="margin-top:.75rem">
@@ -47,11 +55,12 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;fon
                     </label>
                     <label class="muted" style="<?= e($labelStyle) ?>">
                         Layout
-                        <select name="layout" style="<?= e($inputStyle) ?>">
-                            <option value="wide" <?= ($mailCardSeed['layout'] ?? '') === 'wide' ? 'selected' : '' ?>>Rectangular grande</option>
-                            <option value="square" <?= ($mailCardSeed['layout'] ?? '') === 'square' ? 'selected' : '' ?>>Cuadro pequeño</option>
-                            <option value="square_desc" <?= ($mailCardSeed['layout'] ?? '') === 'square_desc' ? 'selected' : '' ?>>Cuadro pequeño + descripción</option>
-                            <option value="row" <?= ($mailCardSeed['layout'] ?? '') === 'row' ? 'selected' : '' ?>>Horizontal + descripción</option>
+                        <select name="layout" class="mail-card-layout" style="<?= e($inputStyle) ?>">
+                            <?php foreach ($layoutOptions as $val => $lab): ?>
+                                <option value="<?= e($val) ?>" <?= ($mailCardSeed['layout'] ?? 'wide') === $val ? 'selected' : '' ?>>
+                                    <?= e($lab) ?>
+                                </option>
+                            <?php endforeach; ?>
                         </select>
                     </label>
                     <label class="muted" style="<?= e($labelStyle) ?>">
@@ -86,11 +95,13 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;fon
 
                 <div style="padding:.75rem;border:1px dashed #cfd8e6;border-radius:10px;background:#fff;display:grid;gap:.55rem">
                     <strong style="font-size:.85rem;color:var(--doceo-blue)">Imagen de la tarjeta</strong>
-                    <p class="muted" style="margin:0;font-size:.78rem">
-                        Por defecto usa el logo del producto. Sube otra si el layout horizontal se ve pequeño.
+                    <p class="muted mail-card-image-hint" style="margin:0;font-size:.78rem">
+                        Por defecto usa el logo del producto. En «Rectangular grande» sube un banner
+                        de <strong><?= e($wideBanner['label']) ?></strong> (ratio 2.5:1) para que llene
+                        todo el ancho sin deformarse. Retina: <?= (int) $wideBanner['width'] * 2 ?>×<?= (int) $wideBanner['height'] * 2 ?> px.
                     </p>
                     <label class="muted" style="<?= e($labelStyle) ?>">
-                        Cambiar imagen (opcional)
+                        Cambiar imagen / banner (opcional)
                         <input type="file" name="custom_image" accept=".png,.jpg,.jpeg,.webp,.gif,image/*"
                                class="mail-card-image-input" style="<?= e($inputStyle) ?>;background:#fff">
                     </label>
@@ -174,13 +185,8 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;fon
                                 </label>
                                 <label class="muted" style="<?= e($labelStyle) ?>">
                                     Layout
-                                    <select name="layout" style="<?= e($inputStyle) ?>">
-                                        <?php foreach ([
-                                            'wide' => 'Rectangular grande',
-                                            'square' => 'Cuadro pequeño',
-                                            'square_desc' => 'Cuadro pequeño + descripción',
-                                            'row' => 'Horizontal + descripción',
-                                        ] as $val => $lab): ?>
+                                    <select name="layout" class="mail-card-layout" style="<?= e($inputStyle) ?>">
+                                        <?php foreach ($layoutOptions as $val => $lab): ?>
                                             <option value="<?= e($val) ?>" <?= ($card['layout'] ?? '') === $val ? 'selected' : '' ?>><?= e($lab) ?></option>
                                         <?php endforeach; ?>
                                     </select>
