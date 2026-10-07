@@ -93,24 +93,31 @@ final class MarketingContactService
             throw new \InvalidArgumentException('No se pudo abrir el CSV.');
         }
 
-        $header = null;
+        try {
+            [$rawHeader, $delimiter] = \App\Support\Csv::readHeader($fh);
+        } catch (\Throwable $e) {
+            fclose($fh);
+            throw new \InvalidArgumentException($e->getMessage());
+        }
+
+        $header = array_map(static fn ($h) => self::normalizeHeader((string) $h), $rawHeader);
+        if (!in_array('email', $header, true)) {
+            fclose($fh);
+            throw new \InvalidArgumentException(
+                'El CSV debe tener una columna de correo (email / correo). '
+                . 'Si Excel lo guardó con ;, vuelve a subir el archivo (ahora se detecta solo).'
+            );
+        }
+
         $imported = 0;
         $updated = 0;
         $skipped = 0;
         $errors = [];
-        $lineNo = 0;
+        $lineNo = 1; // encabezado ya leído
 
-        while (($row = fgetcsv($fh)) !== false) {
+        while (($row = csv_get($fh, null, $delimiter)) !== false) {
             $lineNo++;
             if ($row === [null] || $row === false) {
-                continue;
-            }
-            // BOM UTF-8
-            if ($lineNo === 1 && isset($row[0])) {
-                $row[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string) $row[0]) ?? (string) $row[0];
-            }
-            if ($header === null) {
-                $header = array_map(static fn ($h) => self::normalizeHeader((string) $h), $row);
                 continue;
             }
             if (count(array_filter($row, static fn ($v) => trim((string) $v) !== '')) === 0) {
@@ -133,11 +140,12 @@ final class MarketingContactService
                     $skipped++;
                 }
             } catch (\Throwable $e) {
-                $errors[] = 'Línea ' . $lineNo . ': ' . $e->getMessage();
-                if (count($errors) >= 40) {
-                    $errors[] = '… demasiados errores; se detuvo el detalle.';
-                    break;
+                if (count($errors) < 40) {
+                    $errors[] = 'Línea ' . $lineNo . ': ' . $e->getMessage();
+                } elseif (count($errors) === 40) {
+                    $errors[] = '… más errores omitidos en el detalle (la importación continúa).';
                 }
+                // No detener: seguir con el resto del archivo.
             }
         }
         fclose($fh);

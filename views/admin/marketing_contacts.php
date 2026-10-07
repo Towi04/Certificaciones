@@ -83,6 +83,8 @@ $hints = \App\Services\MarketingContactService::historicalProductHints();
     <span class="muted" style="font-size:.82rem"><?= (int) $total ?> contactos</span>
 </form>
 
+<?php require BASE_PATH . '/views/shared/pagination.php'; ?>
+
 <div class="panel" style="margin-top:.85rem">
     <?php if ($contacts === []): ?>
         <p class="muted" style="margin:0">No hay contactos importados todavía.</p>
@@ -130,5 +132,6 @@ $hints = \App\Services\MarketingContactService::historicalProductHints();
                 </tbody>
             </table>
         </div>
+        <?php require BASE_PATH . '/views/shared/pagination.php'; ?>
     <?php endif; ?>
 </div>
