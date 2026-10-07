@@ -9,7 +9,8 @@ $forced = !empty($forced);
         <h1 style="text-align:center;color:var(--doceo-blue);font-size:1.25rem">Cambiar contraseña</h1>
         <?php if ($forced): ?>
             <p class="muted" style="text-align:center">
-                Tu cuenta tiene una contraseña temporal. Elige una nueva para continuar.
+                Tu cuenta tiene una contraseña temporal (la del correo de registro o la que usaste al entrar).
+                Elige una nueva para continuar.
             </p>
         <?php endif; ?>
         <?php if ($msg = flash('error')): ?><div class="flash flash-error"><?= e($msg) ?></div><?php endif; ?>
