@@ -289,9 +289,11 @@ final class ProviderRequestService
             if ($audience !== '' && $audience !== 'provider') {
                 continue;
             }
+            // Solo tratar como solicitud a proveedor si el paso lo declara (audience=provider)
+            // o usa plantilla UKS/solicitud. Un correo genérico sin audiencia no debe
+            // activar provider_request (evita p. ej. OOPT heredando solicitud_uks).
             $isProvider = $audience === 'provider'
-                || ($tpl !== '' && MailTemplateService::isUksSolicitudCode($tpl))
-                || $tpl === '';
+                || ($tpl !== '' && MailTemplateService::isUksSolicitudCode($tpl));
             if (!$isProvider) {
                 continue;
             }
