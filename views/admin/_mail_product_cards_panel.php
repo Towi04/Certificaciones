@@ -50,6 +50,7 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;fon
                         <select name="layout" style="<?= e($inputStyle) ?>">
                             <option value="wide" <?= ($mailCardSeed['layout'] ?? '') === 'wide' ? 'selected' : '' ?>>Rectangular grande</option>
                             <option value="square" <?= ($mailCardSeed['layout'] ?? '') === 'square' ? 'selected' : '' ?>>Cuadro pequeño</option>
+                            <option value="square_desc" <?= ($mailCardSeed['layout'] ?? '') === 'square_desc' ? 'selected' : '' ?>>Cuadro pequeño + descripción</option>
                             <option value="row" <?= ($mailCardSeed['layout'] ?? '') === 'row' ? 'selected' : '' ?>>Horizontal + descripción</option>
                         </select>
                     </label>
@@ -174,7 +175,12 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;fon
                                 <label class="muted" style="<?= e($labelStyle) ?>">
                                     Layout
                                     <select name="layout" style="<?= e($inputStyle) ?>">
-                                        <?php foreach (['wide' => 'Rectangular', 'square' => 'Cuadro', 'row' => 'Horizontal'] as $val => $lab): ?>
+                                        <?php foreach ([
+                                            'wide' => 'Rectangular grande',
+                                            'square' => 'Cuadro pequeño',
+                                            'square_desc' => 'Cuadro pequeño + descripción',
+                                            'row' => 'Horizontal + descripción',
+                                        ] as $val => $lab): ?>
                                             <option value="<?= e($val) ?>" <?= ($card['layout'] ?? '') === $val ? 'selected' : '' ?>><?= e($lab) ?></option>
                                         <?php endforeach; ?>
                                     </select>

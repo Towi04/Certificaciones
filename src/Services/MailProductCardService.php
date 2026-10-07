@@ -36,7 +36,7 @@ final class MailProductCardService
                 id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                 placeholder VARCHAR(60) NOT NULL,
                 product_id BIGINT UNSIGNED NOT NULL,
-                layout ENUM('square','wide','row') NOT NULL DEFAULT 'wide',
+                layout ENUM('square','square_desc','wide','row') NOT NULL DEFAULT 'wide',
                 badge_mode ENUM('discount','banner','both','none') NOT NULL DEFAULT 'discount',
                 badge_text VARCHAR(80) NULL,
                 custom_image_path VARCHAR(255) NULL,
@@ -55,6 +55,24 @@ final class MailProductCardService
         $this->ensureColumn('custom_image_path', 'VARCHAR(255) NULL AFTER badge_text');
         $this->ensureColumn('accent_color', "VARCHAR(7) NOT NULL DEFAULT '#315285' AFTER custom_image_path");
         $this->ensureColumn('cta_label', "VARCHAR(80) NOT NULL DEFAULT 'Ver en catálogo' AFTER accent_color");
+        $this->ensureLayoutEnum();
+    }
+
+    private function ensureLayoutEnum(): void
+    {
+        try {
+            $col = $this->pdo->query("SHOW COLUMNS FROM mail_product_cards LIKE 'layout'");
+            $row = $col ? $col->fetch() : false;
+            $type = is_array($row) ? (string) ($row['Type'] ?? '') : '';
+            if ($type !== '' && !str_contains($type, 'square_desc')) {
+                $this->pdo->exec(
+                    "ALTER TABLE mail_product_cards
+                     MODIFY COLUMN layout ENUM('square','square_desc','wide','row') NOT NULL DEFAULT 'wide'"
+                );
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
     }
 
     private function ensureColumn(string $name, string $definition): void
@@ -473,8 +491,12 @@ final class MailProductCardService
         if ($layout === 'row') {
             return $this->htmlRowCard($safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc, $badgeHtml, $cta, $accent);
         }
+        if ($layout === 'square_desc') {
+            // Este layout siempre incluye descripción (si el producto la tiene).
+            return $this->htmlSquareCard($safeUrl, $safeLogo, $safeName, $badgeHtml, $cta, $accent, $safeDesc, true);
+        }
         if ($layout === 'square') {
-            return $this->htmlSquareCard($safeUrl, $safeLogo, $safeName, $badgeHtml, $cta, $accent);
+            return $this->htmlSquareCard($safeUrl, $safeLogo, $safeName, $badgeHtml, $cta, $accent, $safeDesc, $showDesc);
         }
 
         return $this->htmlWideCard($safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc, $badgeHtml, $cta, $accent);
@@ -620,7 +642,7 @@ final class MailProductCardService
 
     private static function normalizeLayout(string $layout): string
     {
-        return in_array($layout, ['square', 'wide', 'row'], true) ? $layout : 'wide';
+        return in_array($layout, ['square', 'square_desc', 'wide', 'row'], true) ? $layout : 'wide';
     }
 
     private static function normalizeBadge(string $badge): string
@@ -755,8 +777,14 @@ final class MailProductCardService
         string $name,
         string $badgeHtml,
         string $cta,
-        string $accent
+        string $accent,
+        string $desc = '',
+        bool $showDesc = false
     ): string {
+        $descBlock = ($showDesc && $desc !== '')
+            ? '<p style="margin:0 0 8px;font-size:12px;line-height:1.35;color:#64748b;text-align:left;">' . $desc . '</p>'
+            : '';
+
         return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
             . 'style="border-collapse:collapse;border:1px solid #e6ebf2;border-radius:12px;'
             . 'overflow:hidden;background:#ffffff;max-width:260px;">'
@@ -770,6 +798,7 @@ final class MailProductCardService
             . ($badgeHtml !== '' ? '<div style="margin:0 0 8px;">' . $badgeHtml . '</div>' : '')
             . '<p style="margin:0 0 8px;font-size:13px;font-weight:800;color:' . $accent . ';line-height:1.25;">'
             . '<a href="' . $url . '" style="color:' . $accent . ';text-decoration:none;">' . $name . '</a></p>'
+            . $descBlock
             . '<a href="' . $url . '" style="display:inline-block;background:' . $accent . ';color:#ffffff;'
             . 'text-decoration:none;font-weight:700;font-size:12px;padding:7px 10px;border-radius:8px;">'
             . $cta . '</a>'
