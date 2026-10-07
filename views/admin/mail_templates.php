@@ -41,6 +41,7 @@ $audienceLabels = is_array($audienceLabels ?? null)
 
 <nav class="group-tabs" style="margin-top:1rem" role="tablist" aria-label="Secciones de correos">
     <button type="button" class="group-tab active" data-tab="templates">Correos</button>
+    <button type="button" class="group-tab" data-tab="cards">Tarjetas de catálogo</button>
     <button type="button" class="group-tab" data-tab="branding">Encabezado y pie</button>
 </nav>
 
@@ -141,6 +142,8 @@ $audienceLabels = is_array($audienceLabels ?? null)
         <?php require BASE_PATH . '/views/shared/pagination.php'; ?>
     </div>
 </div>
+
+<?php require __DIR__ . '/_mail_product_cards_panel.php'; ?>
 
 <div class="mail-panel" data-panel="branding" hidden id="mail-branding">
     <div class="panel" style="margin-top:.75rem">
@@ -270,6 +273,7 @@ $audienceLabels = is_array($audienceLabels ?? null)
   });
   var hash = (location.hash || '').replace(/^#/, '');
   if (hash === 'mail-branding') hash = 'branding';
+  if (hash === 'mail-cards') hash = 'cards';
   if (hash && document.querySelector('.mail-panel[data-panel="' + hash + '"]')) {
     activate(hash);
   } else {

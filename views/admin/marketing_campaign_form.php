@@ -103,9 +103,11 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
             </select>
         </label>
 
-        <label class="muted" style="<?= e($labelStyle) ?>">
-            Código Promo DOCEO (para <code>{{promo_code}}</code>)
-            <select name="promo_month" style="<?= e($inputStyle) ?>">
+        <div>
+            <label class="muted" for="mkt-promo-month" style="display:block;font-size:.88rem;font-weight:600;margin:0 0 .35rem;white-space:nowrap">
+                Código Promo DOCEO <span style="font-weight:500">(para <code style="white-space:nowrap">{{promo_code}}</code>)</span>
+            </label>
+            <select name="promo_month" id="mkt-promo-month" style="<?= e($inputStyle) ?>">
                 <option value="0" <?= $promoMonth === 0 ? 'selected' : '' ?>>
                     Mes actual (al momento del envío)
                 </option>
@@ -115,11 +117,11 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                     </option>
                 <?php endforeach; ?>
             </select>
-        </label>
-        <p class="muted" style="margin:-.4rem 0 0;font-size:.8rem">
-            Usa el código del mes definido en Promo DOCEO. Puedes fijar un mes
-            (p. ej. Diciembre) para programar campañas futuras o reutilizar la plantilla cada año.
-        </p>
+            <p class="muted" style="margin:.4rem 0 0;font-size:.8rem">
+                Usa el código del mes definido en Promo DOCEO. Puedes fijar un mes
+                (p. ej. Diciembre) para programar campañas futuras o reutilizar la plantilla cada año.
+            </p>
+        </div>
 
         <fieldset style="border:1px solid #e6ebf2;border-radius:12px;padding:.85rem 1rem;margin:0">
             <legend style="padding:0 .35rem;font-weight:700;color:var(--doceo-blue)">Audiencia</legend>
