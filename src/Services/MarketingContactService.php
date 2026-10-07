@@ -100,7 +100,7 @@ final class MarketingContactService
         $errors = [];
         $lineNo = 0;
 
-        while (($row = fgetcsv($fh)) !== false) {
+        while (($row = csv_get($fh)) !== false) {
             $lineNo++;
             if ($row === [null] || $row === false) {
                 continue;
