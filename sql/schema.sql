@@ -632,7 +632,7 @@ CREATE TABLE IF NOT EXISTS mail_product_cards (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   placeholder VARCHAR(60) NOT NULL,
   product_id BIGINT UNSIGNED NOT NULL,
-  layout ENUM('square','wide','row') NOT NULL DEFAULT 'wide',
+  layout ENUM('square','square_desc','wide','row') NOT NULL DEFAULT 'wide',
   badge_mode ENUM('discount','banner','both','none') NOT NULL DEFAULT 'discount',
   badge_text VARCHAR(80) NULL,
   custom_image_path VARCHAR(255) NULL,
