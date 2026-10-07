@@ -14,7 +14,6 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;fon
 $layoutOptions = [
     'wide' => 'Rectangular grande (banner)',
     'square' => 'Cuadro pequeño',
-    'square_desc' => 'Cuadro pequeño + descripción',
     'row' => 'Horizontal: imagen izq. + texto der.',
     'row_flip' => 'Horizontal: texto izq. + imagen der.',
 ];
@@ -24,8 +23,8 @@ $layoutOptions = [
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Tarjetas de catálogo para correos</h2>
         <p class="muted" style="margin:0 0 1rem;font-size:.88rem;max-width:52rem">
             Cada tarjeta define su propio diseño (color del botón, texto, badge, layout e imagen).
+            La descripción breve se activa solo con el check «Mostrar descripción breve».
             Usa placeholders como <code>{{elet}}</code> o un grid <code>{{cards:elet,toefl}}</code>.
-            Si reutilizas un placeholder existente al crear, se actualiza esa tarjeta.
         </p>
 
         <div class="mail-card-editor" style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(260px,.85fr);gap:1rem;align-items:start;margin-bottom:1.25rem">

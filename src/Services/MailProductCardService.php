@@ -62,6 +62,16 @@ final class MailProductCardService
         $this->ensureColumn('accent_color', "VARCHAR(7) NOT NULL DEFAULT '#315285' AFTER custom_image_path");
         $this->ensureColumn('cta_label', "VARCHAR(80) NOT NULL DEFAULT 'Ver en catálogo' AFTER accent_color");
         $this->ensureLayoutEnum();
+        // La descripción la controla el checkbox, no el layout.
+        try {
+            $this->pdo->exec(
+                "UPDATE mail_product_cards
+                 SET show_description = 1, layout = 'square'
+                 WHERE layout = 'square_desc'"
+            );
+        } catch (\Throwable) {
+            // ignore
+        }
     }
 
     private function ensureLayoutEnum(): void
@@ -503,16 +513,12 @@ final class MailProductCardService
         }
 
         if ($layout === 'row') {
-            // Imagen izquierda + texto/descripción derecha.
+            // Imagen izquierda + texto derecha.
             return $this->htmlRowCard($safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc, $badgeHtml, $cta, $accent, false);
         }
         if ($layout === 'row_flip') {
-            // Texto/descripción izquierda + imagen derecha.
+            // Texto izquierda + imagen derecha.
             return $this->htmlRowCard($safeUrl, $safeLogo, $safeName, $safeDesc, $showDesc, $badgeHtml, $cta, $accent, true);
-        }
-        if ($layout === 'square_desc') {
-            // Este layout siempre incluye descripción (si el producto la tiene).
-            return $this->htmlSquareCard($safeUrl, $safeLogo, $safeName, $badgeHtml, $cta, $accent, $safeDesc, true);
         }
         if ($layout === 'square') {
             return $this->htmlSquareCard($safeUrl, $safeLogo, $safeName, $badgeHtml, $cta, $accent, $safeDesc, $showDesc);
@@ -661,7 +667,12 @@ final class MailProductCardService
 
     private static function normalizeLayout(string $layout): string
     {
-        return in_array($layout, ['square', 'square_desc', 'wide', 'row', 'row_flip'], true) ? $layout : 'wide';
+        // Compat: square_desc era un layout con descripción fija; ahora usa el checkbox.
+        if ($layout === 'square_desc') {
+            return 'square';
+        }
+
+        return in_array($layout, ['square', 'wide', 'row', 'row_flip'], true) ? $layout : 'wide';
     }
 
     /** @return array{width:int,height:int,label:string,hint:string} */
