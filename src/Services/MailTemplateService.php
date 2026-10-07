@@ -95,6 +95,10 @@ final class MailTemplateService
             'partner_code' => 'Código del partner',
             'partner_email' => 'Correo del partner',
         ],
+        'Publicidad / campañas' => [
+            'catalog_url' => 'URL del catálogo público',
+            'promo_code' => 'Código promocional de la campaña',
+        ],
     ];
 
     private MailTemplateRepository $repo;
@@ -880,6 +884,8 @@ final class MailTemplateService
             'partner_name' => 'Partner Ejemplo',
             'partner_code' => 'PARTNER01',
             'partner_email' => 'partner@ejemplo.com',
+            'catalog_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/catalogo',
+            'promo_code' => 'ANTIGUO15',
         ]);
 
         $out = [];
