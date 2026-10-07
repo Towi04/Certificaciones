@@ -2,10 +2,26 @@
 /** @var list<array<string,mixed>> $templates */
 /** @var array<string,string> $branding */
 /** @var string $brandingPreviewHtml */
+/** @var string $filterAudience */
+/** @var string $filterQ */
+/** @var int $filterGroupId */
+/** @var int $filterSupplierId */
+/** @var list<array<string,mixed>> $groups */
+/** @var list<array<string,mixed>> $suppliers */
+/** @var array<string,string> $audienceLabels */
 $branding = is_array($branding ?? null) ? $branding : \App\Mail\MailBranding::config();
 $brandingPreviewHtml = (string) ($brandingPreviewHtml ?? \App\Mail\MailBranding::wrap(
     '<p style="margin:0">Así se verá el cuerpo de tus plantillas entre el encabezado y el pie.</p>'
 ));
+$filterAudience = (string) ($filterAudience ?? '');
+$filterQ = (string) ($filterQ ?? '');
+$filterGroupId = (int) ($filterGroupId ?? 0);
+$filterSupplierId = (int) ($filterSupplierId ?? 0);
+$groups = is_array($groups ?? null) ? $groups : [];
+$suppliers = is_array($suppliers ?? null) ? $suppliers : [];
+$audienceLabels = is_array($audienceLabels ?? null)
+    ? $audienceLabels
+    : \App\Services\MailTemplateService::audienceLabels();
 ?>
 <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
     <div>
@@ -13,12 +29,12 @@ $brandingPreviewHtml = (string) ($brandingPreviewHtml ?? \App\Mail\MailBranding:
         <p class="muted" style="margin:.35rem 0 0;max-width:48rem">
             Edita asunto, contenido y destinatarios en cada plantilla. Variables con doble llave,
             por ejemplo <code>{{matricula}}</code> o <code>{{certificacion}}</code>.
-            <br>Para no volver a ser bloqueados por MailChannels (Neubox): asunto claro (no vacío ni
-            TODO MAYÚSCULAS), destinatarios reales, y la solicitud a proveedor <strong>sin adjuntos</strong>
-            (solo enlaces).
+            Las de tipo <strong>Publicidad</strong> no piden destinatario: la campaña elige a quién enviar.
         </p>
     </div>
-    <a class="btn btn-accent" href="<?= e(url('/admin/correos/nueva')) ?>" id="mail-new-template-btn">
+    <a class="btn btn-accent"
+       href="<?= e(url('/admin/correos/nueva' . ($filterAudience !== '' ? ('?audience=' . urlencode($filterAudience)) : ''))) ?>"
+       id="mail-new-template-btn">
         Nueva plantilla
     </a>
 </div>
@@ -29,10 +45,60 @@ $brandingPreviewHtml = (string) ($brandingPreviewHtml ?? \App\Mail\MailBranding:
 </nav>
 
 <div class="mail-panel" data-panel="templates">
+    <form method="get" action="<?= e(url('/admin/correos')) ?>" class="panel"
+          style="margin-top:.75rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.65rem;align-items:end">
+        <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
+            Destinatario
+            <select name="audience" style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                <option value="">Todos</option>
+                <?php foreach ($audienceLabels as $val => $label): ?>
+                    <option value="<?= e($val) ?>" <?= $filterAudience === $val ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
+            Grupo de proceso
+            <select name="group_id" style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                <option value="">Todos</option>
+                <?php foreach ($groups as $g): ?>
+                    <option value="<?= (int) $g['id'] ?>" <?= $filterGroupId === (int) $g['id'] ? 'selected' : '' ?>>
+                        <?= e((string) $g['name']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
+            Proveedor (vía grupo)
+            <select name="supplier_id" style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+                <option value="">Todos</option>
+                <?php foreach ($suppliers as $s): ?>
+                    <option value="<?= (int) $s['id'] ?>" <?= $filterSupplierId === (int) $s['id'] ? 'selected' : '' ?>>
+                        <?= e((string) $s['name']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
+            Buscar
+            <input type="search" name="q" value="<?= e($filterQ) ?>" placeholder="Nombre o código"
+                   style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
+        </label>
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+            <button class="btn btn-ghost" type="submit">Filtrar</button>
+            <?php if ($filterAudience !== '' || $filterQ !== '' || $filterGroupId > 0 || $filterSupplierId > 0): ?>
+                <a class="btn btn-ghost" href="<?= e(url('/admin/correos')) ?>">Limpiar</a>
+            <?php endif; ?>
+        </div>
+    </form>
+
     <div class="panel" style="margin-top:.75rem">
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Plantillas</h2>
         <?php if ($templates === []): ?>
-            <p class="muted">No hay plantillas. Abre esta página de nuevo o ejecuta el seed de catálogo.</p>
+            <p class="muted">No hay plantillas con estos filtros.
+                <?php if ($filterAudience === 'marketing'): ?>
+                    Crea una con destinatario <strong>Publicidad</strong>.
+                <?php endif; ?>
+            </p>
         <?php else: ?>
             <div class="table-wrap">
                 <table class="data">
@@ -45,16 +111,14 @@ $brandingPreviewHtml = (string) ($brandingPreviewHtml ?? \App\Mail\MailBranding:
                     <?php foreach ($templates as $t): ?>
                         <?php
                         $aud = \App\Services\MailTemplateService::audienceForTemplate((string) ($t['code'] ?? ''));
-                        $audLabel = match ($aud) {
-                            'provider' => 'Proveedor',
-                            'partner' => 'Partner',
-                            default => 'Alumno',
-                        };
+                        $audLabel = \App\Services\MailTemplateService::audienceLabel($aud);
                         ?>
                         <tr>
                             <td><?= e($t['name']) ?></td>
                             <td><code><?= e($t['code']) ?></code></td>
-                            <td><?= e($audLabel) ?></td>
+                            <td>
+                                <span class="pill"><?= e($audLabel) ?></span>
+                            </td>
                             <td><?= (int) $t['is_active'] ? 'Sí' : 'No' ?></td>
                             <td>
                                 <span class="row-actions">

@@ -3210,12 +3210,76 @@ final class AdminController
         $svc = new MailTemplateService();
         $svc->ensureDefaults();
         $repo = new \App\Repositories\MailTemplateRepository();
-        $pagination = Pagination::fromRequest($repo->countAll());
+        $all = $repo->all();
+
+        $filterAudience = isset($_GET['audience']) && is_string($_GET['audience'])
+            ? strtolower(trim($_GET['audience'])) : '';
+        if ($filterAudience !== '' && $filterAudience !== 'all') {
+            $filterAudience = MailTemplateService::normalizeAudience($filterAudience);
+        } else {
+            $filterAudience = '';
+        }
+        $q = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
+        $groupId = isset($_GET['group_id']) ? (int) $_GET['group_id'] : 0;
+        $supplierId = isset($_GET['supplier_id']) ? (int) $_GET['supplier_id'] : 0;
+
+        $groupCodes = null;
+        $groups = (new ProductGroupRepository())->all();
+        if ($groupId > 0) {
+            foreach ($groups as $g) {
+                if ((int) ($g['id'] ?? 0) === $groupId) {
+                    $groupCodes = array_fill_keys(MailTemplateService::templateCodesUsedByGroup($g), true);
+                    break;
+                }
+            }
+            if ($groupCodes === null) {
+                $groupCodes = [];
+            }
+        } elseif ($supplierId > 0) {
+            $groupCodes = [];
+            foreach ($groups as $g) {
+                if ((int) ($g['supplier_id'] ?? 0) !== $supplierId) {
+                    continue;
+                }
+                foreach (MailTemplateService::templateCodesUsedByGroup($g) as $code) {
+                    $groupCodes[$code] = true;
+                }
+            }
+        }
+
+        $filtered = array_values(array_filter($all, static function (array $t) use ($filterAudience, $q, $groupCodes): bool {
+            $code = (string) ($t['code'] ?? '');
+            $aud = MailTemplateService::audienceForTemplate($code);
+            if ($filterAudience !== '' && $aud !== $filterAudience) {
+                return false;
+            }
+            if ($groupCodes !== null && !isset($groupCodes[$code])) {
+                return false;
+            }
+            if ($q !== '') {
+                $hay = mb_strtolower($code . ' ' . (string) ($t['name'] ?? '') . ' ' . (string) ($t['subject'] ?? ''));
+                if (!str_contains($hay, mb_strtolower($q))) {
+                    return false;
+                }
+            }
+
+            return true;
+        }));
+
+        $pagination = Pagination::fromRequest(count($filtered));
+        $page = array_slice($filtered, $pagination['offset'], $pagination['limit']);
         $branding = \App\Mail\MailBranding::config();
         view('admin/mail_templates', [
             'title' => 'Plantillas de correo',
-            'templates' => $repo->all($pagination['limit'], $pagination['offset']),
+            'templates' => $page,
             'pagination' => $pagination,
+            'filterAudience' => $filterAudience,
+            'filterQ' => $q,
+            'filterGroupId' => $groupId,
+            'filterSupplierId' => $supplierId,
+            'groups' => $groups,
+            'suppliers' => (new SupplierRepository())->all(),
+            'audienceLabels' => MailTemplateService::audienceLabels(),
             'branding' => $branding,
             'brandingPreviewHtml' => \App\Mail\MailBranding::wrap(
                 '<p style="margin:0 0 8px"><strong>Vista previa</strong></p>'
@@ -3360,7 +3424,10 @@ final class AdminController
             'required_fields_json' => null,
         ];
         $routing = ['to' => '', 'cc' => ''];
-        $audience = 'student';
+        $preAudience = isset($_GET['audience']) && is_string($_GET['audience'])
+            ? MailTemplateService::normalizeAudience($_GET['audience'])
+            : 'student';
+        $audience = $preAudience;
         [$template, $selectedPlaceholders, $routing, $audience] = $this->mergeOldIntoMailTemplate(
             $template,
             $routing,

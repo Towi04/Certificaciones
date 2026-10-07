@@ -400,8 +400,71 @@ final class MailTemplateService
         return match (strtolower(trim($audience))) {
             'provider' => 'provider',
             'partner' => 'partner',
+            'marketing', 'publicidad', 'campaign', 'promo' => 'marketing',
             default => 'student',
         };
+    }
+
+    /** @return array<string, string> */
+    public static function audienceLabels(): array
+    {
+        return [
+            'student' => 'Alumno',
+            'partner' => 'Partner',
+            'provider' => 'Proveedor',
+            'marketing' => 'Publicidad',
+        ];
+    }
+
+    public static function audienceLabel(string $audience): string
+    {
+        $labels = self::audienceLabels();
+        $key = self::normalizeAudience($audience);
+
+        return $labels[$key] ?? $key;
+    }
+
+    /** Plantilla de campaña: el destinatario lo define Publicidad, no la plantilla. */
+    public static function isMarketingTemplate(string $code): bool
+    {
+        return self::audienceForTemplate($code) === 'marketing';
+    }
+
+    /**
+     * Códigos de plantilla referenciados en el config_json de un grupo.
+     *
+     * @param array<string, mixed> $group
+     * @return list<string>
+     */
+    public static function templateCodesUsedByGroup(array $group): array
+    {
+        $raw = $group['config_json'] ?? null;
+        if (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            $cfg = is_array($decoded) ? $decoded : [];
+        } elseif (is_array($raw)) {
+            $cfg = $raw;
+        } else {
+            $cfg = [];
+        }
+        $found = [];
+        $walk = static function ($node) use (&$walk, &$found): void {
+            if (!is_array($node)) {
+                return;
+            }
+            foreach ($node as $k => $v) {
+                if (is_string($k) && in_array($k, ['template_code', 'mail_template_code', 'access_mail_template'], true)
+                    && is_string($v) && trim($v) !== ''
+                ) {
+                    $found[trim($v)] = true;
+                } elseif (is_array($v)) {
+                    $walk($v);
+                }
+            }
+        };
+        $walk($cfg);
+
+        return array_keys($found);
     }
 
     /**
@@ -501,8 +564,17 @@ final class MailTemplateService
             return 'student';
         }
         $saved = strtolower(trim(Settings::get('mail_tpl_' . $code . '_audience', '') ?? ''));
-        if (in_array($saved, ['provider', 'student', 'partner'], true)) {
-            return $saved;
+        if (in_array($saved, ['provider', 'student', 'partner', 'marketing', 'publicidad'], true)) {
+            return self::normalizeAudience($saved);
+        }
+        // Heurística por código: publicidad_* / marketing_* / promo_*
+        $lower = strtolower($code);
+        if (str_starts_with($lower, 'publicidad_')
+            || str_starts_with($lower, 'marketing_')
+            || str_starts_with($lower, 'promo_')
+            || str_starts_with($lower, 'campaign_')
+        ) {
+            return 'marketing';
         }
         if (self::partnerTemplateHeuristic($code)) {
             return 'partner';

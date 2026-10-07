@@ -78,6 +78,7 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
         <?php
         $audience = \App\Services\MailTemplateService::normalizeAudience((string) ($audience ?? 'student'));
         $showProviderTo = $audience === 'provider';
+        $isMarketing = $audience === 'marketing';
         ?>
         <div style="margin-bottom:1.25rem;padding:1rem;background:#f4f7fb;border-radius:12px;border:1px solid #dbeafe">
             <h2 style="margin:0 0 .75rem;font-size:1rem;color:var(--doceo-blue)">Destinatario</h2>
@@ -88,6 +89,7 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
                         <option value="student" <?= $audience === 'student' ? 'selected' : '' ?>>Alumno (correo de su cuenta)</option>
                         <option value="partner" <?= $audience === 'partner' ? 'selected' : '' ?>>Partner (según el alumno inscrito)</option>
                         <option value="provider" <?= $audience === 'provider' ? 'selected' : '' ?>>Proveedor (correo fijo)</option>
+                        <option value="marketing" <?= $audience === 'marketing' ? 'selected' : '' ?>>Publicidad (campaña)</option>
                     </select>
                 </label>
             </div>
@@ -99,6 +101,13 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
             <div id="mail-partner-hint" class="muted" style="margin:.75rem 0 0;font-size:.88rem;<?= $audience === 'partner' ? '' : 'display:none' ?>">
                 Se envía al <strong>partner vinculado al caso</strong>: el del código usado al inscribirse o el que registró al alumno.
                 Usa etiquetas como <code>{{partner_name}}</code>, <code>{{partner_code}}</code> o <code>{{partner_email}}</code> en el contenido.
+            </div>
+
+            <div id="mail-marketing-hint" class="muted" style="margin:.75rem 0 0;font-size:.88rem;<?= $isMarketing ? '' : 'display:none' ?>">
+                Plantilla de <strong>publicidad</strong>: no lleva destinatario fijo aquí.
+                Los correos (alumnos, partners o clientes anteriores) se eligen al crear la campaña en
+                <a href="<?= e(url('/admin/publicidad')) ?>">Publicidad</a>.
+                Placeholders útiles: <code>{{name}}</code>, <code>{{catalog_url}}</code>, <code>{{promo_code}}</code>.
             </div>
 
             <div id="mail-provider-to" style="<?= $showProviderTo ? 'display:grid;gap:.75rem;margin-top:.85rem' : 'display:none;margin-top:.85rem' ?>">
@@ -114,7 +123,7 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
                 </label>
             </div>
 
-            <div id="mail-cc-fields" style="display:grid;gap:.55rem;margin-top:.85rem">
+            <div id="mail-cc-fields" style="<?= $isMarketing ? 'display:none' : 'display:grid' ?>;gap:.55rem;margin-top:.85rem">
                 <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
                     CC (opcional)
                     <input type="text" name="cc_email" id="mail-cc-email" value="<?= e($routing['cc'] ?? '') ?>"
@@ -652,18 +661,26 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
   var providerTo = document.getElementById('mail-provider-to');
   var studentHint = document.getElementById('mail-student-hint');
   var partnerHint = document.getElementById('mail-partner-hint');
+  var marketingHint = document.getElementById('mail-marketing-hint');
+  var ccFields = document.getElementById('mail-cc-fields');
   var toInput = document.getElementById('mail-to-email');
   if (!audience) return;
   function syncAudienceUi() {
     var value = audience.value;
     var isProvider = value === 'provider';
     var isPartner = value === 'partner';
+    var isMarketing = value === 'marketing';
     if (providerTo) {
       providerTo.style.display = isProvider ? 'grid' : 'none';
       providerTo.style.gap = isProvider ? '.75rem' : '';
     }
     if (studentHint) studentHint.style.display = value === 'student' ? '' : 'none';
     if (partnerHint) partnerHint.style.display = isPartner ? '' : 'none';
+    if (marketingHint) marketingHint.style.display = isMarketing ? '' : 'none';
+    if (ccFields) {
+      ccFields.style.display = isMarketing ? 'none' : 'grid';
+      ccFields.style.gap = '.55rem';
+    }
     if (toInput) {
       if (isProvider) toInput.setAttribute('required', 'required');
       else toInput.removeAttribute('required');
