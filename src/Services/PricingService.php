@@ -253,7 +253,7 @@ final class PricingService
         $quote['partner_credit'] = 0.0;
         $quote['discount_code_id'] = null;
         $quote['discount_code'] = null;
-        $quote['label'] = 'Precio partner (' . strtoupper($tier) . ')';
+        $quote['label'] = 'Precio partner (' . PartnerAdminService::tierLabel($tier) . ')';
 
         return $this->withDeferredPlans($pricedEntity, $quote);
     }

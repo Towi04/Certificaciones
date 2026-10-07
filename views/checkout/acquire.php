@@ -76,15 +76,6 @@ $stepLabels = [
                 <?php endforeach; ?>
             </nav>
 
-            
-<?php if ($isPartnerCheckout): ?>
-<div class="flash flash-info" style="margin:0 0 1rem">
-    <strong>Registro de alumno (partner<?= $partner ? ' · ' . e(\App\Services\PartnerAdminService::tierLabel($partner['tier'] ?? null)) : '' ?>)</strong><br>
-    Completa el mismo proceso que un alumno: datos requeridos, reglamento, agenda, paquetes/combos y pago.
-    Puedes firmar el reglamento en pantalla (pasa el iPad/mouse al alumno) o descargarlo, firmarlo en papel y subir el PDF escaneado.
-    Al terminar seguirás en tu portal partner con el caso creado.
-</div>
-<?php endif; ?>
 <form method="post" action="<?= e(url('/adquirir/' . $product['slug'])) ?>" enctype="multipart/form-data" class="checkout-form panel" id="checkout-form" novalidate>
                 <?= csrf_field() ?>
                 <input type="hidden" name="payment_method" id="payment_method" value="transfer_proof">
@@ -711,7 +702,6 @@ $stepLabels = [
   const examSurchargeNote = document.getElementById('exam-surcharge-note');
   let examMode = 'window';
   let examExtraordinary = null;
-  let examBaseAmount = Number(quoteData.base ?? quoteData.catalog ?? 0);
 
   if (!form || !prevBtn || !nextBtn || !submitBtn) {
     console.error('[checkout] Formulario o botones del wizard no encontrados.');
@@ -722,7 +712,27 @@ $stepLabels = [
     return '$' + Number(n || 0).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2});
   }
 
-  function baseAmount() { return Number(quoteData.base ?? quoteData.catalog ?? 0); }
+  /** Recargo por fecha extraordinaria (si el toggle está activo). No viene en el API de cotización. */
+  function currentExamSurcharge() {
+    if (!needsExam) return 0;
+    if (!(examExtraToggle && examExtraToggle.checked)) return 0;
+    if (!examExtraordinary) return 0;
+    return Math.max(0, Number(examExtraordinary.surcharge_amount || 0));
+  }
+
+  function currentExamSurchargeLabel() {
+    if (!examExtraordinary) return 'Fecha extraordinaria';
+    return String(examExtraordinary.surcharge_label || 'Fecha extraordinaria');
+  }
+
+  /** Precio del producto/combo sin recargo de agenda (respuesta de /api/cotizar*). */
+  function quoteBaseWithoutSurcharge() {
+    return Number(quoteData.base ?? quoteData.charged ?? quoteData.catalog ?? 0);
+  }
+
+  function baseAmount() {
+    return Math.round((quoteBaseWithoutSurcharge() + currentExamSurcharge()) * 100) / 100;
+  }
   function catalogAmount() { return Number(quoteData.catalog ?? 0); }
   function cardPlans() { return quoteData.payment_options?.msi || quoteData.msi_plans || []; }
   function selectedCardPlan() {
@@ -731,8 +741,13 @@ $stepLabels = [
     return plans.find(p => Number(p.months) === months) || plans[0] || null;
   }
   function selectedPayTotal() {
+    const surcharge = currentExamSurcharge();
     const plan = payUi === 'msi' ? selectedCardPlan() : null;
-    return plan ? Number(plan.total || plan.base || baseAmount()) : baseAmount();
+    // Los MSI del API no incluyen recargo de fecha; se suma aquí.
+    if (plan) {
+      return Math.round((Number(plan.total || plan.base || quoteBaseWithoutSurcharge()) + surcharge) * 100) / 100;
+    }
+    return baseAmount();
   }
 
   function creditApplication() {
@@ -952,7 +967,12 @@ $stepLabels = [
     html += '<dt>Correo</dt><dd>' + (fieldValue('email') || '—') + '</dd>';
     html += '<dt>Teléfono</dt><dd>' + (fieldValue('phone') || '—') + '</dd>';
     if (needsExam && examDateHidden && examTimeHidden) {
-      html += '<dt>Examen</dt><dd>' + (examDateHidden.value || '—') + ' ' + (examTimeHidden.value ? examTimeHidden.value.substring(0, 5) : '') + '</dd>';
+      const surcharge = currentExamSurcharge();
+      let examDd = (examDateHidden.value || '—') + ' ' + (examTimeHidden.value ? examTimeHidden.value.substring(0, 5) : '');
+      if (surcharge > 0) {
+        examDd += ' · ' + currentExamSurchargeLabel() + ' +' + money(surcharge);
+      }
+      html += '<dt>Examen</dt><dd>' + examDd + '</dd>';
     }
     const comboPreset = document.querySelector('input[name="combo_preset"]:checked');
     let comboLabel = '';
@@ -999,9 +1019,14 @@ $stepLabels = [
     const plan = plans.find(p => Number(p.months) === months) || plans[0];
     if (plan) {
       const months = Number(plan.months);
+      const surcharge = currentExamSurcharge();
+      const total = Math.round((Number(plan.total || 0) + surcharge) * 100) / 100;
+      const monthly = months > 1
+        ? Math.round((total / months) * 100) / 100
+        : Number(plan.monthly_estimate || total);
       msiMonthlyLine.textContent = months <= 1
-        ? '1 exhibición · Total ' + money(plan.total)
-        : months + ' pagos aprox. de ' + money(plan.monthly_estimate) + ' · Total ' + money(plan.total);
+        ? '1 exhibición · Total ' + money(total)
+        : months + ' pagos aprox. de ' + money(monthly) + ' · Total ' + money(total);
     } else {
       msiMonthlyLine.textContent = '';
     }
@@ -1084,13 +1109,23 @@ $stepLabels = [
       msiChips.innerHTML = '<span class="muted">Tarjeta no disponible.</span>';
       return;
     }
-    msiChips.innerHTML = list.map((p, i) => {
+    const surcharge = currentExamSurcharge();
+    const activeMonths = activeMsiMonths();
+    msiChips.innerHTML = list.map((p) => {
       const m = Number(p.months);
       const label = m <= 1 ? '1 exhibición' : m + ' meses';
-      return '<button type="button" class="msi-chip' + (i === 0 ? ' active' : '') + '" data-months="' + m + '">'
-        + '<span>' + label + '</span><small>Total ' + money(p.total) + '</small></button>';
+      const total = Math.round((Number(p.total || 0) + surcharge) * 100) / 100;
+      const on = m === activeMonths;
+      return '<button type="button" class="msi-chip' + (on ? ' active' : '') + '" data-months="' + m + '">'
+        + '<span>' + label + '</span><small>Total ' + money(total) + '</small></button>';
     }).join('');
-    msiInput.value = String(list[0].months || 1);
+    if (!msiChips.querySelector('.msi-chip.active') && list[0]) {
+      const first = msiChips.querySelector('.msi-chip');
+      if (first) first.classList.add('active');
+      msiInput.value = String(list[0].months || 1);
+    } else {
+      msiInput.value = String(activeMonths || list[0].months || 1);
+    }
     updateMsiDisplay();
   }
 
@@ -1217,9 +1252,9 @@ $stepLabels = [
           }
         }
         renderComboBreakdown(data.matched ? (data.breakdown || null) : null, data.quote || null);
-        renderMsiChips(data.quote.payment_options?.msi || data.quote.msi_plans || []);
-        updatePriceSummary();
-        updateMsiDisplay();
+        // Reaplica recargo de fecha extraordinaria (si aplica) sobre el nuevo
+        // precio de producto/combo y refresca MSI + total del sidebar.
+        syncExtraordinaryUi();
       })
       .catch(() => {});
   }
@@ -1312,21 +1347,19 @@ $stepLabels = [
   }
 
   function setExamSurchargeNote(amount, label) {
-    if (!examSurchargeNote) return;
     const n = Number(amount || 0);
-    if (n > 0) {
-      examSurchargeNote.hidden = false;
-      examSurchargeNote.textContent = (label || 'Fecha extraordinaria') + ': +' + money(n) + ' (se suma al total).';
-      quoteData.base = examBaseAmount + n;
-      quoteData.charged = examBaseAmount + n;
-      updatePriceSummary();
-    } else {
-      examSurchargeNote.hidden = true;
-      examSurchargeNote.textContent = '';
-      quoteData.base = examBaseAmount;
-      quoteData.charged = examBaseAmount;
-      updatePriceSummary();
+    if (examSurchargeNote) {
+      if (n > 0) {
+        examSurchargeNote.hidden = false;
+        examSurchargeNote.textContent = (label || 'Fecha extraordinaria') + ': +' + money(n) + ' (se suma al total).';
+      } else {
+        examSurchargeNote.hidden = true;
+        examSurchargeNote.textContent = '';
+      }
     }
+    // Recalcular totales / MSI sobre el precio actual (producto o combo).
+    renderMsiChips(cardPlans());
+    updatePriceSummary();
   }
 
   function syncExtraordinaryUi() {
@@ -1338,11 +1371,7 @@ $stepLabels = [
     if (on) {
       if (examDateHidden) examDateHidden.value = examExtraDate ? examExtraDate.value : '';
       if (examTimeHidden) examTimeHidden.value = examExtraTime ? examExtraTime.value : '';
-      const amt = examExtraordinary && examExtraordinary.surcharge_amount
-        ? Number(examExtraordinary.surcharge_amount) : 0;
-      const label = examExtraordinary && examExtraordinary.surcharge_label
-        ? examExtraordinary.surcharge_label : 'Fecha extraordinaria';
-      setExamSurchargeNote(amt, label);
+      setExamSurchargeNote(currentExamSurcharge(), currentExamSurchargeLabel());
     } else {
       if (examDateHidden) examDateHidden.value = examDateSelect ? examDateSelect.value : '';
       if (examTimeHidden) examTimeHidden.value = examTimeSelect ? examTimeSelect.value : '';
@@ -1358,7 +1387,6 @@ $stepLabels = [
         if (!data.ok) return;
         examMode = data.mode || 'window';
         examExtraordinary = data.extraordinary || null;
-        examBaseAmount = Number(quoteData.base ?? quoteData.catalog ?? 0);
         if (examDateSelect && data.min_date) examDateSelect.min = data.min_date;
         if (examSlotHint && data.min_advance_days !== undefined && examMode !== 'dated_list') {
           examSlotHint.textContent = examAdvanceHint(data.min_advance_days);
