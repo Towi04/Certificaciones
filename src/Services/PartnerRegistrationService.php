@@ -90,6 +90,8 @@ final class PartnerRegistrationService
             throw new \InvalidArgumentException('Sube el comprobante de pago (transferencia a DOCEO).');
         }
 
+        $this->purchases->ensureSchema();
+
         $this->pdo->beginTransaction();
         try {
             $account = $this->students->findOrCreate($buyer);
@@ -146,7 +148,9 @@ final class PartnerRegistrationService
                 $partnerUserId,
             ]);
 
-            $this->pdo->commit();
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->commit();
+            }
         } catch (\Throwable $e) {
             if ($this->pdo->inTransaction()) {
                 $this->pdo->rollBack();

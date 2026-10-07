@@ -157,10 +157,19 @@ final class PurchaseRepository
      *   partner_price_amount:?float,partner_credit_earned:float,partner_credit_used?:float
      * } $data
      */
-    public function create(array $data): int
+    /**
+     * Asegura columnas/enum de compras. Llamar FUERA de una transacción:
+     * MySQL hace COMMIT implícito en ALTER TABLE.
+     */
+    public function ensureSchema(): void
     {
         $this->ensurePartnerCreditUsedColumn();
         $this->ensureOpenPayStoreColumns();
+    }
+
+    public function create(array $data): int
+    {
+        $this->ensureSchema();
         $msi = isset($data['card_msi_months']) ? (int) $data['card_msi_months'] : null;
         if ($msi !== null && $msi <= 1) {
             $msi = null;
@@ -200,18 +209,16 @@ final class PurchaseRepository
         if ($done) {
             return;
         }
-        $done = true;
-        try {
-            $stmt = $this->pdo->query("SHOW COLUMNS FROM purchases LIKE 'partner_credit_used'");
-            if ($stmt && $stmt->fetch()) {
-                return;
-            }
-            $this->pdo->exec(
-                'ALTER TABLE purchases ADD COLUMN partner_credit_used DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER partner_credit_earned'
-            );
-        } catch (\Throwable $e) {
-            error_log('[Doceo] ensurePartnerCreditUsedColumn: ' . $e->getMessage());
+        if ($this->purchasesHasColumn('partner_credit_used')) {
+            $done = true;
+
+            return;
         }
+        $this->runPurchasesDdl(
+            'ALTER TABLE purchases ADD COLUMN partner_credit_used DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER partner_credit_earned',
+            'ensurePartnerCreditUsedColumn'
+        );
+        $done = true;
     }
 
     /**
@@ -224,48 +231,81 @@ final class PurchaseRepository
         if ($done) {
             return;
         }
+        $needsRef = !$this->purchasesHasColumn('openpay_store_reference');
+        $needsBarcode = !$this->purchasesHasColumn('openpay_barcode_url');
+        $needsEnum = !$this->paymentMethodAllowsStore();
+        if (!$needsRef && !$needsBarcode && !$needsEnum) {
+            $done = true;
+
+            return;
+        }
+        if ($needsRef) {
+            $this->runPurchasesDdl(
+                'ALTER TABLE purchases ADD COLUMN openpay_store_reference VARCHAR(50) NULL AFTER openpay_clabe',
+                'ensureOpenPayStoreColumns:openpay_store_reference'
+            );
+        }
+        if ($needsBarcode) {
+            $this->runPurchasesDdl(
+                'ALTER TABLE purchases ADD COLUMN openpay_barcode_url VARCHAR(512) NULL AFTER openpay_store_reference',
+                'ensureOpenPayStoreColumns:openpay_barcode_url'
+            );
+        }
+        if ($needsEnum) {
+            $this->runPurchasesDdl(
+                "ALTER TABLE purchases MODIFY payment_method ENUM(
+                    'none','openpay_spei','openpay_card','openpay_store',
+                    'transfer_proof','partner_account','credit'
+                 ) NOT NULL DEFAULT 'none'",
+                'ensureOpenPayStoreColumns:payment_method'
+            );
+        }
         $done = true;
+    }
+
+    private function purchasesHasColumn(string $name): bool
+    {
         try {
-            $this->ensurePurchasesColumn(
-                'openpay_store_reference',
-                'VARCHAR(50) NULL AFTER openpay_clabe'
+            $stmt = $this->pdo->query('SHOW COLUMNS FROM purchases LIKE ' . $this->pdo->quote($name));
+
+            return (bool) ($stmt && $stmt->fetch());
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function paymentMethodAllowsStore(): bool
+    {
+        try {
+            $stmt = $this->pdo->query("SHOW COLUMNS FROM purchases LIKE 'payment_method'");
+            $col = $stmt ? $stmt->fetch() : false;
+            if (!is_array($col)) {
+                return true;
+            }
+            $type = strtolower((string) ($col['Type'] ?? ''));
+
+            return str_contains($type, 'openpay_store');
+        } catch (\Throwable) {
+            return true;
+        }
+    }
+
+    /**
+     * Ejecuta DDL de purchases solo fuera de transacción (evita COMMIT implícito de MySQL).
+     */
+    private function runPurchasesDdl(string $sql, string $label): void
+    {
+        if ($this->pdo->inTransaction()) {
+            throw new \RuntimeException(
+                'Esquema de compras incompleto (' . $label . '). Vuelve a intentar la compra.'
             );
-            $this->ensurePurchasesColumn(
-                'openpay_barcode_url',
-                'VARCHAR(512) NULL AFTER openpay_store_reference'
-            );
-            $this->ensurePaymentMethodAllowsStore();
+        }
+        try {
+            $this->pdo->exec($sql);
         } catch (\Throwable $e) {
-            error_log('[Doceo] ensureOpenPayStoreColumns: ' . $e->getMessage());
+            error_log('[Doceo] ' . $label . ': ' . $e->getMessage());
+            throw $e;
         }
-    }
-
-    private function ensurePurchasesColumn(string $name, string $definition): void
-    {
-        $stmt = $this->pdo->query('SHOW COLUMNS FROM purchases LIKE ' . $this->pdo->quote($name));
-        if ($stmt && $stmt->fetch()) {
-            return;
-        }
-        $this->pdo->exec('ALTER TABLE purchases ADD COLUMN ' . $name . ' ' . $definition);
-    }
-
-    private function ensurePaymentMethodAllowsStore(): void
-    {
-        $stmt = $this->pdo->query("SHOW COLUMNS FROM purchases LIKE 'payment_method'");
-        $col = $stmt ? $stmt->fetch() : false;
-        if (!is_array($col)) {
-            return;
-        }
-        $type = strtolower((string) ($col['Type'] ?? ''));
-        if (str_contains($type, 'openpay_store')) {
-            return;
-        }
-        $this->pdo->exec(
-            "ALTER TABLE purchases MODIFY payment_method ENUM(
-                'none','openpay_spei','openpay_card','openpay_store',
-                'transfer_proof','partner_account','credit'
-             ) NOT NULL DEFAULT 'none'"
-        );
     }
 
     public function addItem(int $purchaseId, int $productId, float $public, float $charged): int
@@ -298,6 +338,7 @@ final class PurchaseRepository
         ?string $storeReference = null,
         ?string $barcodeUrl = null
     ): void {
+        // Schema debe haberse asegurado antes de abrir la transacción de checkout.
         $this->ensureOpenPayStoreColumns();
         $this->pdo->prepare(
             'UPDATE purchases SET openpay_charge_id = ?, openpay_clabe = ?,
