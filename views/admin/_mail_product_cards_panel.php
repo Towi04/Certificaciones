@@ -222,7 +222,10 @@ $layoutOptions = [
                             </div>
 
                             <div style="padding:.65rem;border:1px dashed #cfd8e6;border-radius:10px;background:#f8fafc;display:grid;gap:.45rem">
-                                <strong style="font-size:.82rem;color:var(--doceo-blue)">Imagen</strong>
+                                <strong style="font-size:.82rem;color:var(--doceo-blue)">Imagen / banner</strong>
+                                <p class="muted mail-card-image-hint" style="margin:0;font-size:.75rem">
+                                    Rectangular grande: banner <strong><?= e($wideBanner['label']) ?></strong> (2.5:1), a sangre.
+                                </p>
                                 <?php if ($customImg !== ''): ?>
                                     <p class="muted" style="margin:0;font-size:.75rem">
                                         Actual (personalizada):
@@ -236,7 +239,7 @@ $layoutOptions = [
                                     <p class="muted" style="margin:0;font-size:.75rem">Usando la imagen del producto.</p>
                                 <?php endif; ?>
                                 <label class="muted" style="<?= e($labelStyle) ?>">
-                                    Subir otra imagen
+                                    Subir otra imagen / banner
                                     <input type="file" name="custom_image" accept=".png,.jpg,.jpeg,.webp,.gif,image/*"
                                            class="mail-card-image-input" style="<?= e($inputStyle) ?>;background:#fff">
                                 </label>
@@ -292,7 +295,20 @@ $layoutOptions = [
 <script>
 (function () {
   var previewUrl = <?= json_encode(url('/admin/correos/tarjetas/preview')) ?>;
+  var wideHint = <?= json_encode(
+      'Para «Rectangular grande» sube un banner de ' . $wideBanner['label']
+      . ' (ratio 2.5:1). Retina: ' . ((int) $wideBanner['width'] * 2) . '×' . ((int) $wideBanner['height'] * 2)
+      . ' px. La imagen llena todo el ancho de la tarjeta (a sangre), sin márgenes.'
+  ) ?>;
+  var defaultHint = 'Por defecto usa el logo del producto. Puedes subir otra imagen si el logo se ve pequeño.';
   var localImages = new WeakMap();
+
+  function updateImageHint(form) {
+    var hint = form.querySelector('.mail-card-image-hint');
+    var layout = (form.querySelector('[name="layout"]') || {}).value || '';
+    if (!hint) return;
+    hint.innerHTML = layout === 'wide' ? wideHint : defaultHint;
+  }
 
   function schedulePreview(form) {
     clearTimeout(form._previewTimer);
@@ -360,9 +376,13 @@ $layoutOptions = [
   }
 
   function bindForm(form) {
+    updateImageHint(form);
     form.querySelectorAll('input,select,textarea').forEach(function (el) {
       if (el.type === 'file') return;
-      el.addEventListener('change', function () { schedulePreview(form); });
+      el.addEventListener('change', function () {
+        if (el.name === 'layout') updateImageHint(form);
+        schedulePreview(form);
+      });
       el.addEventListener('input', function () { schedulePreview(form); });
     });
 
