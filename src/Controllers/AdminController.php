@@ -3381,14 +3381,7 @@ final class AdminController
         Auth::requireRole(['admin']);
         header('Content-Type: application/json; charset=utf-8');
         try {
-            // Preview admin: CSRF opcional si viene; no muta datos.
-            if (!empty($_POST['_token']) || !empty($_POST['csrf']) || !empty($_POST['_csrf'])) {
-                try {
-                    csrf_verify();
-                } catch (\Throwable) {
-                    // Algunos formularios usan otro nombre; Auth ya valida sesión admin.
-                }
-            }
+            // Solo lectura (sesión admin). No muta BD ni archivos.
             $html = (new MailProductCardService())->previewFromInput($_POST);
             echo json_encode(['ok' => true, 'html' => $html], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
