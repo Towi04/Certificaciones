@@ -764,11 +764,12 @@ final class MailProductCardService
     private static function discountBadgeAbsoluteStyle(string $position): string
     {
         $base = 'position:absolute;z-index:2;line-height:1.2;';
+        // Pegado al borde de la imagen (poco aire para que no se corte el sombra).
         return match (self::normalizeDiscountBadgePosition($position)) {
-            'top_left' => $base . 'top:10px;left:10px;',
-            'bottom_left' => $base . 'bottom:10px;left:10px;',
-            'bottom_right' => $base . 'bottom:10px;right:10px;',
-            default => $base . 'top:10px;right:10px;',
+            'top_left' => $base . 'top:4px;left:4px;',
+            'bottom_left' => $base . 'bottom:4px;left:4px;',
+            'bottom_right' => $base . 'bottom:4px;right:4px;',
+            default => $base . 'top:4px;right:4px;',
         };
     }
 
