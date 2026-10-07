@@ -49,6 +49,11 @@ $router->get('/login', fn () => $auth->showLogin());
 $router->post('/login', fn () => $auth->login());
 $router->post('/logout', fn () => $auth->logout());
 $router->get('/recuperar', fn () => $auth->showForgot());
+$router->post('/recuperar', fn () => $auth->forgotSubmit());
+$router->get('/recuperar/{token}', fn (string $token) => $auth->showReset($token));
+$router->post('/recuperar/{token}', fn (string $token) => $auth->resetSubmit($token));
+$router->get('/cuenta/cambiar-contrasena', fn () => $auth->showChangePassword());
+$router->post('/cuenta/cambiar-contrasena', fn () => $auth->changePasswordSubmit());
 
 $router->get('/admin', fn () => $admin->dashboard());
 $router->get('/admin/productos', fn () => $admin->products());

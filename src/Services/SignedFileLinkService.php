@@ -88,9 +88,16 @@ final class SignedFileLinkService
 
     private function sign(string $payloadJson): string
     {
-        $key = (string) (Env::get('APP_KEY', '') ?? '');
+        $key = trim((string) (Env::get('APP_KEY', '') ?? ''));
         if ($key === '') {
-            $key = (string) (Env::get('MAIL_LINK_SECRET', 'doceo-file-links') ?? 'doceo-file-links');
+            $key = trim((string) (Env::get('MAIL_LINK_SECRET', '') ?? ''));
+        }
+        if ($key === '' || in_array($key, ['doceo-file-links', 'changeme', 'secret'], true)) {
+            throw new \RuntimeException(
+                'Falta APP_KEY (o MAIL_LINK_SECRET) en el .env. '
+                . 'Sin una clave fuerte los enlaces de comprobantes/documentos no son seguros. '
+                . 'Genera una con: openssl rand -hex 32'
+            );
         }
 
         return substr(hash_hmac('sha256', $payloadJson, $key), 0, 32);

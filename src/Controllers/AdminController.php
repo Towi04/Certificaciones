@@ -1106,19 +1106,8 @@ final class AdminController
 
         $docs = new \App\Services\DocumentService();
         $path = $docs->absolutePath((string) $purchase['payment_proof_path']);
-        if (!is_file($path)) {
-            http_response_code(404);
-            exit('Archivo no disponible en disco');
-        }
-
-        $mime = mime_content_type($path) ?: 'application/octet-stream';
         $name = basename((string) $purchase['payment_proof_path']);
-        header('Content-Type: ' . $mime);
-        header('Content-Disposition: inline; filename="' . $name . '"');
-        header('Content-Length: ' . (string) filesize($path));
-        header('X-Content-Type-Options: nosniff');
-        readfile($path);
-        exit;
+        \App\Services\DocumentService::streamFile($path, $name);
     }
 
     public function trackingShow(string $id): void
@@ -1500,17 +1489,7 @@ final class AdminController
         }
         $docs = new DocumentService();
         $path = $docs->absolutePath($pathRel);
-        if (!is_file($path)) {
-            http_response_code(404);
-            exit('Archivo no disponible en disco');
-        }
-        $mime = mime_content_type($path) ?: 'application/pdf';
-        header('Content-Type: ' . $mime);
-        header('Content-Disposition: inline; filename="' . basename($name) . '"');
-        header('Content-Length: ' . (string) filesize($path));
-        header('X-Content-Type-Options: nosniff');
-        readfile($path);
-        exit;
+        DocumentService::streamFile($path, basename($name), 'application/pdf');
     }
 
     public function trackingResendUksRequest(string $id): void
@@ -1791,16 +1770,8 @@ final class AdminController
             exit('No encontrado');
         }
         $path = $svc->absoluteDocumentPath($doc);
-        if (!is_file($path)) {
-            http_response_code(404);
-            exit('Archivo no disponible');
-        }
-        $mime = mime_content_type($path) ?: 'application/octet-stream';
-        header('Content-Type: ' . $mime);
-        header('Content-Disposition: inline; filename="' . basename((string) $doc['original_name']) . '"');
-        header('Content-Length: ' . (string) filesize($path));
-        readfile($path);
-        exit;
+        $mime = isset($doc['mime_type']) ? (string) $doc['mime_type'] : null;
+        DocumentService::streamFile($path, (string) ($doc['original_name'] ?? 'documento'), $mime);
     }
 
     public function partners(): void

@@ -1,5 +1,20 @@
-Options -Indexes
+# Archivos públicos (logos, media). Nunca ejecutar scripts desde aquí.
+Options -Indexes -ExecCGI
+RemoveHandler .php .phtml .phar .php3 .php4 .php5 .php7 .php8
+RemoveType .php .phtml .phar
 
-<FilesMatch "\.(php|phtml|phar)$">
-  Require all denied
-</FilesMatch>
+<IfModule mod_authz_core.c>
+  <FilesMatch "(?i)\.(php\d*|phtml|phar|cgi|pl|py|rb|sh|exe|htaccess|htpasswd|shtml)$">
+    Require all denied
+  </FilesMatch>
+</IfModule>
+<IfModule !mod_authz_core.c>
+  <FilesMatch "(?i)\.(php\d*|phtml|phar|cgi|pl|py|rb|sh|exe|htaccess|htpasswd|shtml)$">
+    Order allow,deny
+    Deny from all
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+</IfModule>

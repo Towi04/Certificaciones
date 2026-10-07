@@ -17,15 +17,20 @@ final class Auth
 
         $sessionPath = BASE_PATH . '/storage/sessions';
         if (!is_dir($sessionPath)) {
-            @mkdir($sessionPath, 0755, true);
+            @mkdir($sessionPath, 0750, true);
         }
         if (is_dir($sessionPath) && is_writable($sessionPath)) {
             session_save_path($sessionPath);
         }
 
+        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || ((int) ($_SERVER['SERVER_PORT'] ?? 0) === 443)
+            || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+
         session_name('doceo_sess');
         session_start([
             'cookie_httponly' => true,
+            'cookie_secure' => $https,
             'cookie_samesite' => 'Lax',
             'use_strict_mode' => true,
         ]);
@@ -45,6 +50,7 @@ final class Auth
         $_SESSION['user_id'] = (int) $user['id'];
         $_SESSION['user_role'] = (string) $user['role'];
         $_SESSION['user_name'] = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name_p'] ?? ''));
+        $_SESSION['must_change_password'] = !empty($user['must_change_password']);
 
         $pdo->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')->execute([(int) $user['id']]);
 
@@ -76,6 +82,26 @@ final class Auth
         return isset($_SESSION['user_role']) ? (string) $_SESSION['user_role'] : null;
     }
 
+    public static function mustChangePassword(): bool
+    {
+        if (!empty($_SESSION['must_change_password'])) {
+            return true;
+        }
+        $user = self::user();
+        if ($user === null) {
+            return false;
+        }
+        $must = !empty($user['must_change_password']);
+        $_SESSION['must_change_password'] = $must;
+
+        return $must;
+    }
+
+    public static function clearMustChangeFlag(): void
+    {
+        $_SESSION['must_change_password'] = false;
+    }
+
     public static function user(): ?array
     {
         $id = self::id();
@@ -95,6 +121,7 @@ final class Auth
             flash('error', 'Inicia sesión para continuar.');
             redirect('/login');
         }
+        self::enforcePasswordChange();
     }
 
     /** @param list<string> $roles */
@@ -106,6 +133,34 @@ final class Auth
             view('errors/403', ['title' => 'Acceso denegado']);
             exit;
         }
+    }
+
+    /**
+     * Obliga a cambiar la contraseña temporal antes de usar el resto del sitio.
+     */
+    public static function enforcePasswordChange(): void
+    {
+        if (!self::check() || !self::mustChangePassword()) {
+            return;
+        }
+        $uri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+        $path = parse_url($uri, PHP_URL_PATH) ?: '';
+        $allowed = [
+            '/cuenta/cambiar-contrasena',
+            '/logout',
+        ];
+        foreach ($allowed as $prefix) {
+            if ($path === $prefix || str_starts_with((string) $path, $prefix . '?')) {
+                return;
+            }
+        }
+        // Comparar también con base path si la app vive en subcarpeta.
+        if (str_contains((string) $path, '/cuenta/cambiar-contrasena')
+            || str_ends_with((string) $path, '/logout')) {
+            return;
+        }
+        flash('error', 'Debes cambiar tu contraseña temporal antes de continuar.');
+        redirect('/cuenta/cambiar-contrasena');
     }
 
     public static function ensureAdminFromEnv(): void
