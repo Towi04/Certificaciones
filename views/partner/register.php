@@ -28,12 +28,8 @@ $totalShown = count($products);
 <p class="meta"><a href="<?= e(url('/partner')) ?>">← Mis alumnos</a></p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">Registrar alumno</h1>
 <p class="muted" style="max-width:48rem">
-    Elige el producto (se muestra tu precio de nivel
-    <strong><?= e(\App\Services\PartnerAdminService::tierLabel($partner['tier'] ?? null)) ?></strong>).
-    Completarás el <strong>mismo proceso</strong> que un alumno cualquiera:
-    datos obligatorios, reglamento (firma digital en pantalla o PDF escaneado),
-    agenda, combos/paquetes y opciones de pago.
-    Al terminar seguirás en tu portal con el caso y su progreso.
+    Elige el producto. Se muestra tu precio de nivel
+    <strong><?= e(\App\Services\PartnerAdminService::tierLabel($partner['tier'] ?? null)) ?></strong>.
 </p>
 
 <nav class="catalog-section-tabs" role="tablist" aria-label="Secciones del catálogo">
