@@ -75,8 +75,22 @@ $priceFields = [
 ] + \App\Services\PartnerAdminService::priceFieldLabels();
 $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px';
 $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600';
+$returnTo = isset($_GET['return_to']) && is_string($_GET['return_to'])
+    ? trim($_GET['return_to'])
+    : (string) (old('return_to', '') ?? '');
+if ($returnTo === '' && isset($_POST['return_to']) && is_string($_POST['return_to'])) {
+    $returnTo = trim($_POST['return_to']);
+}
+$safeReturnTo = \App\Controllers\AdminController::safeCatalogReturnPath($returnTo);
 ?>
-<p class="meta"><a href="<?= e(url('/admin/productos')) ?>">← Productos</a></p>
+<p class="meta">
+    <a href="<?= e(url('/admin/productos')) ?>">← Productos</a>
+    <?php if ($safeReturnTo !== null): ?>
+        · <a href="<?= e(url($safeReturnTo)) ?>">Ver en catálogo</a>
+    <?php elseif ($isEdit && trim((string) ($product['slug'] ?? '')) !== ''): ?>
+        · <a href="<?= e(url('/producto/' . (string) $product['slug'])) ?>">Ver en catálogo</a>
+    <?php endif; ?>
+</p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">
     <?php if ($isEdit): ?>
         Editar producto
@@ -115,6 +129,9 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
 
     <form method="post" action="<?= e($action) ?>" class="panel product-main-form" id="product-main-form">
         <?= csrf_field() ?>
+        <?php if ($safeReturnTo !== null): ?>
+            <input type="hidden" name="return_to" value="<?= e($safeReturnTo) ?>">
+        <?php endif; ?>
 
         <div class="product-tab-panel" data-tab-panel="general" role="tabpanel">
             <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Identidad</h2>
@@ -525,7 +542,11 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
 
         <div class="product-form-actions" style="display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1.25rem">
             <button class="btn btn-accent" type="submit"><?= $isEdit ? 'Guardar producto' : 'Crear producto' ?></button>
-            <a class="btn btn-ghost" href="<?= e(url('/admin/productos')) ?>">Cancelar</a>
+            <?php if ($safeReturnTo !== null): ?>
+                <a class="btn btn-ghost" href="<?= e(url($safeReturnTo)) ?>">Volver al catálogo</a>
+            <?php else: ?>
+                <a class="btn btn-ghost" href="<?= e(url('/admin/productos')) ?>">Cancelar</a>
+            <?php endif; ?>
         </div>
     </form>
 
