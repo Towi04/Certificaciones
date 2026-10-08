@@ -1833,6 +1833,60 @@ final class AdminController
         ]);
     }
 
+    public function partnerTiers(): void
+    {
+        Auth::requireRole(['admin']);
+        $svc = new \App\Services\PartnerTierService();
+        try {
+            (new MailTemplateService())->ensureDefaults();
+        } catch (\Throwable) {
+            // plantilla opcional
+        }
+        $config = $svc->config();
+        $lastRaw = Settings::get('partner_tier_last_eval', '');
+        $lastEval = is_string($lastRaw) && $lastRaw !== '' ? json_decode($lastRaw, true) : null;
+        view('admin/partner_tiers', [
+            'title' => 'Niveles partner',
+            'config' => $config,
+            'tiers' => \App\Services\PartnerTierService::tiersWithRanges($config['tiers'] ?? []),
+            'lastEval' => is_array($lastEval) ? $lastEval : null,
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function partnerTiersSave(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $svc = new \App\Services\PartnerTierService();
+        $action = trim((string) ($_POST['action'] ?? 'save'));
+        try {
+            if ($action === 'evaluate') {
+                $result = $svc->evaluateProgram(null, true);
+                flash(
+                    'success',
+                    'Evaluación lista: ' . (int) $result['updated'] . ' nivel(es) actualizado(s), '
+                    . (int) $result['skipped'] . ' sin cambio.'
+                );
+            } elseif ($action === 'warn') {
+                $result = $svc->processLowSalesWarnings();
+                $msg = 'Avisos enviados: ' . (int) $result['sent'] . '.';
+                if ($result['errors'] !== []) {
+                    $msg .= ' Errores: ' . implode('; ', array_slice($result['errors'], 0, 3));
+                    flash('error', $msg);
+                } else {
+                    flash('success', $msg);
+                }
+            } else {
+                $svc->saveConfig($_POST);
+                flash('success', 'Configuración de niveles partner guardada.');
+            }
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/partners/niveles');
+    }
+
     public function partnerCreateForm(): void
     {
         Auth::requireRole(['admin']);
@@ -1859,6 +1913,9 @@ final class AdminController
                 'code' => (string) ($_POST['code'] ?? ''),
                 'display_name' => (string) ($_POST['display_name'] ?? ''),
                 'tier' => (string) ($_POST['tier'] ?? 'c'),
+                'tier_program' => !empty($_POST['tier_program']),
+                'agreement_starts_at' => (string) ($_POST['agreement_starts_at'] ?? ''),
+                'agreement_ends_at' => (string) ($_POST['agreement_ends_at'] ?? ''),
                 'notes' => (string) ($_POST['notes'] ?? ''),
                 'is_active' => !empty($_POST['is_active']),
                 'must_change_password' => !empty($_POST['must_change_password']),
@@ -1909,6 +1966,9 @@ final class AdminController
                 'code' => (string) ($_POST['code'] ?? ''),
                 'display_name' => (string) ($_POST['display_name'] ?? ''),
                 'tier' => (string) ($_POST['tier'] ?? 'c'),
+                'tier_program' => !empty($_POST['tier_program']),
+                'agreement_starts_at' => (string) ($_POST['agreement_starts_at'] ?? ''),
+                'agreement_ends_at' => (string) ($_POST['agreement_ends_at'] ?? ''),
                 'notes' => (string) ($_POST['notes'] ?? ''),
                 'is_active' => !empty($_POST['is_active']),
                 'must_change_password' => !empty($_POST['must_change_password']),

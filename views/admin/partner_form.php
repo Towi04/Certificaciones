@@ -48,7 +48,43 @@ $action = $isEdit
                 <?php endforeach; ?>
             </select>
             <span class="muted" style="font-size:.78rem;font-weight:500">
-                Niveles: Bronze, Silver y Gold. Gold suele ser el precio partner más preferente.
+                Niveles: Bronze, Silver y Gold. CNCM u otros especiales quedan fuera de la escala.
+            </span>
+        </label>
+    </div>
+    <?php
+    $tierVal = (string) (($partner['tier'] ?? null) ?: 'c');
+    $inProgramDefault = $tierVal !== 'cncm';
+    $partnerRow = is_array($partner ?? null) ? $partner : [];
+    $inProgram = array_key_exists('tier_program', $partnerRow)
+        ? !empty($partnerRow['tier_program'])
+        : $inProgramDefault;
+    ?>
+    <label class="muted" style="display:flex;gap:.45rem;align-items:flex-start;font-size:.88rem;font-weight:600;margin-top:.85rem">
+        <input type="checkbox" name="tier_program" value="1" style="margin-top:.2rem"
+            <?= $inProgram ? 'checked' : '' ?>>
+        <span>
+            Participa en el programa de niveles (Bronze / Silver / Gold)
+            <span class="muted" style="display:block;font-size:.78rem;font-weight:500;margin-top:.2rem">
+                Desmárcalo para convenios únicos (p. ej. CNCM): no ven el ranking ni se reevalúan por ventas.
+            </span>
+        </span>
+    </label>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem;margin-top:.75rem">
+        <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+            Convenio · inicio (opcional)
+            <input type="date" name="agreement_starts_at"
+                   value="<?= e((string) ($partner['agreement_starts_at'] ?? '')) ?>"
+                   style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+        </label>
+        <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+            Convenio · término (opcional)
+            <input type="date" name="agreement_ends_at"
+                   value="<?= e((string) ($partner['agreement_ends_at'] ?? '')) ?>"
+                   style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            <span class="muted" style="font-size:.78rem;font-weight:500">
+                Vacío = usa el periodo global de
+                <a href="<?= e(url('/admin/partners/niveles')) ?>">Niveles partner</a>.
             </span>
         </label>
     </div>
