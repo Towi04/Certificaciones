@@ -210,7 +210,12 @@ $usesInventoryAccess = !empty($usesInventoryAccess);
 </div>
 <?php endif; ?>
 
-<?php require BASE_PATH . '/views/shared/uks_report.php'; ?>
+<?php
+// Reporte UKS / resultados ELeT solo en casos ELeT (no iTEP ni otros).
+if ($isEletCase) {
+    require BASE_PATH . '/views/shared/uks_report.php';
+}
+?>
 
 <?php
 /** @var list<array<string,mixed>> $registrationDocs */
