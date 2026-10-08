@@ -12,6 +12,8 @@ use App\Services\CheckoutRequirements;
 use App\Services\DocumentService;
 use App\Services\GroupStepConfig;
 use App\Services\MailLogService;
+use App\Services\ExamScheduleService;
+use App\Services\PartnerBulkRegistrationService;
 use App\Services\PartnerProfileService;
 use App\Services\PartnerRegistrationService;
 use App\Services\PartnerTierService;
@@ -112,15 +114,158 @@ final class PartnerController
         ]);
     }
 
-    public function bulkPlaceholder(): void
+    public function bulkForm(): void
     {
         Auth::requireRole(['partner']);
         $partner = $this->requirePartner();
-        view('partner/bulk_placeholder', [
+        $repo = new ProductRepository();
+        $products = $repo->publicCatalog('all', null, false, null, null, 'certificaciones');
+        $pricing = new PricingService();
+        $priced = [];
+        foreach ($products as $p) {
+            if (!in_array((string) ($p['type'] ?? ''), ['certification', 'procedure'], true)) {
+                continue;
+            }
+            $p['partner_price'] = $pricing->partnerPriceForProduct($p, (string) $partner['tier']);
+            $priced[] = $p;
+        }
+        $batches = (new PartnerBulkRegistrationService())->listForPartner((int) $partner['id']);
+        $selectedId = (int) ($_GET['producto'] ?? 0);
+        $preview = null;
+        $sessionPreview = $_SESSION['partner_bulk_preview'] ?? null;
+        if (is_array($sessionPreview) && (string) ($_GET['paso'] ?? '') === 'comprobante') {
+            $preview = $sessionPreview;
+            if ($selectedId < 1) {
+                $selectedId = (int) ($preview['product_id'] ?? 0);
+            }
+        }
+        $selected = null;
+        foreach ($priced as $p) {
+            if ((int) $p['id'] === $selectedId) {
+                $selected = $p;
+                break;
+            }
+        }
+        view('partner/bulk_register', [
             'title' => 'Registrar grupo',
             'partner' => $partner,
+            'products' => $priced,
+            'selected' => $selected,
+            'batches' => $batches,
+            'preview' => $preview,
             'layout' => 'partner',
         ]);
+    }
+
+    public function bulkCsvTemplate(): void
+    {
+        Auth::requireRole(['partner']);
+        $csv = (new PartnerBulkRegistrationService())->csvTemplate();
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="plantilla-alumnos-grupo.csv"');
+        echo $csv;
+        exit;
+    }
+
+    public function bulkPreview(): void
+    {
+        Auth::requireRole(['partner']);
+        csrf_verify();
+        $partner = $this->requirePartner();
+        $productId = (int) ($_POST['product_id'] ?? 0);
+        $examDate = trim((string) ($_POST['exam_date'] ?? ''));
+        $examTime = trim((string) ($_POST['exam_time'] ?? ''));
+        $file = $_FILES['students_csv'] ?? null;
+        if ($productId < 1) {
+            flash('error', 'Elige un producto.');
+            redirect('/partner/registrar-grupo');
+        }
+        if ($file === null || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            flash('error', 'Sube el CSV de alumnos.');
+            redirect('/partner/registrar-grupo?producto=' . $productId);
+        }
+        try {
+            $svc = new PartnerBulkRegistrationService();
+            $preview = $svc->parseCsv((string) $file['tmp_name']);
+            $product = (new ProductRepository())->find($productId);
+            if ($product === null) {
+                throw new \InvalidArgumentException('Producto no encontrado.');
+            }
+            $unit = (new PricingService())->partnerPriceForProduct($product, (string) $partner['tier']);
+            if ($examDate !== '' && $examTime !== '') {
+                (new ExamScheduleService())->validateSelection($product, $examDate, $examTime);
+            }
+            // Guardar CSV temporal para el submit final.
+            $tmpDir = BASE_PATH . '/storage/tmp/partner_bulk';
+            if (!is_dir($tmpDir) && !@mkdir($tmpDir, 0755, true) && !is_dir($tmpDir)) {
+                throw new \RuntimeException('No se pudo preparar almacenamiento temporal.');
+            }
+            $token = bin2hex(random_bytes(16));
+            $dest = $tmpDir . '/' . $token . '.csv';
+            if (!@move_uploaded_file((string) $file['tmp_name'], $dest) && !@copy((string) $file['tmp_name'], $dest)) {
+                throw new \RuntimeException('No se pudo guardar el CSV temporal.');
+            }
+            $_SESSION['partner_bulk_preview'] = [
+                'token' => $token,
+                'product_id' => $productId,
+                'exam_date' => $examDate,
+                'exam_time' => $examTime,
+                'path' => $dest,
+                'valid_count' => $preview['valid_count'],
+                'errors' => $preview['errors'],
+                'unit_price' => $unit,
+                'expected_amount' => round($unit * (int) $preview['valid_count'], 2),
+                'sample_rows' => array_slice($preview['rows'], 0, 8),
+            ];
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/partner/registrar-grupo?producto=' . $productId);
+        }
+        redirect('/partner/registrar-grupo?producto=' . $productId . '&paso=comprobante');
+    }
+
+    public function bulkSubmit(): void
+    {
+        Auth::requireRole(['partner']);
+        csrf_verify();
+        $partner = $this->requirePartner();
+        $session = $_SESSION['partner_bulk_preview'] ?? null;
+        if (!is_array($session) || empty($session['path']) || empty($session['token'])) {
+            flash('error', 'La vista previa del CSV expiró. Vuelve a subir el archivo.');
+            redirect('/partner/registrar-grupo');
+        }
+        $token = (string) ($_POST['preview_token'] ?? '');
+        if ($token === '' || !hash_equals((string) $session['token'], $token)) {
+            flash('error', 'Token de vista previa inválido. Vuelve a subir el CSV.');
+            redirect('/partner/registrar-grupo');
+        }
+        $proof = $_FILES['payment_proof'] ?? null;
+        try {
+            $svc = new PartnerBulkRegistrationService();
+            $parsed = $svc->parseCsv((string) $session['path']);
+            if ($parsed['valid_count'] < 1) {
+                throw new \InvalidArgumentException('No hay alumnos válidos en el CSV.');
+            }
+            $result = $svc->createBatch(
+                (int) Auth::id(),
+                (int) $session['product_id'],
+                (string) ($session['exam_date'] ?? ''),
+                (string) ($session['exam_time'] ?? ''),
+                $parsed['rows'],
+                is_array($proof) ? $proof : []
+            );
+            @unlink((string) $session['path']);
+            unset($_SESSION['partner_bulk_preview']);
+            flash(
+                'success',
+                'Lote #' . $result['batch_id'] . ' creado: ' . $result['student_count']
+                . ' alumno(s) · monto ' . money($result['expected_amount']) . ' en revisión de pago.'
+            );
+            redirect('/partner/alumnos');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+            redirect('/partner/registrar-grupo?producto=' . (int) ($session['product_id'] ?? 0) . '&paso=comprobante');
+        }
     }
 
     public function registerForm(): void
