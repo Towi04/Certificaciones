@@ -21,12 +21,20 @@ $exportQs = http_build_query(array_filter([
     'pago' => (($filters['pago'] ?? 'all') !== 'all') ? $filters['pago'] : null,
 ], static fn ($v) => $v !== null && $v !== ''));
 
-$paymentCards = [
-    'awaiting_payment' => $paymentSummary['awaiting_payment'] ?? ['count' => 0, 'amount' => 0.0, 'label' => 'Por pagar'],
-    'payment_review' => $paymentSummary['payment_review'] ?? ['count' => 0, 'amount' => 0.0, 'label' => 'En revisión'],
-    'paid' => $paymentSummary['paid'] ?? ['count' => 0, 'amount' => 0.0, 'label' => 'Pagados'],
-];
+$reviewCount = (int) (($paymentSummary['payment_review']['count'] ?? 0));
+$paidCount = (int) (($paymentSummary['paid']['count'] ?? 0));
 $activePago = (string) ($filters['pago'] ?? 'all');
+
+$filterQs = static function (?string $pago) use ($filters, $activePago): string {
+    return http_build_query(array_filter([
+        'q' => ($filters['q'] ?? '') !== '' ? $filters['q'] : null,
+        'status' => (($filters['status'] ?? 'all') !== 'all') ? $filters['status'] : null,
+        'exam' => (($filters['exam'] ?? 'all') !== 'all') ? $filters['exam'] : null,
+        'producto' => ((int) ($filters['producto'] ?? 0) > 0) ? (int) $filters['producto'] : null,
+        // Si ya está activo el mismo filtro, el click limpia (vuelve a todos).
+        'pago' => ($pago !== null && $activePago !== $pago) ? $pago : null,
+    ], static fn ($v) => $v !== null && $v !== ''));
+};
 ?>
 <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center" data-tour="students-header">
     <div>
@@ -34,10 +42,6 @@ $activePago = (string) ($filters['pago'] ?? 'all');
         <p class="muted" style="margin:.25rem 0 0">
             <?= e($partner['display_name'] ?? 'Partner') ?>
             · código <strong><?= e((string) ($partner['code'] ?? '')) ?></strong>
-            · crédito
-            <a href="<?= e(url('/partner/credito')) ?>" style="font-weight:700">
-                <?= money($partner['credit_balance'] ?? 0) ?>
-            </a>
         </p>
     </div>
     <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center">
@@ -49,25 +53,33 @@ $activePago = (string) ($filters['pago'] ?? 'all');
 </div>
 
 <div class="stats" style="margin:1rem 0" data-tour="students-payments">
-    <?php foreach ($paymentCards as $status => $card): ?>
-        <?php
-        $qs = http_build_query(array_filter([
-            'q' => ($filters['q'] ?? '') !== '' ? $filters['q'] : null,
-            'status' => (($filters['status'] ?? 'all') !== 'all') ? $filters['status'] : null,
-            'exam' => (($filters['exam'] ?? 'all') !== 'all') ? $filters['exam'] : null,
-            'producto' => ((int) ($filters['producto'] ?? 0) > 0) ? (int) $filters['producto'] : null,
-            'pago' => $activePago === $status ? null : $status,
-        ], static fn ($v) => $v !== null && $v !== ''));
-        $href = url('/partner/alumnos' . ($qs !== '' ? '?' . $qs : ''));
-        $isActive = $activePago === $status;
-        ?>
-        <a class="stat" href="<?= e($href) ?>"
-           style="text-decoration:none;color:inherit;<?= $isActive ? 'outline:2px solid var(--doceo-blue);border-radius:14px;' : '' ?>">
-            <div class="label"><?= e((string) ($card['label'] ?? $status)) ?><?= $isActive ? ' · filtro' : '' ?></div>
-            <div class="value" style="font-size:1.15rem"><?= (int) ($card['count'] ?? 0) ?></div>
-            <div class="muted" style="font-size:.82rem;margin-top:.2rem"><?= money($card['amount'] ?? 0) ?></div>
-        </a>
-    <?php endforeach; ?>
+    <a class="stat" href="<?= e(url('/partner/credito')) ?>" style="text-decoration:none;color:inherit" data-tour="students-credit">
+        <div class="label">Crédito</div>
+        <div class="value" style="font-size:1.15rem"><?= money($partner['credit_balance'] ?? 0) ?></div>
+        <div class="muted" style="font-size:.82rem;margin-top:.2rem">Saldo a favor</div>
+    </a>
+    <?php
+    $reviewQs = $filterQs('payment_review');
+    $reviewHref = url('/partner/alumnos' . ($reviewQs !== '' ? '?' . $reviewQs : ''));
+    $reviewActive = $activePago === 'payment_review';
+    ?>
+    <a class="stat" href="<?= e($reviewHref) ?>"
+       style="text-decoration:none;color:inherit;<?= $reviewActive ? 'outline:2px solid var(--doceo-blue);border-radius:14px;' : '' ?>">
+        <div class="label">En revisión<?= $reviewActive ? ' · filtro' : '' ?></div>
+        <div class="value" style="font-size:1.15rem"><?= $reviewCount ?></div>
+        <div class="muted" style="font-size:.82rem;margin-top:.2rem">Comprobantes por confirmar</div>
+    </a>
+    <?php
+    $paidQs = $filterQs('paid');
+    $paidHref = url('/partner/alumnos' . ($paidQs !== '' ? '?' . $paidQs : ''));
+    $paidActive = $activePago === 'paid';
+    ?>
+    <a class="stat" href="<?= e($paidHref) ?>"
+       style="text-decoration:none;color:inherit;<?= $paidActive ? 'outline:2px solid var(--doceo-blue);border-radius:14px;' : '' ?>">
+        <div class="label">Pagados<?= $paidActive ? ' · filtro' : '' ?></div>
+        <div class="value" style="font-size:1.15rem"><?= $paidCount ?></div>
+        <div class="muted" style="font-size:.82rem;margin-top:.2rem">Compras confirmadas</div>
+    </a>
 </div>
 
 <form method="get" action="<?= e(url('/partner/alumnos')) ?>" class="panel" style="margin-top:1rem" data-tour="students-filters">
@@ -96,7 +108,6 @@ $activePago = (string) ($filters['pago'] ?? 'all');
                 <?php
                 $pagoOpts = [
                     'all' => 'Todos',
-                    'awaiting_payment' => 'Por pagar',
                     'payment_review' => 'En revisión',
                     'paid' => 'Pagados',
                     'cancelled' => 'Cancelados',
