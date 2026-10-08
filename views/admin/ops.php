@@ -82,11 +82,12 @@ $extraColHeader = count($extraColLabels) === 1
                             $inventoryCardLevel = 'empty';
                         }
                         // Misma estructura de 3 filas que Crédito partners.
+                        $inventoryWarnHintCount = max(1, $inventoryWarnCount);
                         $inventoryCardHint = match ($inventoryCardLevel) {
                             'low' => 'Stock bajo en ' . $inventoryLowCount . ' producto'
                                 . ($inventoryLowCount === 1 ? '' : 's'),
-                            'warn' => 'Cerca del umbral en ' . max(1, $inventoryWarnCount) . ' producto'
-                                . ($inventoryWarnCount === 1 ? '' : 's'),
+                            'warn' => 'Cerca del umbral en ' . $inventoryWarnHintCount . ' producto'
+                                . ($inventoryWarnHintCount === 1 ? '' : 's'),
                             'empty' => 'Sin productos con inventario',
                             default => 'Códigos disponibles',
                         };
