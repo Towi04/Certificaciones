@@ -14,6 +14,7 @@ use App\Services\GroupStepConfig;
 use App\Services\MailLogService;
 use App\Services\ExamScheduleService;
 use App\Services\PartnerBulkRegistrationService;
+use App\Services\PartnerCreditService;
 use App\Services\PartnerDirectoryService;
 use App\Services\PartnerProfileService;
 use App\Services\PartnerRegistrationService;
@@ -22,6 +23,7 @@ use App\Services\PartnerTierService;
 use App\Services\PricingService;
 use App\Services\ResultsDeliveryService;
 use App\Services\TrackingService;
+use App\Support\Csv;
 use App\Support\Pagination;
 
 final class PartnerController
@@ -37,17 +39,7 @@ final class PartnerController
         $partner = $this->requirePartner();
         $this->syncPendingCredits($partner);
 
-        $q = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
-        $status = isset($_GET['status']) && is_string($_GET['status']) ? trim($_GET['status']) : 'all';
-        $exam = isset($_GET['exam']) && is_string($_GET['exam']) ? trim($_GET['exam']) : 'all';
-        $productId = (int) ($_GET['producto'] ?? 0);
-        $filters = [
-            'q' => $q !== '' ? $q : null,
-            'status' => $status !== '' ? $status : 'all',
-            'exam' => $exam !== '' ? $exam : 'all',
-            'product_id' => $productId > 0 ? $productId : null,
-        ];
-
+        $filters = $this->studentsFiltersFromRequest();
         $repo = new TrackingRepository();
         $partnerId = (int) $partner['id'];
         $total = $repo->countForPartnerFiltered($partnerId, $filters);
@@ -59,23 +51,147 @@ final class PartnerController
         $accessMails = (new MailLogService())->latestAccessMailByTrackingIds(
             array_map(static fn (array $t): int => (int) ($t['id'] ?? 0), $trackings)
         );
+        $paymentSummary = $repo->partnerPaymentSummary($partnerId);
 
         view('partner/students', [
             'title' => 'Alumnos',
             'partner' => $partner,
             'trackings' => $trackings,
             'accessMails' => $accessMails,
+            'paymentSummary' => $paymentSummary,
             'filters' => [
-                'q' => $q,
-                'status' => $status,
-                'exam' => $exam,
-                'producto' => $productId,
+                'q' => (string) ($_GET['q'] ?? ''),
+                'status' => (string) ($_GET['status'] ?? 'all'),
+                'exam' => (string) ($_GET['exam'] ?? 'all'),
+                'producto' => (int) ($_GET['producto'] ?? 0),
+                'pago' => (string) ($_GET['pago'] ?? 'all'),
             ],
             'statusOptions' => $repo->partnerStatusOptions($partnerId),
             'productOptions' => $repo->partnerProductOptions($partnerId),
             'pagination' => $pagination,
             'paginationPerPageOptions' => ['25' => '25', '50' => '50', '100' => '100'],
             'basePath' => '/partner/alumnos',
+            'layout' => 'partner',
+        ]);
+    }
+
+    public function studentsExportCsv(): void
+    {
+        Auth::requireRole(['partner']);
+        $partner = $this->requirePartner();
+        $filters = $this->studentsFiltersFromRequest();
+        $repo = new TrackingRepository();
+        $partnerId = (int) $partner['id'];
+        $total = $repo->countForPartnerFiltered($partnerId, $filters);
+        $maxRows = 5000;
+        if ($total > $maxRows) {
+            flash(
+                'error',
+                'Hay ' . $total . ' filas con esos filtros. Acota la búsqueda (máx. ' . $maxRows . ') antes de exportar.'
+            );
+            redirect('/partner/alumnos?' . http_build_query(array_filter([
+                'q' => $filters['q'] ?? null,
+                'status' => (($filters['status'] ?? 'all') !== 'all') ? $filters['status'] : null,
+                'exam' => (($filters['exam'] ?? 'all') !== 'all') ? $filters['exam'] : null,
+                'producto' => !empty($filters['product_id']) ? $filters['product_id'] : null,
+                'pago' => (($filters['payment'] ?? 'all') !== 'all') ? $filters['payment'] : null,
+            ], static fn ($v) => $v !== null && $v !== '')));
+        }
+
+        $rows = $repo->forPartnerFiltered($partnerId, $filters);
+        $delimiter = Csv::excelDelimiter();
+        $filename = 'alumnos-partner-' . date('Ymd-His') . '.csv';
+        csv_download_headers($filename);
+        $out = fopen('php://output', 'w');
+        if ($out === false) {
+            flash('error', 'No se pudo generar el CSV.');
+            redirect('/partner/alumnos');
+        }
+        csv_put($out, [
+            'matricula',
+            'nombre',
+            'apellido_paterno',
+            'apellido_materno',
+            'email',
+            'telefono',
+            'producto',
+            'examen_fecha',
+            'examen_hora',
+            'estatus_caso',
+            'estatus_pago',
+            'folio',
+            'clave',
+            'nivel',
+            'puntaje',
+            'monto',
+        ], $delimiter);
+        foreach ($rows as $t) {
+            csv_put($out, [
+                (string) ($t['matricula'] ?? ''),
+                (string) ($t['first_name'] ?? ''),
+                (string) ($t['last_name_p'] ?? ''),
+                (string) ($t['last_name_m'] ?? ''),
+                (string) ($t['email'] ?? ''),
+                (string) ($t['student_phone'] ?? ''),
+                (string) ($t['product_name'] ?? ''),
+                (string) ($t['exam_date'] ?? ''),
+                $t['exam_time'] !== null && $t['exam_time'] !== ''
+                    ? substr((string) $t['exam_time'], 0, 5)
+                    : '',
+                (string) ($t['status'] ?? ''),
+                (string) ($t['purchase_status'] ?? ''),
+                (string) ($t['folio'] ?? ''),
+                (string) ($t['access_key'] ?? ''),
+                (string) ($t['results_level'] ?? ''),
+                $t['results_score'] !== null && $t['results_score'] !== ''
+                    ? (string) $t['results_score']
+                    : '',
+                number_format((float) ($t['charged_amount'] ?? 0), 2, '.', ''),
+            ], $delimiter);
+        }
+        fclose($out);
+        exit;
+    }
+
+    public function creditHistory(): void
+    {
+        Auth::requireRole(['partner']);
+        $partner = $this->requirePartner();
+        $this->syncPendingCredits($partner);
+        $history = (new PartnerCreditService())->historyForPartner(
+            (int) $partner['id'],
+            (float) ($partner['credit_balance'] ?? 0)
+        );
+        view('partner/credit', [
+            'title' => 'Crédito',
+            'partner' => $partner,
+            'history' => $history,
+            'layout' => 'partner',
+        ]);
+    }
+
+    public function calendar(): void
+    {
+        Auth::requireRole(['partner']);
+        $partner = $this->requirePartner();
+        $days = (int) ($_GET['dias'] ?? 30);
+        if (!in_array($days, [30, 60], true)) {
+            $days = 30;
+        }
+        $exams = (new TrackingRepository())->upcomingExamsForPartner((int) $partner['id'], $days);
+        $grouped = [];
+        foreach ($exams as $row) {
+            $date = (string) ($row['exam_date'] ?? '');
+            if ($date === '') {
+                continue;
+            }
+            $grouped[$date][] = $row;
+        }
+        view('partner/calendar', [
+            'title' => 'Calendario',
+            'partner' => $partner,
+            'days' => $days,
+            'grouped' => $grouped,
             'layout' => 'partner',
         ]);
     }
@@ -590,6 +706,26 @@ final class PartnerController
         $trackingId = (int) $id;
         flash('error', 'Solo DOCEO puede asignar o reagendar la fecha de examen. Contáctanos para el cambio.');
         redirect('/partner/caso/' . $trackingId);
+    }
+
+    /**
+     * @return array{q:?string,status:string,exam:string,product_id:?int,payment:string}
+     */
+    private function studentsFiltersFromRequest(): array
+    {
+        $q = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
+        $status = isset($_GET['status']) && is_string($_GET['status']) ? trim($_GET['status']) : 'all';
+        $exam = isset($_GET['exam']) && is_string($_GET['exam']) ? trim($_GET['exam']) : 'all';
+        $payment = isset($_GET['pago']) && is_string($_GET['pago']) ? trim($_GET['pago']) : 'all';
+        $productId = (int) ($_GET['producto'] ?? 0);
+
+        return [
+            'q' => $q !== '' ? $q : null,
+            'status' => $status !== '' ? $status : 'all',
+            'exam' => $exam !== '' ? $exam : 'all',
+            'product_id' => $productId > 0 ? $productId : null,
+            'payment' => $payment !== '' ? $payment : 'all',
+        ];
     }
 
     /** @return array<string, mixed> */

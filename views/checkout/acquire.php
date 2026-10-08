@@ -34,8 +34,12 @@ foreach ($comboList as $c) {
 
 /** @var bool $isPartnerCheckout */
 /** @var array<string,mixed>|null $partner */
+/** @var string $referralPromo */
 $isPartnerCheckout = !empty($isPartnerCheckout);
 $partner = $partner ?? null;
+$referralPromo = !$isPartnerCheckout
+    ? strtoupper(trim((string) ($referralPromo ?? '')))
+    : '';
 $wizardSteps = ['datos'];
 if (!empty($reglamento)) {
     $wizardSteps[] = 'reglamento';
@@ -90,7 +94,7 @@ $stepLabels = [
                 <input type="hidden" name="card_msi_months" id="card_msi_months" value="1">
                 <?php if (!$isPartnerCheckout): ?>
                     <?php /* Dentro del form: el input visible está en el aside y a veces no viaja con multipart. */ ?>
-                    <input type="hidden" name="promo_code" id="promo_code_hidden" value="">
+                    <input type="hidden" name="promo_code" id="promo_code_hidden" value="<?= e($referralPromo) ?>">
                 <?php endif; ?>
                 <?php if ($needsExam): ?>
                     <input type="hidden" name="exam_date" id="exam_date" value="">
@@ -425,9 +429,13 @@ $stepLabels = [
             <div class="sidebar-promo">
                 <label for="promo_code">Código promocional</label>
                 <div class="sidebar-promo-row">
-                    <input type="text" id="promo_code" placeholder="CÓDIGO PROMOCIONAL" style="text-transform:uppercase" autocomplete="off">
+                    <input type="text" id="promo_code" placeholder="CÓDIGO PROMOCIONAL" style="text-transform:uppercase" autocomplete="off"
+                           value="<?= e($referralPromo) ?>">
                     <button type="button" class="btn btn-primary btn-sm" id="apply-promo">Aplicar</button>
                 </div>
+                <?php if ($referralPromo !== ''): ?>
+                    <p class="muted" style="margin:.4rem 0 0;font-size:.8rem">Código de partner aplicado desde el enlace.</p>
+                <?php endif; ?>
                 <?php
                 $whatsappUrl = \App\Support\Settings::schoolWhatsappPromoUrl((string) ($product['name'] ?? ''));
                 if ($whatsappUrl !== null):
@@ -1534,5 +1542,10 @@ $stepLabels = [
   selectPayUi('transfer', 'transfer_proof');
   showStep(0);
   loadExamDates();
+  // Prefill de código partner desde /catalogo?partner=CODE
+  if (!isPartnerCheckout && codeInput && codeInput.value && applyBtn) {
+    syncPromoCodeHidden();
+    setTimeout(function () { applyBtn.click(); }, 200);
+  }
 })();
 </script>

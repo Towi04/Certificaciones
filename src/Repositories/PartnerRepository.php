@@ -96,4 +96,24 @@ final class PartnerRepository
 
         return (bool) $stmt->fetchColumn();
     }
+
+    /** Partner activo por código promocional (case-insensitive). */
+    public function findActiveByCode(string $code): ?array
+    {
+        $code = strtoupper(trim($code));
+        if ($code === '') {
+            return null;
+        }
+        $stmt = $this->pdo->prepare(
+            'SELECT p.*, u.email, u.first_name, u.last_name_p
+             FROM partners p
+             JOIN users u ON u.id = p.user_id
+             WHERE UPPER(p.code) = ? AND p.is_active = 1 AND u.is_active = 1
+             LIMIT 1'
+        );
+        $stmt->execute([$code]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
 }
