@@ -99,6 +99,15 @@ final class MailTemplateService
             'partner_name' => 'Nombre del partner',
             'partner_code' => 'Código del partner',
             'partner_email' => 'Correo del partner',
+            'partner_tier' => 'Nivel actual del partner',
+            'sales_year' => 'Ventas del periodo (año/convenio)',
+            'sales_month' => 'Ventas del mes',
+            'max_sales_warning' => 'Umbral de ventas del aviso',
+            'months_without_sale' => 'Meses sin ventas para avisar',
+            'period_start' => 'Inicio del convenio',
+            'period_end' => 'Fin del convenio',
+            'days_left' => 'Días restantes del convenio',
+            'portal_url' => 'URL del portal partner',
         ],
         'Publicidad / campañas' => [
             'catalog_url' => 'URL del catálogo público',
@@ -687,6 +696,11 @@ final class MailTemplateService
             'partner_payment_confirmed' => [
                 'partner_name', 'partner_code', 'name', 'matricula', 'product_name', 'amount',
             ],
+            'partner_low_sales_warning' => [
+                'partner_name', 'partner_code', 'partner_email', 'partner_tier',
+                'sales_year', 'sales_month', 'max_sales_warning', 'months_without_sale',
+                'period_start', 'period_end', 'days_left', 'portal_url', 'login_url',
+            ],
             default => [],
         };
     }
@@ -929,6 +943,21 @@ final class MailTemplateService
                 'product_name' => 'ELeT',
                 'amount' => '$980.00',
             ],
+            'partner_low_sales_warning' => [
+                'partner_name' => 'Partner Ejemplo',
+                'partner_code' => 'PARTNER01',
+                'partner_email' => 'partner@ejemplo.com',
+                'partner_tier' => 'Bronze',
+                'sales_year' => '0',
+                'sales_month' => '0',
+                'max_sales_warning' => '1',
+                'months_without_sale' => '8',
+                'period_start' => date('Y') . '-01-01',
+                'period_end' => date('Y') . '-12-31',
+                'days_left' => '90',
+                'portal_url' => rtrim((string) (\App\Config\Env::get('APP_URL', '') ?? ''), '/') . '/partner',
+                'login_url' => rtrim((string) (\App\Config\Env::get('APP_URL', '') ?? ''), '/') . '/login',
+            ],
             default => [],
         };
     }
@@ -973,6 +1002,15 @@ final class MailTemplateService
             'partner_name' => 'Partner Ejemplo',
             'partner_code' => 'PARTNER01',
             'partner_email' => 'partner@ejemplo.com',
+            'partner_tier' => 'Bronze',
+            'sales_year' => '0',
+            'sales_month' => '0',
+            'max_sales_warning' => '1',
+            'months_without_sale' => '8',
+            'period_start' => date('Y') . '-01-01',
+            'period_end' => date('Y') . '-12-31',
+            'days_left' => '90',
+            'portal_url' => rtrim((string) (\App\Config\Env::get('APP_URL', '') ?? ''), '/') . '/partner',
             'catalog_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/catalogo',
             'promo_code' => PromoDoceoService::currentCode() !== ''
                 ? PromoDoceoService::currentCode()
@@ -1666,6 +1704,22 @@ final class MailTemplateService
                     . '(alumno: {{name}}, producto: {{product_name}}).</p>'
                     . '<p><strong>Monto cobrado (tarifa partner):</strong> {{amount}} MXN</p>'
                     . '<p>Este correo es solo para el partner; el alumno no recibe este monto.</p>'
+                    . '<p>— Instituto DOCEO</p>',
+                'audience' => 'partner',
+            ],
+            [
+                'code' => 'partner_low_sales_warning',
+                'name' => 'Partner · Aviso de bajas ventas / convenio',
+                'subject' => 'Tu convenio partner está por evaluarse — {{partner_code}}',
+                'body' => '<p>Hola {{partner_name}},</p>'
+                    . '<p>El periodo de tu convenio (<strong>{{period_start}}</strong> al '
+                    . '<strong>{{period_end}}</strong>) está por concluir y registramos '
+                    . '<strong>{{sales_year}}</strong> certificación(es) en este periodo '
+                    . '(umbral de aviso: {{max_sales_warning}}).</p>'
+                    . '<p>Si no alcanzas el volumen mínimo podrías <strong>perder o bajar</strong> '
+                    . 'los beneficios de tu nivel <strong>{{partner_tier}}</strong>.</p>'
+                    . '<p>Días restantes aproximados: <strong>{{days_left}}</strong>.</p>'
+                    . '<p><a href="{{portal_url}}">Revisa tu progreso en el portal partner</a></p>'
                     . '<p>— Instituto DOCEO</p>',
                 'audience' => 'partner',
             ],

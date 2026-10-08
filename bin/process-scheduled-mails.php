@@ -13,6 +13,7 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/bootstrap.php';
 
 use App\Services\MarketingCampaignService;
+use App\Services\PartnerTierService;
 use App\Services\ScheduledMailService;
 
 $svc = new ScheduledMailService();
@@ -30,5 +31,20 @@ foreach ($mktResult['errors'] as $err) {
     echo 'ERROR MKT: ' . $err . PHP_EOL;
 }
 
-$hasErrors = $result['errors'] !== [] || $mktResult['errors'] !== [];
+$tierResult = ['evaluated' => ['updated' => 0], 'warnings' => ['sent' => 0, 'errors' => []]];
+try {
+    $tierResult = (new PartnerTierService())->processDue();
+    echo 'Niveles partner: evaluados=' . (int) ($tierResult['evaluated']['updated'] ?? 0)
+        . ' avisos=' . (int) ($tierResult['warnings']['sent'] ?? 0) . PHP_EOL;
+    foreach ($tierResult['warnings']['errors'] ?? [] as $err) {
+        echo 'ERROR TIERS: ' . $err . PHP_EOL;
+    }
+} catch (Throwable $e) {
+    echo 'ERROR TIERS: ' . $e->getMessage() . PHP_EOL;
+    $tierResult['warnings']['errors'][] = $e->getMessage();
+}
+
+$hasErrors = $result['errors'] !== []
+    || $mktResult['errors'] !== []
+    || (($tierResult['warnings']['errors'] ?? []) !== []);
 exit($hasErrors ? 1 : 0);

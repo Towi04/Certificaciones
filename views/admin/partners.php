@@ -5,7 +5,10 @@
 ?>
 <div style="display:flex;justify-content:space-between;gap:1rem;align-items:center;flex-wrap:wrap">
     <h1 style="margin:0;color:var(--doceo-blue)">Partners</h1>
-    <a class="btn btn-accent" href="<?= e(url('/admin/partners/nuevo')) ?>">Nuevo partner</a>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <a class="btn btn-ghost" href="<?= e(url('/admin/partners/niveles')) ?>">Niveles / metas</a>
+        <a class="btn btn-accent" href="<?= e(url('/admin/partners/nuevo')) ?>">Nuevo partner</a>
+    </div>
 </div>
 <p class="muted">Crea cuentas de partner y asigna el nivel de precio (CNCM / Bronze / Silver / Gold).</p>
 

@@ -41,10 +41,19 @@ final class PartnerController
             }
             $trackings = (new TrackingRepository())->forPartner((int) $partner['id']);
         }
+        $tierProgress = null;
+        if ($partner) {
+            try {
+                $tierProgress = (new \App\Services\PartnerTierService())->progressForPartner($partner);
+            } catch (\Throwable $e) {
+                error_log('[Doceo] partner tier progress: ' . $e->getMessage());
+            }
+        }
         view('partner/dashboard', [
             'title' => 'Partner',
             'partner' => $partner,
             'trackings' => $trackings,
+            'tierProgress' => $tierProgress,
             'layout' => 'partner',
         ]);
     }

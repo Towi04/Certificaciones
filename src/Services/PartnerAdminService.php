@@ -230,15 +230,29 @@ final class PartnerAdminService
             ]);
             $userId = (int) $this->pdo->lastInsertId();
 
+            PartnerTierService::ensureSchema($this->pdo);
+            $tierProgram = array_key_exists('tier_program', $data)
+                ? !empty($data['tier_program'])
+                : ($tier !== 'cncm');
+            if ($tier === 'cncm') {
+                $tierProgram = false;
+            }
+            $agrStart = self::normalizeDate($data['agreement_starts_at'] ?? null);
+            $agrEnd = self::normalizeDate($data['agreement_ends_at'] ?? null);
             $this->pdo->prepare(
-                'INSERT INTO partners (user_id, code, display_name, tier, notes, is_active)
-                 VALUES (?,?,?,?,?,?)'
+                'INSERT INTO partners
+                    (user_id, code, display_name, tier, tier_program, notes,
+                     agreement_starts_at, agreement_ends_at, is_active)
+                 VALUES (?,?,?,?,?,?,?,?,?)'
             )->execute([
                 $userId,
                 $code,
                 $display,
                 $tier,
+                $tierProgram ? 1 : 0,
                 $notes !== '' ? $notes : null,
+                $agrStart,
+                $agrEnd,
                 $active ? 1 : 0,
             ]);
             $partnerId = (int) $this->pdo->lastInsertId();
@@ -354,15 +368,28 @@ final class PartnerAdminService
                 ]);
             }
 
+            PartnerTierService::ensureSchema($this->pdo);
+            $tierProgram = array_key_exists('tier_program', $data)
+                ? !empty($data['tier_program'])
+                : ($tier !== 'cncm');
+            if ($tier === 'cncm') {
+                $tierProgram = false;
+            }
+            $agrStart = self::normalizeDate($data['agreement_starts_at'] ?? null);
+            $agrEnd = self::normalizeDate($data['agreement_ends_at'] ?? null);
             $this->pdo->prepare(
                 'UPDATE partners
-                 SET code = ?, display_name = ?, tier = ?, notes = ?, is_active = ?
+                 SET code = ?, display_name = ?, tier = ?, tier_program = ?, notes = ?,
+                     agreement_starts_at = ?, agreement_ends_at = ?, is_active = ?
                  WHERE id = ?'
             )->execute([
                 $code,
                 $display,
                 $tier,
+                $tierProgram ? 1 : 0,
                 $notes !== '' ? $notes : null,
+                $agrStart,
+                $agrEnd,
                 $active ? 1 : 0,
                 $partnerId,
             ]);
@@ -516,5 +543,18 @@ final class PartnerAdminService
             'email_sent' => false,
             'email_error' => null,
         ];
+    }
+
+    private static function normalizeDate(mixed $raw): ?string
+    {
+        $s = trim((string) ($raw ?? ''));
+        if ($s === '') {
+            return null;
+        }
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $s)) {
+            throw new \InvalidArgumentException('Fecha de convenio inválida (usa YYYY-MM-DD).');
+        }
+
+        return $s;
     }
 }
