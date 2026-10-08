@@ -81,62 +81,25 @@ $extraColHeader = count($extraColLabels) === 1
                         } elseif ($inventoryStockRows === []) {
                             $inventoryCardLevel = 'empty';
                         }
+                        // Misma estructura de 3 filas que Crédito partners.
+                        $inventoryWarnHintCount = max(1, $inventoryWarnCount);
                         $inventoryCardHint = match ($inventoryCardLevel) {
-                            'low' => 'Stock bajo — reponer pronto',
-                            'warn' => 'Acercándose al umbral',
+                            'low' => 'Stock bajo en ' . $inventoryLowCount . ' producto'
+                                . ($inventoryLowCount === 1 ? '' : 's'),
+                            'warn' => 'Cerca del umbral en ' . $inventoryWarnHintCount . ' producto'
+                                . ($inventoryWarnHintCount === 1 ? '' : 's'),
                             'empty' => 'Sin productos con inventario',
-                            default => 'Stock holgado',
+                            default => 'Códigos disponibles',
                         };
                         ?>
                         <div class="ops-stock-card ops-stock-card--<?= e($inventoryCardLevel) ?>"
-                             title="Códigos de inventario disponibles por producto (siempre visible)">
+                             title="Códigos de inventario disponibles">
                             <div class="ops-stock-card-head">
                                 <span class="ops-stock-card-label">Inventario disponible</span>
                                 <a class="ops-stock-card-link" href="<?= e(url('/admin/inventario')) ?>">Ver todo</a>
                             </div>
                             <span class="ops-stock-card-amount"><?= (int) $inventoryAvailTotal ?></span>
                             <span class="ops-stock-card-hint"><?= e($inventoryCardHint) ?></span>
-                            <?php if ($inventoryLowCount > 0): ?>
-                                <div class="ops-stock-alert">
-                                    Stock bajo en <?= (int) $inventoryLowCount ?> producto<?= $inventoryLowCount === 1 ? '' : 's' ?>
-                                </div>
-                            <?php endif; ?>
-                            <?php if ($inventoryStockRows !== []): ?>
-                            <ul class="ops-stock-list">
-                                <?php foreach ($inventoryStockRows as $invRow): ?>
-                                    <?php
-                                    $invLevel = (string) ($invRow['level'] ?? (!empty($invRow['low']) ? 'low' : 'ok'));
-                                    if (!in_array($invLevel, ['low', 'warn', 'ok'], true)) {
-                                        $invLevel = 'ok';
-                                    }
-                                    $invAvail = (int) ($invRow['available'] ?? 0);
-                                    $invName = trim((string) ($invRow['name'] ?? ''));
-                                    if ($invName === '') {
-                                        $invName = (string) ($invRow['code'] ?? 'Producto');
-                                    }
-                                    $invHref = url('/admin/inventario/' . (int) ($invRow['id'] ?? 0));
-                                    $invPill = match ($invLevel) {
-                                        'low' => 'bajo',
-                                        'warn' => 'cerca',
-                                        default => '',
-                                    };
-                                    ?>
-                                    <li class="ops-stock-item ops-stock-item--<?= e($invLevel) ?>">
-                                        <a href="<?= e($invHref) ?>" class="ops-stock-item-name" title="<?= e($invName) ?>">
-                                            <?= e($invName) ?>
-                                        </a>
-                                        <span class="ops-stock-item-qty" title="Disponibles / umbral <?= (int) ($invRow['threshold'] ?? 0) ?>">
-                                            <?= $invAvail ?>
-                                            <?php if ($invPill !== ''): ?>
-                                                <span class="ops-stock-pill ops-stock-pill--<?= e($invLevel) ?>"><?= e($invPill) ?></span>
-                                            <?php endif; ?>
-                                        </span>
-                                    </li>
-                                <?php endforeach; ?>
-                            </ul>
-                            <?php else: ?>
-                                <p class="ops-stock-empty">Activa inventario en Grupos o carga códigos para ver el detalle aquí.</p>
-                            <?php endif; ?>
                         </div>
                         <?php if (isset($partnerCreditTotal)): ?>
                             <div class="ops-credit-card" title="Suma de saldos a favor activos de partners">
@@ -872,8 +835,9 @@ $extraColHeader = count($extraColLabels) === 1
 }
 .ops-credit-card-hint { font-size:.72rem; color:#7c5a1e; }
 .ops-stock-card {
-  display:flex; flex-direction:column; gap:.35rem;
-  box-sizing:border-box; padding:.7rem .85rem;
+  display:flex; flex-direction:column; justify-content:center; gap:.15rem;
+  min-height:5.5rem; box-sizing:border-box;
+  padding:.75rem 1.05rem;
   border-radius:14px; border:2px solid #86efac;
   background:linear-gradient(145deg, #f0fdf4 0%, #dcfce7 100%);
   box-shadow:0 2px 8px rgba(22, 163, 74, .12);
@@ -923,41 +887,6 @@ $extraColHeader = count($extraColLabels) === 1
   font-size:.72rem; font-weight:700; color:var(--doceo-blue); text-decoration:none; white-space:nowrap;
 }
 .ops-stock-card-link:hover { text-decoration:underline; }
-.ops-stock-alert {
-  font-size:.78rem; font-weight:700; color:#991b1b;
-  padding:.3rem .45rem; border-radius:8px; background:rgba(255,255,255,.7);
-}
-.ops-stock-empty {
-  margin:0; font-size:.75rem; color:#64748b; line-height:1.35;
-}
-.ops-stock-list {
-  list-style:none; margin:0; padding:0;
-  display:flex; flex-direction:column; gap:.3rem;
-  max-height:9.5rem; overflow:auto;
-}
-.ops-stock-item {
-  display:flex; align-items:center; justify-content:space-between; gap:.45rem;
-  padding:.2rem 0;
-}
-.ops-stock-item-name {
-  flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  font-size:.78rem; font-weight:600; color:#1e3a5f; text-decoration:none;
-}
-.ops-stock-item-name:hover { text-decoration:underline; }
-.ops-stock-item-qty {
-  flex:0 0 auto; font-size:1rem; font-weight:800;
-  color:#15803d; font-variant-numeric:tabular-nums;
-  display:inline-flex; align-items:center; gap:.25rem;
-}
-.ops-stock-item--warn .ops-stock-item-qty { color:#b45309; }
-.ops-stock-item--low .ops-stock-item-qty { color:#b91c1c; }
-.ops-stock-pill {
-  font-size:.65rem; font-weight:800; text-transform:uppercase;
-  padding:.05rem .3rem; border-radius:999px;
-  background:#fde68a; color:#92400e;
-}
-.ops-stock-pill--low { background:#fecaca; color:#991b1b; }
-.ops-stock-pill--warn { background:#fde68a; color:#92400e; }
 .ops-icon-btn {
   display:inline-flex; align-items:center; justify-content:center;
   width:2.15rem; height:2.15rem; padding:0; flex:0 0 auto;
