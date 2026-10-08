@@ -273,10 +273,7 @@ final class PartnerController
     public function bulkCsvTemplate(): void
     {
         Auth::requireRole(['partner']);
-        $csv = (new PartnerBulkRegistrationService())->csvTemplate();
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename="plantilla-alumnos-grupo.csv"');
-        echo $csv;
+        (new PartnerBulkRegistrationService())->streamCsvTemplate();
         exit;
     }
 

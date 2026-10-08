@@ -8,6 +8,7 @@ use App\Database\Connection;
 use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\TrackingRepository;
+use App\Support\Csv;
 use PDO;
 
 /**
@@ -118,18 +119,19 @@ final class PartnerBulkRegistrationService
         if ($fh === false) {
             throw new \InvalidArgumentException('No se pudo abrir el CSV.');
         }
-        $bom = fread($fh, 3);
-        if ($bom !== "\xEF\xBB\xBF") {
-            rewind($fh);
+        try {
+            [$header, $delimiter] = Csv::readHeader($fh);
+        } catch (\InvalidArgumentException $e) {
+            fclose($fh);
+            throw $e;
         }
-        $header = fgetcsv($fh);
-        if (!is_array($header) || $header === []) {
+        if ($header === []) {
             fclose($fh);
             throw new \InvalidArgumentException('El CSV está vacío o no tiene encabezados.');
         }
         $map = [];
         foreach ($header as $i => $col) {
-            $key = strtolower(trim((string) $col));
+            $key = strtolower(trim(Csv::cellToUtf8($col)));
             $key = str_replace([' ', '-'], '_', $key);
             $aliases = [
                 'correo' => 'email',
@@ -161,14 +163,14 @@ final class PartnerBulkRegistrationService
         $errors = [];
         $line = 1;
         $seenEmails = [];
-        while (($data = fgetcsv($fh)) !== false) {
+        while (($data = csv_get($fh, null, $delimiter)) !== false) {
             $line++;
             if (!is_array($data)) {
                 continue;
             }
             $allEmpty = true;
             foreach ($data as $cell) {
-                if (trim((string) $cell) !== '') {
+                if (trim(Csv::cellToUtf8($cell)) !== '') {
                     $allEmpty = false;
                     break;
                 }
@@ -179,7 +181,7 @@ final class PartnerBulkRegistrationService
             $row = [];
             foreach (self::CSV_HEADERS as $key) {
                 $idx = $map[$key] ?? null;
-                $row[$key] = $idx !== null ? trim((string) ($data[$idx] ?? '')) : '';
+                $row[$key] = $idx !== null ? trim(Csv::cellToUtf8($data[$idx] ?? '')) : '';
             }
             $email = strtolower($row['email']);
             $row['email'] = $email;
@@ -222,13 +224,41 @@ final class PartnerBulkRegistrationService
         ];
     }
 
+    /**
+     * Descarga plantilla UTF-8 con BOM y delimitador ; (Excel MX/ES).
+     */
+    public function streamCsvTemplate(): void
+    {
+        $delimiter = Csv::excelDelimiter();
+        csv_download_headers('plantilla-alumnos-grupo.csv');
+        $out = fopen('php://output', 'w');
+        if ($out === false) {
+            throw new \RuntimeException('No se pudo generar el CSV.');
+        }
+        csv_put($out, self::CSV_HEADERS, $delimiter);
+        csv_put($out, [
+            'alumno@ejemplo.com',
+            'Ana',
+            'García',
+            'López',
+            '5512345678',
+            'GALA900101MDFRRN09',
+            '1990-01-01',
+            'F',
+            'Mexicana',
+        ], $delimiter);
+        fclose($out);
+    }
+
+    /** @deprecated Preferir streamCsvTemplate(); se mantiene por compatibilidad. */
     public function csvTemplate(): string
     {
+        $delimiter = Csv::excelDelimiter();
         $fh = fopen('php://temp', 'r+b');
         if ($fh === false) {
-            return implode(',', self::CSV_HEADERS) . "\n";
+            return "\xEF\xBB\xBF" . implode($delimiter, self::CSV_HEADERS) . "\n";
         }
-        csv_put($fh, self::CSV_HEADERS);
+        csv_put($fh, self::CSV_HEADERS, $delimiter);
         csv_put($fh, [
             'alumno@ejemplo.com',
             'Ana',
@@ -239,12 +269,12 @@ final class PartnerBulkRegistrationService
             '1990-01-01',
             'F',
             'Mexicana',
-        ]);
+        ], $delimiter);
         rewind($fh);
         $csv = stream_get_contents($fh) ?: '';
         fclose($fh);
 
-        return $csv;
+        return "\xEF\xBB\xBF" . $csv;
     }
 
     /**
