@@ -89,7 +89,11 @@ final class AdminController
         try {
             $inventoryStockRows = (new InventoryService())->opsBoardStockRows();
         } catch (\Throwable $e) {
+            // El bloque de inventario siempre se pinta; si falla el conteo, queda en 0.
             error_log('[Doceo] ops inventory stock: ' . $e->getMessage());
+            $inventoryStockRows = [];
+        }
+        if (!is_array($inventoryStockRows)) {
             $inventoryStockRows = [];
         }
 

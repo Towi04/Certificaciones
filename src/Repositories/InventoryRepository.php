@@ -81,6 +81,44 @@ final class InventoryRepository
         return $out;
     }
 
+    /**
+     * Conteos de stock agrupados por producto (una sola query).
+     *
+     * @return array<int, array{available:int,assigned:int,expired:int,void:int,total:int}>
+     */
+    public function stockCountsByProduct(): array
+    {
+        $stmt = $this->pdo->query(
+            'SELECT product_id, status, COUNT(*) AS n
+             FROM inventory_codes
+             GROUP BY product_id, status'
+        );
+        $out = [];
+        foreach ($stmt->fetchAll() ?: [] as $row) {
+            $pid = (int) ($row['product_id'] ?? 0);
+            if ($pid < 1) {
+                continue;
+            }
+            if (!isset($out[$pid])) {
+                $out[$pid] = [
+                    'available' => 0,
+                    'assigned' => 0,
+                    'expired' => 0,
+                    'void' => 0,
+                    'total' => 0,
+                ];
+            }
+            $status = (string) ($row['status'] ?? '');
+            $n = (int) ($row['n'] ?? 0);
+            if (isset($out[$pid][$status])) {
+                $out[$pid][$status] = $n;
+            }
+            $out[$pid]['total'] += $n;
+        }
+
+        return $out;
+    }
+
     /** @return list<array<string, mixed>> */
     public function codesForProduct(int $productId, ?string $status = null, int $limit = 200): array
     {
