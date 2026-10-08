@@ -56,14 +56,64 @@ $extraColHeader = count($extraColLabels) === 1
                         <?php endforeach; ?>
                     </div>
                 </td>
-                <td class="ops-controls-credit" rowspan="2">
-                    <?php if (isset($partnerCreditTotal)): ?>
-                        <div class="ops-credit-card" title="Suma de saldos a favor activos de partners">
-                            <span class="ops-credit-card-label">Crédito partners (apartado)</span>
-                            <span class="ops-credit-card-amount"><?= money((float) $partnerCreditTotal) ?></span>
-                            <span class="ops-credit-card-hint">Saldos a favor activos</span>
-                        </div>
-                    <?php endif; ?>
+                <td class="ops-controls-side" rowspan="2">
+                    <div class="ops-side-stack">
+                        <?php if (isset($partnerCreditTotal)): ?>
+                            <div class="ops-credit-card" title="Suma de saldos a favor activos de partners">
+                                <span class="ops-credit-card-label">Crédito partners (apartado)</span>
+                                <span class="ops-credit-card-amount"><?= money((float) $partnerCreditTotal) ?></span>
+                                <span class="ops-credit-card-hint">Saldos a favor activos</span>
+                            </div>
+                        <?php endif; ?>
+                        <?php
+                        /** @var list<array<string,mixed>> $inventoryStockRows */
+                        $inventoryStockRows = is_array($inventoryStockRows ?? null) ? $inventoryStockRows : [];
+                        $inventoryLowCount = 0;
+                        foreach ($inventoryStockRows as $__inv) {
+                            if (!empty($__inv['low'])) {
+                                $inventoryLowCount++;
+                            }
+                        }
+                        ?>
+                        <?php if ($inventoryStockRows !== []): ?>
+                            <div class="ops-stock-card<?= $inventoryLowCount > 0 ? ' ops-stock-card--low' : '' ?>"
+                                 title="Códigos de inventario disponibles por producto">
+                                <div class="ops-stock-card-head">
+                                    <span class="ops-stock-card-label">Inventario disponible</span>
+                                    <a class="ops-stock-card-link" href="<?= e(url('/admin/inventario')) ?>">Ver todo</a>
+                                </div>
+                                <?php if ($inventoryLowCount > 0): ?>
+                                    <div class="ops-stock-alert">
+                                        Stock bajo en <?= (int) $inventoryLowCount ?> producto<?= $inventoryLowCount === 1 ? '' : 's' ?>
+                                    </div>
+                                <?php endif; ?>
+                                <ul class="ops-stock-list">
+                                    <?php foreach ($inventoryStockRows as $invRow): ?>
+                                        <?php
+                                        $invLow = !empty($invRow['low']);
+                                        $invAvail = (int) ($invRow['available'] ?? 0);
+                                        $invName = trim((string) ($invRow['name'] ?? ''));
+                                        if ($invName === '') {
+                                            $invName = (string) ($invRow['code'] ?? 'Producto');
+                                        }
+                                        $invHref = url('/admin/inventario/' . (int) ($invRow['id'] ?? 0));
+                                        ?>
+                                        <li class="ops-stock-item<?= $invLow ? ' ops-stock-item--low' : '' ?>">
+                                            <a href="<?= e($invHref) ?>" class="ops-stock-item-name" title="<?= e($invName) ?>">
+                                                <?= e($invName) ?>
+                                            </a>
+                                            <span class="ops-stock-item-qty" title="Disponibles / umbral <?= (int) ($invRow['threshold'] ?? 0) ?>">
+                                                <?= $invAvail ?>
+                                                <?php if ($invLow): ?>
+                                                    <span class="ops-stock-pill">bajo</span>
+                                                <?php endif; ?>
+                                            </span>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            </div>
+                        <?php endif; ?>
+                    </div>
                 </td>
             </tr>
             <tr>
@@ -760,12 +810,16 @@ $extraColHeader = count($extraColLabels) === 1
 .ops-controls-main {
   width:auto; vertical-align:middle; padding:0 .85rem 0 0;
 }
-.ops-controls-credit {
-  width:13.5rem; vertical-align:stretch; padding:0;
+.ops-controls-side {
+  width:14.5rem; vertical-align:stretch; padding:0;
+}
+.ops-side-stack {
+  display:flex; flex-direction:column; gap:.55rem;
+  height:100%; min-width:12rem;
 }
 .ops-credit-card {
   display:flex; flex-direction:column; justify-content:center; gap:.15rem;
-  height:100%; min-height:5.5rem; min-width:11.5rem; box-sizing:border-box;
+  min-height:5.5rem; box-sizing:border-box;
   padding:.75rem 1.05rem;
   border-radius:14px; border:2px solid #f0d78c;
   background:linear-gradient(145deg, #fff8e6 0%, #ffefc2 100%);
@@ -780,6 +834,59 @@ $extraColHeader = count($extraColLabels) === 1
   color:var(--doceo-blue); font-variant-numeric:tabular-nums;
 }
 .ops-credit-card-hint { font-size:.72rem; color:#7c5a1e; }
+.ops-stock-card {
+  display:flex; flex-direction:column; gap:.4rem;
+  box-sizing:border-box; padding:.7rem .85rem;
+  border-radius:14px; border:2px solid #bfdbfe;
+  background:linear-gradient(145deg, #eff6ff 0%, #dbeafe 100%);
+  box-shadow:0 2px 8px rgba(37, 99, 235, .10);
+}
+.ops-stock-card--low {
+  border-color:#f0d78c;
+  background:linear-gradient(145deg, #fff8e6 0%, #ffedd5 100%);
+  box-shadow:0 2px 8px rgba(180, 120, 20, .12);
+}
+.ops-stock-card-head {
+  display:flex; align-items:center; justify-content:space-between; gap:.4rem;
+}
+.ops-stock-card-label {
+  font-size:.72rem; font-weight:700; letter-spacing:.02em;
+  text-transform:uppercase; color:#1e40af;
+}
+.ops-stock-card--low .ops-stock-card-label { color:#9a3412; }
+.ops-stock-card-link {
+  font-size:.72rem; font-weight:700; color:var(--doceo-blue); text-decoration:none; white-space:nowrap;
+}
+.ops-stock-card-link:hover { text-decoration:underline; }
+.ops-stock-alert {
+  font-size:.78rem; font-weight:700; color:#9a3412;
+  padding:.3rem .45rem; border-radius:8px; background:rgba(255,255,255,.65);
+}
+.ops-stock-list {
+  list-style:none; margin:0; padding:0;
+  display:flex; flex-direction:column; gap:.3rem;
+  max-height:9.5rem; overflow:auto;
+}
+.ops-stock-item {
+  display:flex; align-items:center; justify-content:space-between; gap:.45rem;
+  padding:.2rem 0;
+}
+.ops-stock-item-name {
+  flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-size:.78rem; font-weight:600; color:#1e3a5f; text-decoration:none;
+}
+.ops-stock-item-name:hover { text-decoration:underline; }
+.ops-stock-item-qty {
+  flex:0 0 auto; font-size:1rem; font-weight:800;
+  color:var(--doceo-blue); font-variant-numeric:tabular-nums;
+  display:inline-flex; align-items:center; gap:.25rem;
+}
+.ops-stock-item--low .ops-stock-item-qty { color:#b45309; }
+.ops-stock-pill {
+  font-size:.65rem; font-weight:800; text-transform:uppercase;
+  padding:.05rem .3rem; border-radius:999px;
+  background:#fde68a; color:#92400e;
+}
 .ops-icon-btn {
   display:inline-flex; align-items:center; justify-content:center;
   width:2.15rem; height:2.15rem; padding:0; flex:0 0 auto;
@@ -818,8 +925,8 @@ $extraColHeader = count($extraColLabels) === 1
   }
   .ops-controls { border-spacing:0; }
   .ops-controls-main { padding:0 0 .55rem; }
-  .ops-controls-credit { width:100%; }
-  .ops-credit-card { min-width:0; width:100%; }
+  .ops-controls-side { width:100%; }
+  .ops-side-stack, .ops-credit-card, .ops-stock-card { min-width:0; width:100%; }
 }
 .ops-table-wrap { max-height: min(70vh, 820px); overflow:auto; }
 .ops-table { margin:0; border-collapse:separate; border-spacing:0; min-width:1100px; }
