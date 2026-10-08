@@ -17,7 +17,7 @@ $navItems = [
 $activeKey = match (true) {
     $path === '/partner' || $path === '/partner/' || str_starts_with($path, '/partner/alumnos') || str_starts_with($path, '/partner/caso') => 'alumnos',
     str_starts_with($path, '/partner/registrar-grupo') => 'registrar-grupo',
-    str_starts_with($path, '/partner/registrar') => 'registrar',
+    str_starts_with($path, '/partner/registrar') || str_starts_with($path, '/adquirir/') => 'registrar',
     str_starts_with($path, '/catalogo') => 'catalogo',
     str_starts_with($path, '/partner/avance') => 'avance',
     str_starts_with($path, '/partner/perfil') => 'perfil',

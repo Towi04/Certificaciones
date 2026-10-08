@@ -22,6 +22,7 @@ use App\Services\PartnerTierService;
 use App\Services\PricingService;
 use App\Services\ResultsDeliveryService;
 use App\Services\TrackingService;
+use App\Support\Pagination;
 
 final class PartnerController
 {
@@ -36,7 +37,25 @@ final class PartnerController
         $partner = $this->requirePartner();
         $this->syncPendingCredits($partner);
 
-        $trackings = (new TrackingRepository())->forPartner((int) $partner['id']);
+        $q = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
+        $status = isset($_GET['status']) && is_string($_GET['status']) ? trim($_GET['status']) : 'all';
+        $exam = isset($_GET['exam']) && is_string($_GET['exam']) ? trim($_GET['exam']) : 'all';
+        $productId = (int) ($_GET['producto'] ?? 0);
+        $filters = [
+            'q' => $q !== '' ? $q : null,
+            'status' => $status !== '' ? $status : 'all',
+            'exam' => $exam !== '' ? $exam : 'all',
+            'product_id' => $productId > 0 ? $productId : null,
+        ];
+
+        $repo = new TrackingRepository();
+        $partnerId = (int) $partner['id'];
+        $total = $repo->countForPartnerFiltered($partnerId, $filters);
+        $pagination = Pagination::fromRequest($total, 25);
+        $trackings = $repo->forPartnerFiltered($partnerId, $filters + [
+            'limit' => $pagination['limit'],
+            'offset' => $pagination['offset'],
+        ]);
         $accessMails = (new MailLogService())->latestAccessMailByTrackingIds(
             array_map(static fn (array $t): int => (int) ($t['id'] ?? 0), $trackings)
         );
@@ -46,6 +65,17 @@ final class PartnerController
             'partner' => $partner,
             'trackings' => $trackings,
             'accessMails' => $accessMails,
+            'filters' => [
+                'q' => $q,
+                'status' => $status,
+                'exam' => $exam,
+                'producto' => $productId,
+            ],
+            'statusOptions' => $repo->partnerStatusOptions($partnerId),
+            'productOptions' => $repo->partnerProductOptions($partnerId),
+            'pagination' => $pagination,
+            'paginationPerPageOptions' => ['25' => '25', '50' => '50', '100' => '100'],
+            'basePath' => '/partner/alumnos',
             'layout' => 'partner',
         ]);
     }

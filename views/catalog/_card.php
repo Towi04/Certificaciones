@@ -46,7 +46,9 @@ $searchBlob = mb_strtolower(trim(implode(' ', array_filter([
             <div class="meta"><?= e($p['certifier_name'] ?? category_label((string) $p['category'])) ?></div>
             <h3><?= e($p['name']) ?></h3>
             <?php if (!empty($p['short_description'])): ?>
-                <div class="meta product-richtext"><?= rich_text((string) $p['short_description']) ?></div>
+                <div class="meta product-card-desc product-richtext"><?= e(trim(strip_tags((string) $p['short_description']))) ?></div>
+            <?php else: ?>
+                <div class="meta product-card-desc" aria-hidden="true">&nbsp;</div>
             <?php endif; ?>
             <div class="price">
                 <?= money($displayPrice) ?>
