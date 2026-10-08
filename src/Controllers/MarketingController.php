@@ -188,9 +188,12 @@ final class MarketingController
         if (!$includeClients && !$includePartners) {
             $includeClients = true;
         }
+        $onlyDirect = !empty($_GET['only_direct_clients']) || !empty($_GET['doceo_direct']);
         $audience = [
             'include_clients' => $includeClients,
             'include_partners' => $includePartners,
+            'only_direct_clients' => $onlyDirect,
+            'doceo_direct' => $onlyDirect,
             'product_id' => (int) ($_GET['product_id'] ?? 0) ?: null,
             'certifier_id' => (int) ($_GET['certifier_id'] ?? 0) ?: null,
         ];

@@ -72,3 +72,23 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
 
     <button class="btn btn-accent" type="submit" style="margin-top:1rem">Guardar cambios</button>
 </form>
+
+<div class="panel" style="margin-top:1.25rem;max-width:640px" data-tour="tutorial-reset">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Tutorial del portal</h2>
+    <p class="muted" style="margin-top:0;font-size:.85rem">
+        Las burbujas de ayuda se muestran la primera vez en cada sección. Puedes reiniciarlas aquí.
+    </p>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <form method="post" action="<?= e(url('/partner/tutorial/reiniciar')) ?>">
+            <?= csrf_field() ?>
+            <input type="hidden" name="scope" value="all">
+            <button class="btn btn-ghost btn-sm" type="submit">Reiniciar tutorial completo</button>
+        </form>
+        <form method="post" action="<?= e(url('/partner/tutorial/reiniciar')) ?>">
+            <?= csrf_field() ?>
+            <input type="hidden" name="scope" value="view">
+            <input type="hidden" name="view" value="perfil">
+            <button class="btn btn-ghost btn-sm" type="submit">Reiniciar tutorial de esta vista</button>
+        </form>
+    </div>
+</div>

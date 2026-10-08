@@ -10,6 +10,7 @@ use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\TrackingRepository;
 use App\Services\CatalogFilterService;
+use App\Services\PartnerDirectoryService;
 use App\Services\PartnerRegistrationService;
 use App\Services\PricingService;
 use App\Support\Pagination;
@@ -81,6 +82,13 @@ final class CatalogController
             }
         }
 
+        $distributors = [];
+        try {
+            $distributors = (new PartnerDirectoryService())->publicCards();
+        } catch (\Throwable $e) {
+            error_log('[Doceo] partner directory public: ' . $e->getMessage());
+        }
+
         view('catalog/home', [
             'title' => $section === 'cursos' ? 'Cursos' : 'Certificaciones',
             'stars' => $stars,
@@ -95,6 +103,7 @@ final class CatalogController
             'dbOk' => $dbOk,
             'user' => $user,
             'partner' => $partner,
+            'distributors' => $distributors,
         ]);
     }
 
