@@ -85,6 +85,14 @@ final class AdminController
             $partnerCreditTotal = 0.0;
         }
 
+        $inventoryStockRows = [];
+        try {
+            $inventoryStockRows = (new InventoryService())->opsBoardStockRows();
+        } catch (\Throwable $e) {
+            error_log('[Doceo] ops inventory stock: ' . $e->getMessage());
+            $inventoryStockRows = [];
+        }
+
         view('admin/ops', [
             'title' => 'Operaciones',
             'rows' => $rows,
@@ -94,6 +102,7 @@ final class AdminController
             'counts' => $counts,
             'pagination' => $pagination,
             'partnerCreditTotal' => $partnerCreditTotal,
+            'inventoryStockRows' => $inventoryStockRows,
             'layout' => 'admin',
         ]);
     }

@@ -76,6 +76,50 @@ final class InventoryService
     }
 
     /**
+     * Resumen de stock para el tablero de Operaciones (siempre visibles los disponibles).
+     *
+     * @return list<array{
+     *   id:int,name:string,code:string,available:int,assigned:int,total:int,
+     *   threshold:int,low:bool
+     * }>
+     */
+    public function opsBoardStockRows(): array
+    {
+        $products = $this->products->adminList(null, 500, 0);
+        $out = [];
+        foreach ($products as $p) {
+            $enabled = self::isEnabledForProduct($p);
+            $stock = $this->repo->stockCounts((int) $p['id']);
+            if (!$enabled && (int) ($stock['total'] ?? 0) < 1) {
+                continue;
+            }
+            $cfg = self::configForProduct($p);
+            $available = (int) ($stock['available'] ?? 0);
+            $threshold = (int) ($cfg['low_stock_threshold'] ?? 5);
+            $out[] = [
+                'id' => (int) ($p['id'] ?? 0),
+                'name' => (string) ($p['name'] ?? ''),
+                'code' => (string) ($p['code'] ?? ''),
+                'available' => $available,
+                'assigned' => (int) ($stock['assigned'] ?? 0),
+                'total' => (int) ($stock['total'] ?? 0),
+                'threshold' => $threshold,
+                'low' => $available <= $threshold,
+            ];
+        }
+        // Stock bajo primero; luego menos disponibles.
+        usort($out, static function (array $a, array $b): int {
+            if ($a['low'] !== $b['low']) {
+                return $a['low'] ? -1 : 1;
+            }
+
+            return $a['available'] <=> $b['available'] ?: strcmp($a['name'], $b['name']);
+        });
+
+        return $out;
+    }
+
+    /**
      * @param list<array{folio:string,clave?:string,extra?:string}> $rows
      * @return array{lot_id:int,imported:int,skipped:int,errors:list<string>}
      */
