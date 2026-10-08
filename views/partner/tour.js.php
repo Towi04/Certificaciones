@@ -1,11 +1,18 @@
+<?php
+/** Motor JS del tutorial partner (servido por PHP para evitar assets obsoletos). */
+$stepsJson = json_encode(
+    \App\Services\PartnerTutorialService::tourSteps(),
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+);
+?>
 /**
  * Tutorial ligero por vista del portal partner (burbujas ancladas a [data-tour]).
+ * Textos: PartnerTutorialService::tourSteps() (inyectados abajo).
  */
 (function (global) {
   'use strict';
 
-  // Fallback; el layout partner inyecta STEPS actualizados vía configure({ steps }).
-  var STEPS = {};
+  var STEPS = <?= $stepsJson ?> || {};
 
   var overlay, bubble, currentView, currentSteps, index, completeUrl, csrf;
 

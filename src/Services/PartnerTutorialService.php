@@ -125,6 +125,54 @@ final class PartnerTutorialService
         };
     }
 
+    /**
+     * Textos del tutorial (fuente de verdad en PHP para no depender solo del JS cacheado).
+     *
+     * @return array<string, list<array{sel:string,title:string,body:string}>>
+     */
+    public static function tourSteps(): array
+    {
+        return [
+            'dashboard' => [
+                ['sel' => '[data-tour="partner-nav"]', 'title' => 'Menú partner', 'body' => 'Desde aquí navegas alumnos, registro, avance, perfil y tu escuela.'],
+                ['sel' => '[data-tour="students-header"]', 'title' => 'Tu tablero', 'body' => 'Aquí ves el resumen de tu código, crédito y accesos rápidos.'],
+                ['sel' => '[data-tour="students-table"]', 'title' => 'Cartera de alumnos', 'body' => 'Abre cada caso para ver datos, códigos, correos y resultados.'],
+            ],
+            'alumnos' => [
+                ['sel' => '[data-tour="students-header"]', 'title' => 'Alumnos', 'body' => 'Tu cartera: matrícula, examen, folio/clave y últimos correos de accesos.'],
+                ['sel' => '[data-tour="register-cta"]', 'title' => 'Registrar', 'body' => 'Usa este botón para inscribir un alumno con el flujo completo.'],
+                ['sel' => '[data-tour="students-table"]', 'title' => 'Abrir ficha', 'body' => 'Haz clic en «Abrir» para ver el detalle del caso.'],
+            ],
+            'caso' => [
+                ['sel' => '[data-tour="case-registration"]', 'title' => 'Datos del alumno', 'body' => 'Siempre visibles. Solo se editan antes de asignar folio y clave.'],
+                ['sel' => '[data-tour="case-codes"]', 'title' => 'Códigos de acceso', 'body' => 'Cuando DOCEO asigne folio/clave (y extra), aparecerán aquí.'],
+                ['sel' => '[data-tour="case-mails"]', 'title' => 'Correos al alumno', 'body' => 'Historial de correos del caso.'],
+                ['sel' => '[data-tour="case-results"]', 'title' => 'Resultados', 'body' => 'Nivel, puntaje, certificado y PDF cuando existan.'],
+            ],
+            'registrar' => [
+                ['sel' => '[data-tour="register-header"]', 'title' => 'Registrar alumno', 'body' => 'Elige un producto del catálogo partner y completa el mismo flujo de compra.'],
+                ['sel' => '[data-tour="partner-nav"]', 'title' => 'Menú', 'body' => 'También puedes volver a alumnos o ir a registro de grupo desde el menú lateral.'],
+            ],
+            'registrar-grupo' => [
+                ['sel' => '[data-tour="bulk-header"]', 'title' => 'Registro de grupo', 'body' => 'Un producto, una fecha, CSV de alumnos y un solo comprobante.'],
+                ['sel' => '[data-tour="bulk-form"], [data-tour="bulk-proof"]', 'title' => 'Pasos del lote', 'body' => 'Primero revisas el CSV; luego subes el comprobante por el monto partner × N.'],
+            ],
+            'avance' => [
+                ['sel' => '[data-tour="progress-stats"]', 'title' => 'Tu avance', 'body' => 'Ventas del mes/convenio y crédito.'],
+                ['sel' => '[data-tour="tier-progress"]', 'title' => 'Niveles', 'body' => 'Barra y metas Bronze / Silver / Gold de tu convenio.'],
+            ],
+            'perfil' => [
+                ['sel' => '[data-tour="profile-readonly"]', 'title' => 'Nivel y crédito', 'body' => 'Estos datos son de solo lectura.'],
+                ['sel' => '[data-tour="profile-form"]', 'title' => 'Editar perfil', 'body' => 'Actualiza nombre comercial, contacto, código de descuento y contraseña.'],
+                ['sel' => '[data-tour="tutorial-reset"]', 'title' => 'Reiniciar tutorial', 'body' => 'Desde aquí puedes volver a ver las burbujas de ayuda.'],
+            ],
+            'mi-escuela' => [
+                ['sel' => '[data-tour="school-header"]', 'title' => 'Directorio', 'body' => 'Publica tu escuela como distribuidor autorizado (con aprobación de DOCEO).'],
+                ['sel' => '[data-tour="school-form"]', 'title' => 'Borrador', 'body' => 'Guarda y envía a revisión. Los cambios nuevos no se publican hasta aprobarse.'],
+            ],
+        ];
+    }
+
     private function normalizeView(string $view): string
     {
         $view = trim($view);
