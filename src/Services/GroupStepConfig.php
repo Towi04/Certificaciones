@@ -268,11 +268,13 @@ final class GroupStepConfig
         $explicit = is_array($config['step_defs'] ?? null) ? $config['step_defs'] : [];
         if ($explicit !== []) {
             $ordered = [];
-            foreach ($explicit as $code => $row) {
-                if (!is_array($row)) {
+            // Ojo: no reutilizar $row (es el tracking del tablero); si se pisa,
+            // purchase_status se pierde y Operación oculta «Confirmar pago».
+            foreach ($explicit as $code => $defRow) {
+                if (!is_array($defRow)) {
                     continue;
                 }
-                $code = self::normalizeCode(is_string($code) ? $code : (string) ($row['code'] ?? ''));
+                $code = self::normalizeCode(is_string($code) ? $code : (string) ($defRow['code'] ?? ''));
                 if ($code === '' || !isset($defs[$code])) {
                     continue;
                 }
