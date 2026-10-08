@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS partners (
   publish_note VARCHAR(500) NULL,
   published_json JSON NULL,
   pending_json JSON NULL,
+  tutorial_json JSON NULL,
   credit_balance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
   notes TEXT NULL,
   agreement_starts_at DATE NULL,

@@ -17,6 +17,7 @@ use App\Services\PartnerBulkRegistrationService;
 use App\Services\PartnerDirectoryService;
 use App\Services\PartnerProfileService;
 use App\Services\PartnerRegistrationService;
+use App\Services\PartnerTutorialService;
 use App\Services\PartnerTierService;
 use App\Services\PricingService;
 use App\Services\ResultsDeliveryService;
@@ -98,6 +99,54 @@ final class PartnerController
                 'password_confirmation' => (string) ($_POST['password_confirmation'] ?? ''),
             ]);
             flash('success', 'Perfil actualizado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/partner/perfil');
+    }
+
+    public function tutorialComplete(): void
+    {
+        Auth::requireRole(['partner']);
+        csrf_verify();
+        $partner = $this->requirePartner();
+        $view = (string) ($_POST['view'] ?? '');
+        try {
+            $state = (new PartnerTutorialService())->markViewComplete((int) $partner['id'], $view);
+            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['ok' => true, 'state' => $state], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            flash('success', 'Tutorial de esta vista marcado como visto.');
+        } catch (\Throwable $e) {
+            if (!empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+                header('Content-Type: application/json; charset=utf-8');
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            flash('error', $e->getMessage());
+        }
+        redirect('/partner/perfil');
+    }
+
+    public function tutorialReset(): void
+    {
+        Auth::requireRole(['partner']);
+        csrf_verify();
+        $partner = $this->requirePartner();
+        $scope = (string) ($_POST['scope'] ?? 'all');
+        $view = (string) ($_POST['view'] ?? '');
+        try {
+            $svc = new PartnerTutorialService();
+            if ($scope === 'view' && $view !== '') {
+                $svc->resetView((int) $partner['id'], $view);
+                flash('success', 'Tutorial de esta vista reiniciado. Recarga la vista para verlo.');
+            } else {
+                $svc->resetAll((int) $partner['id']);
+                flash('success', 'Tutorial completo reiniciado. Al visitar cada sección se mostrará de nuevo.');
+            }
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
