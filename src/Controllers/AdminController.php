@@ -1841,7 +1841,7 @@ final class AdminController
             'title' => 'Directorio partners',
             'pending' => $svc->pendingQueue(),
             'publicEnabled' => $svc->isPublicEnabled(),
-            'publicCards' => $svc->publicCards(),
+            'approvedCount' => count($svc->publicCards(true)),
             'layout' => 'admin',
         ]);
     }

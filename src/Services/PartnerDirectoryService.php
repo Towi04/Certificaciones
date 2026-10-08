@@ -280,13 +280,13 @@ final class PartnerDirectoryService
     }
 
     /**
-     * Cards públicas: solo si el switch global está on y hay al menos un approved.
+     * Cards públicas: solo si el switch global está on (salvo $ignoreSwitch) y hay approved.
      *
      * @return list<array<string, mixed>>
      */
-    public function publicCards(): array
+    public function publicCards(bool $ignoreSwitch = false): array
     {
-        if (!$this->isPublicEnabled()) {
+        if (!$ignoreSwitch && !$this->isPublicEnabled()) {
             return [];
         }
         $this->ensureSchema();
@@ -294,13 +294,18 @@ final class PartnerDirectoryService
             "SELECT p.id, p.code, p.display_name, p.published_json, p.directory_logo_path,
                     p.directory_phone, p.directory_address, p.directory_maps_url, p.directory_description
              FROM partners p
-             WHERE p.is_active = 1 AND p.publish_status = 'approved'
+             WHERE p.is_active = 1
                AND p.published_json IS NOT NULL
+               AND (
+                    p.publish_status = 'approved'
+                    OR p.publish_status = 'pending'
+               )
              ORDER BY p.display_name ASC, p.id ASC"
         );
         $rows = $stmt ? ($stmt->fetchAll() ?: []) : [];
         $out = [];
         foreach ($rows as $row) {
+            // Con cambios pendientes sigue visible la versión publicada (published_json).
             $pub = $this->decodeJson($row['published_json'] ?? null);
             if ($pub === []) {
                 continue;

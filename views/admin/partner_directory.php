@@ -1,7 +1,8 @@
 <?php
 /** @var list<array<string,mixed>> $pending */
-/** @var list<array<string,mixed>> $publicCards */
+/** @var int $approvedCount */
 /** @var bool $publicEnabled */
+$approvedCount = (int) ($approvedCount ?? 0);
 ?>
 <p class="meta"><a href="<?= e(url('/admin/partners')) ?>">← Partners</a></p>
 <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center">
@@ -21,7 +22,7 @@
                 <strong>Mostrar sección «Distribuidores autorizados» en el catálogo</strong>
                 <span class="muted" style="display:block;font-size:.8rem;margin-top:.2rem">
                     Estado actual: <?= $publicEnabled ? 'activado' : 'apagado' ?>
-                    · perfiles aprobados visibles: <?= count($publicCards) ?>
+                    · perfiles con versión publicada: <?= $approvedCount ?>
                 </span>
             </span>
         </label>
