@@ -1833,6 +1833,68 @@ final class AdminController
         ]);
     }
 
+    public function partnerDirectory(): void
+    {
+        Auth::requireRole(['admin']);
+        $svc = new \App\Services\PartnerDirectoryService();
+        view('admin/partner_directory', [
+            'title' => 'Directorio partners',
+            'pending' => $svc->pendingQueue(),
+            'publicEnabled' => $svc->isPublicEnabled(),
+            'approvedCount' => count($svc->publicCards(true)),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function partnerDirectoryVisibility(): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $svc = new \App\Services\PartnerDirectoryService();
+        $svc->setPublicEnabled(!empty($_POST['enabled']));
+        flash(
+            'success',
+            $svc->isPublicEnabled()
+                ? 'Sección «Distribuidores autorizados» activada en el catálogo.'
+                : 'Sección «Distribuidores autorizados» oculta en el catálogo.'
+        );
+        redirect('/admin/partners/directorio');
+    }
+
+    public function partnerDirectoryApprove(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            (new \App\Services\PartnerDirectoryService())->approve(
+                (int) $id,
+                (int) Auth::id(),
+                trim((string) ($_POST['note'] ?? '')) ?: null
+            );
+            flash('success', 'Perfil aprobado y publicado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/partners/directorio');
+    }
+
+    public function partnerDirectoryReject(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            (new \App\Services\PartnerDirectoryService())->reject(
+                (int) $id,
+                (int) Auth::id(),
+                (string) ($_POST['note'] ?? '')
+            );
+            flash('success', 'Perfil rechazado.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/partners/directorio');
+    }
+
     public function partnerBatches(): void
     {
         Auth::requireRole(['admin']);
