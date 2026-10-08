@@ -87,6 +87,7 @@ final class CheckoutController
                 : 0,
             'isPartnerCheckout' => $isPartnerCheckout,
             'partner' => $partner,
+            'layout' => $isPartnerCheckout ? 'partner' : 'main',
         ]);
     }
 
@@ -428,6 +429,7 @@ final class CheckoutController
             }
         }
 
+        $isPartnerUser = ($user['role'] ?? '') === 'partner';
         view('checkout/success', [
             'title' => 'Caso ' . $purchase['matricula'],
             'purchase' => $purchase,
@@ -436,6 +438,7 @@ final class CheckoutController
             'depositCard' => $this->depositCardNumber(),
             'openpayPdf' => $openpayPdf,
             'user' => $user,
+            'layout' => $isPartnerUser ? 'partner' : 'main',
         ]);
     }
 

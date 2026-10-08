@@ -117,7 +117,7 @@ final class PartnerTutorialService
             str_starts_with($path, '/partner/alumnos') => 'alumnos',
             str_starts_with($path, '/partner/caso/') => 'caso',
             str_starts_with($path, '/partner/registrar-grupo') => 'registrar-grupo',
-            str_starts_with($path, '/partner/registrar') => 'registrar',
+            str_starts_with($path, '/partner/registrar') || str_starts_with($path, '/adquirir/') => 'registrar',
             str_starts_with($path, '/partner/avance') => 'avance',
             str_starts_with($path, '/partner/perfil') => 'perfil',
             str_starts_with($path, '/partner/mi-escuela') => 'mi-escuela',

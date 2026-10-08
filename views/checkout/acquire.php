@@ -59,8 +59,16 @@ $stepLabels = [
 ];
 ?>
 <div class="checkout-page">
-    <p class="meta" style="margin-bottom:.5rem"><a href="<?= e(url('/producto/' . $product['slug'])) ?>">← <?= e($product['name']) ?></a></p>
-    <h1 style="margin:.2rem 0 .75rem;color:var(--doceo-blue)">Adquirir <?= e($product['name']) ?></h1>
+    <?php if ($isPartnerCheckout): ?>
+        <p class="meta" style="margin-bottom:.5rem">
+            <a href="<?= e(url('/partner/registrar')) ?>">← Registrar alumno</a>
+            · <?= e($product['name']) ?>
+        </p>
+        <h1 style="margin:.2rem 0 .75rem;color:var(--doceo-blue)">Registrar alumno · <?= e($product['name']) ?></h1>
+    <?php else: ?>
+        <p class="meta" style="margin-bottom:.5rem"><a href="<?= e(url('/producto/' . $product['slug'])) ?>">← <?= e($product['name']) ?></a></p>
+        <h1 style="margin:.2rem 0 .75rem;color:var(--doceo-blue)">Adquirir <?= e($product['name']) ?></h1>
+    <?php endif; ?>
 
     <div class="checkout-layout">
         <div class="checkout-main">
