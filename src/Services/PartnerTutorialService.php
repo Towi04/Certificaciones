@@ -140,12 +140,12 @@ final class PartnerTutorialService
             'dashboard' => [
                 ['sel' => '[data-tour="partner-nav"]', 'title' => 'Menú partner', 'body' => 'Desde aquí navegas alumnos, registro, calendario, crédito, avance, perfil y tu escuela.'],
                 ['sel' => '[data-tour="students-header"]', 'title' => 'Tu tablero', 'body' => 'Aquí ves el resumen de tu código, crédito y accesos rápidos.'],
-                ['sel' => '[data-tour="students-payments"]', 'title' => 'Pagos', 'body' => 'Resumen de pagos: por pagar, en revisión y pagados. Haz clic para filtrar.'],
+                ['sel' => '[data-tour="students-payments"]', 'title' => 'Resumen', 'body' => 'Tu crédito, casos en revisión y compras pagadas. Haz clic en revisión o pagados para filtrar.'],
                 ['sel' => '[data-tour="students-table"]', 'title' => 'Cartera de alumnos', 'body' => 'Abre cada caso para ver datos, códigos, correos y resultados.'],
             ],
             'alumnos' => [
                 ['sel' => '[data-tour="students-header"]', 'title' => 'Alumnos', 'body' => 'Tu cartera: matrícula, examen, folio/clave y últimos correos de accesos.'],
-                ['sel' => '[data-tour="students-payments"]', 'title' => 'Estado de pagos', 'body' => 'Resumen de pagos: por pagar, en revisión y pagados; haz clic para filtrar.'],
+                ['sel' => '[data-tour="students-payments"]', 'title' => 'Crédito y pagos', 'body' => 'Saldo a favor, cuántos están en revisión y cuántos ya están pagados. Sin montos totales de compra.'],
                 ['sel' => '[data-tour="register-cta"]', 'title' => 'Registrar', 'body' => 'Usa este botón para inscribir un alumno con el flujo completo.'],
                 ['sel' => '[data-tour="students-export"]', 'title' => 'Exportar CSV', 'body' => 'Exporta tu cartera filtrada a CSV para control escolar.'],
                 ['sel' => '[data-tour="students-table"]', 'title' => 'Abrir ficha', 'body' => 'Haz clic en «Abrir» para ver el detalle del caso.'],
