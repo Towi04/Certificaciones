@@ -192,8 +192,17 @@ final class PartnerController
                 throw new \InvalidArgumentException('Producto no encontrado.');
             }
             $unit = (new PricingService())->partnerPriceForProduct($product, (string) $partner['tier']);
-            if ($examDate !== '' && $examTime !== '') {
+            if (
+                $examDate !== ''
+                && $examTime !== ''
+                && ExamScheduleService::needsExamAtCheckout($product)
+            ) {
                 (new ExamScheduleService())->validateSelection($product, $examDate, $examTime);
+            } elseif (
+                in_array((string) ($product['type'] ?? ''), ['certification', 'procedure'], true)
+                && ($examDate === '' || $examTime === '')
+            ) {
+                throw new \InvalidArgumentException('Indica fecha y hora de examen.');
             }
             // Guardar CSV temporal para el submit final.
             $tmpDir = BASE_PATH . '/storage/tmp/partner_bulk';

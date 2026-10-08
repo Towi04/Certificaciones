@@ -277,11 +277,13 @@ final class PartnerBulkRegistrationService
 
         $needsExam = in_array((string) $product['type'], ['certification', 'procedure'], true);
         if ($needsExam) {
-            (new ExamScheduleService())->validateSelection($product, $examDate, $examTime);
-            $examDate = ExamScheduleService::normalizeDateStatic($examDate) ?? trim($examDate);
+            $examDate = ExamScheduleService::normalizeDateStatic($examDate) ?? '';
             $examTime = self::normalizeTime($examTime);
             if ($examDate === '' || $examTime === '') {
                 throw new \InvalidArgumentException('Indica fecha y hora de examen válidas.');
+            }
+            if (ExamScheduleService::needsExamAtCheckout($product)) {
+                (new ExamScheduleService())->validateSelection($product, $examDate, $examTime);
             }
         } else {
             $examDate = '';
