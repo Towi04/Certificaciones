@@ -19,6 +19,7 @@ final class PartnerTutorialService
         'registrar',
         'registrar-grupo',
         'calendario',
+        'notificaciones',
         'credito',
         'avance',
         'perfil',
@@ -121,6 +122,7 @@ final class PartnerTutorialService
             str_starts_with($path, '/partner/registrar-grupo') => 'registrar-grupo',
             str_starts_with($path, '/partner/registrar') || str_starts_with($path, '/adquirir/') => 'registrar',
             str_starts_with($path, '/partner/calendario') => 'calendario',
+            str_starts_with($path, '/partner/notificaciones') => 'notificaciones',
             str_starts_with($path, '/partner/credito') => 'credito',
             str_starts_with($path, '/partner/avance') => 'avance',
             str_starts_with($path, '/partner/perfil') => 'perfil',
@@ -138,7 +140,7 @@ final class PartnerTutorialService
     {
         return [
             'dashboard' => [
-                ['sel' => '[data-tour="partner-nav"]', 'title' => 'Menú partner', 'body' => 'Desde aquí navegas alumnos, registro, calendario, crédito, avance, perfil y tu escuela.'],
+                ['sel' => '[data-tour="partner-nav"]', 'title' => 'Menú partner', 'body' => 'Desde aquí navegas alumnos, registro, calendario, notificaciones, crédito, avance, perfil y tu escuela.'],
                 ['sel' => '[data-tour="students-header"]', 'title' => 'Tu tablero', 'body' => 'Aquí ves el resumen de tu código, crédito y accesos rápidos.'],
                 ['sel' => '[data-tour="students-payments"]', 'title' => 'Resumen', 'body' => 'Tu crédito, casos en revisión y compras pagadas. Haz clic en revisión o pagados para filtrar.'],
                 ['sel' => '[data-tour="students-table"]', 'title' => 'Cartera de alumnos', 'body' => 'Abre cada caso para ver datos, códigos, correos y resultados.'],
@@ -168,6 +170,11 @@ final class PartnerTutorialService
                 ['sel' => '[data-tour="calendar-header"]', 'title' => 'Calendario', 'body' => 'Aquí ves los exámenes próximos de tus alumnos.'],
                 ['sel' => '[data-tour="calendar-range"]', 'title' => 'Rango', 'body' => 'Cambia entre los próximos 30 o 60 días.'],
                 ['sel' => '[data-tour="calendar-list"]', 'title' => 'Lista por fecha', 'body' => 'Agrupados por día. Abre el caso para ver detalle o códigos.'],
+            ],
+            'notificaciones' => [
+                ['sel' => '[data-tour="notifications-header"]', 'title' => 'Centro de notificaciones', 'body' => 'Aquí ves cuando se enviaron accesos a tus alumnos y cuando hay resultados listos.'],
+                ['sel' => '[data-tour="notifications-filters"]', 'title' => 'Filtros', 'body' => 'Filtra por accesos o por resultados.'],
+                ['sel' => '[data-tour="notifications-list"]', 'title' => 'Lista', 'body' => 'Las nuevas se resaltan. Abre el caso para ver códigos o resultados. El aviso del menú se limpia al entrar.'],
             ],
             'credito' => [
                 ['sel' => '[data-tour="credit-header"]', 'title' => 'Tu crédito', 'body' => 'Consulta el saldo a favor generado por ventas con tu código.'],
