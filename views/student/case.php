@@ -172,6 +172,9 @@ $usesInventoryAccess = !empty($usesInventoryAccess);
         <li>Clave del día: <strong style="font-family:ui-monospace,monospace"><?= e((string) $tracking['access_key']) ?></strong></li>
     </ul>
     <p class="muted" style="font-size:.85rem;margin:0">Presenta el examen en la fecha y hora programadas arriba.</p>
+    <p style="margin:.65rem 0 0;padding:.55rem .7rem;background:#fff8e6;border:1px solid #f0d78c;border-radius:8px;font-size:.85rem;color:#9a3412;font-weight:600">
+        No compartas tu folio ni tu clave con nadie. Son personales e intransferibles.
+    </p>
 </div>
 <?php elseif ($hasExamAccessCodes && $usesInventoryAccess): ?>
 <div class="panel" style="margin-top:1rem;border:2px solid var(--doceo-yellow)">
@@ -181,6 +184,9 @@ $usesInventoryAccess = !empty($usesInventoryAccess);
         <li>Clave: <strong style="font-family:ui-monospace,monospace"><?= e((string) $tracking['access_key']) ?></strong></li>
     </ul>
     <p class="muted" style="font-size:.85rem;margin:0">Usa estos datos en la fecha y hora programadas. Te llegarán también por correo cuando corresponda.</p>
+    <p style="margin:.65rem 0 0;padding:.55rem .7rem;background:#fff8e6;border:1px solid #f0d78c;border-radius:8px;font-size:.85rem;color:#9a3412;font-weight:600">
+        No compartas tu folio ni tu clave con nadie. Son personales e intransferibles.
+    </p>
 </div>
 <?php elseif ($isEletCase && (string) ($tracking['purchase_status'] ?? '') === 'paid'): ?>
 <div class="panel" style="margin-top:1rem;background:#f4f7fb">
