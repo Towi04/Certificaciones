@@ -165,12 +165,9 @@ final class ComboAdminService
         }
 
         // $fromCsv mantiene la misma firma que ProductAdminService (import CSV).
-        return [
+        $prices = [
             'public_price' => $publicPrice,
             'catalog_price' => $catalogPrice,
-            'price_cncm' => array_key_exists('price_cncm', $input)
-                ? $this->nullableMoney($input['price_cncm'])
-                : $this->nullableMoney($existing['price_cncm'] ?? null),
             'price_partner_a' => array_key_exists('price_partner_a', $input)
                 ? $this->nullableMoney($input['price_partner_a'])
                 : $this->nullableMoney($existing['price_partner_a'] ?? null),
@@ -181,6 +178,13 @@ final class ComboAdminService
                 ? $this->nullableMoney($input['price_partner_c'])
                 : $this->nullableMoney($existing['price_partner_c'] ?? null),
         ];
+        foreach (array_keys(PartnerAdminService::specialPriceFieldLabels()) as $specialCol) {
+            $prices[$specialCol] = array_key_exists($specialCol, $input)
+                ? $this->nullableMoney($input[$specialCol])
+                : $this->nullableMoney($existing[$specialCol] ?? null);
+        }
+
+        return $prices;
     }
 
     /**
@@ -374,7 +378,7 @@ final class ComboAdminService
             $catalog = round(max(0, (float) $catalogRaw), 2);
         }
 
-        return [
+        $data = [
             'name' => $name,
             'code' => $code,
             'slug' => $slug,
@@ -383,11 +387,15 @@ final class ComboAdminService
             'is_star' => !empty($input['is_star']) ? 1 : 0,
             'public_price' => $public,
             'catalog_price' => $catalog,
-            'price_cncm' => $this->nullableMoney($input['price_cncm'] ?? null),
             'price_partner_a' => $this->nullableMoney($input['price_partner_a'] ?? null),
             'price_partner_b' => $this->nullableMoney($input['price_partner_b'] ?? null),
             'price_partner_c' => $this->nullableMoney($input['price_partner_c'] ?? null),
         ];
+        foreach (array_keys(PartnerAdminService::specialPriceFieldLabels()) as $specialCol) {
+            $data[$specialCol] = $this->nullableMoney($input[$specialCol] ?? null);
+        }
+
+        return $data;
     }
 
     private function nullableMoney(mixed $value): ?float

@@ -212,13 +212,7 @@ final class PricingService
 
     public function partnerPriceForProduct(array $product, string $tier): float
     {
-        $map = [
-            'cncm' => 'price_cncm',
-            'a' => 'price_partner_a',
-            'b' => 'price_partner_b',
-            'c' => 'price_partner_c',
-        ];
-        $col = $map[$tier] ?? 'price_partner_c';
+        $col = PartnerAdminService::priceColumnForTier($tier);
         $val = $product[$col] ?? null;
         if ($val !== null && $val !== '') {
             return round((float) $val, 2);

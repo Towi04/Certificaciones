@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS partners (
   user_id BIGINT UNSIGNED NOT NULL,
   code VARCHAR(40) NOT NULL,
   display_name VARCHAR(190) NOT NULL,
-  tier ENUM('cncm','a','b','c') NOT NULL DEFAULT 'c',
+  -- a/b/c = escala; cncm u otros códigos de partner_special_tiers = convenio especial.
+  tier VARCHAR(40) NOT NULL DEFAULT 'c',
   -- 1 = escala Bronze/Silver/Gold; 0 = convenio especial (p. ej. CNCM) sin ranking.
   tier_program TINYINT(1) NOT NULL DEFAULT 1,
   logo_path VARCHAR(255) NULL,
@@ -54,6 +55,19 @@ CREATE TABLE IF NOT EXISTS partners (
   UNIQUE KEY uq_partners_code (code),
   UNIQUE KEY uq_partners_user (user_id),
   CONSTRAINT fk_partners_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS partner_special_tiers (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(40) NOT NULL,
+  label VARCHAR(120) NOT NULL,
+  price_column VARCHAR(64) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  sort_order INT NOT NULL DEFAULT 100,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_partner_special_tiers_code (code),
+  UNIQUE KEY uq_partner_special_tiers_col (price_column)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS students (

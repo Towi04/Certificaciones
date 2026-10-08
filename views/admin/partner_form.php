@@ -54,22 +54,39 @@ $action = $isEdit
     </div>
     <?php
     $tierVal = (string) (($partner['tier'] ?? null) ?: 'c');
-    $inProgramDefault = $tierVal !== 'cncm';
+    $isSpecialTier = \App\Services\PartnerAdminService::isSpecialTier($tierVal) || $tierVal === 'cncm';
+    $inProgramDefault = !$isSpecialTier;
     $partnerRow = is_array($partner ?? null) ? $partner : [];
     $inProgram = array_key_exists('tier_program', $partnerRow)
         ? !empty($partnerRow['tier_program'])
         : $inProgramDefault;
+    $specialCodes = array_keys(\App\Services\PartnerSpecialTierService::activeLabels());
     ?>
     <label class="muted" style="display:flex;gap:.45rem;align-items:flex-start;font-size:.88rem;font-weight:600;margin-top:.85rem">
-        <input type="checkbox" name="tier_program" value="1" style="margin-top:.2rem"
+        <input type="checkbox" name="tier_program" id="partner-tier-program" value="1" style="margin-top:.2rem"
             <?= $inProgram ? 'checked' : '' ?>>
         <span>
             Participa en el programa de niveles (Bronze / Silver / Gold)
             <span class="muted" style="display:block;font-size:.78rem;font-weight:500;margin-top:.2rem">
-                Desmárcalo para convenios únicos (p. ej. CNCM): no ven el ranking ni se reevalúan por ventas.
+                Desmárcalo para convenios especiales (CNCM u otros): no ven el ranking ni se reevalúan por ventas.
             </span>
         </span>
     </label>
+    <script>
+    (function () {
+      var sel = document.querySelector('select[name="tier"]');
+      var box = document.getElementById('partner-tier-program');
+      var specials = <?= json_encode(array_values($specialCodes), JSON_UNESCAPED_UNICODE) ?: '[]' ?>;
+      if (!sel || !box) return;
+      function sync() {
+        var v = String(sel.value || '').toLowerCase();
+        if (specials.indexOf(v) !== -1) {
+          box.checked = false;
+        }
+      }
+      sel.addEventListener('change', sync);
+    })();
+    </script>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem;margin-top:.75rem">
         <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
             Convenio · inicio (opcional)

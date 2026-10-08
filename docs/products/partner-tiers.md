@@ -9,8 +9,15 @@
 
 ## Dónde configurar
 - Admin → Partners → **Niveles / metas** (`/admin/partners/niveles`)
+- En la misma pantalla: **Convenios especiales** (crear CNCM-like con precio propio)
 - Ficha del partner: checkbox de programa + fechas de convenio propias (opcionales)
 - Correos → plantilla `partner_low_sales_warning`
+
+## Convenios especiales (tipo CNCM)
+- Se crean con código + nombre; el sistema agrega columna `price_special_{codigo}`
+  (CNCM conserva `price_cncm`).
+- Aparecen en: ficha partner, precios masivos, producto, combo y CSV.
+- No participan en la escala Bronze/Silver/Gold ni ven el ranking en el portal.
 
 ## Cron
 `php bin/process-scheduled-mails.php` también:

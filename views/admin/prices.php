@@ -8,16 +8,11 @@ $priceFields = [
     'cost_price' => 'Costo',
     'catalog_price' => 'Lista',
     'public_price' => 'Público',
-    'price_cncm' => 'CNCM',
-] + \App\Services\PartnerAdminService::priceFieldLabels();
-$sellFields = [
-    'catalog_price',
-    'public_price',
-    'price_cncm',
-    'price_partner_a',
-    'price_partner_b',
-    'price_partner_c',
-];
+] + \App\Services\PartnerAdminService::allPartnerPriceFieldLabels();
+$sellFields = array_merge(
+    ['catalog_price', 'public_price'],
+    array_keys(\App\Services\PartnerAdminService::allPartnerPriceFieldLabels())
+);
 $partnerCsvHeaders = implode(',', \App\Services\PartnerAdminService::priceCsvHeaders());
 ?>
 <div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap">

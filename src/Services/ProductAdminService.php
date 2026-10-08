@@ -538,7 +538,6 @@ final class ProductAdminService
                 'cost_price',
                 'catalog_price',
                 'public_price',
-                'price_cncm',
             ],
             PartnerAdminService::priceCsvHeaders()
         );
@@ -593,10 +592,7 @@ final class ProductAdminService
                     continue;
                 }
                 // Montos con punto decimal (el ; es el separador de columnas).
-                if (in_array($dbKey, [
-                    'cost_price', 'catalog_price', 'public_price', 'price_cncm',
-                    'price_partner_a', 'price_partner_b', 'price_partner_c',
-                ], true) && is_numeric($val)) {
+                if (in_array($dbKey, PartnerAdminService::allMoneyPriceColumns(), true) && is_numeric($val)) {
                     $row[] = number_format((float) $val, 2, '.', '');
                     continue;
                 }
@@ -669,7 +665,13 @@ final class ProductAdminService
 
             $rawCode = Csv::cellToUtf8((string) ($data[$map['code']] ?? ''));
             $fields = [];
-            foreach (['cost_price', 'catalog_price', 'public_price', 'price_cncm'] as $col) {
+            foreach (['cost_price', 'catalog_price', 'public_price'] as $col) {
+                if (!isset($map[$col])) {
+                    continue;
+                }
+                $fields[$col] = Csv::cellToUtf8((string) ($data[$map[$col]] ?? ''));
+            }
+            foreach (array_keys(PartnerAdminService::specialPriceFieldLabels()) as $col) {
                 if (!isset($map[$col])) {
                     continue;
                 }
@@ -871,7 +873,6 @@ final class ProductAdminService
                 'public_price' => $get('public_price', $existing['public_price'] ?? 0),
                 'catalog_price' => $get('catalog_price', $existing['catalog_price'] ?? ''),
                 'cost_price' => $get('cost_price', $existing['cost_price'] ?? 0),
-                'price_cncm' => $get('price_cncm', $existing['price_cncm'] ?? ''),
                 'price_partner_a' => PartnerAdminService::csvPartnerPriceValue(
                     $map,
                     $data,
@@ -901,6 +902,9 @@ final class ProductAdminService
                 'access_months' => $existing['access_months'] ?? 6,
                 'sort_order' => $existing['sort_order'] ?? 100,
             ];
+            foreach (array_keys(PartnerAdminService::specialPriceFieldLabels()) as $specialCol) {
+                $input[$specialCol] = $get($specialCol, $existing[$specialCol] ?? '');
+            }
 
             $rowSupplierResolved = false;
             if (isset($map['supplier_code'])) {
@@ -1067,7 +1071,6 @@ final class ProductAdminService
                 'public_price',
                 'catalog_price',
                 'cost_price',
-                'price_cncm',
             ],
             PartnerAdminService::priceCsvHeaders(),
             [
@@ -1151,29 +1154,30 @@ final class ProductAdminService
 
                 return number_format((float) $v, 2, '.', '');
             };
-            csv_put($out, [
-                (string) ($p['code'] ?? ''),
-                (string) ($p['name'] ?? ''),
-                (string) ($p['type'] ?? 'certification'),
-                (string) ($p['category'] ?? 'other'),
-                (string) ($p['audience'] ?? 'any'),
-                $money($p['public_price'] ?? ''),
-                $money($p['catalog_price'] ?? ''),
-                $money($p['cost_price'] ?? ''),
-                $money($p['price_cncm'] ?? ''),
-                $money($p['price_partner_a'] ?? ''),
-                $money($p['price_partner_b'] ?? ''),
-                $money($p['price_partner_c'] ?? ''),
-                (string) ($p['product_group_code'] ?? ''),
-                (string) ($p['supplier_code'] ?? ''),
-                (string) ($p['certifier_code'] ?? ''),
-                $cenniTypes,
-                (string) ($p['short_description'] ?? ''),
-                (string) ($p['description'] ?? ''),
-                (string) ($p['benefits_html'] ?? ''),
-                !empty($p['is_public']) ? '1' : '0',
-                !empty($p['is_star']) ? '1' : '0',
-            ], $delimiter);
+            $row = [];
+            foreach ($headers as $h) {
+                $dbKey = PartnerAdminService::resolvePriceDbColumn($h) ?? $h;
+                $row[] = match ($h) {
+                    'code' => (string) ($p['code'] ?? ''),
+                    'name' => (string) ($p['name'] ?? ''),
+                    'type' => (string) ($p['type'] ?? 'certification'),
+                    'category' => (string) ($p['category'] ?? 'other'),
+                    'audience' => (string) ($p['audience'] ?? 'any'),
+                    'product_group_code' => (string) ($p['product_group_code'] ?? ''),
+                    'supplier_code' => (string) ($p['supplier_code'] ?? ''),
+                    'certifier_code' => (string) ($p['certifier_code'] ?? ''),
+                    'cenni_types' => $cenniTypes,
+                    'short_description' => (string) ($p['short_description'] ?? ''),
+                    'description' => (string) ($p['description'] ?? ''),
+                    'benefits_html' => (string) ($p['benefits_html'] ?? ''),
+                    'is_public' => !empty($p['is_public']) ? '1' : '0',
+                    'is_star' => !empty($p['is_star']) ? '1' : '0',
+                    default => in_array($dbKey, PartnerAdminService::allMoneyPriceColumns(), true)
+                        ? $money($p[$dbKey] ?? '')
+                        : (string) ($p[$dbKey] ?? ''),
+                };
+            }
+            csv_put($out, $row, $delimiter);
         }
         fclose($out);
         exit;
@@ -1534,7 +1538,7 @@ final class ProductAdminService
 
         $costParsed = Csv::parseMoney($input['cost_price'] ?? ($existing['cost_price'] ?? 0));
 
-        return [
+        $data = [
             'code' => $code,
             'name' => $name,
             'slug' => $slug,
@@ -1552,7 +1556,6 @@ final class ProductAdminService
             'public_price' => $publicPrice,
             'catalog_price' => $catalogPrice,
             'cost_price' => $costParsed ?? 0.0,
-            'price_cncm' => $this->nullableMoney($input['price_cncm'] ?? ($existing['price_cncm'] ?? null)),
             'price_partner_a' => $this->nullableMoney($input['price_partner_a'] ?? ($existing['price_partner_a'] ?? null)),
             'price_partner_b' => $this->nullableMoney($input['price_partner_b'] ?? ($existing['price_partner_b'] ?? null)),
             'price_partner_c' => $this->nullableMoney($input['price_partner_c'] ?? ($existing['price_partner_c'] ?? null)),
@@ -1564,6 +1567,11 @@ final class ProductAdminService
             'sort_order' => (int) ($input['sort_order'] ?? ($existing['sort_order'] ?? 100)),
             'config_json' => $this->buildProductConfigJson($input, $existing),
         ];
+        foreach (array_keys(PartnerAdminService::specialPriceFieldLabels()) as $specialCol) {
+            $data[$specialCol] = $this->nullableMoney($input[$specialCol] ?? ($existing[$specialCol] ?? null));
+        }
+
+        return $data;
     }
 
     /**
@@ -2538,15 +2546,19 @@ final class ProductAdminService
             false
         );
 
-        return [
+        $prices = [
             'public_price' => $publicPrice,
             'catalog_price' => $catalogPrice,
             'cost_price' => $costPrice,
-            'price_cncm' => $this->resolveNullableMoneyField($input, $existing, 'price_cncm'),
             'price_partner_a' => $this->resolveNullableMoneyField($input, $existing, 'price_partner_a'),
             'price_partner_b' => $this->resolveNullableMoneyField($input, $existing, 'price_partner_b'),
             'price_partner_c' => $this->resolveNullableMoneyField($input, $existing, 'price_partner_c'),
         ];
+        foreach (array_keys(PartnerAdminService::specialPriceFieldLabels()) as $specialCol) {
+            $prices[$specialCol] = $this->resolveNullableMoneyField($input, $existing, $specialCol);
+        }
+
+        return $prices;
     }
 
     /**

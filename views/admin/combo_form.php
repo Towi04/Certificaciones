@@ -15,11 +15,11 @@ $typeLabels = [
     'extension' => 'Extensión',
     'other' => 'Otro',
 ];
+$specialPriceFields = \App\Services\PartnerAdminService::specialPriceFieldLabels();
 $priceFields = [
     'public_price' => 'Público *',
     'catalog_price' => 'Lista',
-    'price_cncm' => 'CNCM',
-] + \App\Services\PartnerAdminService::priceFieldLabels();
+] + \App\Services\PartnerAdminService::allPartnerPriceFieldLabels();
 $num = static function (mixed $v): string {
     if ($v === null || $v === '') {
         return '0';
@@ -77,7 +77,9 @@ $num = static function (mixed $v): string {
                        class="combo-product-check"
                        data-public="<?= e($num($p['public_price'] ?? 0)) ?>"
                        data-catalog="<?= e($num(($p['catalog_price'] ?? 0) > 0 ? $p['catalog_price'] : ($p['public_price'] ?? 0))) ?>"
-                       data-cncm="<?= e($num($p['price_cncm'] ?? $p['public_price'] ?? 0)) ?>"
+                       <?php foreach ($specialPriceFields as $spCol => $_spLabel): ?>
+                       data-<?= e(str_replace('_', '-', $spCol)) ?>="<?= e($num($p[$spCol] ?? $p['public_price'] ?? 0)) ?>"
+                       <?php endforeach; ?>
                        data-partner-bronze="<?= e($num($p['price_partner_a'] ?? $p['public_price'] ?? 0)) ?>"
                        data-partner-silver="<?= e($num($p['price_partner_b'] ?? $p['public_price'] ?? 0)) ?>"
                        data-partner-gold="<?= e($num($p['price_partner_c'] ?? $p['public_price'] ?? 0)) ?>"
@@ -177,14 +179,17 @@ $num = static function (mixed $v): string {
   let dirty = {};
   let autoFill = !isEdit;
 
+  const specialFields = <?= json_encode(array_keys($specialPriceFields), JSON_UNESCAPED_UNICODE) ?: '[]' ?>;
   const fieldMap = {
     public_price: 'public',
     catalog_price: 'catalog',
-    price_cncm: 'cncm',
     price_partner_a: 'partner-bronze',
     price_partner_b: 'partner-silver',
     price_partner_c: 'partner-gold'
   };
+  specialFields.forEach(function (col) {
+    fieldMap[col] = String(col).replace(/_/g, '-');
+  });
 
   function money(n) {
     return '$' + Number(n || 0).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -195,12 +200,18 @@ $num = static function (mixed $v): string {
   }
 
   function totals() {
-    const out = { public: 0, catalog: 0, cncm: 0, 'partner-bronze': 0, 'partner-silver': 0, 'partner-gold': 0, lines: [] };
+    const out = { public: 0, catalog: 0, 'partner-bronze': 0, 'partner-silver': 0, 'partner-gold': 0, lines: [] };
+    specialFields.forEach(function (col) {
+      out[String(col).replace(/_/g, '-')] = 0;
+    });
     selected().forEach(function (c) {
       const pub = Number(c.getAttribute('data-public') || 0);
       out.public += pub;
       out.catalog += Number(c.getAttribute('data-catalog') || 0);
-      out.cncm += Number(c.getAttribute('data-cncm') || 0);
+      specialFields.forEach(function (col) {
+        const key = String(col).replace(/_/g, '-');
+        out[key] += Number(c.getAttribute('data-' + key) || 0);
+      });
       out['partner-bronze'] += Number(c.getAttribute('data-partner-bronze') || 0);
       out['partner-silver'] += Number(c.getAttribute('data-partner-silver') || 0);
       out['partner-gold'] += Number(c.getAttribute('data-partner-gold') || 0);
@@ -269,7 +280,9 @@ $num = static function (mixed $v): string {
     if (applyAuto && autoFill && n >= 2) {
       setInput('public_price', t.public, false);
       setInput('catalog_price', t.catalog, false);
-      setInput('price_cncm', t.cncm, false);
+      specialFields.forEach(function (col) {
+        setInput(col, t[String(col).replace(/_/g, '-')] || 0, false);
+      });
       setInput('price_partner_a', t['partner-bronze'], false);
       setInput('price_partner_b', t['partner-silver'], false);
       setInput('price_partner_c', t['partner-gold'], false);
@@ -287,7 +300,9 @@ $num = static function (mixed $v): string {
     dirty.public_price = false;
     if (all) {
       setInput('catalog_price', t.catalog, true);
-      setInput('price_cncm', t.cncm, true);
+      specialFields.forEach(function (col) {
+        setInput(col, t[String(col).replace(/_/g, '-')] || 0, true);
+      });
       setInput('price_partner_a', t['partner-bronze'], true);
       setInput('price_partner_b', t['partner-silver'], true);
       setInput('price_partner_c', t['partner-gold'], true);
