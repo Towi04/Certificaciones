@@ -68,51 +68,83 @@ $extraColHeader = count($extraColLabels) === 1
                         <?php
                         /** @var list<array<string,mixed>> $inventoryStockRows */
                         $inventoryStockRows = is_array($inventoryStockRows ?? null) ? $inventoryStockRows : [];
+                        $inventoryAvailTotal = 0;
                         $inventoryLowCount = 0;
+                        $inventoryWarnCount = 0;
                         foreach ($inventoryStockRows as $__inv) {
-                            if (!empty($__inv['low'])) {
+                            $inventoryAvailTotal += (int) ($__inv['available'] ?? 0);
+                            $lvl = (string) ($__inv['level'] ?? (!empty($__inv['low']) ? 'low' : 'ok'));
+                            if ($lvl === 'low') {
                                 $inventoryLowCount++;
+                            } elseif ($lvl === 'warn') {
+                                $inventoryWarnCount++;
                             }
                         }
+                        $inventoryCardLevel = 'ok';
+                        if ($inventoryLowCount > 0) {
+                            $inventoryCardLevel = 'low';
+                        } elseif ($inventoryWarnCount > 0 || ($inventoryStockRows !== [] && $inventoryAvailTotal <= 8)) {
+                            $inventoryCardLevel = 'warn';
+                        } elseif ($inventoryStockRows === []) {
+                            $inventoryCardLevel = 'empty';
+                        }
+                        $inventoryCardHint = match ($inventoryCardLevel) {
+                            'low' => 'Stock bajo — reponer pronto',
+                            'warn' => 'Acercándose al umbral',
+                            'empty' => 'Sin productos con inventario',
+                            default => 'Stock holgado',
+                        };
                         ?>
-                        <?php if ($inventoryStockRows !== []): ?>
-                            <div class="ops-stock-card<?= $inventoryLowCount > 0 ? ' ops-stock-card--low' : '' ?>"
-                                 title="Códigos de inventario disponibles por producto">
+                            <div class="ops-stock-card ops-stock-card--<?= e($inventoryCardLevel) ?>"
+                                 title="Códigos de inventario disponibles por producto (siempre visible)">
                                 <div class="ops-stock-card-head">
                                     <span class="ops-stock-card-label">Inventario disponible</span>
                                     <a class="ops-stock-card-link" href="<?= e(url('/admin/inventario')) ?>">Ver todo</a>
                                 </div>
+                                <span class="ops-stock-card-amount"><?= (int) $inventoryAvailTotal ?></span>
+                                <span class="ops-stock-card-hint"><?= e($inventoryCardHint) ?></span>
                                 <?php if ($inventoryLowCount > 0): ?>
                                     <div class="ops-stock-alert">
                                         Stock bajo en <?= (int) $inventoryLowCount ?> producto<?= $inventoryLowCount === 1 ? '' : 's' ?>
                                     </div>
                                 <?php endif; ?>
+                                <?php if ($inventoryStockRows !== []): ?>
                                 <ul class="ops-stock-list">
                                     <?php foreach ($inventoryStockRows as $invRow): ?>
                                         <?php
-                                        $invLow = !empty($invRow['low']);
+                                        $invLevel = (string) ($invRow['level'] ?? (!empty($invRow['low']) ? 'low' : 'ok'));
+                                        if (!in_array($invLevel, ['low', 'warn', 'ok'], true)) {
+                                            $invLevel = 'ok';
+                                        }
                                         $invAvail = (int) ($invRow['available'] ?? 0);
                                         $invName = trim((string) ($invRow['name'] ?? ''));
                                         if ($invName === '') {
                                             $invName = (string) ($invRow['code'] ?? 'Producto');
                                         }
                                         $invHref = url('/admin/inventario/' . (int) ($invRow['id'] ?? 0));
+                                        $invPill = match ($invLevel) {
+                                            'low' => 'bajo',
+                                            'warn' => 'cerca',
+                                            default => '',
+                                        };
                                         ?>
-                                        <li class="ops-stock-item<?= $invLow ? ' ops-stock-item--low' : '' ?>">
+                                        <li class="ops-stock-item ops-stock-item--<?= e($invLevel) ?>">
                                             <a href="<?= e($invHref) ?>" class="ops-stock-item-name" title="<?= e($invName) ?>">
                                                 <?= e($invName) ?>
                                             </a>
                                             <span class="ops-stock-item-qty" title="Disponibles / umbral <?= (int) ($invRow['threshold'] ?? 0) ?>">
                                                 <?= $invAvail ?>
-                                                <?php if ($invLow): ?>
-                                                    <span class="ops-stock-pill">bajo</span>
+                                                <?php if ($invPill !== ''): ?>
+                                                    <span class="ops-stock-pill ops-stock-pill--<?= e($invLevel) ?>"><?= e($invPill) ?></span>
                                                 <?php endif; ?>
                                             </span>
                                         </li>
                                     <?php endforeach; ?>
                                 </ul>
+                                <?php else: ?>
+                                    <p class="ops-stock-empty">Activa inventario en Grupos o carga códigos para ver el detalle aquí.</p>
+                                <?php endif; ?>
                             </div>
-                        <?php endif; ?>
                     </div>
                 </td>
             </tr>
@@ -811,11 +843,11 @@ $extraColHeader = count($extraColLabels) === 1
   width:auto; vertical-align:middle; padding:0 .85rem 0 0;
 }
 .ops-controls-side {
-  width:14.5rem; vertical-align:stretch; padding:0;
+  width:15.5rem; vertical-align:stretch; padding:0;
 }
 .ops-side-stack {
   display:flex; flex-direction:column; gap:.55rem;
-  height:100%; min-width:12rem;
+  height:100%; min-width:13rem;
 }
 .ops-credit-card {
   display:flex; flex-direction:column; justify-content:center; gap:.15rem;
@@ -835,32 +867,63 @@ $extraColHeader = count($extraColLabels) === 1
 }
 .ops-credit-card-hint { font-size:.72rem; color:#7c5a1e; }
 .ops-stock-card {
-  display:flex; flex-direction:column; gap:.4rem;
+  display:flex; flex-direction:column; gap:.35rem;
   box-sizing:border-box; padding:.7rem .85rem;
-  border-radius:14px; border:2px solid #bfdbfe;
-  background:linear-gradient(145deg, #eff6ff 0%, #dbeafe 100%);
-  box-shadow:0 2px 8px rgba(37, 99, 235, .10);
+  border-radius:14px; border:2px solid #86efac;
+  background:linear-gradient(145deg, #f0fdf4 0%, #dcfce7 100%);
+  box-shadow:0 2px 8px rgba(22, 163, 74, .12);
+}
+.ops-stock-card--ok {
+  border-color:#86efac;
+  background:linear-gradient(145deg, #f0fdf4 0%, #dcfce7 100%);
+  box-shadow:0 2px 8px rgba(22, 163, 74, .12);
+}
+.ops-stock-card--warn {
+  border-color:#f0d78c;
+  background:linear-gradient(145deg, #fffbeb 0%, #fef3c7 100%);
+  box-shadow:0 2px 8px rgba(180, 120, 20, .14);
 }
 .ops-stock-card--low {
-  border-color:#f0d78c;
-  background:linear-gradient(145deg, #fff8e6 0%, #ffedd5 100%);
-  box-shadow:0 2px 8px rgba(180, 120, 20, .12);
+  border-color:#fca5a5;
+  background:linear-gradient(145deg, #fef2f2 0%, #fecaca 100%);
+  box-shadow:0 2px 8px rgba(185, 28, 28, .14);
+}
+.ops-stock-card--empty {
+  border-color:#cbd5e1;
+  background:linear-gradient(145deg, #f8fafc 0%, #e2e8f0 100%);
+  box-shadow:0 2px 8px rgba(100, 116, 139, .10);
 }
 .ops-stock-card-head {
   display:flex; align-items:center; justify-content:space-between; gap:.4rem;
 }
 .ops-stock-card-label {
   font-size:.72rem; font-weight:700; letter-spacing:.02em;
-  text-transform:uppercase; color:#1e40af;
+  text-transform:uppercase; color:#166534;
 }
-.ops-stock-card--low .ops-stock-card-label { color:#9a3412; }
+.ops-stock-card--warn .ops-stock-card-label { color:#9a3412; }
+.ops-stock-card--low .ops-stock-card-label { color:#991b1b; }
+.ops-stock-card--empty .ops-stock-card-label { color:#475569; }
+.ops-stock-card-amount {
+  font-size:1.55rem; font-weight:800; line-height:1.15;
+  color:#15803d; font-variant-numeric:tabular-nums;
+}
+.ops-stock-card--warn .ops-stock-card-amount { color:#b45309; }
+.ops-stock-card--low .ops-stock-card-amount { color:#b91c1c; }
+.ops-stock-card--empty .ops-stock-card-amount { color:#64748b; }
+.ops-stock-card-hint { font-size:.72rem; color:#166534; }
+.ops-stock-card--warn .ops-stock-card-hint { color:#92400e; }
+.ops-stock-card--low .ops-stock-card-hint { color:#991b1b; }
+.ops-stock-card--empty .ops-stock-card-hint { color:#64748b; }
 .ops-stock-card-link {
   font-size:.72rem; font-weight:700; color:var(--doceo-blue); text-decoration:none; white-space:nowrap;
 }
 .ops-stock-card-link:hover { text-decoration:underline; }
 .ops-stock-alert {
-  font-size:.78rem; font-weight:700; color:#9a3412;
-  padding:.3rem .45rem; border-radius:8px; background:rgba(255,255,255,.65);
+  font-size:.78rem; font-weight:700; color:#991b1b;
+  padding:.3rem .45rem; border-radius:8px; background:rgba(255,255,255,.7);
+}
+.ops-stock-empty {
+  margin:0; font-size:.75rem; color:#64748b; line-height:1.35;
 }
 .ops-stock-list {
   list-style:none; margin:0; padding:0;
@@ -878,15 +941,18 @@ $extraColHeader = count($extraColLabels) === 1
 .ops-stock-item-name:hover { text-decoration:underline; }
 .ops-stock-item-qty {
   flex:0 0 auto; font-size:1rem; font-weight:800;
-  color:var(--doceo-blue); font-variant-numeric:tabular-nums;
+  color:#15803d; font-variant-numeric:tabular-nums;
   display:inline-flex; align-items:center; gap:.25rem;
 }
-.ops-stock-item--low .ops-stock-item-qty { color:#b45309; }
+.ops-stock-item--warn .ops-stock-item-qty { color:#b45309; }
+.ops-stock-item--low .ops-stock-item-qty { color:#b91c1c; }
 .ops-stock-pill {
   font-size:.65rem; font-weight:800; text-transform:uppercase;
   padding:.05rem .3rem; border-radius:999px;
   background:#fde68a; color:#92400e;
 }
+.ops-stock-pill--low { background:#fecaca; color:#991b1b; }
+.ops-stock-pill--warn { background:#fde68a; color:#92400e; }
 .ops-icon-btn {
   display:inline-flex; align-items:center; justify-content:center;
   width:2.15rem; height:2.15rem; padding:0; flex:0 0 auto;

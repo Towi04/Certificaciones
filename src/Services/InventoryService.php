@@ -76,41 +76,92 @@ final class InventoryService
     }
 
     /**
+     * Nivel de semáforo para el tablero de Operaciones.
+     * - low: disponible ≤ umbral (rojo)
+     * - warn: se acerca al umbral (amarillo)
+     * - ok: holgado (verde)
+     */
+    public static function stockLevel(int $available, int $threshold): string
+    {
+        $threshold = max(0, $threshold);
+        if ($available <= $threshold) {
+            return 'low';
+        }
+        // Zona ámbar: hasta el doble del umbral (mín. umbral+3).
+        $warnAt = max($threshold + 3, $threshold * 2);
+        if ($available <= $warnAt) {
+            return 'warn';
+        }
+
+        return 'ok';
+    }
+
+    /**
      * Resumen de stock para el tablero de Operaciones (siempre visibles los disponibles).
      *
      * @return list<array{
      *   id:int,name:string,code:string,available:int,assigned:int,total:int,
-     *   threshold:int,low:bool
+     *   threshold:int,low:bool,level:string
      * }>
      */
     public function opsBoardStockRows(): array
     {
-        $products = $this->products->adminList(null, 500, 0);
-        $out = [];
+        $stockByProduct = $this->repo->stockCountsByProduct();
+        $products = $this->products->adminList(null, 1000, 0);
+        $byId = [];
         foreach ($products as $p) {
+            $pid = (int) ($p['id'] ?? 0);
+            if ($pid > 0) {
+                $byId[$pid] = $p;
+            }
+        }
+        // Asegura productos con códigos aunque no hayan entrado en el listado admin.
+        foreach (array_keys($stockByProduct) as $pid) {
+            if (isset($byId[$pid])) {
+                continue;
+            }
+            $found = $this->products->find((int) $pid);
+            if ($found !== null) {
+                $byId[(int) $pid] = $found;
+            }
+        }
+
+        $out = [];
+        foreach ($byId as $pid => $p) {
             $enabled = self::isEnabledForProduct($p);
-            $stock = $this->repo->stockCounts((int) $p['id']);
+            $stock = $stockByProduct[$pid] ?? [
+                'available' => 0,
+                'assigned' => 0,
+                'expired' => 0,
+                'void' => 0,
+                'total' => 0,
+            ];
             if (!$enabled && (int) ($stock['total'] ?? 0) < 1) {
                 continue;
             }
             $cfg = self::configForProduct($p);
             $available = (int) ($stock['available'] ?? 0);
             $threshold = (int) ($cfg['low_stock_threshold'] ?? 5);
+            $level = self::stockLevel($available, $threshold);
             $out[] = [
-                'id' => (int) ($p['id'] ?? 0),
+                'id' => (int) $pid,
                 'name' => (string) ($p['name'] ?? ''),
                 'code' => (string) ($p['code'] ?? ''),
                 'available' => $available,
                 'assigned' => (int) ($stock['assigned'] ?? 0),
                 'total' => (int) ($stock['total'] ?? 0),
                 'threshold' => $threshold,
-                'low' => $available <= $threshold,
+                'low' => $level === 'low',
+                'level' => $level,
             ];
         }
-        // Stock bajo primero; luego menos disponibles.
-        usort($out, static function (array $a, array $b): int {
-            if ($a['low'] !== $b['low']) {
-                return $a['low'] ? -1 : 1;
+        // Peor nivel primero; luego menos disponibles.
+        $rank = ['low' => 0, 'warn' => 1, 'ok' => 2];
+        usort($out, static function (array $a, array $b) use ($rank): int {
+            $ra = $rank[$a['level'] ?? 'ok'] ?? 2;
+            $rb = $rank[$b['level'] ?? 'ok'] ?? 2;
+            if ($ra !== $rb) {
+                return $ra <=> $rb;
             }
 
             return $a['available'] <=> $b['available'] ?: strcmp($a['name'], $b['name']);
