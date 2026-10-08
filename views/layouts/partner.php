@@ -10,6 +10,7 @@ $navItems = [
     ['href' => '/partner/registrar-grupo', 'label' => 'Registrar grupo', 'icon' => 'groups', 'keys' => ['registrar-grupo']],
     ['href' => '/catalogo', 'label' => 'Catálogo', 'icon' => 'catalog', 'keys' => ['catalogo']],
     ['href' => '/partner/calendario', 'label' => 'Calendario', 'icon' => 'calendar', 'keys' => ['calendario']],
+    ['href' => '/partner/notificaciones', 'label' => 'Notificaciones', 'icon' => 'bell', 'keys' => ['notificaciones']],
     ['href' => '/partner/credito', 'label' => 'Crédito', 'icon' => 'promo', 'keys' => ['credito']],
     ['href' => '/partner/avance', 'label' => 'Avance / niveles', 'icon' => 'advance', 'keys' => ['avance']],
     ['href' => '/partner/perfil', 'label' => 'Mi perfil', 'icon' => 'edit', 'keys' => ['perfil']],
@@ -22,6 +23,7 @@ $activeKey = match (true) {
     str_starts_with($path, '/partner/registrar') || str_starts_with($path, '/adquirir/') => 'registrar',
     str_starts_with($path, '/catalogo') => 'catalogo',
     str_starts_with($path, '/partner/calendario') => 'calendario',
+    str_starts_with($path, '/partner/notificaciones') => 'notificaciones',
     str_starts_with($path, '/partner/credito') => 'credito',
     str_starts_with($path, '/partner/avance') => 'avance',
     str_starts_with($path, '/partner/perfil') => 'perfil',
@@ -35,6 +37,7 @@ $isActive = static function (array $item) use ($activeKey): bool {
 
 $partnerTourView = \App\Services\PartnerTutorialService::viewFromPath($path);
 $partnerTutorial = ['views' => [], 'completed_all' => false];
+$partnerUnreadNotifications = 0;
 try {
     $stmt = \App\Database\Connection::get()->prepare(
         'SELECT id FROM partners WHERE user_id = ? AND is_active = 1 LIMIT 1'
@@ -43,9 +46,14 @@ try {
     $partnerId = (int) $stmt->fetchColumn();
     if ($partnerId > 0) {
         $partnerTutorial = (new \App\Services\PartnerTutorialService())->stateForPartner($partnerId);
+        // En la propia página de notificaciones el contador ya se marca como leído.
+        if (!str_starts_with($path, '/partner/notificaciones')) {
+            $partnerUnreadNotifications = (new \App\Services\PartnerNotificationService())
+                ->unreadCount($partnerId);
+        }
     }
 } catch (\Throwable) {
-    // tutorial opcional
+    // tutorial / badge opcionales
 }
 ?>
 <!DOCTYPE html>
@@ -84,12 +92,25 @@ try {
 
         <nav class="side-nav-links" id="partner-side-nav-links">
             <?php foreach ($navItems as $item): ?>
+                <?php
+                $showBadge = ($item['href'] ?? '') === '/partner/notificaciones'
+                    && $partnerUnreadNotifications > 0;
+                $badgeLabel = $partnerUnreadNotifications > 99 ? '99+' : (string) $partnerUnreadNotifications;
+                ?>
                 <a class="side-nav-link<?= $isActive($item) ? ' active' : '' ?>"
                    href="<?= e(url($item['href'])) ?>"
-                   title="<?= e($item['label']) ?>"
+                   title="<?= e($item['label'] . ($showBadge ? ' (' . $badgeLabel . ' nuevas)' : '')) ?>"
                    data-tour="nav-<?= e(ltrim(str_replace('/', '-', $item['href']), '-')) ?>">
-                    <span class="side-nav-icon"><?= icon($item['icon']) ?></span>
+                    <span class="side-nav-icon">
+                        <?= icon($item['icon']) ?>
+                        <?php if ($showBadge): ?>
+                            <span class="side-nav-badge" aria-label="<?= e($badgeLabel) ?> sin leer"><?= e($badgeLabel) ?></span>
+                        <?php endif; ?>
+                    </span>
                     <span class="side-nav-label"><?= e($item['label']) ?></span>
+                    <?php if ($showBadge): ?>
+                        <span class="side-nav-badge side-nav-badge--inline" aria-hidden="true"><?= e($badgeLabel) ?></span>
+                    <?php endif; ?>
                 </a>
             <?php endforeach; ?>
         </nav>

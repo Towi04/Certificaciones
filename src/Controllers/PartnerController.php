@@ -16,6 +16,7 @@ use App\Services\ExamScheduleService;
 use App\Services\PartnerBulkRegistrationService;
 use App\Services\PartnerCreditService;
 use App\Services\PartnerDirectoryService;
+use App\Services\PartnerNotificationService;
 use App\Services\PartnerProfileService;
 use App\Services\PartnerRegistrationService;
 use App\Services\PartnerTutorialService;
@@ -194,6 +195,47 @@ final class PartnerController
             'grouped' => $grouped,
             'layout' => 'partner',
         ]);
+    }
+
+    public function notifications(): void
+    {
+        Auth::requireRole(['partner']);
+        $partner = $this->requirePartner();
+        $type = isset($_GET['tipo']) && is_string($_GET['tipo']) ? trim($_GET['tipo']) : 'all';
+        if (!in_array($type, ['all', 'access', 'results'], true)) {
+            $type = 'all';
+        }
+        $svc = new PartnerNotificationService();
+        $payload = $svc->listForPartner((int) $partner['id']);
+        $items = $payload['items'];
+        if ($type !== 'all') {
+            $items = array_values(array_filter(
+                $items,
+                static fn (array $row): bool => ($row['type'] ?? '') === $type
+            ));
+        }
+        // Marcar leídas tras cargar la lista para que esta visita aún muestre no leídas.
+        if (($payload['unread_count'] ?? 0) > 0) {
+            $svc->markAllRead((int) $partner['id']);
+        }
+        view('partner/notifications', [
+            'title' => 'Notificaciones',
+            'partner' => $partner,
+            'items' => $items,
+            'unreadCount' => (int) ($payload['unread_count'] ?? 0),
+            'typeFilter' => $type,
+            'layout' => 'partner',
+        ]);
+    }
+
+    public function notificationsMarkRead(): void
+    {
+        Auth::requireRole(['partner']);
+        csrf_verify();
+        $partner = $this->requirePartner();
+        (new PartnerNotificationService())->markAllRead((int) $partner['id']);
+        flash('success', 'Notificaciones marcadas como leídas.');
+        redirect('/partner/notificaciones');
     }
 
     public function progress(): void
