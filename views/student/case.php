@@ -86,6 +86,8 @@ $portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($track
     <?php
     $canEditRegistration = !empty($canEditRegistration);
     $formAction = url('/alumno/caso/' . (int) $tracking['id'] . '/datos');
+    /** @var list<array<string,mixed>>|null $registrationFields */
+    $registrationFields = $registrationFields ?? null;
     require BASE_PATH . '/views/partials/registration_edit_form.php';
     ?>
 </div>
@@ -145,8 +147,6 @@ $portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($track
                 <strong style="font-family:ui-monospace,monospace"><?= e($extraVal) ?></strong>
             </p>
         <?php endif; ?>
-    <?php elseif (empty($tracking['folio']) && empty($tracking['access_key'])): ?>
-        <p class="muted">Los accesos al examen (folio y clave del día) se publicarán aquí cuando UKS confirme tu registro.</p>
     <?php endif; ?>
     <p class="muted" style="font-size:.85rem;margin:.75rem 0 0">
         Si necesitas reagendar el examen, contacta a DOCEO. Solo administración puede cambiar la fecha.
@@ -154,7 +154,13 @@ $portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($track
 </div>
 <?php endif; ?>
 
-<?php if (!empty($tracking['folio']) && !empty($tracking['access_key'])): ?>
+<?php
+$isEletCase = ((string) ($tracking['pipeline_code'] ?? '') === 'elet_uks')
+    || ((string) ($tracking['product_code'] ?? '') === 'ELET-UKS');
+$hasExamAccessCodes = !empty($tracking['folio']) && !empty($tracking['access_key']);
+$usesInventoryAccess = !empty($usesInventoryAccess);
+?>
+<?php if ($hasExamAccessCodes && $isEletCase): ?>
 <div class="panel" style="margin-top:1rem;border:2px solid var(--doceo-yellow)">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Acceso al examen ELeT</h2>
     <p style="margin-top:0">
@@ -167,9 +173,22 @@ $portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($track
     </ul>
     <p class="muted" style="font-size:.85rem;margin:0">Presenta el examen en la fecha y hora programadas arriba.</p>
 </div>
-<?php elseif ((string) ($tracking['purchase_status'] ?? '') === 'paid' && ($tracking['pipeline_code'] ?? '') === 'elet_uks'): ?>
+<?php elseif ($hasExamAccessCodes && $usesInventoryAccess): ?>
+<div class="panel" style="margin-top:1rem;border:2px solid var(--doceo-yellow)">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Acceso al examen</h2>
+    <ul style="margin:.5rem 0;padding-left:1.1rem">
+        <li>Folio: <strong style="font-family:ui-monospace,monospace"><?= e((string) $tracking['folio']) ?></strong></li>
+        <li>Clave: <strong style="font-family:ui-monospace,monospace"><?= e((string) $tracking['access_key']) ?></strong></li>
+    </ul>
+    <p class="muted" style="font-size:.85rem;margin:0">Usa estos datos en la fecha y hora programadas. Te llegarán también por correo cuando corresponda.</p>
+</div>
+<?php elseif ($isEletCase && (string) ($tracking['purchase_status'] ?? '') === 'paid'): ?>
 <div class="panel" style="margin-top:1rem;background:#f4f7fb">
     <p class="muted" style="margin:0">Tu pago está confirmado. Estamos coordinando con UKS tu registro; recibirás folio y clave por correo y aquí.</p>
+</div>
+<?php elseif ($usesInventoryAccess && (string) ($tracking['purchase_status'] ?? '') === 'paid' && !$hasExamAccessCodes): ?>
+<div class="panel" style="margin-top:1rem;background:#f4f7fb">
+    <p class="muted" style="margin:0">Tu pago está confirmado. El folio y la clave de acceso se publicarán aquí (y por correo) cuando corresponda según la fecha de tu examen.</p>
 </div>
 <?php endif; ?>
 
@@ -191,23 +210,39 @@ $portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($track
 </div>
 <?php endif; ?>
 
-<?php require BASE_PATH . '/views/shared/uks_report.php'; ?>
+<?php
+// Reporte UKS / resultados ELeT solo en casos ELeT (no iTEP ni otros).
+if ($isEletCase) {
+    require BASE_PATH . '/views/shared/uks_report.php';
+}
+?>
 
+<?php
+/** @var list<array<string,mixed>> $registrationDocs */
+$registrationDocs = $registrationDocs ?? [];
+$statusDoc = [
+    'pending' => 'En revisión',
+    'approved' => 'Aprobado',
+    'rejected' => 'Rechazado',
+];
+$otherDocs = [];
+foreach ($documents as $d) {
+    $codes = array_column($registrationDocs, 'code');
+    if (in_array((string) $d['doc_type'], $codes, true)) {
+        continue;
+    }
+    // Ocultar tipos de expediente que este producto ya no pide.
+    if (in_array((string) $d['doc_type'], ['reglamento', 'signature'], true) && $registrationDocs === []) {
+        continue;
+    }
+    $otherDocs[] = $d;
+}
+?>
+<?php if ($registrationDocs !== [] || $otherDocs !== []): ?>
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Documentos del registro</h2>
-    <?php
-    /** @var list<array<string,mixed>> $registrationDocs */
-    $registrationDocs = $registrationDocs ?? [];
-    $statusDoc = [
-        'pending' => 'En revisión',
-        'approved' => 'Aprobado',
-        'rejected' => 'Rechazado',
-    ];
-    ?>
-    <?php if ($registrationDocs === []): ?>
-        <p class="muted">Este producto no pide reglamento ni firma en el expediente.</p>
-    <?php else: ?>
-        <p class="muted" style="margin-top:0">Sube el reglamento firmado y tu firma. Administración los revisará.</p>
+    <?php if ($registrationDocs !== []): ?>
+        <p class="muted" style="margin-top:0">Sube los documentos que pide este producto. Administración los revisará.</p>
         <?php foreach ($registrationDocs as $req): ?>
             <?php
             $st = $req['status'] ?? null;
@@ -243,15 +278,9 @@ $portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($track
         <?php endforeach; ?>
     <?php endif; ?>
 
-    <?php if ($documents !== []): ?>
+    <?php if ($otherDocs !== []): ?>
         <h3 style="margin:1.25rem 0 .5rem;font-size:.95rem;color:var(--doceo-blue)">Otros archivos del caso</h3>
-        <?php foreach ($documents as $d): ?>
-            <?php
-            $codes = array_column($registrationDocs, 'code');
-            if (in_array((string) $d['doc_type'], $codes, true)) {
-                continue;
-            }
-            ?>
+        <?php foreach ($otherDocs as $d): ?>
             <div style="padding:.75rem 0;border-bottom:1px solid #e6ebf2">
                 <strong><?= e($d['doc_type']) ?></strong>
                 · <span class="pill"><?= e($statusDoc[$d['status']] ?? $d['status']) ?></span>
@@ -268,6 +297,7 @@ $portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($track
         <?php endforeach; ?>
     <?php endif; ?>
 </div>
+<?php endif; ?>
 
 <?php if ($logs !== []): ?>
     <div class="panel" style="margin-top:1rem">

@@ -820,9 +820,8 @@ final class CheckoutRequirements
      * En config_json:
      * "registration_docs": [{"code":"reglamento","label":"...","required":true,"accept":".pdf"}]
      *
-     * Defaults:
-     * - certification / procedure → reglamento + firma
-     * - course → ninguno
+     * Sin lista en el grupo → ninguno (ya no se asume reglamento+firma para toda certificación).
+     * Con inventario de accesos, se ignora el par legado reglamento+firma del seeder.
      *
      * @param array<string, mixed> $product
      * @return list<array{code:string,label:string,required:bool,accept:string}>
@@ -830,29 +829,46 @@ final class CheckoutRequirements
     public static function registrationDocsForProduct(array $product): array
     {
         $cfg = self::config($product);
+        $docs = [];
         if (array_key_exists('registration_docs', $cfg) && is_array($cfg['registration_docs'])) {
-            return self::normalizeDocs($cfg['registration_docs']);
+            $docs = self::normalizeDocs($cfg['registration_docs']);
         }
 
-        $type = (string) ($product['type'] ?? $product['product_type'] ?? '');
-        if (in_array($type, ['certification', 'procedure'], true)) {
-            return self::normalizeDocs([
-                [
-                    'code' => 'reglamento',
-                    'label' => 'Reglamento firmado (PDF)',
-                    'required' => true,
-                    'accept' => '.pdf',
-                ],
-                [
-                    'code' => 'signature',
-                    'label' => 'Firma (imagen)',
-                    'required' => true,
-                    'accept' => '.jpg,.jpeg,.png',
-                ],
-            ]);
+        // No duplicar reglamento/firma si ya se firmó en checkout.
+        $reg = self::reglamentoForProduct($product);
+        if ($reg !== null) {
+            $digitalCode = (string) ($reg['doc_code'] ?? 'reglamento_firmado');
+            $docs = array_values(array_filter(
+                $docs,
+                static fn (array $d): bool => !in_array(
+                    (string) ($d['code'] ?? ''),
+                    [$digitalCode, 'reglamento', 'signature'],
+                    true
+                )
+            ));
         }
 
-        return [];
+        // Inventario (p. ej. iTEP): el seeder metía reglamento+firma aunque el grupo no los usa.
+        $inv = is_array($cfg['inventory'] ?? null) ? $cfg['inventory'] : [];
+        if (!empty($inv['enabled']) && self::isDefaultReglamentoFirmaPair($docs)) {
+            return [];
+        }
+
+        return $docs;
+    }
+
+    /**
+     * @param list<array{code:string,label:string,required:bool,accept:string}> $docs
+     */
+    private static function isDefaultReglamentoFirmaPair(array $docs): bool
+    {
+        if (count($docs) !== 2) {
+            return false;
+        }
+        $codes = array_map(static fn (array $d): string => (string) ($d['code'] ?? ''), $docs);
+        sort($codes);
+
+        return $codes === ['reglamento', 'signature'];
     }
 
     /** Resuelve pipeline por config_json.pipeline_code o null si no hay override. */

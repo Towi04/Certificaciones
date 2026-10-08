@@ -30,6 +30,8 @@ $current = (string) ($tracking['current_step_code'] ?? '');
     <?php
     $canEditRegistration = !empty($canEditRegistration);
     $formAction = url('/partner/caso/' . (int) $tracking['id'] . '/datos');
+    /** @var list<array<string,mixed>>|null $registrationFields */
+    $registrationFields = $registrationFields ?? null;
     require BASE_PATH . '/views/partials/registration_edit_form.php';
     ?>
 </div>
