@@ -140,13 +140,19 @@ try {
 })();
 </script>
 <?php if ($partnerTourView): ?>
-<script src="<?= e(asset('/assets/js/partner-tour.js')) ?>" defer></script>
+<?php
+    $tourJsVersion = @filemtime(BASE_PATH . '/views/partner/tour.js.php')
+        ?: @filemtime(BASE_PATH . '/src/Services/PartnerTutorialService.php')
+        ?: time();
+?>
+<script src="<?= e(url('/partner/tutorial.js')) ?>?v=<?= (int) $tourJsVersion ?>" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   if (!window.DoceoPartnerTour) return;
   window.DoceoPartnerTour.configure({
     completeUrl: <?= json_encode(url('/partner/tutorial/completo'), JSON_UNESCAPED_UNICODE) ?>,
-    csrf: <?= json_encode(csrf_token(), JSON_UNESCAPED_UNICODE) ?>
+    csrf: <?= json_encode(csrf_token(), JSON_UNESCAPED_UNICODE) ?>,
+    steps: <?= json_encode(\App\Services\PartnerTutorialService::tourSteps(), JSON_UNESCAPED_UNICODE) ?>
   });
   window.DoceoPartnerTour.maybeStart(
     <?= json_encode($partnerTourView, JSON_UNESCAPED_UNICODE) ?>,

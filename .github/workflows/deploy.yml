@@ -8,7 +8,14 @@ name: Deploy to Neubox
 on:
   push:
     branches: [main]
+  # Si un merge a main no dispara el push (o falla el job), se puede republicar a mano:
+  # Actions → Deploy to Neubox → Run workflow
   workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Motivo del redeploy manual'
+        required: false
+        default: 'manual'
 
 jobs:
   deploy:

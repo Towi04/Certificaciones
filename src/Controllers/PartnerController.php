@@ -135,6 +135,20 @@ final class PartnerController
         redirect('/partner/perfil');
     }
 
+    /** JS del tutorial servido por PHP (evita /public/assets obsoleto en Neubox). */
+    public function tourJs(): void
+    {
+        Auth::requireRole(['partner']);
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        header('Content-Type: application/javascript; charset=UTF-8');
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+        header('Pragma: no-cache');
+        require BASE_PATH . '/views/partner/tour.js.php';
+        exit;
+    }
+
     public function tutorialComplete(): void
     {
         Auth::requireRole(['partner']);

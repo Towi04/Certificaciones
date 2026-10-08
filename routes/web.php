@@ -234,6 +234,7 @@ $router->get('/partner/alumnos', fn () => $partner->studentsBoard());
 $router->get('/partner/avance', fn () => $partner->progress());
 $router->get('/partner/perfil', fn () => $partner->profileForm());
 $router->post('/partner/perfil', fn () => $partner->profileSave());
+$router->get('/partner/tutorial.js', fn () => $partner->tourJs());
 $router->post('/partner/tutorial/completo', fn () => $partner->tutorialComplete());
 $router->post('/partner/tutorial/reiniciar', fn () => $partner->tutorialReset());
 $router->get('/partner/mi-escuela', fn () => $partner->schoolForm());
