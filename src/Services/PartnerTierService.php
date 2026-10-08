@@ -208,7 +208,7 @@ final class PartnerTierService
     public static function isInProgram(array $partner): bool
     {
         $tier = strtolower(trim((string) ($partner['tier'] ?? '')));
-        if ($tier === 'cncm') {
+        if (PartnerAdminService::isSpecialTier($tier) || $tier === 'cncm') {
             return false;
         }
         if (array_key_exists('tier_program', $partner)) {

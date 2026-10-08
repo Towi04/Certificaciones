@@ -71,8 +71,7 @@ $priceFields = [
     'cost_price' => 'Costo',
     'catalog_price' => 'Lista / catálogo',
     'public_price' => 'Público',
-    'price_cncm' => 'CNCM',
-] + \App\Services\PartnerAdminService::priceFieldLabels();
+] + \App\Services\PartnerAdminService::allPartnerPriceFieldLabels();
 $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px';
 $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600';
 $returnTo = isset($_GET['return_to']) && is_string($_GET['return_to'])

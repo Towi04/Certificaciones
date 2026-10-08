@@ -1837,6 +1837,7 @@ final class AdminController
     {
         Auth::requireRole(['admin']);
         $svc = new \App\Services\PartnerTierService();
+        $specialSvc = new \App\Services\PartnerSpecialTierService();
         try {
             (new MailTemplateService())->ensureDefaults();
         } catch (\Throwable) {
@@ -1849,6 +1850,7 @@ final class AdminController
             'title' => 'Niveles partner',
             'config' => $config,
             'tiers' => \App\Services\PartnerTierService::tiersWithRanges($config['tiers'] ?? []),
+            'specialTiers' => $specialSvc->all(false),
             'lastEval' => is_array($lastEval) ? $lastEval : null,
             'layout' => 'admin',
         ]);
@@ -1859,6 +1861,7 @@ final class AdminController
         Auth::requireRole(['admin']);
         csrf_verify();
         $svc = new \App\Services\PartnerTierService();
+        $specialSvc = new \App\Services\PartnerSpecialTierService();
         $action = trim((string) ($_POST['action'] ?? 'save'));
         try {
             if ($action === 'evaluate') {
@@ -1877,6 +1880,24 @@ final class AdminController
                 } else {
                     flash('success', $msg);
                 }
+            } elseif ($action === 'special_create') {
+                $created = $specialSvc->create(
+                    (string) ($_POST['special_code'] ?? ''),
+                    (string) ($_POST['special_label'] ?? '')
+                );
+                flash(
+                    'success',
+                    'Convenio especial «' . $created['label'] . '» creado. '
+                    . 'Ya puedes asignarlo a partners y capturar su precio (' . $created['price_column'] . ').'
+                );
+            } elseif ($action === 'special_update') {
+                $specialSvc->update(
+                    (int) ($_POST['special_id'] ?? 0),
+                    (string) ($_POST['special_label'] ?? ''),
+                    !empty($_POST['special_active']),
+                    (int) ($_POST['special_sort'] ?? 100)
+                );
+                flash('success', 'Convenio especial actualizado.');
             } else {
                 $svc->saveConfig($_POST);
                 flash('success', 'Configuración de niveles partner guardada.');

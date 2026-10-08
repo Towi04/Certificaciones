@@ -162,26 +162,33 @@ final class ComboRepository
     /** @param array<string, mixed> $data */
     public function create(array $data): int
     {
+        $base = [
+            'code' => $data['code'] ?? '',
+            'name' => $data['name'] ?? '',
+            'slug' => $data['slug'] ?? '',
+            'description' => $data['description'] ?? null,
+            'is_active' => $data['is_active'] ?? 1,
+            'is_star' => $data['is_star'] ?? 0,
+            'public_price' => $data['public_price'] ?? 0,
+            'catalog_price' => $data['catalog_price'] ?? 0,
+            'price_partner_a' => $data['price_partner_a'] ?? null,
+            'price_partner_b' => $data['price_partner_b'] ?? null,
+            'price_partner_c' => $data['price_partner_c'] ?? null,
+        ];
+        foreach ($data as $k => $v) {
+            if (is_string($k) && str_starts_with($k, 'price_') && !array_key_exists($k, $base)) {
+                $base[$k] = $v;
+            }
+        }
+        $cols = array_keys($base);
+        $placeholders = array_map(static fn ($c) => ':' . $c, $cols);
         $stmt = $this->pdo->prepare(
-            'INSERT INTO combos (
-                code, name, slug, description, is_active, is_star,
-                public_price, catalog_price, price_cncm, price_partner_a, price_partner_b, price_partner_c
-             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+            'INSERT INTO combos (' . implode(',', $cols) . ') VALUES (' . implode(',', $placeholders) . ')'
         );
-        $stmt->execute([
-            $data['code'],
-            $data['name'],
-            $data['slug'],
-            $data['description'] ?? null,
-            $data['is_active'] ?? 1,
-            $data['is_star'] ?? 0,
-            $data['public_price'] ?? 0,
-            $data['catalog_price'] ?? 0,
-            $data['price_cncm'] ?? null,
-            $data['price_partner_a'] ?? null,
-            $data['price_partner_b'] ?? null,
-            $data['price_partner_c'] ?? null,
-        ]);
+        foreach ($base as $k => $v) {
+            $stmt->bindValue(':' . $k, $v);
+        }
+        $stmt->execute();
 
         return (int) $this->pdo->lastInsertId();
     }

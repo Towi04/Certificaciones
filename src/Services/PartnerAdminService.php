@@ -14,7 +14,14 @@ use PDO;
  */
 final class PartnerAdminService
 {
+    /** Niveles de la escala (no especiales). */
+    public const LADDER_TIERS = ['a', 'b', 'c'];
+
+    /** @deprecated Usar allowedTierCodes() — se conserva por compat. */
     public const TIERS = ['cncm', 'a', 'b', 'c'];
+
+    /** @var array<string, string>|null */
+    private static ?array $tierLabelCache = null;
 
     private PDO $pdo;
     private PartnerRepository $partners;
@@ -23,17 +30,35 @@ final class PartnerAdminService
     {
         $this->pdo = Connection::get();
         $this->partners = new PartnerRepository();
+        PartnerSpecialTierService::ensureSchema($this->pdo);
+    }
+
+    public static function clearTierCache(): void
+    {
+        self::$tierLabelCache = null;
+    }
+
+    /** @return array<string, string> */
+    public static function ladderTierLabels(): array
+    {
+        return [
+            'a' => 'Bronze',
+            'b' => 'Silver',
+            'c' => 'Gold',
+        ];
     }
 
     /** @return array<string, string> */
     public static function tierLabels(): array
     {
-        return [
-            'cncm' => 'CNCM',
-            'a' => 'Bronze',
-            'b' => 'Silver',
-            'c' => 'Gold',
-        ];
+        if (self::$tierLabelCache !== null) {
+            return self::$tierLabelCache;
+        }
+        // Especiales primero (CNCM, etc.), luego escala.
+        $labels = PartnerSpecialTierService::activeLabels() + self::ladderTierLabels();
+        self::$tierLabelCache = $labels;
+
+        return $labels;
     }
 
     public static function tierLabel(?string $tier): string
@@ -42,6 +67,49 @@ final class PartnerAdminService
         $labels = self::tierLabels();
 
         return $labels[$tier] ?? strtoupper($tier !== '' ? $tier : '—');
+    }
+
+    /** @return list<string> */
+    public static function allowedTierCodes(): array
+    {
+        return array_keys(self::tierLabels());
+    }
+
+    public static function isLadderTier(string $tier): bool
+    {
+        return in_array(strtolower(trim($tier)), self::LADDER_TIERS, true);
+    }
+
+    public static function isSpecialTier(string $tier): bool
+    {
+        $tier = strtolower(trim($tier));
+        if ($tier === '' || self::isLadderTier($tier)) {
+            return false;
+        }
+
+        return isset(PartnerSpecialTierService::activeLabels()[$tier]);
+    }
+
+    public static function priceColumnForTier(string $tier): string
+    {
+        $tier = strtolower(trim($tier));
+        $map = [
+            'a' => 'price_partner_a',
+            'b' => 'price_partner_b',
+            'c' => 'price_partner_c',
+        ] + PartnerSpecialTierService::activePriceColumnMap();
+
+        return $map[$tier] ?? 'price_partner_c';
+    }
+
+    /**
+     * Columnas de precio de convenios especiales activos (price_col => label).
+     *
+     * @return array<string, string>
+     */
+    public static function specialPriceFieldLabels(): array
+    {
+        return PartnerSpecialTierService::activePriceFields();
     }
 
     /**
@@ -59,18 +127,46 @@ final class PartnerAdminService
     }
 
     /**
+     * Todos los campos de precio partner mostrables: especiales + Bronze/Silver/Gold.
+     *
+     * @return array<string, string>
+     */
+    public static function allPartnerPriceFieldLabels(): array
+    {
+        return self::specialPriceFieldLabels() + self::priceFieldLabels();
+    }
+
+    /**
+     * Columnas de precio monetarias conocidas (base + especiales + escala).
+     *
+     * @return list<string>
+     */
+    public static function allMoneyPriceColumns(): array
+    {
+        return array_values(array_unique(array_merge(
+            ['cost_price', 'catalog_price', 'public_price'],
+            array_keys(self::specialPriceFieldLabels()),
+            ['price_partner_a', 'price_partner_b', 'price_partner_c']
+        )));
+    }
+
+    /**
      * Encabezados CSV públicos → columnas de BD.
-     * Los CSV usan bronze/silver/gold; la BD mantiene price_partner_a/b/c.
+     * Especiales usan el nombre de columna; la escala usa bronze/silver/gold.
      *
      * @return array<string, string>
      */
     public static function priceCsvFieldMap(): array
     {
-        return [
-            'price_partner_bronze' => 'price_partner_a',
-            'price_partner_silver' => 'price_partner_b',
-            'price_partner_gold' => 'price_partner_c',
-        ];
+        $map = [];
+        foreach (self::specialPriceFieldLabels() as $col => $_label) {
+            $map[$col] = $col;
+        }
+        $map['price_partner_bronze'] = 'price_partner_a';
+        $map['price_partner_silver'] = 'price_partner_b';
+        $map['price_partner_gold'] = 'price_partner_c';
+
+        return $map;
     }
 
     /** @return list<string> */
@@ -95,6 +191,9 @@ final class PartnerAdminService
         if (in_array($key, ['price_partner_a', 'price_partner_b', 'price_partner_c'], true)) {
             return $key;
         }
+        if (isset(self::specialPriceFieldLabels()[$key])) {
+            return $key;
+        }
         $aliases = [
             'bronze' => 'price_partner_a',
             'silver' => 'price_partner_b',
@@ -108,7 +207,12 @@ final class PartnerAdminService
             'a' => 'price_partner_a',
             'b' => 'price_partner_b',
             'c' => 'price_partner_c',
+            'cncm' => 'price_cncm',
         ];
+        foreach (PartnerSpecialTierService::activePriceColumnMap() as $code => $col) {
+            $aliases[$code] = $col;
+            $aliases['partner_' . $code] = $col;
+        }
 
         return $aliases[$key] ?? null;
     }
@@ -191,7 +295,7 @@ final class PartnerAdminService
         if ($code === '' || !preg_match('/^[A-Z0-9_-]{2,40}$/', $code)) {
             throw new \InvalidArgumentException('Código inválido (2–40 caracteres: A-Z, 0-9, _ o -).');
         }
-        if (!in_array($tier, self::TIERS, true)) {
+        if (!in_array($tier, self::allowedTierCodes(), true)) {
             throw new \InvalidArgumentException('Nivel de partner no válido.');
         }
         if ($this->partners->codeExists($code)) {
@@ -231,10 +335,11 @@ final class PartnerAdminService
             $userId = (int) $this->pdo->lastInsertId();
 
             PartnerTierService::ensureSchema($this->pdo);
+            $isSpecial = self::isSpecialTier($tier);
             $tierProgram = array_key_exists('tier_program', $data)
                 ? !empty($data['tier_program'])
-                : ($tier !== 'cncm');
-            if ($tier === 'cncm') {
+                : !$isSpecial;
+            if ($isSpecial) {
                 $tierProgram = false;
             }
             $agrStart = self::normalizeDate($data['agreement_starts_at'] ?? null);
@@ -313,7 +418,7 @@ final class PartnerAdminService
         if ($code === '' || !preg_match('/^[A-Z0-9_-]{2,40}$/', $code)) {
             throw new \InvalidArgumentException('Código inválido (2–40 caracteres: A-Z, 0-9, _ o -).');
         }
-        if (!in_array($tier, self::TIERS, true)) {
+        if (!in_array($tier, self::allowedTierCodes(), true)) {
             throw new \InvalidArgumentException('Nivel de partner no válido.');
         }
         if ($this->partners->codeExists($code, $partnerId)) {
@@ -369,10 +474,11 @@ final class PartnerAdminService
             }
 
             PartnerTierService::ensureSchema($this->pdo);
+            $isSpecial = self::isSpecialTier($tier);
             $tierProgram = array_key_exists('tier_program', $data)
                 ? !empty($data['tier_program'])
-                : ($tier !== 'cncm');
-            if ($tier === 'cncm') {
+                : !$isSpecial;
+            if ($isSpecial) {
                 $tierProgram = false;
             }
             $agrStart = self::normalizeDate($data['agreement_starts_at'] ?? null);

@@ -1,9 +1,11 @@
 <?php
 /** @var array<string,mixed> $config */
 /** @var list<array{code:string,label:string,min_sales:int,max_sales:?int,range_label:string}> $tiers */
+/** @var list<array<string,mixed>> $specialTiers */
 /** @var array<string,mixed>|null $lastEval */
 $config = $config ?? [];
 $tiers = $tiers ?? [];
+$specialTiers = $specialTiers ?? [];
 $warn = is_array($config['warning'] ?? null) ? $config['warning'] : [];
 $minByCode = [];
 foreach ($config['tiers'] ?? [] as $t) {
@@ -118,6 +120,79 @@ foreach ($config['tiers'] ?? [] as $t) {
 
     <button class="btn btn-accent" type="submit">Guardar configuración</button>
 </form>
+
+<div class="panel" style="margin-top:1rem;max-width:760px">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Convenios especiales</h2>
+    <p class="muted" style="font-size:.85rem;max-width:40rem">
+        Además de Bronze / Silver / Gold puedes crear convenios únicos (como CNCM) con precio propio.
+        Aparecen en la ficha del partner, precios masivos, productos, combos y CSV.
+        Esos partners no participan en la escala de niveles.
+    </p>
+
+    <?php if ($specialTiers !== []): ?>
+        <div class="table-wrap" style="margin:.75rem 0 1rem">
+            <table class="data">
+                <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Nombre</th>
+                    <th>Columna precio</th>
+                    <th>Activo</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($specialTiers as $st): ?>
+                    <tr>
+                        <td><code><?= e((string) ($st['code'] ?? '')) ?></code></td>
+                        <td>
+                            <form method="post" action="<?= e(url('/admin/partners/niveles')) ?>"
+                                  style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="action" value="special_update">
+                                <input type="hidden" name="special_id" value="<?= (int) ($st['id'] ?? 0) ?>">
+                                <input type="text" name="special_label" required
+                                       value="<?= e((string) ($st['label'] ?? '')) ?>"
+                                       style="padding:.4rem .55rem;border:1px solid #cfd8e6;border-radius:8px;min-width:8rem">
+                                <label class="muted" style="display:inline-flex;gap:.3rem;align-items:center;font-size:.8rem">
+                                    <input type="checkbox" name="special_active" value="1"
+                                        <?= !empty($st['is_active']) ? 'checked' : '' ?>>
+                                    Activo
+                                </label>
+                                <input type="number" name="special_sort" value="<?= (int) ($st['sort_order'] ?? 100) ?>"
+                                       style="width:4.5rem;padding:.4rem .45rem;border:1px solid #cfd8e6;border-radius:8px"
+                                       title="Orden">
+                                <button class="btn btn-ghost btn-sm" type="submit">Guardar</button>
+                            </form>
+                        </td>
+                        <td><code><?= e((string) ($st['price_column'] ?? '')) ?></code></td>
+                        <td><?= !empty($st['is_active']) ? 'Sí' : 'No' ?></td>
+                        <td class="muted" style="font-size:.78rem">Usar en precios / partners</td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+
+    <form method="post" action="<?= e(url('/admin/partners/niveles')) ?>"
+          style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.65rem;align-items:end">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="special_create">
+        <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+            Código *
+            <input type="text" name="special_code" required maxlength="31" pattern="[A-Za-z][A-Za-z0-9_]{1,30}"
+                   placeholder="ej. escuela_x"
+                   style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;text-transform:lowercase">
+        </label>
+        <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+            Nombre visible *
+            <input type="text" name="special_label" required maxlength="120" placeholder="Ej. Escuela X"
+                   style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+        </label>
+        <button class="btn btn-accent" type="submit">Crear convenio especial</button>
+    </form>
+</div>
 
 <div class="panel" style="margin-top:1rem;max-width:760px">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Evaluación manual</h2>
