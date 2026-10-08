@@ -1,6 +1,33 @@
 <?php
 /** @var string $contentFile */
+$user = \App\Auth\Auth::user();
 $title = $title ?? 'Partner';
+$path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '';
+
+$navItems = [
+    ['href' => '/partner/alumnos', 'label' => 'Alumnos', 'icon' => 'partners', 'keys' => ['alumnos', 'home', 'caso']],
+    ['href' => '/partner/registrar', 'label' => 'Registrar alumno', 'icon' => 'user', 'keys' => ['registrar']],
+    ['href' => '/partner/registrar-grupo', 'label' => 'Registrar grupo', 'icon' => 'groups', 'keys' => ['registrar-grupo']],
+    ['href' => '/catalogo', 'label' => 'Catálogo', 'icon' => 'catalog', 'keys' => ['catalogo']],
+    ['href' => '/partner/avance', 'label' => 'Avance / niveles', 'icon' => 'advance', 'keys' => ['avance']],
+    ['href' => '/partner/perfil', 'label' => 'Mi perfil', 'icon' => 'edit', 'keys' => ['perfil']],
+    ['href' => '/partner/mi-escuela', 'label' => 'Mi escuela', 'icon' => 'factory', 'keys' => ['mi-escuela']],
+];
+
+$activeKey = match (true) {
+    $path === '/partner' || $path === '/partner/' || str_starts_with($path, '/partner/alumnos') || str_starts_with($path, '/partner/caso') => 'alumnos',
+    str_starts_with($path, '/partner/registrar-grupo') => 'registrar-grupo',
+    str_starts_with($path, '/partner/registrar') => 'registrar',
+    str_starts_with($path, '/catalogo') => 'catalogo',
+    str_starts_with($path, '/partner/avance') => 'avance',
+    str_starts_with($path, '/partner/perfil') => 'perfil',
+    str_starts_with($path, '/partner/mi-escuela') => 'mi-escuela',
+    default => '',
+};
+
+$isActive = static function (array $item) use ($activeKey): bool {
+    return in_array($activeKey, $item['keys'], true);
+};
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -10,29 +37,92 @@ $title = $title ?? 'Partner';
     <title><?= e($title) ?> · Partner</title>
     <link rel="icon" href="<?= e(asset('/assets/brand/favicon.ico')) ?>">
     <link rel="stylesheet" href="<?= e(asset('/assets/css/app.css')) ?>">
+    <script>
+      try {
+        if (localStorage.getItem('doceo-partner-nav-collapsed') === '1') {
+          document.documentElement.classList.add('admin-nav-collapsed-boot');
+        }
+      } catch (e) {}
+    </script>
 </head>
 <body>
-<header class="site-header">
-    <div class="container site-header-inner">
-        <a class="brand" href="<?= e(url('/partner')) ?>">
-            <img src="<?= e(asset('/assets/brand/logo.png')) ?>" alt="">
-            <div><strong>Portal Partner</strong><span><?= e(app_name()) ?></span></div>
-        </a>
-        <nav class="nav">
-            <a href="<?= e(url('/catalogo')) ?>">Catálogo</a>
-            <a href="<?= e(url('/partner')) ?>">Mis alumnos</a>
-            <a class="btn btn-accent btn-sm" href="<?= e(url('/partner/registrar')) ?>">Registrar</a>
-            <form method="post" action="<?= e(url('/logout')) ?>"><?= csrf_field() ?>
-                <button class="btn btn-ghost btn-sm" type="submit">Salir</button>
-            </form>
+<div class="app-shell" id="partner-shell">
+    <aside class="side-nav" id="partner-side-nav" aria-label="Menú partner" data-tour="partner-nav">
+        <div class="side-nav-top">
+            <div class="brand-mini">
+                <img src="<?= e(asset('/assets/brand/logo.png')) ?>" alt="">
+                <div class="brand-mini-text">
+                    <strong>Portal Partner</strong><br>
+                    <small><?= e($user['first_name'] ?? '') ?></small>
+                </div>
+            </div>
+            <button type="button" class="nav-collapse-btn" id="partner-nav-toggle"
+                    title="Ocultar menú" aria-label="Ocultar o mostrar el menú lateral" aria-expanded="true"
+                    aria-controls="partner-side-nav">
+                <?= icon('menu') ?>
+            </button>
+        </div>
+
+        <nav class="side-nav-links" id="partner-side-nav-links">
+            <?php foreach ($navItems as $item): ?>
+                <a class="side-nav-link<?= $isActive($item) ? ' active' : '' ?>"
+                   href="<?= e(url($item['href'])) ?>"
+                   title="<?= e($item['label']) ?>"
+                   data-tour="nav-<?= e(ltrim(str_replace('/', '-', $item['href']), '-')) ?>">
+                    <span class="side-nav-icon"><?= icon($item['icon']) ?></span>
+                    <span class="side-nav-label"><?= e($item['label']) ?></span>
+                </a>
+            <?php endforeach; ?>
         </nav>
+
+        <form method="post" action="<?= e(url('/logout')) ?>" class="side-nav-logout">
+            <?= csrf_field() ?>
+            <button class="side-nav-link side-nav-logout-btn" type="submit" title="Cerrar sesión">
+                <span class="side-nav-icon"><?= icon('logout') ?></span>
+                <span class="side-nav-label">Cerrar sesión</span>
+            </button>
+        </form>
+    </aside>
+    <div class="app-main">
+        <?php if ($msg = flash('error')): ?><div class="flash flash-error"><?= e($msg) ?></div><?php endif; ?>
+        <?php if ($msg = flash('warning')): ?><div class="flash flash-warning"><?= e($msg) ?></div><?php endif; ?>
+        <?php if ($msg = flash('success')): ?><div class="flash flash-success"><?= e($msg) ?></div><?php endif; ?>
+        <?php if ($msg = flash('info')): ?><div class="flash flash-info"><?= e($msg) ?></div><?php endif; ?>
+        <?php require $contentFile; ?>
     </div>
-</header>
-<main class="container" style="padding:1.25rem 0 3rem">
-    <?php if ($msg = flash('error')): ?><div class="flash flash-error"><?= e($msg) ?></div><?php endif; ?>
-    <?php if ($msg = flash('success')): ?><div class="flash flash-success"><?= e($msg) ?></div><?php endif; ?>
-    <?php if ($msg = flash('info')): ?><div class="flash flash-info"><?= e($msg) ?></div><?php endif; ?>
-    <?php require $contentFile; ?>
-</main>
+</div>
+<script>
+(function () {
+  var shell = document.getElementById('partner-shell');
+  var btn = document.getElementById('partner-nav-toggle');
+  var key = 'doceo-partner-nav-collapsed';
+
+  function apply(collapsed) {
+    if (!shell) return;
+    shell.classList.toggle('app-shell--nav-collapsed', !!collapsed);
+    document.documentElement.classList.toggle('admin-nav-collapsed-boot', !!collapsed);
+    if (btn) {
+      btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      btn.title = collapsed ? 'Mostrar menú' : 'Ocultar menú';
+      btn.setAttribute('aria-label', collapsed ? 'Mostrar el menú lateral' : 'Ocultar el menú lateral');
+    }
+    try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e) {}
+  }
+
+  try {
+    apply(localStorage.getItem(key) === '1');
+  } catch (e) {
+    apply(false);
+  }
+
+  if (btn && shell) {
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      apply(!shell.classList.contains('app-shell--nav-collapsed'));
+    });
+  }
+})();
+</script>
 </body>
 </html>

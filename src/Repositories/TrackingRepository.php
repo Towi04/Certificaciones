@@ -39,7 +39,9 @@ final class TrackingRepository
     public function forPartner(int $partnerId): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT t.*, pr.name AS product_name, u.first_name, u.last_name_p, u.email, pu.matricula
+            'SELECT t.*, pr.name AS product_name, pr.type AS product_type, pr.code AS product_code,
+                    u.first_name, u.last_name_p, u.last_name_m, u.email, u.phone AS student_phone,
+                    pu.matricula, pu.status AS purchase_status, pu.charged_amount
              FROM trackings t
              JOIN products pr ON pr.id = t.product_id
              JOIN users u ON u.id = t.student_user_id
