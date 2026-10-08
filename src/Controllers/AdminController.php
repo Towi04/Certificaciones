@@ -1833,6 +1833,86 @@ final class AdminController
         ]);
     }
 
+    public function partnerBatches(): void
+    {
+        Auth::requireRole(['admin']);
+        $status = isset($_GET['status']) && is_string($_GET['status']) ? trim($_GET['status']) : 'payment_review';
+        if ($status === 'all') {
+            $status = null;
+        }
+        $batches = (new \App\Services\PartnerBulkRegistrationService())->adminList($status, 150);
+        view('admin/partner_batches', [
+            'title' => 'Lotes partner',
+            'batches' => $batches,
+            'status' => $status ?? 'all',
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function partnerBatchShow(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $svc = new \App\Services\PartnerBulkRegistrationService();
+        $batch = $svc->find((int) $id);
+        if ($batch === null) {
+            flash('error', 'Lote no encontrado.');
+            redirect('/admin/partners/lotes');
+        }
+        view('admin/partner_batch_show', [
+            'title' => 'Lote #' . (int) $id,
+            'batch' => $batch,
+            'purchases' => $svc->purchasesForBatch((int) $id),
+            'layout' => 'admin',
+        ]);
+    }
+
+    public function partnerBatchConfirm(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        try {
+            $result = (new \App\Services\PartnerBulkRegistrationService())->confirmBatchPayment(
+                (int) $id,
+                (int) Auth::id(),
+                trim((string) ($_POST['notes'] ?? '')) ?: null
+            );
+            $msg = 'Lote: ' . (int) $result['confirmed'] . ' pago(s) confirmados';
+            if ((int) $result['already_paid'] > 0) {
+                $msg .= ', ' . (int) $result['already_paid'] . ' ya pagados';
+            }
+            if (!empty($result['errors'])) {
+                flash('warning', $msg . '. Errores: ' . implode(' · ', $result['errors']));
+            } else {
+                flash('success', $msg . '.');
+            }
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/partners/lotes/' . (int) $id);
+    }
+
+    public function partnerBatchProof(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $batch = (new \App\Services\PartnerBulkRegistrationService())->find((int) $id);
+        if ($batch === null || empty($batch['proof_path'])) {
+            http_response_code(404);
+            exit('Comprobante no encontrado');
+        }
+        $docs = new \App\Services\DocumentService();
+        $path = $docs->absolutePath((string) $batch['proof_path']);
+        $name = basename((string) $batch['proof_path']);
+        $mime = 'application/octet-stream';
+        if (preg_match('/\.pdf$/i', $name)) {
+            $mime = 'application/pdf';
+        } elseif (preg_match('/\.(jpe?g)$/i', $name)) {
+            $mime = 'image/jpeg';
+        } elseif (preg_match('/\.png$/i', $name)) {
+            $mime = 'image/png';
+        }
+        DocumentService::streamFile($path, $name, $mime);
+    }
+
     public function partnerTiers(): void
     {
         Auth::requireRole(['admin']);

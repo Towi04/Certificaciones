@@ -6,6 +6,7 @@
 <div style="display:flex;justify-content:space-between;gap:1rem;align-items:center;flex-wrap:wrap">
     <h1 style="margin:0;color:var(--doceo-blue)">Partners</h1>
     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <a class="btn btn-ghost" href="<?= e(url('/admin/partners/lotes')) ?>">Lotes de grupo</a>
         <a class="btn btn-ghost" href="<?= e(url('/admin/partners/niveles')) ?>">Niveles / metas</a>
         <a class="btn btn-accent" href="<?= e(url('/admin/partners/nuevo')) ?>">Nuevo partner</a>
     </div>

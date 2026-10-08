@@ -315,11 +315,37 @@ CREATE TABLE IF NOT EXISTS pipeline_steps (
   CONSTRAINT fk_pstep_tpl FOREIGN KEY (pipeline_template_id) REFERENCES pipeline_templates(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS partner_registration_batches (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  partner_id BIGINT UNSIGNED NOT NULL,
+  product_id BIGINT UNSIGNED NOT NULL,
+  exam_date DATE NULL,
+  exam_time TIME NULL,
+  expected_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  unit_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  student_count INT UNSIGNED NOT NULL DEFAULT 0,
+  proof_path VARCHAR(255) NULL,
+  status ENUM('payment_review','paid','cancelled') NOT NULL DEFAULT 'payment_review',
+  notes TEXT NULL,
+  created_by BIGINT UNSIGNED NULL,
+  paid_at DATETIME NULL,
+  paid_by BIGINT UNSIGNED NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_prb_partner (partner_id),
+  KEY idx_prb_status (status),
+  CONSTRAINT fk_prb_partner FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE,
+  CONSTRAINT fk_prb_product FOREIGN KEY (product_id) REFERENCES products(id),
+  CONSTRAINT fk_prb_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_prb_paid_by FOREIGN KEY (paid_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS purchases (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   matricula VARCHAR(40) NOT NULL,
   student_user_id BIGINT UNSIGNED NOT NULL,
   partner_id BIGINT UNSIGNED NULL,
+  batch_id BIGINT UNSIGNED NULL,
   discount_code_id BIGINT UNSIGNED NULL,
   combo_id BIGINT UNSIGNED NULL,
   status ENUM('draft','awaiting_docs','awaiting_payment','payment_review','paid','cancelled','refunded') NOT NULL DEFAULT 'draft',
@@ -343,9 +369,11 @@ CREATE TABLE IF NOT EXISTS purchases (
   UNIQUE KEY uq_purchases_matricula (matricula),
   KEY idx_purchases_student (student_user_id),
   KEY idx_purchases_partner (partner_id),
+  KEY idx_purchases_batch (batch_id),
   KEY idx_purchases_status (status),
   CONSTRAINT fk_purchases_student FOREIGN KEY (student_user_id) REFERENCES users(id),
   CONSTRAINT fk_purchases_partner FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE SET NULL,
+  CONSTRAINT fk_purchases_batch FOREIGN KEY (batch_id) REFERENCES partner_registration_batches(id) ON DELETE SET NULL,
   CONSTRAINT fk_purchases_dcode FOREIGN KEY (discount_code_id) REFERENCES discount_codes(id) ON DELETE SET NULL,
   CONSTRAINT fk_purchases_combo FOREIGN KEY (combo_id) REFERENCES combos(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
