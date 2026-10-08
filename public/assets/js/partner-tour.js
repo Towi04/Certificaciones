@@ -22,7 +22,8 @@
       { sel: '[data-tour="case-results"]', title: 'Resultados', body: 'Nivel, puntaje, certificado y PDF cuando existan.' }
     ],
     registrar: [
-      { sel: '[data-tour="partner-nav"]', title: 'Registrar alumno', body: 'Elige un producto del catálogo partner y completa el mismo flujo de compra.' }
+      { sel: '[data-tour="register-header"]', title: 'Registrar alumno', body: 'Elige un producto del catálogo partner y completa el mismo flujo de compra.' },
+      { sel: '[data-tour="partner-nav"]', title: 'Menú', body: 'También puedes volver a alumnos o ir a registro de grupo desde el menú lateral.' }
     ],
     'registrar-grupo': [
       { sel: '[data-tour="bulk-header"]', title: 'Registro de grupo', body: 'Un producto, una fecha, CSV de alumnos y un solo comprobante.' },
