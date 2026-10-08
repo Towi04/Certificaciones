@@ -36,6 +36,7 @@ final class StudentController
         }
         $product = [
             'type' => $tracking['product_type'] ?? '',
+            'product_type' => $tracking['product_type'] ?? '',
             'config_json' => $tracking['config_json'] ?? null,
             'group_config_json' => $tracking['group_config_json'] ?? null,
         ];
@@ -45,12 +46,15 @@ final class StudentController
         $cfg = \App\Services\CheckoutRequirements::config($tracking);
         $defs = \App\Services\GroupStepConfig::defsFromConfig($cfg);
         $steps = \App\Services\GroupStepConfig::visibleToStudent($steps, $defs, $cfg);
+        $registrationFields = \App\Services\CheckoutRequirements::fieldsForProduct($product);
         view('student/case', [
             'title' => 'Caso ' . $tracking['matricula'],
             'tracking' => $tracking,
             'steps' => $steps,
             'documents' => $svc->documentsForTracking((int) $tracking['id']),
             'registrationDocs' => $checklist,
+            'registrationFields' => $registrationFields,
+            'usesInventoryAccess' => \App\Services\InventoryService::isEnabledForProduct($product),
             'logs' => $svc->logs((int) $tracking['id']),
             'canReschedule' => $svc->canStudentRequestReschedule($tracking),
             'canEditRegistration' => TrackingService::canEditRegistration($tracking),

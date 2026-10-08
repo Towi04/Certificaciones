@@ -412,6 +412,8 @@ HTML;
                 'name' => 'iTEP / Oxford · Exámenes',
                 'supplier_id' => $supplierIds['itep'],
                 'config' => array_merge($standardCertConfig, [
+                    // Accesos por inventario; no pedir reglamento/firma en el expediente del alumno.
+                    'registration_docs' => [],
                     'exam' => [
                         'choose_at_checkout' => true,
                         'slot_minutes' => 30,
