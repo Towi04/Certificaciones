@@ -72,11 +72,15 @@ $zip->close();
 echo '• Archivos descomprimidos.<br>';
 flush();
 
+$copyFailures = [];
+
 function smartCopy(string $source, string $dest): void
 {
+    global $copyFailures;
+
     if (is_dir($source)) {
-        if (!is_dir($dest)) {
-            mkdir($dest, 0755, true);
+        if (!is_dir($dest) && !mkdir($dest, 0755, true) && !is_dir($dest)) {
+            $copyFailures[] = "No se pudo crear directorio: {$dest}";
         }
         foreach (scandir($source) ?: [] as $file) {
             if ($file !== '.' && $file !== '..') {
@@ -96,13 +100,25 @@ function smartCopy(string $source, string $dest): void
     }
 
     if (file_exists($dest)) {
-        @chmod($dest, 0777);
-        @unlink($dest);
+        @chmod($dest, 0666);
+        if (!@unlink($dest) && file_exists($dest)) {
+            // Sobrescribir in-place si unlink falla (permisos/hosting).
+            $data = file_get_contents($source);
+            if ($data === false || file_put_contents($dest, $data) === false) {
+                $copyFailures[] = "No se pudo actualizar: {$dest}";
+                return;
+            }
+            @chmod($dest, 0644);
+
+            return;
+        }
     }
 
-    if (copy($source, $dest)) {
-        chmod($dest, 0644);
+    if (!@copy($source, $dest)) {
+        $copyFailures[] = "No se pudo copiar: {$dest}";
+        return;
     }
+    @chmod($dest, 0644);
 }
 
 $source_folder = "./extracted/{$repo}-main/";
@@ -117,6 +133,25 @@ foreach (scandir($source_folder) ?: [] as $item) {
 }
 echo '• Archivos actualizados.<br>';
 flush();
+
+if ($copyFailures !== []) {
+    echo '<p style="color:#b91c1c"><strong>Avisos de copia (' . count($copyFailures) . '):</strong><br>';
+    foreach (array_slice($copyFailures, 0, 20) as $fail) {
+        echo '• ' . htmlspecialchars($fail, ENT_QUOTES, 'UTF-8') . '<br>';
+    }
+    echo '</p>';
+    flush();
+}
+
+// Neubox a veces sirve /assets y /public/assets como árboles distintos.
+// Forzar ambos desde el ZIP recién extraído (antes de borrar extracted/).
+$extractedAssets = $source_folder . 'public/assets';
+if (is_dir($extractedAssets)) {
+    smartCopy($extractedAssets, __DIR__ . '/public/assets');
+    smartCopy($extractedAssets, __DIR__ . '/assets');
+    echo '• Assets sincronizados en /public/assets y /assets.<br>';
+    flush();
+}
 
 // Marca de versión para verificar en /admin/salud
 @file_put_contents(

@@ -79,27 +79,50 @@ function asset(string $path): string
 {
     $path = '/' . ltrim($path, '/');
 
-    // Prefijo opcional: ASSET_BASE=/public  (Neubox con docroot en la raíz)
+    // Prefijo opcional: ASSET_BASE=/public  (Neubox con docroot en la raíz del repo)
     $configured = rtrim((string) (\App\Config\Env::get('ASSET_BASE', '') ?? ''), '/');
-    if ($configured !== '') {
-        return $configured . $path;
-    }
 
-    // Auto: si el archivo solo existe bajo public/, exponerlo como /public/...
-    // (docroot = raíz del subdominio). Si docroot = /public, el archivo también
-    // existe como BASE_PATH/public/... pero la URL correcta sigue siendo /assets/...
-    // Detectamos docroot-raíz cuando hay index.php en la raíz del repo.
     $publicFile = BASE_PATH . '/public' . $path;
     $rootFile = BASE_PATH . $path;
-    $rootFrontController = is_file(BASE_PATH . '/index.php') && is_file(BASE_PATH . '/public/index.php');
-    if ($rootFrontController && is_file($publicFile) && !is_file($rootFile)) {
-        $url = '/public' . $path;
+    $publicOk = is_file($publicFile);
+    $rootOk = is_file($rootFile);
+
+    // Si existen ambas copias (p. ej. espejo viejo en /public/assets y otra en /assets),
+    // usar la más reciente para URL + cache-bust. Evita servir JS/CSS obsoleto en Neubox.
+    if ($publicOk && $rootOk) {
+        $publicMtime = (int) filemtime($publicFile);
+        $rootMtime = (int) filemtime($rootFile);
+        if ($rootMtime > $publicMtime) {
+            $url = $path;
+            $disk = $rootFile;
+        } else {
+            $url = ($configured !== '' ? $configured : '/public') . $path;
+            // Si el prefijo configurado es /public pero el docroot ya es public/, no duplicar.
+            $docRoot = realpath($_SERVER['DOCUMENT_ROOT'] ?? '') ?: '';
+            $publicDir = realpath(BASE_PATH . '/public') ?: '';
+            if ($docRoot !== '' && $publicDir !== '' && $docRoot === $publicDir) {
+                $url = $path;
+            }
+            $disk = $publicFile;
+        }
+    } elseif ($configured !== '') {
+        $url = $configured . $path;
+        $disk = $publicOk ? $publicFile : ($rootOk ? $rootFile : null);
     } else {
-        $url = $path;
+        // Auto: docroot = raíz del repo → /public/assets/...; docroot = public/ → /assets/...
+        $docRoot = realpath($_SERVER['DOCUMENT_ROOT'] ?? '') ?: '';
+        $publicDir = realpath(BASE_PATH . '/public') ?: '';
+        $rootFrontController = is_file(BASE_PATH . '/index.php') && is_file(BASE_PATH . '/public/index.php');
+        if ($docRoot !== '' && $publicDir !== '' && $docRoot === $publicDir) {
+            $url = $path;
+        } elseif ($rootFrontController && $publicOk && !$rootOk) {
+            $url = '/public' . $path;
+        } else {
+            $url = $path;
+        }
+        $disk = $publicOk ? $publicFile : ($rootOk ? $rootFile : null);
     }
 
-    // Cache-bust si el archivo existe en disco
-    $disk = is_file($publicFile) ? $publicFile : (is_file($rootFile) ? $rootFile : null);
     if ($disk !== null) {
         $url .= '?v=' . filemtime($disk);
     }
