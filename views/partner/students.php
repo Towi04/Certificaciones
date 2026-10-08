@@ -2,7 +2,14 @@
 /** @var array<string,mixed>|null $partner */
 /** @var list<array<string,mixed>> $trackings */
 /** @var array<int,array<string,mixed>> $accessMails */
+/** @var array{q:string,status:string,exam:string,producto:int} $filters */
+/** @var list<string> $statusOptions */
+/** @var list<array{id:int,name:string}> $productOptions */
 $accessMails = is_array($accessMails ?? null) ? $accessMails : [];
+$filters = is_array($filters ?? null) ? $filters : ['q' => '', 'status' => 'all', 'exam' => 'all', 'producto' => 0];
+$statusOptions = is_array($statusOptions ?? null) ? $statusOptions : [];
+$productOptions = is_array($productOptions ?? null) ? $productOptions : [];
+$inputStyle = 'padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px;min-width:0';
 ?>
 <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center" data-tour="students-header">
     <div>
@@ -19,13 +26,75 @@ $accessMails = is_array($accessMails ?? null) ? $accessMails : [];
     </div>
 </div>
 
+<form method="get" action="<?= e(url('/partner/alumnos')) ?>" class="panel" style="margin-top:1rem" data-tour="students-filters">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Buscar y filtrar</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.65rem;align-items:end">
+        <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600;grid-column:span 2">
+            Buscar
+            <input type="search" name="q" value="<?= e((string) ($filters['q'] ?? '')) ?>"
+                   placeholder="Matrícula, alumno, correo, folio, producto…"
+                   style="<?= e($inputStyle) ?>">
+        </label>
+        <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
+            Estatus
+            <select name="status" style="<?= e($inputStyle) ?>">
+                <option value="all" <?= (($filters['status'] ?? 'all') === 'all') ? 'selected' : '' ?>>Todos</option>
+                <?php foreach ($statusOptions as $st): ?>
+                    <option value="<?= e($st) ?>" <?= (($filters['status'] ?? '') === $st) ? 'selected' : '' ?>>
+                        <?= e($st) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
+            Producto
+            <select name="producto" style="<?= e($inputStyle) ?>">
+                <option value="0" <?= ((int) ($filters['producto'] ?? 0) === 0) ? 'selected' : '' ?>>Todos</option>
+                <?php foreach ($productOptions as $opt): ?>
+                    <option value="<?= (int) $opt['id'] ?>"
+                        <?= ((int) ($filters['producto'] ?? 0) === (int) $opt['id']) ? 'selected' : '' ?>>
+                        <?= e((string) $opt['name']) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.82rem;font-weight:600">
+            Examen
+            <select name="exam" style="<?= e($inputStyle) ?>">
+                <?php
+                $exam = (string) ($filters['exam'] ?? 'all');
+                $examOpts = [
+                    'all' => 'Todos',
+                    'upcoming' => 'Próximos',
+                    'past' => 'Pasados',
+                    'set' => 'Con fecha',
+                    'none' => 'Sin fecha',
+                ];
+                foreach ($examOpts as $val => $label):
+                    ?>
+                    <option value="<?= e($val) ?>" <?= $exam === $val ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <div style="display:flex;gap:.45rem;flex-wrap:wrap">
+            <button class="btn btn-primary" type="submit">Buscar</button>
+            <a class="btn btn-ghost" href="<?= e(url('/partner/alumnos')) ?>">Limpiar</a>
+        </div>
+    </div>
+</form>
+
 <div class="panel" style="margin-top:1rem" data-tour="students-table">
     <h2 style="margin-top:0">Cartera de alumnos</h2>
     <?php if ($trackings === []): ?>
         <div class="empty">
-            Aún no hay alumnos.
-            <a href="<?= e(url('/partner/registrar')) ?>">Elige un producto del catálogo</a>
-            y completa el registro.
+            <?php if (($filters['q'] ?? '') !== '' || ($filters['status'] ?? 'all') !== 'all' || (int) ($filters['producto'] ?? 0) > 0 || ($filters['exam'] ?? 'all') !== 'all'): ?>
+                No hay alumnos con esos filtros.
+                <a href="<?= e(url('/partner/alumnos')) ?>">Ver todos</a>
+            <?php else: ?>
+                Aún no hay alumnos.
+                <a href="<?= e(url('/partner/registrar')) ?>">Elige un producto del catálogo</a>
+                y completa el registro.
+            <?php endif; ?>
         </div>
     <?php else: ?>
         <div class="table-wrap">
@@ -99,5 +168,6 @@ $accessMails = is_array($accessMails ?? null) ? $accessMails : [];
                 </tbody>
             </table>
         </div>
+        <?php require BASE_PATH . '/views/shared/pagination.php'; ?>
     <?php endif; ?>
 </div>

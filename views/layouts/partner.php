@@ -17,7 +17,7 @@ $navItems = [
 $activeKey = match (true) {
     $path === '/partner' || $path === '/partner/' || str_starts_with($path, '/partner/alumnos') || str_starts_with($path, '/partner/caso') => 'alumnos',
     str_starts_with($path, '/partner/registrar-grupo') => 'registrar-grupo',
-    str_starts_with($path, '/partner/registrar') => 'registrar',
+    str_starts_with($path, '/partner/registrar') || str_starts_with($path, '/adquirir/') => 'registrar',
     str_starts_with($path, '/catalogo') => 'catalogo',
     str_starts_with($path, '/partner/avance') => 'avance',
     str_starts_with($path, '/partner/perfil') => 'perfil',
@@ -28,6 +28,21 @@ $activeKey = match (true) {
 $isActive = static function (array $item) use ($activeKey): bool {
     return in_array($activeKey, $item['keys'], true);
 };
+
+$partnerTourView = \App\Services\PartnerTutorialService::viewFromPath($path);
+$partnerTutorial = ['views' => [], 'completed_all' => false];
+try {
+    $stmt = \App\Database\Connection::get()->prepare(
+        'SELECT id FROM partners WHERE user_id = ? AND is_active = 1 LIMIT 1'
+    );
+    $stmt->execute([(int) ($user['id'] ?? 0)]);
+    $partnerId = (int) $stmt->fetchColumn();
+    if ($partnerId > 0) {
+        $partnerTutorial = (new \App\Services\PartnerTutorialService())->stateForPartner($partnerId);
+    }
+} catch (\Throwable) {
+    // tutorial opcional
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -124,5 +139,21 @@ $isActive = static function (array $item) use ($activeKey): bool {
   }
 })();
 </script>
+<?php if ($partnerTourView): ?>
+<script src="<?= e(asset('/assets/js/partner-tour.js')) ?>" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  if (!window.DoceoPartnerTour) return;
+  window.DoceoPartnerTour.configure({
+    completeUrl: <?= json_encode(url('/partner/tutorial/completo'), JSON_UNESCAPED_UNICODE) ?>,
+    csrf: <?= json_encode(csrf_token(), JSON_UNESCAPED_UNICODE) ?>
+  });
+  window.DoceoPartnerTour.maybeStart(
+    <?= json_encode($partnerTourView, JSON_UNESCAPED_UNICODE) ?>,
+    <?= json_encode($partnerTutorial, JSON_UNESCAPED_UNICODE) ?>
+  );
+});
+</script>
+<?php endif; ?>
 </body>
 </html>

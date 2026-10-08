@@ -38,20 +38,146 @@ final class TrackingRepository
     /** @return list<array<string, mixed>> */
     public function forPartner(int $partnerId): array
     {
+        return $this->forPartnerFiltered($partnerId);
+    }
+
+    /**
+     * @param array{
+     *   q?:?string,
+     *   status?:?string,
+     *   product_id?:?int,
+     *   exam?:?string,
+     *   limit?:?int,
+     *   offset?:?int
+     * } $filters
+     * @return list<array<string, mixed>>
+     */
+    public function forPartnerFiltered(int $partnerId, array $filters = []): array
+    {
+        [$where, $params] = $this->partnerFilterSql($partnerId, $filters);
+        $sql = 'SELECT t.*, pr.name AS product_name, pr.type AS product_type, pr.code AS product_code,
+                       u.first_name, u.last_name_p, u.last_name_m, u.email, u.phone AS student_phone,
+                       pu.matricula, pu.status AS purchase_status, pu.charged_amount
+                FROM trackings t
+                JOIN products pr ON pr.id = t.product_id
+                JOIN users u ON u.id = t.student_user_id
+                JOIN purchases pu ON pu.id = t.purchase_id
+                WHERE ' . $where . '
+                ORDER BY t.created_at DESC, t.id DESC';
+        $limit = isset($filters['limit']) ? (int) $filters['limit'] : null;
+        $offset = isset($filters['offset']) ? max(0, (int) $filters['offset']) : 0;
+        if ($limit !== null && $limit > 0) {
+            $sql .= ' LIMIT ' . $limit . ' OFFSET ' . $offset;
+        }
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll() ?: [];
+    }
+
+    /**
+     * @param array{q?:?string,status?:?string,product_id?:?int,exam?:?string} $filters
+     */
+    public function countForPartnerFiltered(int $partnerId, array $filters = []): int
+    {
+        [$where, $params] = $this->partnerFilterSql($partnerId, $filters);
         $stmt = $this->pdo->prepare(
-            'SELECT t.*, pr.name AS product_name, pr.type AS product_type, pr.code AS product_code,
-                    u.first_name, u.last_name_p, u.last_name_m, u.email, u.phone AS student_phone,
-                    pu.matricula, pu.status AS purchase_status, pu.charged_amount
+            'SELECT COUNT(*)
              FROM trackings t
              JOIN products pr ON pr.id = t.product_id
              JOIN users u ON u.id = t.student_user_id
              JOIN purchases pu ON pu.id = t.purchase_id
+             WHERE ' . $where
+        );
+        $stmt->execute($params);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /** @return list<array{id:int,name:string}> */
+    public function partnerProductOptions(int $partnerId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT DISTINCT pr.id, pr.name
+             FROM trackings t
+             JOIN products pr ON pr.id = t.product_id
              WHERE t.partner_id = ?
-             ORDER BY t.created_at DESC'
+             ORDER BY pr.name ASC'
+        );
+        $stmt->execute([$partnerId]);
+        $rows = $stmt->fetchAll() ?: [];
+        $out = [];
+        foreach ($rows as $row) {
+            $out[] = ['id' => (int) $row['id'], 'name' => (string) $row['name']];
+        }
+
+        return $out;
+    }
+
+    /** @return list<string> */
+    public function partnerStatusOptions(int $partnerId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT DISTINCT t.status
+             FROM trackings t
+             WHERE t.partner_id = ? AND t.status IS NOT NULL AND t.status <> \'\'
+             ORDER BY t.status ASC'
         );
         $stmt->execute([$partnerId]);
 
-        return $stmt->fetchAll();
+        return array_values(array_filter(array_map(
+            static fn ($v): string => (string) $v,
+            $stmt->fetchAll(PDO::FETCH_COLUMN) ?: []
+        )));
+    }
+
+    /**
+     * @param array{q?:?string,status?:?string,product_id?:?int,exam?:?string} $filters
+     * @return array{0:string,1:list<mixed>}
+     */
+    private function partnerFilterSql(int $partnerId, array $filters): array
+    {
+        $where = ['t.partner_id = ?'];
+        $params = [$partnerId];
+
+        $q = trim((string) ($filters['q'] ?? ''));
+        if ($q !== '') {
+            $like = '%' . $q . '%';
+            $where[] = '(pu.matricula LIKE ?
+                OR u.first_name LIKE ?
+                OR u.last_name_p LIKE ?
+                OR u.last_name_m LIKE ?
+                OR u.email LIKE ?
+                OR pr.name LIKE ?
+                OR t.folio LIKE ?
+                OR t.access_key LIKE ?)';
+            array_push($params, $like, $like, $like, $like, $like, $like, $like, $like);
+        }
+
+        $status = trim((string) ($filters['status'] ?? ''));
+        if ($status !== '' && $status !== 'all') {
+            $where[] = 't.status = ?';
+            $params[] = $status;
+        }
+
+        $productId = (int) ($filters['product_id'] ?? 0);
+        if ($productId > 0) {
+            $where[] = 't.product_id = ?';
+            $params[] = $productId;
+        }
+
+        $exam = trim((string) ($filters['exam'] ?? ''));
+        if ($exam === 'upcoming') {
+            $where[] = 't.exam_date IS NOT NULL AND t.exam_date >= CURDATE()';
+        } elseif ($exam === 'past') {
+            $where[] = 't.exam_date IS NOT NULL AND t.exam_date < CURDATE()';
+        } elseif ($exam === 'none') {
+            $where[] = 't.exam_date IS NULL';
+        } elseif ($exam === 'set') {
+            $where[] = 't.exam_date IS NOT NULL';
+        }
+
+        return [implode(' AND ', $where), $params];
     }
 
     /** @return list<array<string, mixed>> */
