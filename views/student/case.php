@@ -81,7 +81,7 @@ $portalLabels = (new \App\Services\UksEletService())->studentPortalLabels($track
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Mis datos de registro</h2>
     <p class="muted" style="font-size:.85rem;margin-top:0">
         Si detectas un error en tu nombre u otros datos (después del correo de bienvenida), corrígelos aquí
-        <strong>antes de presentar el examen</strong>.
+        <strong>antes de que se asignen tus códigos de acceso</strong>.
     </p>
     <?php
     $canEditRegistration = !empty($canEditRegistration);

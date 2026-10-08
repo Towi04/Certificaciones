@@ -1,6 +1,6 @@
 <?php
 /**
- * Formulario compartido para editar datos de registro (antes del examen).
+ * Formulario compartido para editar datos de registro (antes de asignar códigos).
  * Si se pasa $registrationFields (desde checkout_fields del grupo), solo se muestran esos.
  * Admin puede omitir la lista para ver/editar el set completo.
  *
@@ -61,8 +61,8 @@ $valueFor = static function (string $code) use ($tracking, $sex, $nationality): 
     <p class="muted" style="margin:0;font-size:.88rem">No se configuró la URL del formulario.</p>
 <?php elseif (!$canEdit): ?>
     <p class="muted" style="margin:0;font-size:.88rem">
-        Los datos de registro ya no se pueden modificar porque el alumno ya presentó el examen
-        (o el caso está cerrado).
+        Los datos de registro ya no se pueden modificar porque ya se asignaron los códigos de acceso
+        (folio y clave) o el caso está cerrado.
     </p>
 <?php else: ?>
 <form method="post" action="<?= e($formAction) ?>" class="registration-edit-form">
@@ -120,7 +120,8 @@ $valueFor = static function (string $code) use ($tracking, $sex, $nationality): 
         <?php endforeach; ?>
     </div>
     <p class="muted" style="font-size:.78rem;margin:.55rem 0 0">
-        Puedes corregir estos datos hasta que el alumno presente el examen. Después quedan bloqueados.
+        Puedes corregir estos datos hasta que se asignen los códigos de acceso (folio y clave).
+        Después quedan bloqueados.
     </p>
     <button class="btn btn-accent btn-sm" type="submit" style="margin-top:.65rem">Guardar datos</button>
 </form>

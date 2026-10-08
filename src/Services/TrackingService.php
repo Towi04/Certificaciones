@@ -259,14 +259,25 @@ final class TrackingService
     }
 
     /**
+     * Códigos de acceso ya asignados (folio + clave): registro ante el proveedor hecho.
+     *
+     * @param array<string, mixed> $tracking
+     */
+    public static function hasAccessCodesAssigned(array $tracking): bool
+    {
+        return trim((string) ($tracking['folio'] ?? '')) !== ''
+            && trim((string) ($tracking['access_key'] ?? '')) !== '';
+    }
+
+    /**
      * ¿Se pueden editar los datos de registro del alumno?
-     * Bloqueado una vez que se marcó asistencia al examen (presente).
+     * Bloqueado al asignar códigos de acceso (folio/clave), no al presentar el examen.
      *
      * @param array<string, mixed> $tracking
      */
     public static function canEditRegistration(array $tracking): bool
     {
-        if (GroupStepConfig::isExamAttendancePresent($tracking)) {
+        if (self::hasAccessCodesAssigned($tracking)) {
             return false;
         }
         $status = strtolower(trim((string) ($tracking['status'] ?? '')));
@@ -279,7 +290,7 @@ final class TrackingService
 
     /**
      * Actualiza datos de registro del alumno (usuario + ficha students).
-     * Solo permitido antes de presentar el examen.
+     * Solo permitido antes de asignar los códigos de acceso (folio/clave).
      *
      * @param array{
      *   first_name?:string,last_name_p?:string,last_name_m?:string,phone?:string,email?:string,
@@ -294,7 +305,7 @@ final class TrackingService
         }
         if (!self::canEditRegistration($tracking)) {
             throw new \InvalidArgumentException(
-                'Ya no se pueden modificar los datos de registro: el alumno ya presentó el examen.'
+                'Ya no se pueden modificar los datos de registro: ya se asignaron los códigos de acceso.'
             );
         }
         $userId = (int) ($tracking['student_user_id'] ?? 0);
