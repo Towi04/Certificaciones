@@ -64,33 +64,46 @@
     overlay = document.createElement('div');
     overlay.id = 'partner-tour-overlay';
     overlay.setAttribute('aria-hidden', 'true');
-    overlay.innerHTML = ''
-      + '<div class="partner-tour-backdrop"></div>'
-      + '<div class="partner-tour-bubble" role="dialog" aria-modal="true">'
-      + '  <div class="partner-tour-title"></div>'
-      + '  <div class="partner-tour-body"></div>'
-      + '  <div class="partner-tour-actions">'
-      + '    <button type="button" class="btn btn-ghost btn-sm partner-tour-skip">Omitir</button>'
-      + '    <button type="button" class="btn btn-accent btn-sm partner-tour-next">Siguiente</button>'
-      + '  </div>'
-      + '</div>';
+    overlay.innerHTML = '<div class="partner-tour-backdrop"></div>';
     document.body.appendChild(overlay);
-    bubble = overlay.querySelector('.partner-tour-bubble');
-    overlay.querySelector('.partner-tour-skip').addEventListener('click', finish);
-    overlay.querySelector('.partner-tour-next').addEventListener('click', next);
+
+    // Burbuja aparte del overlay: debe quedar SIEMPRE por encima del target
+    // (p. ej. el sidebar sticky al que se le sube z-index al resaltar).
+    bubble = document.createElement('div');
+    bubble.className = 'partner-tour-bubble';
+    bubble.setAttribute('role', 'dialog');
+    bubble.setAttribute('aria-modal', 'true');
+    bubble.setAttribute('aria-hidden', 'true');
+    bubble.innerHTML = ''
+      + '<div class="partner-tour-title"></div>'
+      + '<div class="partner-tour-body"></div>'
+      + '<div class="partner-tour-actions">'
+      + '  <button type="button" class="btn btn-ghost btn-sm partner-tour-skip">Omitir</button>'
+      + '  <button type="button" class="btn btn-accent btn-sm partner-tour-next">Siguiente</button>'
+      + '</div>';
+    document.body.appendChild(bubble);
+
+    bubble.querySelector('.partner-tour-skip').addEventListener('click', finish);
+    bubble.querySelector('.partner-tour-next').addEventListener('click', next);
     overlay.querySelector('.partner-tour-backdrop').addEventListener('click', finish);
 
     var style = document.createElement('style');
     style.textContent = ''
-      + '#partner-tour-overlay{position:fixed;inset:0;z-index:9999;pointer-events:none;display:none}'
+      // Capas: backdrop < target resaltado < burbuja (legible sobre el sidebar).
+      + '#partner-tour-overlay{position:fixed;inset:0;z-index:99990;pointer-events:none;display:none}'
       + '#partner-tour-overlay.is-open{display:block;pointer-events:auto}'
       + '.partner-tour-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.35)}'
-      + '.partner-tour-bubble{position:absolute;max-width:320px;background:#fff;border-radius:14px;'
-      + 'box-shadow:0 18px 50px rgba(15,23,42,.28);padding:1rem 1.05rem;border:1px solid #dbe3f0}'
+      + '.partner-tour-bubble{position:fixed;z-index:100010;max-width:320px;width:min(320px,calc(100vw - 24px));'
+      + 'background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(15,23,42,.28);'
+      + 'padding:1rem 1.05rem;border:1px solid #dbe3f0;display:none;pointer-events:auto}'
+      + '.partner-tour-bubble.is-open{display:block}'
       + '.partner-tour-title{font-weight:700;color:#1e3a8a;margin-bottom:.35rem}'
       + '.partner-tour-body{font-size:.9rem;line-height:1.4;color:#334155;margin-bottom:.85rem}'
       + '.partner-tour-actions{display:flex;justify-content:flex-end;gap:.4rem}'
-      + '.partner-tour-target{outline:3px solid #f59e0b;outline-offset:3px;border-radius:10px;position:relative;z-index:10000}';
+      + '.partner-tour-target{outline:3px solid #f59e0b;outline-offset:3px;border-radius:10px;'
+      + 'position:relative;z-index:100000;isolation:isolate}'
+      // No pisar sticky del menú lateral al resaltar.
+      + '.side-nav.partner-tour-target{position:sticky;top:0}';
     document.head.appendChild(style);
   }
 
@@ -102,13 +115,33 @@
 
   function placeBubble(el) {
     var rect = el.getBoundingClientRect();
-    var top = rect.bottom + 12;
-    var left = Math.min(Math.max(12, rect.left), window.innerWidth - 340);
-    if (top + 180 > window.innerHeight) {
-      top = Math.max(12, rect.top - 180);
+    var gap = 12;
+    var bubbleW = Math.min(320, window.innerWidth - 24);
+    var bubbleH = bubble.offsetHeight || 180;
+    var left;
+    var top;
+
+    // Sidebar / columna izquierda alta: anclar a la derecha del menú.
+    var isSideNav = el.classList.contains('side-nav')
+      || el.id === 'partner-side-nav'
+      || (rect.height > window.innerHeight * 0.6 && rect.left < 80);
+
+    if (isSideNav) {
+      left = rect.right + gap;
+      if (left + bubbleW > window.innerWidth - gap) {
+        left = Math.max(gap, window.innerWidth - bubbleW - gap);
+      }
+      top = Math.min(Math.max(gap, rect.top + 72), window.innerHeight - bubbleH - gap);
+    } else {
+      left = Math.min(Math.max(gap, rect.left), window.innerWidth - bubbleW - gap);
+      top = rect.bottom + gap;
+      if (top + bubbleH > window.innerHeight - gap) {
+        top = Math.max(gap, rect.top - bubbleH - gap);
+      }
     }
-    bubble.style.top = top + 'px';
-    bubble.style.left = left + 'px';
+
+    bubble.style.top = Math.round(top) + 'px';
+    bubble.style.left = Math.round(left) + 'px';
   }
 
   function showStep() {
@@ -117,12 +150,18 @@
       var resolved = resolveStep(currentSteps[index]);
       if (resolved) {
         resolved.el.classList.add('partner-tour-target');
-        resolved.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // No scrollear el sidebar completo fuera de vista.
+        if (!resolved.el.classList.contains('side-nav') && resolved.el.id !== 'partner-side-nav') {
+          resolved.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
         bubble.querySelector('.partner-tour-title').textContent = resolved.title;
         bubble.querySelector('.partner-tour-body').textContent = resolved.body;
         var nextBtn = bubble.querySelector('.partner-tour-next');
         nextBtn.textContent = index >= currentSteps.length - 1 ? 'Listo' : 'Siguiente';
-        placeBubble(resolved.el);
+        bubble.classList.add('is-open');
+        bubble.setAttribute('aria-hidden', 'false');
+        // Medir altura real tras pintar texto.
+        requestAnimationFrame(function () { placeBubble(resolved.el); });
         return;
       }
       index++;
@@ -159,6 +198,10 @@
     if (overlay) {
       overlay.classList.remove('is-open');
       overlay.setAttribute('aria-hidden', 'true');
+    }
+    if (bubble) {
+      bubble.classList.remove('is-open');
+      bubble.setAttribute('aria-hidden', 'true');
     }
     postComplete();
   }
