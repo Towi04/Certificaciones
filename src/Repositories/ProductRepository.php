@@ -61,11 +61,12 @@ final class ProductRepository
         bool $starsOnly = false,
         ?int $limit = null,
         ?int $offset = null,
-        string $section = 'certificaciones'
+        string $section = 'certificaciones',
+        string $sort = 'relevantes'
     ): array {
         [$sql, $params] = $this->publicCatalogWhere($filterSlug, $q, $starsOnly, $section);
         $sql = self::SELECT_WITH_RELATIONS . $sql
-            . ' ORDER BY p.is_star DESC, p.sort_order ASC, p.name ASC';
+            . ' ORDER BY ' . self::publicCatalogOrderBy($sort);
         if ($limit !== null) {
             $sql .= ' LIMIT ' . (int) $limit . ' OFFSET ' . max(0, (int) ($offset ?? 0));
         }
@@ -73,6 +74,52 @@ final class ProductRepository
         $stmt->execute($params);
 
         return $stmt->fetchAll();
+    }
+
+    /**
+     * Orden del catálogo público.
+     * relevantes | precio_asc | precio_desc | nombre_asc | nombre_desc
+     */
+    public static function normalizeCatalogSort(string $sort): string
+    {
+        $sort = strtolower(trim($sort));
+
+        return match ($sort) {
+            'precio_asc', 'precio-asc', 'price_asc', 'price-asc' => 'precio_asc',
+            'precio_desc', 'precio-desc', 'price_desc', 'price-desc' => 'precio_desc',
+            'nombre_asc', 'nombre-asc', 'name_asc', 'az', 'a-z' => 'nombre_asc',
+            'nombre_desc', 'nombre-desc', 'name_desc', 'za', 'z-a' => 'nombre_desc',
+            default => 'relevantes',
+        };
+    }
+
+    /** Cláusula ORDER BY (sin la palabra ORDER BY). */
+    public static function publicCatalogOrderBy(string $sort): string
+    {
+        $sort = self::normalizeCatalogSort($sort);
+        $priceExpr = 'COALESCE(NULLIF(p.catalog_price, 0), NULLIF(p.public_price, 0), 0)';
+
+        return match ($sort) {
+            'precio_asc' => $priceExpr . ' ASC, p.name ASC',
+            'precio_desc' => $priceExpr . ' DESC, p.name ASC',
+            'nombre_asc' => 'p.name ASC',
+            'nombre_desc' => 'p.name DESC',
+            default => 'p.is_star DESC, p.sort_order ASC, p.name ASC',
+        };
+    }
+
+    /**
+     * @return array<string, string> valor => etiqueta
+     */
+    public static function catalogSortOptions(): array
+    {
+        return [
+            'relevantes' => 'Más relevantes',
+            'precio_asc' => 'Precio: menor a mayor',
+            'precio_desc' => 'Precio: mayor a menor',
+            'nombre_asc' => 'Nombre: A–Z',
+            'nombre_desc' => 'Nombre: Z–A',
+        ];
     }
 
     public function publicCatalogCount(

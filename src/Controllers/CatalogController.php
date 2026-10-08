@@ -37,6 +37,9 @@ final class CatalogController
             $filter = is_string($filter) ? $filter : 'all';
             $q = $_GET['q'] ?? null;
             $q = is_string($q) ? $q : null;
+            $sort = ProductRepository::normalizeCatalogSort(
+                is_string($_GET['orden'] ?? null) ? (string) $_GET['orden'] : 'relevantes'
+            );
 
             $sectionCounts['certificaciones'] = $repo->publicCatalogCount('all', null, false, 'certificaciones');
             $sectionCounts['cursos'] = $repo->publicCatalogCount('all', null, false, 'cursos');
@@ -51,13 +54,15 @@ final class CatalogController
                 false,
                 $pagination['limit'],
                 $pagination['offset'],
-                $section
+                $section,
+                $sort
             );
             $catalogFilters = (new CatalogFilterService())->catalogFilters($section);
         } catch (\Throwable $e) {
             $dbOk = false;
             $catalogFilters = [];
             $section = 'certificaciones';
+            $sort = 'relevantes';
             error_log('[Doceo] Catalog: ' . $e->getMessage());
         }
 
@@ -75,7 +80,34 @@ final class CatalogController
                     }
                     return $out;
                 };
-                $products = $annotate($products);
+                // Con precio partner: reordenar la página actual por precio partner visible.
+                if (in_array($sort ?? 'relevantes', ['precio_asc', 'precio_desc'], true)
+                    && ($pagination['limit'] ?? null) === null
+                ) {
+                    // Todas las filas ya vienen; anotar y ordenar por precio partner.
+                    $products = $annotate($products);
+                    $dir = ($sort === 'precio_desc') ? -1 : 1;
+                    usort($products, static function (array $a, array $b) use ($dir): int {
+                        $pa = (float) ($a['partner_price'] ?? 0);
+                        $pb = (float) ($b['partner_price'] ?? 0);
+                        return $pa === $pb ? 0 : ($pa < $pb ? -1 * $dir : 1 * $dir);
+                    });
+                } elseif (in_array($sort ?? 'relevantes', ['precio_asc', 'precio_desc'], true)) {
+                    // Paginado: traer todo, ordenar por partner y rebanar.
+                    $all = $repo->publicCatalog($filter, $q, false, null, null, $section ?? 'certificaciones', 'relevantes');
+                    $all = $annotate($all);
+                    $dir = ($sort === 'precio_desc') ? -1 : 1;
+                    usort($all, static function (array $a, array $b) use ($dir): int {
+                        $pa = (float) ($a['partner_price'] ?? 0);
+                        $pb = (float) ($b['partner_price'] ?? 0);
+                        return $pa === $pb ? 0 : ($pa < $pb ? -1 * $dir : 1 * $dir);
+                    });
+                    $offset = (int) ($pagination['offset'] ?? 0);
+                    $limit = $pagination['limit'];
+                    $products = $limit === null ? $all : array_slice($all, $offset, (int) $limit);
+                } else {
+                    $products = $annotate($products);
+                }
                 $stars = $annotate($stars);
             } catch (\Throwable) {
                 $partner = null;
@@ -98,6 +130,8 @@ final class CatalogController
             'catalogFilters' => $catalogFilters ?? [],
             'filter' => $_GET['filtro'] ?? $_GET['categoria'] ?? 'all',
             'q' => $_GET['q'] ?? '',
+            'sort' => $sort ?? 'relevantes',
+            'sortOptions' => ProductRepository::catalogSortOptions(),
             'section' => $section ?? 'certificaciones',
             'sectionCounts' => $sectionCounts,
             'dbOk' => $dbOk,

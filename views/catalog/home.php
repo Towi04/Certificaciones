@@ -10,10 +10,17 @@ $user = $user ?? null;
 /** @var string $filter */
 /** @var string $q */
 /** @var string $section */
+/** @var string $sort */
+/** @var array<string,string> $sortOptions */
 /** @var array{certificaciones:int,cursos:int} $sectionCounts */
 /** @var bool $dbOk */
 $filter = is_string($filter ?? null) ? $filter : 'all';
 $q = is_string($q ?? null) ? $q : '';
+$sort = is_string($sort ?? null) ? $sort : 'relevantes';
+$sortOptions = is_array($sortOptions ?? null) ? $sortOptions : \App\Repositories\ProductRepository::catalogSortOptions();
+if (!isset($sortOptions[$sort])) {
+    $sort = 'relevantes';
+}
 $section = is_string($section ?? null) ? $section : 'certificaciones';
 if ($section !== 'cursos') {
     $section = 'certificaciones';
@@ -21,7 +28,9 @@ if ($section !== 'cursos') {
 $sectionCounts = is_array($sectionCounts ?? null) ? $sectionCounts : ['certificaciones' => 0, 'cursos' => 0];
 $totalShown = $pagination['total'] ?? count($products);
 $qsSection = 'seccion=' . urlencode($section);
-$qsExtra = $qsSection . ($q !== '' ? '&q=' . urlencode($q) : '');
+$qsExtra = $qsSection
+    . ($q !== '' ? '&q=' . urlencode($q) : '')
+    . ($sort !== 'relevantes' ? '&orden=' . urlencode($sort) : '');
 $isCourses = $section === 'cursos';
 $heroTitle = $isCourses ? 'Catálogo de cursos' : 'Catálogo de certificaciones';
 $heroLead = $isCourses
@@ -48,10 +57,14 @@ require __DIR__ . '/_card_styles.php';
     $tabCertQs = http_build_query(array_filter([
         'seccion' => 'certificaciones',
         'q' => $q !== '' ? $q : null,
+        'orden' => $sort !== 'relevantes' ? $sort : null,
+        'filtro' => $filter !== 'all' ? $filter : null,
     ], static fn ($v) => $v !== null && $v !== ''));
     $tabCourseQs = http_build_query(array_filter([
         'seccion' => 'cursos',
         'q' => $q !== '' ? $q : null,
+        'orden' => $sort !== 'relevantes' ? $sort : null,
+        'filtro' => $filter !== 'all' ? $filter : null,
     ], static fn ($v) => $v !== null && $v !== ''));
     ?>
     <a class="catalog-section-tab <?= !$isCourses ? 'active' : '' ?>"
@@ -110,6 +123,9 @@ require __DIR__ . '/_card_styles.php';
             <form class="search" method="get" action="<?= e(url('/catalogo')) ?>" id="catalog-search-form">
                 <input type="hidden" name="seccion" value="<?= e($section) ?>">
                 <input type="hidden" name="filtro" value="<?= e($filter) ?>">
+                <?php if ($sort !== 'relevantes'): ?>
+                    <input type="hidden" name="orden" value="<?= e($sort) ?>">
+                <?php endif; ?>
                 <?php if (($pagination['per_page_param'] ?? 'all') !== 'all'): ?>
                     <input type="hidden" name="per_page" value="<?= e((string) ($pagination['per_page_param'] ?? 'all')) ?>">
                 <?php endif; ?>
@@ -117,6 +133,24 @@ require __DIR__ . '/_card_styles.php';
                        placeholder="<?= e($searchPlaceholder) ?>"
                        autocomplete="off">
                 <button class="btn btn-primary" type="submit">Buscar</button>
+            </form>
+            <form class="catalog-sort" method="get" action="<?= e(url('/catalogo')) ?>" id="catalog-sort-form">
+                <input type="hidden" name="seccion" value="<?= e($section) ?>">
+                <input type="hidden" name="filtro" value="<?= e($filter) ?>">
+                <?php if ($q !== ''): ?>
+                    <input type="hidden" name="q" value="<?= e($q) ?>">
+                <?php endif; ?>
+                <?php if (($pagination['per_page_param'] ?? 'all') !== 'all'): ?>
+                    <input type="hidden" name="per_page" value="<?= e((string) ($pagination['per_page_param'] ?? 'all')) ?>">
+                <?php endif; ?>
+                <label class="catalog-sort-label" for="catalog-sort-select">Ordenar</label>
+                <select name="orden" id="catalog-sort-select" onchange="this.form.submit()">
+                    <?php foreach ($sortOptions as $value => $label): ?>
+                        <option value="<?= e($value) ?>" <?= $sort === $value ? 'selected' : '' ?>>
+                            <?= e($label) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
             </form>
             <div class="muted" id="catalog-result-count"><?= (int) $totalShown ?> producto<?= (int) $totalShown === 1 ? '' : 's' ?></div>
         </div>
@@ -134,6 +168,7 @@ require __DIR__ . '/_card_styles.php';
                 'seccion' => $section,
                 'filtro' => $filter !== 'all' ? $filter : null,
                 'q' => $q !== '' ? $q : null,
+                'orden' => $sort !== 'relevantes' ? $sort : null,
                 'per_page' => 'all',
             ], static fn ($v) => $v !== null && $v !== ''));
             $liveClientSide = $pagination === null
