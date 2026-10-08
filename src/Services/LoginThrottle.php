@@ -27,9 +27,10 @@ final class LoginThrottle
     {
         $data = $this->read($bucket);
         $now = time();
+        $window = $this->windowSeconds;
         $data['attempts'] = array_values(array_filter(
             $data['attempts'],
-            static fn (int $t): bool => ($now - $t) < $this->windowSeconds
+            static fn (int $t): bool => ($now - $t) < $window
         ));
         $this->write($bucket, $data);
 
@@ -40,9 +41,10 @@ final class LoginThrottle
     {
         $data = $this->read($bucket);
         $now = time();
+        $window = $this->windowSeconds;
         $data['attempts'] = array_values(array_filter(
             $data['attempts'],
-            static fn (int $t): bool => ($now - $t) < $this->windowSeconds
+            static fn (int $t): bool => ($now - $t) < $window
         ));
         $data['attempts'][] = $now;
         $this->write($bucket, $data);
