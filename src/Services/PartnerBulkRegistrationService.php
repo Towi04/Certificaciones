@@ -228,8 +228,8 @@ final class PartnerBulkRegistrationService
         if ($fh === false) {
             return implode(',', self::CSV_HEADERS) . "\n";
         }
-        fputcsv($fh, self::CSV_HEADERS);
-        fputcsv($fh, [
+        csv_put($fh, self::CSV_HEADERS);
+        csv_put($fh, [
             'alumno@ejemplo.com',
             'Ana',
             'García',
