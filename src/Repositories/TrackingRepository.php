@@ -47,6 +47,7 @@ final class TrackingRepository
      *   status?:?string,
      *   product_id?:?int,
      *   exam?:?string,
+     *   payment?:?string,
      *   limit?:?int,
      *   offset?:?int
      * } $filters
@@ -76,7 +77,7 @@ final class TrackingRepository
     }
 
     /**
-     * @param array{q?:?string,status?:?string,product_id?:?int,exam?:?string} $filters
+     * @param array{q?:?string,status?:?string,product_id?:?int,exam?:?string,payment?:?string} $filters
      */
     public function countForPartnerFiltered(int $partnerId, array $filters = []): int
     {
@@ -92,6 +93,72 @@ final class TrackingRepository
         $stmt->execute($params);
 
         return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * Resumen de pagos del partner (por purchases.status).
+     *
+     * @return array<string, array{status:string,label:string,count:int,amount:float}>
+     */
+    public function partnerPaymentSummary(int $partnerId): array
+    {
+        $labels = [
+            'awaiting_payment' => 'Por pagar',
+            'payment_review' => 'En revisión',
+            'paid' => 'Pagados',
+            'cancelled' => 'Cancelados',
+            'refunded' => 'Reembolsados',
+        ];
+        $stmt = $this->pdo->prepare(
+            "SELECT pu.status, COUNT(*) AS cnt, COALESCE(SUM(pu.charged_amount), 0) AS amount
+             FROM purchases pu
+             WHERE pu.partner_id = ?
+               AND pu.status IN ('awaiting_payment','payment_review','paid','cancelled','refunded')
+             GROUP BY pu.status"
+        );
+        $stmt->execute([$partnerId]);
+        $rows = $stmt->fetchAll() ?: [];
+        $out = [];
+        foreach ($labels as $status => $label) {
+            $out[$status] = ['status' => $status, 'label' => $label, 'count' => 0, 'amount' => 0.0];
+        }
+        foreach ($rows as $row) {
+            $st = (string) ($row['status'] ?? '');
+            if (!isset($out[$st])) {
+                continue;
+            }
+            $out[$st]['count'] = (int) ($row['cnt'] ?? 0);
+            $out[$st]['amount'] = round((float) ($row['amount'] ?? 0), 2);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Exámenes próximos del partner (30/60 días).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function upcomingExamsForPartner(int $partnerId, int $days = 30): array
+    {
+        $days = in_array($days, [30, 60], true) ? $days : 30;
+        $stmt = $this->pdo->prepare(
+            'SELECT t.id, t.exam_date, t.exam_time, t.status, t.folio,
+                    pr.name AS product_name,
+                    u.first_name, u.last_name_p, u.email,
+                    pu.matricula
+             FROM trackings t
+             JOIN products pr ON pr.id = t.product_id
+             JOIN users u ON u.id = t.student_user_id
+             JOIN purchases pu ON pu.id = t.purchase_id
+             WHERE t.partner_id = ?
+               AND t.exam_date IS NOT NULL
+               AND t.exam_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL ? DAY)
+             ORDER BY t.exam_date ASC, t.exam_time ASC, t.id ASC'
+        );
+        $stmt->execute([$partnerId, $days]);
+
+        return $stmt->fetchAll() ?: [];
     }
 
     /** @return list<array{id:int,name:string}> */
@@ -132,7 +199,7 @@ final class TrackingRepository
     }
 
     /**
-     * @param array{q?:?string,status?:?string,product_id?:?int,exam?:?string} $filters
+     * @param array{q?:?string,status?:?string,product_id?:?int,exam?:?string,payment?:?string} $filters
      * @return array{0:string,1:list<mixed>}
      */
     private function partnerFilterSql(int $partnerId, array $filters): array
@@ -175,6 +242,13 @@ final class TrackingRepository
             $where[] = 't.exam_date IS NULL';
         } elseif ($exam === 'set') {
             $where[] = 't.exam_date IS NOT NULL';
+        }
+
+        $payment = trim((string) ($filters['payment'] ?? ''));
+        $allowedPayments = ['awaiting_payment', 'payment_review', 'paid', 'cancelled', 'refunded'];
+        if ($payment !== '' && $payment !== 'all' && in_array($payment, $allowedPayments, true)) {
+            $where[] = 'pu.status = ?';
+            $params[] = $payment;
         }
 
         return [implode(' AND ', $where), $params];

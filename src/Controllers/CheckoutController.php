@@ -65,6 +65,14 @@ final class CheckoutController
             }
             unset($comboOffer);
         }
+        $referralPromo = '';
+        if (!$isPartnerCheckout) {
+            if (session_status() !== PHP_SESSION_ACTIVE) {
+                session_start();
+            }
+            $referralPromo = strtoupper(trim((string) ($_SESSION['partner_referral_code'] ?? '')));
+        }
+
         view('checkout/acquire', [
             'title' => ($isPartnerCheckout ? 'Registrar alumno · ' : 'Adquirir · ') . $product['name'],
             'product' => $product,
@@ -87,6 +95,7 @@ final class CheckoutController
                 : 0,
             'isPartnerCheckout' => $isPartnerCheckout,
             'partner' => $partner,
+            'referralPromo' => $referralPromo,
             'layout' => $isPartnerCheckout ? 'partner' : 'main',
         ]);
     }

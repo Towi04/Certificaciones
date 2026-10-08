@@ -15,13 +15,52 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
     </div>
     <div class="stat">
         <div class="label">Saldo a favor</div>
-        <div class="value" style="font-size:1.1rem"><?= money($partner['credit_balance'] ?? 0) ?></div>
+        <div class="value" style="font-size:1.1rem">
+            <a href="<?= e(url('/partner/credito')) ?>"><?= money($partner['credit_balance'] ?? 0) ?></a>
+        </div>
     </div>
     <div class="stat">
         <div class="label">Correo de acceso</div>
         <div class="value" style="font-size:1rem"><?= e((string) ($partner['email'] ?? '')) ?></div>
     </div>
 </div>
+
+<?php
+$shareUrl = rtrim((string) url('/catalogo'), '/') . '?partner=' . rawurlencode((string) ($partner['code'] ?? ''));
+?>
+<div class="panel" style="margin:1rem 0;max-width:640px" data-tour="profile-share-link">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Tu link de captación</h2>
+    <p class="muted" style="margin-top:0;font-size:.85rem">
+        Compártelo con tus alumnos. Al comprar en línea usarán tu código y generarás crédito.
+    </p>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <input type="text" id="partner-share-url" readonly value="<?= e($shareUrl) ?>"
+               style="flex:1;min-width:220px;padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;font:inherit">
+        <button type="button" class="btn btn-accent btn-sm" id="partner-share-copy">Copiar link</button>
+    </div>
+    <p class="muted" id="partner-share-copied" hidden style="margin:.45rem 0 0;font-size:.8rem;color:#15803d">Copiado</p>
+</div>
+<script>
+(function () {
+  var btn = document.getElementById('partner-share-copy');
+  var input = document.getElementById('partner-share-url');
+  var ok = document.getElementById('partner-share-copied');
+  if (!btn || !input) return;
+  btn.addEventListener('click', function () {
+    var text = input.value || '';
+    function done() {
+      if (ok) { ok.hidden = false; setTimeout(function () { ok.hidden = true; }, 1600); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () {
+        input.select(); document.execCommand('copy'); done();
+      });
+    } else {
+      input.select(); document.execCommand('copy'); done();
+    }
+  });
+})();
+</script>
 
 <form method="post" action="<?= e(url('/partner/perfil')) ?>" class="panel" style="max-width:640px" data-tour="profile-form">
     <?= csrf_field() ?>

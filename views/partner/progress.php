@@ -27,7 +27,9 @@
         </div>
         <div class="stat">
             <div class="label">Saldo a favor</div>
-            <div class="value" style="font-size:1.2rem"><?= money($partner['credit_balance']) ?></div>
+            <div class="value" style="font-size:1.2rem">
+                <a href="<?= e(url('/partner/credito')) ?>"><?= money($partner['credit_balance']) ?></a>
+            </div>
         </div>
         <?php if ($tierProgress && !empty($tierProgress['in_program'])): ?>
             <div class="stat">

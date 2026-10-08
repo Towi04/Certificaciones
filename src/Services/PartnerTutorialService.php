@@ -18,6 +18,8 @@ final class PartnerTutorialService
         'caso',
         'registrar',
         'registrar-grupo',
+        'calendario',
+        'credito',
         'avance',
         'perfil',
         'mi-escuela',
@@ -118,6 +120,8 @@ final class PartnerTutorialService
             str_starts_with($path, '/partner/caso/') => 'caso',
             str_starts_with($path, '/partner/registrar-grupo') => 'registrar-grupo',
             str_starts_with($path, '/partner/registrar') || str_starts_with($path, '/adquirir/') => 'registrar',
+            str_starts_with($path, '/partner/calendario') => 'calendario',
+            str_starts_with($path, '/partner/credito') => 'credito',
             str_starts_with($path, '/partner/avance') => 'avance',
             str_starts_with($path, '/partner/perfil') => 'perfil',
             str_starts_with($path, '/partner/mi-escuela') => 'mi-escuela',
@@ -134,13 +138,16 @@ final class PartnerTutorialService
     {
         return [
             'dashboard' => [
-                ['sel' => '[data-tour="partner-nav"]', 'title' => 'Menú partner', 'body' => 'Desde aquí navegas alumnos, registro, avance, perfil y tu escuela.'],
+                ['sel' => '[data-tour="partner-nav"]', 'title' => 'Menú partner', 'body' => 'Desde aquí navegas alumnos, registro, calendario, crédito, avance, perfil y tu escuela.'],
                 ['sel' => '[data-tour="students-header"]', 'title' => 'Tu tablero', 'body' => 'Aquí ves el resumen de tu código, crédito y accesos rápidos.'],
+                ['sel' => '[data-tour="students-payments"]', 'title' => 'Pagos', 'body' => 'Resumen de pagos: por pagar, en revisión y pagados. Haz clic para filtrar.'],
                 ['sel' => '[data-tour="students-table"]', 'title' => 'Cartera de alumnos', 'body' => 'Abre cada caso para ver datos, códigos, correos y resultados.'],
             ],
             'alumnos' => [
                 ['sel' => '[data-tour="students-header"]', 'title' => 'Alumnos', 'body' => 'Tu cartera: matrícula, examen, folio/clave y últimos correos de accesos.'],
+                ['sel' => '[data-tour="students-payments"]', 'title' => 'Estado de pagos', 'body' => 'Resumen de pagos: por pagar, en revisión y pagados; haz clic para filtrar.'],
                 ['sel' => '[data-tour="register-cta"]', 'title' => 'Registrar', 'body' => 'Usa este botón para inscribir un alumno con el flujo completo.'],
+                ['sel' => '[data-tour="students-export"]', 'title' => 'Exportar CSV', 'body' => 'Exporta tu cartera filtrada a CSV para control escolar.'],
                 ['sel' => '[data-tour="students-table"]', 'title' => 'Abrir ficha', 'body' => 'Haz clic en «Abrir» para ver el detalle del caso.'],
             ],
             'caso' => [
@@ -151,11 +158,21 @@ final class PartnerTutorialService
             ],
             'registrar' => [
                 ['sel' => '[data-tour="register-header"]', 'title' => 'Registrar alumno', 'body' => 'Elige un producto del catálogo partner y completa el mismo flujo de compra.'],
-                ['sel' => '[data-tour="partner-nav"]', 'title' => 'Menú', 'body' => 'También puedes volver a alumnos o ir a registro de grupo desde el menú lateral.'],
+                ['sel' => '[data-tour="partner-nav"]', 'title' => 'Menú', 'body' => 'También puedes volver a alumnos, calendario, crédito o registro de grupo desde el menú lateral.'],
             ],
             'registrar-grupo' => [
                 ['sel' => '[data-tour="bulk-header"]', 'title' => 'Registro de grupo', 'body' => 'Un producto, una fecha, CSV de alumnos y un solo comprobante.'],
                 ['sel' => '[data-tour="bulk-form"], [data-tour="bulk-proof"]', 'title' => 'Pasos del lote', 'body' => 'Primero revisas el CSV; luego subes el comprobante por el monto partner × N.'],
+            ],
+            'calendario' => [
+                ['sel' => '[data-tour="calendar-header"]', 'title' => 'Calendario', 'body' => 'Aquí ves los exámenes próximos de tus alumnos.'],
+                ['sel' => '[data-tour="calendar-range"]', 'title' => 'Rango', 'body' => 'Cambia entre los próximos 30 o 60 días.'],
+                ['sel' => '[data-tour="calendar-list"]', 'title' => 'Lista por fecha', 'body' => 'Agrupados por día. Abre el caso para ver detalle o códigos.'],
+            ],
+            'credito' => [
+                ['sel' => '[data-tour="credit-header"]', 'title' => 'Tu crédito', 'body' => 'Consulta el saldo a favor generado por ventas con tu código.'],
+                ['sel' => '[data-tour="credit-balance"]', 'title' => 'Saldo y totales', 'body' => 'Saldo actual, abonos y usos del mes, e histórico.'],
+                ['sel' => '[data-tour="credit-movements"]', 'title' => 'Movimientos', 'body' => 'Cada abono (+) o uso (−) ligado a una compra/matrícula.'],
             ],
             'avance' => [
                 ['sel' => '[data-tour="progress-stats"]', 'title' => 'Tu avance', 'body' => 'Ventas del mes/convenio y crédito.'],
@@ -163,6 +180,7 @@ final class PartnerTutorialService
             ],
             'perfil' => [
                 ['sel' => '[data-tour="profile-readonly"]', 'title' => 'Nivel y crédito', 'body' => 'Estos datos son de solo lectura.'],
+                ['sel' => '[data-tour="profile-share-link"]', 'title' => 'Link de captación', 'body' => 'Comparte este enlace para que tus alumnos compren con tu código.'],
                 ['sel' => '[data-tour="profile-form"]', 'title' => 'Editar perfil', 'body' => 'Actualiza nombre comercial, contacto, código de descuento y contraseña.'],
                 ['sel' => '[data-tour="tutorial-reset"]', 'title' => 'Reiniciar tutorial', 'body' => 'Desde aquí puedes volver a ver las burbujas de ayuda.'],
             ],

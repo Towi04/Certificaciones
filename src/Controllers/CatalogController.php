@@ -9,6 +9,7 @@ use App\Repositories\ProductMediaRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\TrackingRepository;
+use App\Repositories\PartnerRepository;
 use App\Services\CatalogFilterService;
 use App\Services\PartnerDirectoryService;
 use App\Services\PartnerRegistrationService;
@@ -121,6 +122,28 @@ final class CatalogController
             error_log('[Doceo] partner directory public: ' . $e->getMessage());
         }
 
+        $referralPartner = null;
+        $rawPartnerCode = $_GET['partner'] ?? $_GET['codigo'] ?? null;
+        if (is_string($rawPartnerCode) && trim($rawPartnerCode) !== '') {
+            try {
+                $referralPartner = (new PartnerRepository())->findActiveByCode(trim($rawPartnerCode));
+                if ($referralPartner) {
+                    if (session_status() !== PHP_SESSION_ACTIVE) {
+                        session_start();
+                    }
+                    $_SESSION['partner_referral_code'] = strtoupper((string) $referralPartner['code']);
+                    $_SESSION['partner_referral_name'] = (string) ($referralPartner['display_name'] ?? '');
+                }
+            } catch (\Throwable $e) {
+                error_log('[Doceo] partner referral: ' . $e->getMessage());
+            }
+        } elseif (!empty($_SESSION['partner_referral_code'])) {
+            $referralPartner = [
+                'code' => (string) $_SESSION['partner_referral_code'],
+                'display_name' => (string) ($_SESSION['partner_referral_name'] ?? $_SESSION['partner_referral_code']),
+            ];
+        }
+
         view('catalog/home', [
             'title' => $section === 'cursos' ? 'Cursos' : 'Certificaciones',
             'stars' => $stars,
@@ -138,6 +161,7 @@ final class CatalogController
             'user' => $user,
             'partner' => $partner,
             'distributors' => $distributors,
+            'referralPartner' => $referralPartner,
         ]);
     }
 

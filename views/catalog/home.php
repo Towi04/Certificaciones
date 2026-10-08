@@ -44,6 +44,8 @@ $searchPlaceholder = $isCourses
     ? 'Buscar curso, proveedor…'
     : 'Buscar certificación, proveedor…';
 require __DIR__ . '/_card_styles.php';
+/** @var array<string,mixed>|null $referralPartner */
+$referralPartner = is_array($referralPartner ?? null) ? $referralPartner : null;
 ?>
 <section class="hero">
     <div class="hero-banner">
@@ -51,6 +53,36 @@ require __DIR__ . '/_card_styles.php';
         <p><?= e($heroLead) ?></p>
     </div>
 </section>
+
+<?php if ($referralPartner && ($user['role'] ?? '') !== 'partner'): ?>
+    <?php
+    $refCode = strtoupper((string) ($referralPartner['code'] ?? ''));
+    $refName = (string) ($referralPartner['display_name'] ?? $refCode);
+    $refUrl = rtrim((string) url('/catalogo'), '/') . '?partner=' . rawurlencode($refCode);
+    ?>
+    <div class="flash flash-info" style="margin:1rem 0;display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;justify-content:space-between">
+        <div>
+            Estás usando el código de <strong><?= e($refName) ?></strong>
+            (<code><?= e($refCode) ?></code>). Se aplicará al adquirir un producto.
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="catalog-copy-partner-link"
+                data-url="<?= e($refUrl) ?>">Copiar link</button>
+    </div>
+    <script>
+    (function () {
+      var btn = document.getElementById('catalog-copy-partner-link');
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        var u = btn.getAttribute('data-url') || '';
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(u);
+        }
+        btn.textContent = 'Copiado';
+        setTimeout(function () { btn.textContent = 'Copiar link'; }, 1500);
+      });
+    })();
+    </script>
+<?php endif; ?>
 
 <nav class="catalog-section-tabs" role="tablist" aria-label="Secciones del catálogo">
     <?php
