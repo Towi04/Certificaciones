@@ -25,12 +25,15 @@ $searchPlaceholder = $isCourses
     : 'Buscar certificación, proveedor…';
 $totalShown = count($products);
 ?>
+<div data-tour="partner-nav" hidden aria-hidden="true"></div>
 <p class="meta"><a href="<?= e(url('/partner')) ?>">← Mis alumnos</a></p>
+<div data-tour="register-header">
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">Registrar alumno</h1>
 <p class="muted" style="max-width:48rem">
     Elige el producto. Se muestra tu precio de nivel
     <strong><?= e(\App\Services\PartnerAdminService::tierLabel($partner['tier'] ?? null)) ?></strong>.
 </p>
+</div>
 
 <nav class="catalog-section-tabs" role="tablist" aria-label="Secciones del catálogo">
     <?php
