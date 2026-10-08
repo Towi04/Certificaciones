@@ -14,6 +14,7 @@ use App\Services\GroupStepConfig;
 use App\Services\MailLogService;
 use App\Services\ExamScheduleService;
 use App\Services\PartnerBulkRegistrationService;
+use App\Services\PartnerDirectoryService;
 use App\Services\PartnerProfileService;
 use App\Services\PartnerRegistrationService;
 use App\Services\PartnerTierService;
@@ -103,15 +104,48 @@ final class PartnerController
         redirect('/partner/perfil');
     }
 
-    public function schoolPlaceholder(): void
+    public function schoolForm(): void
     {
         Auth::requireRole(['partner']);
         $partner = $this->requirePartner();
-        view('partner/school_placeholder', [
+        $profile = (new PartnerDirectoryService())->profileForPartner((int) $partner['id']);
+        view('partner/school', [
             'title' => 'Mi escuela',
             'partner' => $partner,
+            'profile' => $profile,
             'layout' => 'partner',
         ]);
+    }
+
+    public function schoolSave(): void
+    {
+        Auth::requireRole(['partner']);
+        csrf_verify();
+        $partner = $this->requirePartner();
+        $submit = !empty($_POST['submit_review']);
+        try {
+            (new PartnerDirectoryService())->saveDraft(
+                (int) $partner['id'],
+                [
+                    'display_name' => (string) ($_POST['display_name'] ?? ''),
+                    'phone' => (string) ($_POST['phone'] ?? ''),
+                    'address' => (string) ($_POST['address'] ?? ''),
+                    'maps_url' => (string) ($_POST['maps_url'] ?? ''),
+                    'description' => (string) ($_POST['description'] ?? ''),
+                ],
+                isset($_FILES['logo']) && is_array($_FILES['logo']) ? $_FILES['logo'] : null,
+                $submit
+            );
+            flash(
+                'success',
+                $submit
+                    ? 'Perfil enviado a revisión. DOCEO te avisará cuando esté publicado.'
+                    : 'Borrador guardado.'
+            );
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/partner/mi-escuela');
     }
 
     public function bulkForm(): void

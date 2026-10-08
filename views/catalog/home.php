@@ -255,3 +255,55 @@ require __DIR__ . '/_card_styles.php';
         <?php endif; ?>
     </section>
 </div>
+
+<?php
+/** @var list<array<string,mixed>> $distributors */
+$distributors = is_array($distributors ?? null) ? $distributors : [];
+?>
+<?php if ($distributors !== []): ?>
+<section class="panel" style="margin:1.5rem 0 2rem" id="distribuidores-autorizados">
+    <h2 style="margin:0 0 .35rem;color:var(--doceo-blue)">Distribuidores autorizados</h2>
+    <p class="muted" style="margin:0 0 1rem;font-size:.9rem">
+        Escuelas y partners autorizados por Instituto DOCEO.
+    </p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1rem">
+        <?php foreach ($distributors as $d): ?>
+            <article style="border:1px solid #e6ebf2;border-radius:14px;padding:1rem;background:#fff;display:flex;flex-direction:column;gap:.55rem">
+                <div style="display:flex;gap:.75rem;align-items:center">
+                    <div style="width:56px;height:56px;border-radius:12px;border:1px solid #e6ebf2;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#f8fafc;flex:0 0 auto">
+                        <?php if (!empty($d['logo_path'])): ?>
+                            <img src="<?= e(asset((string) $d['logo_path'])) ?>" alt=""
+                                 style="max-width:100%;max-height:100%;object-fit:contain">
+                        <?php else: ?>
+                            <img src="<?= e(asset('/assets/brand/logo.png')) ?>" alt=""
+                                 style="max-width:70%;max-height:70%;object-fit:contain;opacity:.7">
+                        <?php endif; ?>
+                    </div>
+                    <strong style="color:var(--doceo-blue)"><?= e((string) ($d['display_name'] ?? '')) ?></strong>
+                </div>
+                <?php if (!empty($d['description'])): ?>
+                    <p style="margin:0;font-size:.88rem;line-height:1.4"><?= e((string) $d['description']) ?></p>
+                <?php endif; ?>
+                <?php if (!empty($d['phone'])): ?>
+                    <p style="margin:0;font-size:.88rem">
+                        Tel:
+                        <a href="tel:<?= e(preg_replace('/\s+/', '', (string) $d['phone']) ?? '') ?>">
+                            <?= e((string) $d['phone']) ?>
+                        </a>
+                    </p>
+                <?php endif; ?>
+                <?php if (!empty($d['address'])): ?>
+                    <p class="muted" style="margin:0;font-size:.82rem"><?= e((string) $d['address']) ?></p>
+                <?php endif; ?>
+                <?php if (!empty($d['maps_url'])): ?>
+                    <p style="margin:0">
+                        <a class="btn btn-ghost btn-sm" href="<?= e((string) $d['maps_url']) ?>" target="_blank" rel="noopener">
+                            Ver en Maps
+                        </a>
+                    </p>
+                <?php endif; ?>
+            </article>
+        <?php endforeach; ?>
+    </div>
+</section>
+<?php endif; ?>
