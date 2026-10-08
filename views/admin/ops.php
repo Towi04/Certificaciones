@@ -548,7 +548,7 @@ $extraColHeader = count($extraColLabels) === 1
                                                 </select>
                                             </div>
                                             <?php if (!\App\Services\TrackingService::canEditRegistration($r)): ?>
-                                                <p class="muted" style="font-size:.75rem;margin:.35rem 0">Bloqueado: examen ya presentado.</p>
+                                                <p class="muted" style="font-size:.75rem;margin:.35rem 0">Bloqueado: códigos de acceso ya asignados.</p>
                                             <?php endif; ?>
                                             <button class="btn btn-accent btn-sm" type="submit"
                                                 <?= \App\Services\TrackingService::canEditRegistration($r) ? '' : 'disabled' ?>>

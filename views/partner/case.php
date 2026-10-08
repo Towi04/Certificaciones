@@ -25,7 +25,7 @@ $current = (string) ($tracking['current_step_code'] ?? '');
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Datos de registro del alumno</h2>
     <p class="muted" style="font-size:.85rem;margin-top:0">
         Corrige nombre u otros datos si el alumno se equivocó al registrarse.
-        Solo se permite <strong>antes de presentar el examen</strong>.
+        Solo se permite <strong>antes de asignar los códigos de acceso</strong>.
     </p>
     <?php
     $canEditRegistration = !empty($canEditRegistration);
