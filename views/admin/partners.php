@@ -28,6 +28,7 @@
                 <th>Correo</th>
                 <th>Nivel</th>
                 <th>Crédito</th>
+                <th>Último acceso</th>
                 <th>Activo</th>
                 <th></th>
             </tr>
@@ -40,13 +41,20 @@
                     <td><?= e($p['email']) ?></td>
                     <td><span class="pill"><?= e($tierLabels[$p['tier']] ?? strtoupper((string) $p['tier'])) ?></span></td>
                     <td><?= money($p['credit_balance']) ?></td>
+                    <td style="font-size:.85rem;white-space:nowrap">
+                        <?php if (!empty($p['last_login_at'])): ?>
+                            <?= e((string) $p['last_login_at']) ?>
+                        <?php else: ?>
+                            <span class="muted">Nunca</span>
+                        <?php endif; ?>
+                    </td>
                     <td><?= (int) $p['is_active'] ? 'Sí' : 'No' ?></td>
                     <td><a href="<?= e(url('/admin/partners/' . $p['id'])) ?>">Editar</a></td>
                 </tr>
             <?php endforeach; ?>
             <?php if ($partners === []): ?>
                 <tr>
-                    <td colspan="7" class="muted">
+                    <td colspan="8" class="muted">
                         Aún no hay partners.
                         <a href="<?= e(url('/admin/partners/nuevo')) ?>">Registra el primero</a>.
                     </td>

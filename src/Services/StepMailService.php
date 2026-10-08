@@ -132,14 +132,40 @@ final class StepMailService
         );
         $mail = new MailTemplateService();
         $to = $this->resolveRecipient($tracking, $audience, $tplCode, $mail);
-        if ($mail->render($tplCode, $vars) === null) {
+        $rendered = $mail->render($tplCode, $vars);
+        if ($rendered === null) {
             throw new \RuntimeException('Plantilla no encontrada o desactivada: ' . $tplCode);
         }
         $options = [];
         if ($attachments !== []) {
             $options['attachments'] = $attachments;
         }
-        $mail->send($tplCode, $to, $vars, $options);
+        try {
+            $mail->send($tplCode, $to, $vars, $options);
+        } catch (\Throwable $e) {
+            (new MailLogService())->record([
+                'template_code' => $tplCode,
+                'purchase_id' => (int) ($tracking['purchase_id'] ?? 0) ?: null,
+                'tracking_id' => $trackingId,
+                'to_email' => $to,
+                'subject' => (string) ($rendered['subject'] ?? ('Correo «' . $tplCode . '»')),
+                'status' => 'failed',
+                'error_message' => $e->getMessage(),
+                'triggered_by' => $actorUserId,
+            ]);
+            throw $e;
+        }
+
+        (new MailLogService())->record([
+            'template_code' => $tplCode,
+            'purchase_id' => (int) ($tracking['purchase_id'] ?? 0) ?: null,
+            'tracking_id' => $trackingId,
+            'to_email' => $to,
+            'subject' => (string) ($rendered['subject'] ?? ('Correo «' . $tplCode . '»')),
+            'body_html' => (string) ($rendered['body_html'] ?? ''),
+            'status' => 'sent',
+            'triggered_by' => $actorUserId,
+        ]);
 
         $this->markSent($trackingId, $stepCode, $actorUserId, $to, $tplCode, $audience);
         $this->tracking->markStepDone(

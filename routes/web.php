@@ -222,9 +222,16 @@ $router->post('/alumno/caso/{id}/documentos', fn (string $id) => $student->uploa
 $router->post('/alumno/documentos/{id}/reenviar', fn (string $id) => $student->reuploadDocument($id));
 $router->get('/alumno/documentos/{id}/ver', fn (string $id) => $student->documentDownload($id));
 $router->get('/partner', fn () => $partner->dashboard());
+$router->get('/partner/alumnos', fn () => $partner->studentsBoard());
+$router->get('/partner/avance', fn () => $partner->progress());
+$router->get('/partner/perfil', fn () => $partner->profileForm());
+$router->post('/partner/perfil', fn () => $partner->profileSave());
+$router->get('/partner/mi-escuela', fn () => $partner->schoolPlaceholder());
+$router->get('/partner/registrar-grupo', fn () => $partner->bulkPlaceholder());
 $router->get('/partner/registrar', fn () => $partner->registerForm());
 $router->post('/partner/registrar', fn () => $partner->registerSubmit());
 $router->get('/partner/caso/{id}', fn (string $id) => $partner->caseShow($id));
+$router->get('/partner/caso/{id}/resultados-pdf', fn (string $id) => $partner->resultsPdf($id));
 $router->post('/partner/caso/{id}/datos', fn (string $id) => $partner->updateRegistration($id));
 $router->post('/partner/caso/{id}/examen', fn (string $id) => $partner->updateExam($id));
 

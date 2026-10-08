@@ -57,13 +57,45 @@ $valueFor = static function (string $code) use ($tracking, $sex, $nationality): 
     };
 };
 ?>
-<?php if ($formAction === ''): ?>
-    <p class="muted" style="margin:0;font-size:.88rem">No se configuró la URL del formulario.</p>
-<?php elseif (!$canEdit): ?>
-    <p class="muted" style="margin:0;font-size:.88rem">
+<?php if (!$canEdit): ?>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.55rem">
+        <?php foreach ($fields as $field): ?>
+            <?php
+            $code = (string) ($field['code'] ?? '');
+            if ($code === '') {
+                continue;
+            }
+            $label = (string) ($field['label'] ?? $code);
+            $value = $valueFor($code);
+            if ($code === 'sex' && $value !== '') {
+                foreach (\App\Services\CheckoutRequirements::SEX_OPTIONS as $opt) {
+                    if ((string) ($opt['value'] ?? '') === $value) {
+                        $value = (string) ($opt['label'] ?? $value);
+                        break;
+                    }
+                }
+            }
+            if ($code === 'nationality' && $value !== '') {
+                foreach (\App\Services\CheckoutRequirements::NATIONALITY_OPTIONS as $opt) {
+                    if ((string) ($opt['value'] ?? '') === $value) {
+                        $value = (string) ($opt['label'] ?? $value);
+                        break;
+                    }
+                }
+            }
+            ?>
+            <div style="display:flex;flex-direction:column;gap:.2rem">
+                <span class="muted" style="font-size:.78rem;font-weight:600"><?= e($label) ?></span>
+                <span style="font-size:.92rem"><?= $value !== '' ? e($value) : '—' ?></span>
+            </div>
+        <?php endforeach; ?>
+    </div>
+    <p class="muted" style="margin:.65rem 0 0;font-size:.82rem">
         Los datos de registro ya no se pueden modificar porque ya se asignaron los códigos de acceso
         (folio y clave) o el caso está cerrado.
     </p>
+<?php elseif ($formAction === ''): ?>
+    <p class="muted" style="margin:0;font-size:.88rem">No se configuró la URL del formulario.</p>
 <?php else: ?>
 <form method="post" action="<?= e($formAction) ?>" class="registration-edit-form">
     <?= csrf_field() ?>

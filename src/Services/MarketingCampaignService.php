@@ -470,8 +470,11 @@ final class MarketingCampaignService
         /** @var array<string, array<string, mixed>> $byEmail */
         $byEmail = [];
 
+        $onlyDirect = !empty($audience['only_direct_clients'])
+            || !empty($audience['doceo_direct']);
+
         if ($includeClients) {
-            foreach ($this->fetchStudentBuyers($productId, $certifierId) as $row) {
+            foreach ($this->fetchStudentBuyers($productId, $certifierId, $onlyDirect) as $row) {
                 $email = strtolower(trim((string) ($row['email'] ?? '')));
                 if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                     continue;
@@ -489,6 +492,8 @@ final class MarketingCampaignService
                 ];
             }
 
+            // Clientes anteriores (CSV): en modo DOCEO directo se incluyen
+            // (no tienen partner_id); el filtro partner solo aplica a compras del sistema.
             foreach ($this->fetchLegacy($productId, $certifierId) as $row) {
                 $email = strtolower(trim((string) ($row['email'] ?? '')));
                 if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -638,12 +643,17 @@ final class MarketingCampaignService
         $mode = trim((string) ($input['audience_mode'] ?? ''));
         $includeClients = true;
         $includePartners = false;
+        $onlyDirect = false;
         if ($mode === 'partners') {
             $includeClients = false;
             $includePartners = true;
         } elseif ($mode === 'both') {
             $includeClients = true;
             $includePartners = true;
+        } elseif ($mode === 'doceo_direct') {
+            $includeClients = true;
+            $includePartners = false;
+            $onlyDirect = true;
         } elseif ($mode === 'clients') {
             $includeClients = true;
             $includePartners = false;
@@ -657,6 +667,7 @@ final class MarketingCampaignService
                     || !empty($input['include_legacy'])
                     || !$includePartners;
             }
+            $onlyDirect = !empty($input['only_direct_clients']) || !empty($input['doceo_direct']);
         }
         if (!$includeClients && !$includePartners) {
             $includeClients = true;
@@ -667,6 +678,8 @@ final class MarketingCampaignService
         $audience = [
             'include_clients' => $includeClients,
             'include_partners' => $includePartners,
+            'only_direct_clients' => $onlyDirect,
+            'doceo_direct' => $onlyDirect,
             // Compat para campañas/vistas antiguas.
             'include_students' => $includeClients,
             'include_legacy' => $includeClients,
@@ -771,7 +784,7 @@ final class MarketingCampaignService
     }
 
     /** @return list<array<string, mixed>> */
-    private function fetchStudentBuyers(?int $productId, ?int $certifierId): array
+    private function fetchStudentBuyers(?int $productId, ?int $certifierId, bool $onlyDirect = false): array
     {
         $sql = 'SELECT u.id AS user_id, u.email, u.first_name, u.last_name_p, u.last_name_m, u.phone,
                        TRIM(CONCAT(u.first_name, \' \', u.last_name_p, \' \', u.last_name_m)) AS full_name,
@@ -780,10 +793,16 @@ final class MarketingCampaignService
                 INNER JOIN users u ON u.id = pu.student_user_id
                 INNER JOIN purchase_items pi ON pi.purchase_id = pu.id
                 INNER JOIN products pr ON pr.id = pi.product_id
+                LEFT JOIN discount_codes dc ON dc.id = pu.discount_code_id
                 WHERE pu.status NOT IN (\'cancelled\', \'refunded\', \'draft\')
                   AND u.email IS NOT NULL AND u.email != \'\'
                   AND u.is_active = 1';
         $params = [];
+        if ($onlyDirect) {
+            // Clientes DOCEO directos: sin partner en la compra y sin código partner.
+            $sql .= ' AND pu.partner_id IS NULL
+                      AND (pu.discount_code_id IS NULL OR dc.type IS NULL OR dc.type <> \'partner\')';
+        }
         if ($productId !== null) {
             $sql .= ' AND pr.id = ?';
             $params[] = $productId;

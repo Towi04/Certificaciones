@@ -35,7 +35,7 @@ final class PartnerRepository
     public function adminList(?string $q = null, ?int $limit = null, ?int $offset = null): array
     {
         $sql = 'SELECT p.*, u.email, u.first_name, u.last_name_p, u.last_name_m, u.phone,
-                       u.is_active AS user_is_active, u.must_change_password
+                       u.is_active AS user_is_active, u.must_change_password, u.last_login_at
                 FROM partners p
                 JOIN users u ON u.id = p.user_id';
         $params = [];

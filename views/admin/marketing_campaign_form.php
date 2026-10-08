@@ -24,11 +24,14 @@ if (!$includeClients && !$includePartners) {
     $includeClients = true;
 }
 
+$onlyDirect = !empty($audience['only_direct_clients']) || !empty($audience['doceo_direct']);
 $audienceMode = 'clients';
 if ($includeClients && $includePartners) {
     $audienceMode = 'both';
 } elseif ($includePartners && !$includeClients) {
     $audienceMode = 'partners';
+} elseif ($includeClients && !$includePartners && $onlyDirect) {
+    $audienceMode = 'doceo_direct';
 }
 
 $promoMonth = 0;
@@ -132,7 +135,17 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
                     <span>
                         <strong>Todos los clientes</strong>
                         <span class="muted" style="display:block;font-size:.8rem;font-weight:400">
-                            Alumnos del sistema (pagados o pendientes) + clientes anteriores (CSV).
+                            Alumnos del sistema (pagados o pendientes) + clientes anteriores (CSV), con o sin partner.
+                        </span>
+                    </span>
+                </label>
+                <label style="display:flex;gap:.45rem;align-items:flex-start;font-size:.9rem">
+                    <input type="radio" name="audience_mode" value="doceo_direct"
+                           <?= $audienceMode === 'doceo_direct' ? 'checked' : '' ?> style="margin-top:.2rem">
+                    <span>
+                        <strong>Solo clientes DOCEO (sin partner)</strong>
+                        <span class="muted" style="display:block;font-size:.8rem;font-weight:400">
+                            Compras sin partner ni código partner + clientes anteriores (CSV).
                         </span>
                     </span>
                 </label>
@@ -246,8 +259,9 @@ $labelStyle = 'display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;fo
     var params = new URLSearchParams();
     var modeEl = form.querySelector('input[name="audience_mode"]:checked');
     var mode = modeEl ? modeEl.value : 'clients';
-    if (mode === 'clients' || mode === 'both') params.set('include_clients', '1');
+    if (mode === 'clients' || mode === 'both' || mode === 'doceo_direct') params.set('include_clients', '1');
     if (mode === 'partners' || mode === 'both') params.set('include_partners', '1');
+    if (mode === 'doceo_direct') params.set('only_direct_clients', '1');
     ['product_id','certifier_id'].forEach(function (name) {
       var el = form.querySelector('[name="' + name + '"]');
       if (el && el.value) params.set(name, el.value);
