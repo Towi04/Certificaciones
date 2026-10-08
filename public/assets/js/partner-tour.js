@@ -18,7 +18,7 @@
     caso: [
       { sel: '[data-tour="case-registration"]', title: 'Datos del alumno', body: 'Siempre visibles. Solo se editan antes de asignar folio y clave.' },
       { sel: '[data-tour="case-codes"]', title: 'Códigos de acceso', body: 'Cuando DOCEO asigne folio/clave (y extra), aparecerán aquí.' },
-      { sel: '[data-tour="case-mails"]', title: 'Correos al alumno', body: 'Historial de correos del caso (sin publicidad ni correos a proveedor).' },
+      { sel: '[data-tour="case-mails"]', title: 'Correos al alumno', body: 'Historial de correos del caso.' },
       { sel: '[data-tour="case-results"]', title: 'Resultados', body: 'Nivel, puntaje, certificado y PDF cuando existan.' }
     ],
     registrar: [
@@ -30,7 +30,7 @@
       { sel: '[data-tour="bulk-form"], [data-tour="bulk-proof"]', title: 'Pasos del lote', body: 'Primero revisas el CSV; luego subes el comprobante por el monto partner × N.' }
     ],
     avance: [
-      { sel: '[data-tour="progress-stats"]', title: 'Tu avance', body: 'Ventas del mes/convenio y crédito. Los convenios especiales no ven la escala.' },
+      { sel: '[data-tour="progress-stats"]', title: 'Tu avance', body: 'Ventas del mes/convenio y crédito.' },
       { sel: '[data-tour="tier-progress"]', title: 'Niveles', body: 'Barra y metas Bronze / Silver / Gold de tu convenio.' }
     ],
     perfil: [
