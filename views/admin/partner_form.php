@@ -6,15 +6,30 @@ $action = $isEdit
     ? url('/admin/partners/' . $partner['id'])
     : url('/admin/partners/nuevo');
 ?>
-<p class="meta"><a href="<?= e(url('/admin/partners')) ?>">← Partners</a></p>
-<h1 style="margin:.2rem 0;color:var(--doceo-blue)">
-    <?= $isEdit ? 'Editar partner' : 'Nuevo partner' ?>
-</h1>
-<p class="muted">
-    <?= $isEdit
-        ? 'Puedes cambiar el nivel de precio, datos de acceso y activar/desactivar la cuenta.'
-        : 'Se crea la cuenta de acceso (rol partner) y la ficha con nivel de precio.' ?>
+<p class="meta">
+    <a href="<?= e(url('/admin/partners')) ?>">← Partners</a>
+    <?php if ($isEdit): ?>
+        ·
+        <a href="<?= e(url('/admin/partners/' . (int) $partner['id'] . '/avance')) ?>">Ver avance / métricas</a>
+    <?php endif; ?>
 </p>
+<div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:flex-start">
+    <div>
+        <h1 style="margin:.2rem 0;color:var(--doceo-blue)">
+            <?= $isEdit ? 'Editar partner' : 'Nuevo partner' ?>
+        </h1>
+        <p class="muted" style="margin:.25rem 0 0">
+            <?= $isEdit
+                ? 'Puedes cambiar el nivel de precio, datos de acceso y activar/desactivar la cuenta.'
+                : 'Se crea la cuenta de acceso (rol partner) y la ficha con nivel de precio.' ?>
+        </p>
+    </div>
+    <?php if ($isEdit): ?>
+        <a class="btn btn-accent" href="<?= e(url('/admin/partners/' . (int) $partner['id'] . '/avance')) ?>">
+            Ver avance / métricas
+        </a>
+    <?php endif; ?>
+</div>
 
 <form method="post" action="<?= e($action) ?>" class="panel" style="margin-top:1rem;max-width:640px">
     <?= csrf_field() ?>

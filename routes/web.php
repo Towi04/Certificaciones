@@ -138,6 +138,7 @@ $router->post('/admin/partners/directorio/{id}/aprobar', fn (string $id) => $adm
 $router->post('/admin/partners/directorio/{id}/rechazar', fn (string $id) => $admin->partnerDirectoryReject($id));
 $router->get('/admin/partners/nuevo', fn () => $admin->partnerCreateForm());
 $router->post('/admin/partners/nuevo', fn () => $admin->partnerCreate());
+$router->get('/admin/partners/{id}/avance', fn (string $id) => $admin->partnerMetrics($id));
 $router->get('/admin/partners/{id}', fn (string $id) => $admin->partnerEdit($id));
 $router->post('/admin/partners/{id}', fn (string $id) => $admin->partnerUpdate($id));
 $router->post('/admin/partners/{id}/reenviar-acceso', fn (string $id) => $admin->partnerResendAccess($id));

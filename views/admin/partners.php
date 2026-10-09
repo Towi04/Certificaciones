@@ -51,7 +51,11 @@
                         <?php endif; ?>
                     </td>
                     <td><?= (int) $p['is_active'] ? 'Sí' : 'No' ?></td>
-                    <td><a href="<?= e(url('/admin/partners/' . $p['id'])) ?>">Editar</a></td>
+                    <td style="white-space:nowrap">
+                        <a href="<?= e(url('/admin/partners/' . $p['id'] . '/avance')) ?>">Avance</a>
+                        ·
+                        <a href="<?= e(url('/admin/partners/' . $p['id'])) ?>">Editar</a>
+                    </td>
                 </tr>
             <?php endforeach; ?>
             <?php if ($partners === []): ?>
