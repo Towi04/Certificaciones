@@ -104,18 +104,20 @@ $action = $isEdit
                 <a href="<?= e(url('/admin/partners/niveles')) ?>">Niveles partner</a>.
             </span>
         </label>
+    </div>
+    <div class="panel" style="margin-top:1rem;padding:.85rem 1rem;background:#fffbeb;border:1px solid #f59e0b;max-width:640px">
+        <h2 style="margin:0 0 .5rem;font-size:1.05rem;color:#92400e">Ventas históricas (temporal)</h2>
+        <p class="muted" style="margin:0 0 .65rem;font-size:.82rem">
+            Solo visible aquí en admin. Suma al avance del convenio del partner
+            (p. ej. alumnos desde agosto 2026 que ya están en
+            <a href="<?= e(url('/admin/publicidad/contactos')) ?>">clientes anteriores</a>).
+            No altera ventas del mes ni crédito. Cuando ya no haga falta, déjalo en 0.
+        </p>
         <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-            Ventas históricas (temporal)
+            Cantidad a sumar al convenio
             <input type="number" name="legacy_sales_bonus" min="0" step="1"
                    value="<?= (int) ($partner['legacy_sales_bonus'] ?? 0) ?>"
-                   style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-            <span class="muted" style="font-size:.78rem;font-weight:500">
-                Cantidad de certificaciones/alumnos de este partner que ya están en
-                <a href="<?= e(url('/admin/publicidad/contactos')) ?>">clientes anteriores</a>
-                (fuera del PDV) y deben sumar al conteo del convenio actual
-                (p. ej. desde agosto 2026). No altera las ventas del mes ni el crédito.
-                Cuando todo fluya por el sistema, déjalo en 0.
-            </span>
+                   style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;max-width:12rem">
         </label>
     </div>
     <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-top:.75rem">
