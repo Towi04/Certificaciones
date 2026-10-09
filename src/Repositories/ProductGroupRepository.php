@@ -100,12 +100,9 @@ final class ProductGroupRepository
 
     /**
      * Crea o actualiza un grupo por código.
+     * Por defecto no pisa config_json de grupos ya existentes (cutover seguro).
      *
      * @param array{name:string,code:string,supplier_id?:?int,config_json?:?string} $data
-     */
-    /**
-     * @param array{name:string,code:string,supplier_id?:?int,config_json?:?string} $data
-     * @param bool $overwriteConfig si false (default), no pisa config_json de grupos ya existentes
      */
     public function upsertByCode(array $data, bool $overwriteConfig = false): int
     {

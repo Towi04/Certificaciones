@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace App\Setup;
 
-use App\Database\Connection;
 use App\Repositories\MailTemplateRepository;
 use App\Repositories\ProductGroupRepository;
-use PDO;
 
 /**
  * Parches seguros para el cutover UKS / Cambridge / CENNI.
@@ -15,13 +13,6 @@ use PDO;
  */
 final class CutoverConfigEnsurer
 {
-    private PDO $pdo;
-
-    public function __construct()
-    {
-        $this->pdo = Connection::get();
-    }
-
     /** @return list<string> */
     public function run(): array
     {
