@@ -87,14 +87,22 @@ No hace falta activarlo para ELeT a menos que UKS pase a venderte lotes de códi
 
 ## Prueba seca (antes del anuncio público)
 
+Checklist completa (matriz A–D, rollback, combo): **`docs/products/cutover-phase8-qa.md`**.
+
+```bash
+php bin/ensure-cutover-config.php
+php bin/cutover-readiness.php
+```
+
 1. En un grupo de prueba (o Cambridge) carga 2 convocatorias con sede.
 2. Compra de prueba → verifica que el selector muestra sede y que el caso guarda
    `extra_json.exam_schedule.venue|city|address`.
-3. Envía un correo de prueba con `{{exam_venue_line}}`.
+3. Envía un correo de prueba con `{{exam_venue_line}}` y con `{{doc_ine_url}}` (INE aprobado).
 4. Cuando UKS confirme fecha de corte, replica la config en `uks-elet`.
 
 ## Resumen
 
-- **Hoy:** no cambies nada de UKS; el online sigue igual.
-- **Listo desde ya:** `venue_schedules` (recurring/dated/open_window) y `dated_list` + correos con sede.
+- **Hoy:** no cambies la agenda de UKS a presencial; el online sigue igual.
+- **Listo desde ya:** docs INE + gate, sedes (`venue_schedules` / `dated_list`), placeholders.
 - **Al cutover:** cambiar modo de agenda del grupo, cargar sedes, quitar folio/clave del progreso y actualizar plantillas.
+- **QA / rollback:** `docs/products/cutover-phase8-qa.md`.
