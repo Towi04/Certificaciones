@@ -103,15 +103,22 @@ final class ProductGroupRepository
      *
      * @param array{name:string,code:string,supplier_id?:?int,config_json?:?string} $data
      */
-    public function upsertByCode(array $data): int
+    /**
+     * @param array{name:string,code:string,supplier_id?:?int,config_json?:?string} $data
+     * @param bool $overwriteConfig si false (default), no pisa config_json de grupos ya existentes
+     */
+    public function upsertByCode(array $data, bool $overwriteConfig = false): int
     {
         $existing = $this->findByCode($data['code']);
         if ($existing) {
-            $this->update((int) $existing['id'], [
+            $payload = [
                 'name' => $data['name'],
                 'supplier_id' => $data['supplier_id'] ?? null,
-                'config_json' => $data['config_json'] ?? null,
-            ]);
+            ];
+            if ($overwriteConfig && array_key_exists('config_json', $data)) {
+                $payload['config_json'] = $data['config_json'];
+            }
+            $this->update((int) $existing['id'], $payload);
 
             return (int) $existing['id'];
         }

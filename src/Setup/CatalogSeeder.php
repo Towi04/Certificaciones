@@ -160,6 +160,7 @@ HTML;
             ],
             'registration_docs' => [],
             'student_docs_timing' => 'before_payment',
+            'student_docs_gate' => ['block_until_approved' => true],
             'reglamento' => [
                 'template_path' => '/assets/reglamentos/elet-reglamento.pdf',
                 'source_url' => 'https://drive.google.com/file/d/1sfP7zSPlqqpBdYaHUmz-_kM_BijRZDHW/view?usp=sharing',
@@ -274,6 +275,7 @@ HTML;
             'required_docs' => [],
             'registration_docs' => $cenniRegistrationDocs,
             'student_docs_timing' => 'after_payment',
+            'student_docs_gate' => ['block_until_approved' => true],
             'card_msi' => ['enabled' => false, 'months' => [], 'min_amount' => 0],
             'bundled_with' => 'ELET-UKS',
             'starts_after' => 'exam_completed',
@@ -404,6 +406,7 @@ HTML;
         $cambridgeFlexibleConfig['required_docs'] = $ineBeforePayment;
         $cambridgeFlexibleConfig['registration_docs'] = [];
         $cambridgeFlexibleConfig['student_docs_timing'] = 'before_payment';
+        $cambridgeFlexibleConfig['student_docs_gate'] = ['block_until_approved' => true];
         $cambridgeFlexibleConfig['exam'] = [
             'choose_at_checkout' => true,
             'slot_minutes' => 60,
@@ -425,6 +428,7 @@ HTML;
         $cambridgeFixedConfig['required_docs'] = $ineBeforePayment;
         $cambridgeFixedConfig['registration_docs'] = [];
         $cambridgeFixedConfig['student_docs_timing'] = 'before_payment';
+        $cambridgeFixedConfig['student_docs_gate'] = ['block_until_approved' => true];
         $cambridgeFixedConfig['exam'] = [
             'choose_at_checkout' => true,
             'slot_minutes' => 30,
@@ -1030,6 +1034,11 @@ HTML;
 
         $this->seedMailTemplates($log);
 
+        // Parches aditivos cutover (no pisan agendas/docs ya editados).
+        foreach ((new CutoverConfigEnsurer())->run() as $line) {
+            $log[] = $line;
+        }
+
         $log[] = 'Seed de catálogo completado.';
 
         return $log;
@@ -1055,11 +1064,33 @@ HTML;
                     . '<li><strong>Hora examen:</strong> {{exam_time}}</li>'
                     . '</ul>'
                     . '{{documentos_html}}'
+                    . '{{student_docs_html}}'
                     . '<p>Enlaces individuales (si los necesitas): '
-                    . '<a href="{{doc_ine_url}}">INE / identificación</a> · '
+                    . '<a href="{{doc_ine_url}}">{{doc_ine_label}}</a> · '
                     . '<a href="{{reglamento_url}}">Reglamento</a> · '
                     . '<a href="{{comprobante_url}}">Comprobante</a> · '
                     . '<a href="{{workbook_url}}">Excel</a></p>'
+                    . '<p>Sede: {{exam_venue_line}}</p>'
+                    . '<p>— Instituto DOCEO</p>',
+            ],
+            [
+                'code' => 'cenni_solicitud',
+                'name' => 'CENNI · Solicitud de trámite (docs alumno)',
+                'subject' => 'Trámite CENNI · {{full_name}} · {{matricula}}',
+                'body' => '<p>Solicitud de trámite <strong>CENNI</strong> — Instituto DOCEO</p>'
+                    . '<ul>'
+                    . '<li><strong>Alumno:</strong> {{full_name}}</li>'
+                    . '<li><strong>Matrícula:</strong> {{matricula}}</li>'
+                    . '<li><strong>Correo:</strong> {{student_email}}</li>'
+                    . '<li><strong>Producto:</strong> {{product_name}}</li>'
+                    . '</ul>'
+                    . '{{student_docs_html}}'
+                    . '<p>Enlaces:</p><ul>'
+                    . '<li><a href="{{doc_ine_url}}">{{doc_ine_label}}</a></li>'
+                    . '<li><a href="{{doc_curp_url}}">{{doc_curp_label}}</a></li>'
+                    . '<li><a href="{{doc_solicitud_url}}">{{doc_solicitud_label}}</a></li>'
+                    . '<li><a href="{{doc_certificado_constancia_url}}">{{doc_certificado_constancia_label}}</a></li>'
+                    . '</ul>'
                     . '<p>— Instituto DOCEO</p>',
             ],
             [

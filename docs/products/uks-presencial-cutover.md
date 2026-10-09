@@ -15,7 +15,11 @@ Este documento es la checklist para el día del cambio, sin tocar producción an
 | Campos opcionales de sede en cada convocatoria (`venue` / `city` / `address`) | Listo |
 | Checkout: alumno elige sede y luego fecha/convocatoria | Listo |
 | Placeholders de correo `{{exam_venue}}`, `{{exam_city}}`, `{{exam_address}}`, `{{exam_venue_line}}` | Listo |
+| Docs INE antes de pagar + gate de aprobación + `{{doc_ine_url}}` | Listo (Fase 7) |
+| Parche seguro `php bin/ensure-cutover-config.php` | Listo |
 | Flujo actual UKS online (ventana + folio/clave + CSV) | Sin cambios |
+
+Detalle Fase 7: `docs/products/cutover-phase7.md`.
 
 ## Qué NO hay que hacer todavía
 
