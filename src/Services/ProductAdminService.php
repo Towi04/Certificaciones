@@ -2120,6 +2120,10 @@ final class ProductAdminService
             if ($code === '') {
                 continue;
             }
+            // Reglamento / firma digital o escaneada → pestaña Reglamento, no aquí.
+            if (CheckoutRequirements::isReglamentoManagedDocCode($code, ['config_json' => null, 'group_config_json' => $config])) {
+                continue;
+            }
             $label = trim((string) (is_array($labels) ? ($labels[$i] ?? '') : ''));
             $desc = trim((string) (is_array($descriptions) ? ($descriptions[$i] ?? '') : ''));
             $accept = trim((string) (is_array($accepts) ? ($accepts[$i] ?? '') : ''));
@@ -2145,7 +2149,10 @@ final class ProductAdminService
             ];
         }
 
-        $docs = CheckoutRequirements::normalizeStudentDocs($rows);
+        $docs = CheckoutRequirements::withoutReglamentoManagedDocs(
+            CheckoutRequirements::normalizeStudentDocs($rows),
+            ['config_json' => null, 'group_config_json' => $config]
+        );
         $config['student_docs_timing'] = $timing;
         if ($timing === CheckoutRequirements::DOCS_TIMING_AFTER_PAYMENT) {
             $config['registration_docs'] = $docs;

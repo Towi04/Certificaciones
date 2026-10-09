@@ -775,8 +775,14 @@ final class CheckoutRequirements
             return $timing;
         }
 
-        $before = self::normalizeDocs(is_array($cfg['required_docs'] ?? null) ? $cfg['required_docs'] : []);
-        $after = self::normalizeDocs(is_array($cfg['registration_docs'] ?? null) ? $cfg['registration_docs'] : []);
+        $before = self::withoutReglamentoManagedDocs(
+            self::normalizeDocs(is_array($cfg['required_docs'] ?? null) ? $cfg['required_docs'] : []),
+            $product
+        );
+        $after = self::withoutReglamentoManagedDocs(
+            self::normalizeDocs(is_array($cfg['registration_docs'] ?? null) ? $cfg['registration_docs'] : []),
+            $product
+        );
         if ($before !== []) {
             return self::DOCS_TIMING_BEFORE_PAYMENT;
         }
@@ -789,15 +795,18 @@ final class CheckoutRequirements
 
     /**
      * Lista unificada de docs del alumno (checkout o portal según timing).
+     * Nunca incluye reglamento/firma digital: eso vive en la pestaña Reglamento.
      *
      * @param array<string, mixed> $product
      * @return list<array{code:string,label:string,description:string,required:bool,accept:string,include_in_provider_mail:bool,require_for_provider_send:bool}>
      */
     public static function studentDocsForProduct(array $product): array
     {
-        return self::studentDocsTiming($product) === self::DOCS_TIMING_AFTER_PAYMENT
+        $docs = self::studentDocsTiming($product) === self::DOCS_TIMING_AFTER_PAYMENT
             ? self::registrationDocsForProduct($product)
             : self::docsForProduct($product);
+
+        return self::withoutReglamentoManagedDocs($docs, $product);
     }
 
     /**
@@ -808,21 +817,55 @@ final class CheckoutRequirements
     {
         $cfg = self::config($product);
         if (array_key_exists('required_docs', $cfg) && is_array($cfg['required_docs'])) {
-            $docs = self::normalizeDocs($cfg['required_docs']);
-            if (self::reglamentoForProduct($product) !== null) {
-                $digitalCode = self::reglamentoForProduct($product)['doc_code'];
-                $docs = array_values(array_filter(
-                    $docs,
-                    static fn (array $d): bool => ($d['code'] ?? '') !== $digitalCode
-                ));
-            }
-
-            return $docs;
+            return self::withoutReglamentoManagedDocs(self::normalizeDocs($cfg['required_docs']), $product);
         }
 
         // Sin config: no pedir documentos en el checkout.
-        // Reglamento, firma, INE, actas, etc. se solicitan en el pipeline cuando aplique.
+        // Reglamento/firma van en la pestaña Reglamento; INE y similares aquí.
         return [];
+    }
+
+    /**
+     * Códigos reservados al flujo de reglamento (pestaña Reglamento / firma digital o PDF escaneado).
+     * No deben editarse ni pedirse como “documentos del alumno”.
+     *
+     * @param array<string, mixed> $product
+     * @return list<string>
+     */
+    public static function reglamentoManagedDocCodes(array $product = []): array
+    {
+        $codes = ['reglamento', 'signature', 'reglamento_firmado'];
+        $reg = self::reglamentoForProduct($product);
+        if ($reg !== null) {
+            $digital = strtolower(trim((string) ($reg['doc_code'] ?? '')));
+            if ($digital !== '') {
+                $codes[] = $digital;
+            }
+        }
+
+        return array_values(array_unique($codes));
+    }
+
+    public static function isReglamentoManagedDocCode(string $code, array $product = []): bool
+    {
+        $code = strtolower(trim($code));
+
+        return $code !== '' && in_array($code, self::reglamentoManagedDocCodes($product), true);
+    }
+
+    /**
+     * @param list<array{code:string,label:string,description?:string,required:bool,accept:string,include_in_provider_mail?:bool,require_for_provider_send?:bool}> $docs
+     * @param array<string, mixed> $product
+     * @return list<array{code:string,label:string,description:string,required:bool,accept:string,include_in_provider_mail:bool,require_for_provider_send:bool}>
+     */
+    public static function withoutReglamentoManagedDocs(array $docs, array $product = []): array
+    {
+        $blocked = array_fill_keys(self::reglamentoManagedDocCodes($product), true);
+
+        return array_values(array_filter(
+            $docs,
+            static fn (array $d): bool => !isset($blocked[strtolower(trim((string) ($d['code'] ?? '')))])
+        ));
     }
 
     /** Paso inicial del pipeline al crear tracking: primero de la plantilla del grupo. */
@@ -876,23 +919,14 @@ final class CheckoutRequirements
             $docs = self::normalizeDocs($cfg['registration_docs']);
         }
 
-        // No duplicar reglamento/firma si ya se firmó en checkout.
-        $reg = self::reglamentoForProduct($product);
-        if ($reg !== null) {
-            $digitalCode = (string) ($reg['doc_code'] ?? 'reglamento_firmado');
-            $docs = array_values(array_filter(
-                $docs,
-                static fn (array $d): bool => !in_array(
-                    (string) ($d['code'] ?? ''),
-                    [$digitalCode, 'reglamento', 'signature'],
-                    true
-                )
-            ));
-        }
+        // Reglamento/firma digital o escaneada se manejan en la pestaña Reglamento, no aquí.
+        $docs = self::withoutReglamentoManagedDocs($docs, $product);
 
         // Inventario (p. ej. iTEP): el seeder metía reglamento+firma aunque el grupo no los usa.
         $inv = is_array($cfg['inventory'] ?? null) ? $cfg['inventory'] : [];
-        if (!empty($inv['enabled']) && self::isDefaultReglamentoFirmaPair($docs)) {
+        if (!empty($inv['enabled']) && self::isDefaultReglamentoFirmaPair(
+            self::normalizeDocs(is_array($cfg['registration_docs'] ?? null) ? $cfg['registration_docs'] : [])
+        )) {
             return [];
         }
 
