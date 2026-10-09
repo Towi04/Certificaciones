@@ -15,4 +15,5 @@ use App\Setup\CutoverConfigEnsurer;
 foreach ((new CutoverConfigEnsurer())->run() as $line) {
     fwrite(STDOUT, $line . PHP_EOL);
 }
+fwrite(STDOUT, PHP_EOL . 'Siguiente: php bin/cutover-readiness.php' . PHP_EOL);
 exit(0);

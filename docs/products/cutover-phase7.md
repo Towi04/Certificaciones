@@ -34,13 +34,6 @@ Luego en Admin (manual, no lo hace el script):
 
 | Fase | Estado |
 |------|--------|
-| 0 Hotfix JSON | Operativo / parcial |
-| 1 Docs UI + timing | Hecha |
-| 2 Checkout wizard docs | Hecha |
-| 3 Approve/reject + mail | Hecha |
-| 4 Placeholders proveedor | Hecha |
-| 5 Checkout sede-primero | Hecha |
-| 6 Motor venues | Hecha |
-| Gate ops docs aprobados | Hecha (#264) |
-| **7 Config real por grupo** | **Esta** |
-| **8 QA cutover** | **Pendiente (última)** |
+| 0–6 + gate ops | Hechas |
+| **7 Config real por grupo** | Hecha (#265) |
+| **8 QA cutover** | `docs/products/cutover-phase8-qa.md` |

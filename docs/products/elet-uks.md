@@ -64,7 +64,11 @@ No se piden otros campos (sin CURP, fecha de nacimiento, etc.).
 ## Trámite CENNI (post-examen)
 
 - Pipeline **aparte**, inicia **después del examen** si el alumno lo desea.
-- DOCEO **no recibe** INE/CURP/solicitud CENNI; el alumno los sube en la **plataforma UKS** (enlace único por alumno).
+- Con `doceo_collects_docs: true` (config actual del grupo): el alumno sube en el **portal DOCEO**
+  INE, CURP, solicitud y certificado/constancia **después de pagar** el trámite; admin aprueba/rechaza.
+  Ver `docs/products/student-docs.md` y `docs/products/combo-elet-cenni.md`.
+- Si en el futuro UKS captura esos archivos solo en su plataforma, vaciar `registration_docs`
+  del grupo CENNI y documentar el enlace UKS en el progreso.
 - Admin importa folio CENNI desde **CSV de UKS** y lo publica para seguimiento.
 - Consulta alumno: https://cennisistema.sep.gob.mx/cenni/consulta/consultaEstatus.jsp
 - **Plazo:** 15 días desde el examen para iniciar; si no, cancelación automática.
