@@ -1060,6 +1060,18 @@ final class MailTemplateService
                 . '<li><a href="#">Comprobante pago al proveedor</a></li>'
                 . '<li><a href="#">Plantilla Excel</a></li>'
                 . '</ul>',
+            'student_docs_html' => '<p><strong>Documentos del alumno:</strong></p><ul>'
+                . '<li><a href="#">INE o pasaporte escaneado (PDF)</a></li>'
+                . '</ul>',
+            'doc_ine_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/archivo/ejemplo-ine',
+            'doc_ine_label' => 'INE o pasaporte escaneado (PDF)',
+            'ine_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/archivo/ejemplo-ine',
+            'doc_curp_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/archivo/ejemplo-curp',
+            'doc_curp_label' => 'CURP',
+            'doc_solicitud_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/archivo/ejemplo-solicitud',
+            'doc_solicitud_label' => 'Solicitud',
+            'doc_certificado_constancia_url' => rtrim((string) (Env::get('APP_URL', '') ?? 'https://pdv.institutodoceo.com'), '/') . '/archivo/ejemplo-constancia',
+            'doc_certificado_constancia_label' => 'Certificado / constancia',
             'attachment_note' => 'Documentos por enlace (sin adjuntos en el correo).',
             'workbook_note' => 'Plantilla Excel disponible por enlace seguro.',
         ];
