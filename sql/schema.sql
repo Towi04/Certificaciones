@@ -60,6 +60,8 @@ CREATE TABLE IF NOT EXISTS partners (
   notifications_seen_at DATETIME NULL,
   credit_balance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
   notes TEXT NULL,
+  -- Temporal: alumnos/certificaciones anteriores (p. ej. CSV clientes) que suman al convenio.
+  legacy_sales_bonus INT UNSIGNED NOT NULL DEFAULT 0,
   agreement_starts_at DATE NULL,
   agreement_ends_at DATE NULL,
   tier_evaluated_at DATETIME NULL,

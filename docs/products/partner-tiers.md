@@ -26,3 +26,12 @@
 
 ## Conteo de ventas
 Ítems de compra pagados (`purchases.status = paid`) cuyo producto es `type = certification`, atribuidos al `partner_id` de la compra.
+
+### Ajuste temporal: ventas históricas (`legacy_sales_bonus`)
+Campo en la ficha del partner (admin) para sumar certificaciones/alumnos que el partner
+inscribió en el convenio actual pero que solo existen como **clientes anteriores**
+(marketing), no como compras del PDV.
+
+- Suma al **conteo del convenio** (avance / evaluación / avisos de bajas ventas).
+- **No** altera las ventas del mes ni el crédito.
+- Usar p. ej. para el convenio renovado en agosto 2026; dejar en `0` cuando ya no haga falta.

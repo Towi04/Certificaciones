@@ -107,9 +107,21 @@ $pct = (int) ($tierProgress['progress_pct'] ?? 0);
             </tbody>
         </table>
     </div>
+    <?php if ((int) ($tierProgress['legacy_sales_bonus'] ?? 0) > 0): ?>
+        <p class="muted" style="font-size:.82rem;margin:.85rem 0 0">
+            Incluye <strong><?= (int) $tierProgress['legacy_sales_bonus'] ?></strong>
+            certificación(es) históricas del convenio actual
+            (registradas fuera del portal) +
+            <strong><?= (int) ($tierProgress['system_year_sales'] ?? 0) ?></strong>
+            con pago confirmado en el sistema.
+        </p>
+    <?php endif; ?>
     <p class="muted" style="font-size:.78rem;margin:.65rem 0 0">
-        Solo cuentan certificaciones con pago confirmado. Los partners con convenio especial
-        no participan en esta escala.
+        Solo cuentan certificaciones con pago confirmado
+        <?php if ((int) ($tierProgress['legacy_sales_bonus'] ?? 0) > 0): ?>
+            más el ajuste histórico autorizado por DOCEO
+        <?php endif; ?>
+        . Los partners con convenio especial no participan en esta escala.
     </p>
 </div>
 <style>

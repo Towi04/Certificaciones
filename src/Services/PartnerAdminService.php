@@ -344,11 +344,12 @@ final class PartnerAdminService
             }
             $agrStart = self::normalizeDate($data['agreement_starts_at'] ?? null);
             $agrEnd = self::normalizeDate($data['agreement_ends_at'] ?? null);
+            $legacyBonus = max(0, (int) ($data['legacy_sales_bonus'] ?? 0));
             $this->pdo->prepare(
                 'INSERT INTO partners
-                    (user_id, code, display_name, tier, tier_program, notes,
+                    (user_id, code, display_name, tier, tier_program, notes, legacy_sales_bonus,
                      agreement_starts_at, agreement_ends_at, is_active)
-                 VALUES (?,?,?,?,?,?,?,?,?)'
+                 VALUES (?,?,?,?,?,?,?,?,?,?)'
             )->execute([
                 $userId,
                 $code,
@@ -356,6 +357,7 @@ final class PartnerAdminService
                 $tier,
                 $tierProgram ? 1 : 0,
                 $notes !== '' ? $notes : null,
+                $legacyBonus,
                 $agrStart,
                 $agrEnd,
                 $active ? 1 : 0,
@@ -483,9 +485,11 @@ final class PartnerAdminService
             }
             $agrStart = self::normalizeDate($data['agreement_starts_at'] ?? null);
             $agrEnd = self::normalizeDate($data['agreement_ends_at'] ?? null);
+            $legacyBonus = max(0, (int) ($data['legacy_sales_bonus'] ?? 0));
             $this->pdo->prepare(
                 'UPDATE partners
                  SET code = ?, display_name = ?, tier = ?, tier_program = ?, notes = ?,
+                     legacy_sales_bonus = ?,
                      agreement_starts_at = ?, agreement_ends_at = ?, is_active = ?
                  WHERE id = ?'
             )->execute([
@@ -494,6 +498,7 @@ final class PartnerAdminService
                 $tier,
                 $tierProgram ? 1 : 0,
                 $notes !== '' ? $notes : null,
+                $legacyBonus,
                 $agrStart,
                 $agrEnd,
                 $active ? 1 : 0,
