@@ -244,6 +244,26 @@ foreach ($documents as $d) {
     $otherDocs[] = $d;
 }
 ?>
+<?php
+/** @var array<string,mixed>|null $studentDocsReport */
+$studentDocsReport = $studentDocsReport ?? null;
+?>
+<?php if (is_array($studentDocsReport) && !empty($studentDocsReport['gate_enabled']) && empty($studentDocsReport['ok']) && (int) ($studentDocsReport['required_total'] ?? 0) > 0): ?>
+<div class="panel" style="margin-top:1rem;border-color:#f5c518;background:#fffbeb">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Documentos en revisión</h2>
+    <p style="margin:0;font-size:.9rem">
+        Administración debe <strong>aprobar</strong> tus documentos obligatorios
+        (<?= (int) $studentDocsReport['approved'] ?> / <?= (int) $studentDocsReport['required_total'] ?> listos)
+        antes de continuar con la solicitud al proveedor / siguientes pasos.
+        <?php if ((int) ($studentDocsReport['missing'] ?? 0) > 0): ?>
+            Aún falta subir alguno.
+        <?php elseif ((int) ($studentDocsReport['pending_review'] ?? 0) > 0): ?>
+            Ya los recibimos; espera la revisión o corrige si alguno fue rechazado.
+        <?php endif; ?>
+    </p>
+</div>
+<?php endif; ?>
+
 <?php if ($registrationDocs !== [] || $otherDocs !== []): ?>
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Documentos del registro</h2>

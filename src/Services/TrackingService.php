@@ -420,17 +420,17 @@ final class TrackingService
     }
 
     /**
-     * Checklist de documentos de registro vs lo ya subido.
+     * Checklist de documentos del alumno (antes o después de pagar) vs lo ya subido.
      *
      * @param array<string, mixed> $product
      * @return list<array{
-     *   code:string,label:string,required:bool,accept:string,
+     *   code:string,label:string,description:string,required:bool,accept:string,
      *   status:?string,document_id:?int,original_name:?string,rejection_reason:?string
      * }>
      */
     public function registrationChecklist(int $trackingId, array $product): array
     {
-        $required = CheckoutRequirements::registrationDocsForProduct($product);
+        $required = CheckoutRequirements::studentDocsForProduct($product);
         if ($required === []) {
             return [];
         }
@@ -466,6 +466,79 @@ final class TrackingService
     }
 
     /**
+     * Estado del gate: ¿todos los docs required están approved?
+     *
+     * @param array<string, mixed> $product
+     * @return array{
+     *   gate_enabled:bool,ok:bool,approved:int,required_total:int,
+     *   pending_review:int,missing:int,items:list<array<string,mixed>>,
+     *   blocking_labels:list<string>
+     * }
+     */
+    public function studentDocsApprovalReport(int $trackingId, array $product): array
+    {
+        $items = $this->registrationChecklist($trackingId, $product);
+        $gate = CheckoutRequirements::studentDocsGateEnabled($product);
+        $requiredTotal = 0;
+        $approved = 0;
+        $pendingReview = 0;
+        $missing = 0;
+        $blocking = [];
+        foreach ($items as $item) {
+            if (empty($item['required'])) {
+                continue;
+            }
+            $requiredTotal++;
+            $st = $item['status'] ?? null;
+            if ($st === 'approved') {
+                $approved++;
+                continue;
+            }
+            if ($st === 'pending') {
+                $pendingReview++;
+            } elseif ($st === null || $st === '') {
+                $missing++;
+            } else {
+                // rejected u otro
+                $pendingReview++;
+            }
+            $blocking[] = (string) $item['label'];
+        }
+        $ok = $requiredTotal === 0 || $approved === $requiredTotal;
+
+        return [
+            'gate_enabled' => $gate,
+            'ok' => $ok,
+            'approved' => $approved,
+            'required_total' => $requiredTotal,
+            'pending_review' => $pendingReview,
+            'missing' => $missing,
+            'items' => $items,
+            'blocking_labels' => $blocking,
+        ];
+    }
+
+    /**
+     * Lanza si el gate está activo y faltan docs approved (p. ej. antes de enviar a proveedor).
+     *
+     * @param array<string, mixed> $product
+     */
+    public function assertStudentDocsApprovedForOps(int $trackingId, array $product): void
+    {
+        $report = $this->studentDocsApprovalReport($trackingId, $product);
+        if (!$report['gate_enabled'] || $report['ok']) {
+            return;
+        }
+        $labels = $report['blocking_labels'];
+        $msg = 'Documentos del alumno pendientes de aprobación';
+        if ($labels !== []) {
+            $msg .= ': ' . implode(', ', $labels);
+        }
+        $msg .= '. Apruébalos en el caso antes de continuar.';
+        throw new \RuntimeException($msg);
+    }
+
+    /**
      * Primera carga o reemplazo de un documento del expediente de registro.
      *
      * @param array{tmp_name:string,name:string,error:int,size:int} $file
@@ -486,7 +559,7 @@ final class TrackingService
             'config_json' => $tracking['config_json'] ?? null,
             'group_config_json' => $tracking['group_config_json'] ?? null,
         ];
-        $required = CheckoutRequirements::registrationDocsForProduct($product);
+        $required = CheckoutRequirements::studentDocsForProduct($product);
         $meta = null;
         foreach ($required as $row) {
             if ($row['code'] === $docType) {

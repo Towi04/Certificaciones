@@ -14,6 +14,7 @@ final class AdminOpsBoardService
 {
     public const VIEWS = [
         'action' => 'Por atender',
+        'docs' => 'Docs por revisar',
         'provider' => 'Solicitud proveedor',
         'access' => 'Folio / clave',
         'exams' => 'Exámenes',
@@ -23,6 +24,7 @@ final class AdminOpsBoardService
     /** Texto corto bajo el título de Operaciones (antes de pestañas/filtro). */
     public const VIEW_HINTS = [
         'action' => 'Casos que requieren acción tuya: pago por confirmar, solicitud a proveedor pendiente o accesos incompletos.',
+        'docs' => 'Casos con documentos del alumno en revisión (pending). Ábrelo y aprueba o rechaza.',
         'provider' => 'Pagados con solicitud al proveedor pendiente de enviar (p. ej. UKS / Lingua Franca).',
         'access' => 'Exámenes ELeT pagados: captura o revisa folio y clave del día.',
         'exams' => 'Exámenes de hoy a 21 días. Semáforo: rojo = hoy, ámbar = mañana, verde = posteriores.',
@@ -312,8 +314,20 @@ final class AdminOpsBoardService
         // Campo extra (Zoom / ID escuela / código curso…): por config del grupo, heurística TOEFL, o ya hay valor.
         $row['show_zoom_fields'] = $captureZoom || $zoomUrl !== '';
         $row['extra_field_label'] = $extraLabel;
+        $docsPending = 0;
+        try {
+            $dstmt = $this->pdo->prepare(
+                "SELECT COUNT(*) FROM documents WHERE tracking_id = ? AND status = 'pending'"
+            );
+            $dstmt->execute([(int) ($row['id'] ?? 0)]);
+            $docsPending = (int) $dstmt->fetchColumn();
+        } catch (\Throwable) {
+            $docsPending = 0;
+        }
+        $row['docs_pending_count'] = $docsPending;
         $row['needs_action'] = $pendingOps > 0
-            || (string) ($row['tracking_status'] ?? '') === 'waiting_admin';
+            || (string) ($row['tracking_status'] ?? '') === 'waiting_admin'
+            || $docsPending > 0;
 
         return $row;
     }
@@ -641,6 +655,12 @@ final class AdminOpsBoardService
             case 'pay':
                 $parts[] = "pu.status IN ('awaiting_payment','payment_review')";
                 break;
+            case 'docs':
+                $parts[] = "EXISTS (
+                    SELECT 1 FROM documents d
+                    WHERE d.tracking_id = t.id AND d.status = 'pending'
+                )";
+                break;
             case 'provider':
                 $parts[] = "pu.status = 'paid'
                     AND JSON_EXTRACT(t.extra_json, '$.provider_request.required') = true
@@ -665,6 +685,10 @@ final class AdminOpsBoardService
                 $parts[] = "(
                     pu.status IN ('awaiting_payment','payment_review')
                     OR t.status = 'waiting_admin'
+                    OR EXISTS (
+                        SELECT 1 FROM documents d
+                        WHERE d.tracking_id = t.id AND d.status = 'pending'
+                    )
                     OR (
                         pu.status = 'paid'
                         AND JSON_EXTRACT(t.extra_json, '$.provider_request.required') = true

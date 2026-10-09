@@ -41,6 +41,7 @@ final class StudentController
             'group_config_json' => $tracking['group_config_json'] ?? null,
         ];
         $checklist = $svc->registrationChecklist((int) $tracking['id'], $product);
+        $docsReport = $svc->studentDocsApprovalReport((int) $tracking['id'], $product);
         $pipelineId = (int) ($tracking['pipeline_template_id'] ?? 0);
         $steps = $pipelineId > 0 ? $svc->steps($pipelineId) : [];
         $cfg = \App\Services\CheckoutRequirements::config($tracking);
@@ -53,6 +54,7 @@ final class StudentController
             'steps' => $steps,
             'documents' => $svc->documentsForTracking((int) $tracking['id']),
             'registrationDocs' => $checklist,
+            'studentDocsReport' => $docsReport,
             'registrationFields' => $registrationFields,
             'usesInventoryAccess' => \App\Services\InventoryService::isEnabledForProduct($product),
             'logs' => $svc->logs((int) $tracking['id']),

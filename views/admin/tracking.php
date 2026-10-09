@@ -684,16 +684,117 @@ $isCancelled = $deliveryEnabled && !empty($resultsState['cancelled']);
 </div>
 <?php endif; ?>
 
+<?php
+/** @var array<string,mixed>|null $studentDocsReport */
+$studentDocsReport = $studentDocsReport ?? null;
+$docsStatusLabel = [
+    'pending' => 'En revisión',
+    'approved' => 'Aprobado',
+    'rejected' => 'Rechazado',
+];
+?>
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Documentos</h2>
-    <?php if ($documents === []): ?>
-        <p class="muted">Sin documentos en este caso (normal si el producto no los pide en checkout).</p>
-    <?php else: ?>
+    <?php if (is_array($studentDocsReport) && (int) ($studentDocsReport['required_total'] ?? 0) > 0): ?>
+        <?php
+        $docsOk = !empty($studentDocsReport['ok']);
+        $docsGate = !empty($studentDocsReport['gate_enabled']);
+        ?>
+        <p style="margin:0 0 .75rem;font-size:.9rem">
+            Obligatorios aprobados:
+            <strong><?= (int) $studentDocsReport['approved'] ?> / <?= (int) $studentDocsReport['required_total'] ?></strong>
+            <?php if ($docsOk): ?>
+                · <span class="pill" style="background:#e8f8ef;color:#166534">Listos</span>
+            <?php else: ?>
+                · <span class="pill" style="background:#fff4d6;color:#92400e">Pendientes</span>
+            <?php endif; ?>
+            <?php if ($docsGate && !$docsOk): ?>
+                <span class="muted" style="display:block;font-size:.8rem;margin-top:.35rem">
+                    Gate activo: no se puede enviar la solicitud al proveedor hasta aprobar todos los obligatorios.
+                </span>
+            <?php endif; ?>
+        </p>
+        <?php if (!empty($studentDocsReport['items'])): ?>
+            <div class="table-wrap" style="margin-bottom:1rem">
+                <table class="data">
+                    <thead><tr><th>Documento pedido</th><th>Estatus</th><th>Archivo</th><th></th></tr></thead>
+                    <tbody>
+                    <?php foreach ($studentDocsReport['items'] as $item): ?>
+                        <?php
+                        $st = $item['status'] ?? null;
+                        $docId = (int) ($item['document_id'] ?? 0);
+                        ?>
+                        <tr>
+                            <td>
+                                <?= e((string) $item['label']) ?>
+                                <?php if (!empty($item['required'])): ?><span class="muted">*</span><?php endif; ?>
+                                <?php if (trim((string) ($item['description'] ?? '')) !== ''): ?>
+                                    <div class="muted" style="font-size:.78rem;margin-top:.2rem"><?= e((string) $item['description']) ?></div>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <span class="pill"><?= e($st ? ($docsStatusLabel[$st] ?? $st) : 'Sin subir') ?></span>
+                                <?php if ($st === 'rejected' && !empty($item['rejection_reason'])): ?>
+                                    <div class="muted" style="font-size:.78rem;margin-top:.25rem"><?= e((string) $item['rejection_reason']) ?></div>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if ($docId > 0): ?>
+                                    <a href="<?= e(url('/admin/documentos/' . $docId . '/ver')) ?>" target="_blank" rel="noopener">
+                                        <?= e((string) ($item['original_name'] ?? 'Ver archivo')) ?>
+                                    </a>
+                                <?php else: ?>
+                                    <span class="muted">—</span>
+                                <?php endif; ?>
+                            </td>
+                            <td style="white-space:nowrap">
+                                <?php if ($docId > 0 && ($st === 'pending' || $st === 'rejected')): ?>
+                                    <form method="post" action="<?= e(url('/admin/documentos/' . $docId . '/aprobar')) ?>" style="display:inline">
+                                        <?= csrf_field() ?>
+                                        <button class="btn btn-primary btn-sm" type="submit">Aprobar</button>
+                                    </form>
+                                <?php endif; ?>
+                                <?php if ($docId > 0 && $st !== 'rejected'): ?>
+                                    <form method="post" action="<?= e(url('/admin/documentos/' . $docId . '/rechazar')) ?>" style="display:inline-flex;gap:.35rem;align-items:center;margin-top:.35rem">
+                                        <?= csrf_field() ?>
+                                        <input type="text" name="reason" required placeholder="Motivo rechazo" style="padding:.3rem .5rem;border:1px solid #cfd8e6;border-radius:8px;max-width:160px">
+                                        <button class="btn btn-ghost btn-sm" type="submit">Rechazar</button>
+                                    </form>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    <?php endif; ?>
+
+    <?php
+    $checklistCodes = [];
+    if (is_array($studentDocsReport) && !empty($studentDocsReport['items'])) {
+        foreach ($studentDocsReport['items'] as $it) {
+            $checklistCodes[(string) ($it['code'] ?? '')] = true;
+        }
+    }
+    $otherUploaded = [];
+    foreach ($documents as $d) {
+        $type = (string) ($d['doc_type'] ?? '');
+        if ($type !== '' && isset($checklistCodes[$type])) {
+            continue;
+        }
+        $otherUploaded[] = $d;
+    }
+    ?>
+    <?php if ($otherUploaded === [] && (empty($studentDocsReport['required_total']))): ?>
+        <p class="muted">Sin documentos en este caso (normal si el producto no los pide).</p>
+    <?php elseif ($otherUploaded !== []): ?>
+        <h3 style="margin:0 0 .5rem;font-size:.95rem;color:var(--doceo-blue)">Otros archivos del caso</h3>
         <div class="table-wrap">
             <table class="data">
                 <thead><tr><th>Tipo</th><th>Archivo</th><th>Estatus</th><th>Motivo</th><th></th></tr></thead>
                 <tbody>
-                <?php foreach ($documents as $d): ?>
+                <?php foreach ($otherUploaded as $d): ?>
                     <tr>
                         <td><?= e($d['doc_type']) ?></td>
                         <td>
@@ -701,7 +802,7 @@ $isCancelled = $deliveryEnabled && !empty($resultsState['cancelled']);
                                 <?= e($d['original_name']) ?>
                             </a>
                         </td>
-                        <td><span class="pill"><?= e($d['status']) ?></span></td>
+                        <td><span class="pill"><?= e($docsStatusLabel[$d['status']] ?? $d['status']) ?></span></td>
                         <td class="muted"><?= e($d['rejection_reason'] ?? '') ?></td>
                         <td style="white-space:nowrap">
                             <?php if ($d['status'] === 'pending' || $d['status'] === 'rejected'): ?>

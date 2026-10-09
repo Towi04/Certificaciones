@@ -810,6 +810,26 @@ final class CheckoutRequirements
     }
 
     /**
+     * ¿Bloquear envío a proveedor / ops hasta que los docs required estén approved?
+     * Default: activo si el grupo pide al menos un documento required.
+     */
+    public static function studentDocsGateEnabled(array $product): bool
+    {
+        $cfg = self::config($product);
+        $gate = is_array($cfg['student_docs_gate'] ?? null) ? $cfg['student_docs_gate'] : [];
+        if (array_key_exists('block_until_approved', $gate)) {
+            return !empty($gate['block_until_approved']);
+        }
+        foreach (self::studentDocsForProduct($product) as $doc) {
+            if (!empty($doc['required'])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @param array<string, mixed> $product
      * @return list<array{code:string,label:string,description:string,required:bool,accept:string,include_in_provider_mail:bool,require_for_provider_send:bool}>
      */
