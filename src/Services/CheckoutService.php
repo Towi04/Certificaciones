@@ -391,6 +391,7 @@ final class CheckoutService
                 'venue' => (string) ($examMeta['venue'] ?? ''),
                 'city' => (string) ($examMeta['city'] ?? ''),
                 'address' => (string) ($examMeta['address'] ?? ''),
+                'venue_id' => (string) ($examMeta['venue_id'] ?? ''),
             ]);
             if (!empty($examMeta['requires_admin'])) {
                 $this->pdo->prepare('UPDATE trackings SET status = ? WHERE id = ?')

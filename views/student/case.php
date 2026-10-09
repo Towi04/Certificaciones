@@ -265,6 +265,9 @@ foreach ($documents as $d) {
                 <?php else: ?>
                     · <span class="pill">Pendiente de subir</span>
                 <?php endif; ?>
+                <?php if (trim((string) ($req['description'] ?? '')) !== ''): ?>
+                    <p class="muted" style="margin:.35rem 0 0;font-size:.82rem"><?= e((string) $req['description']) ?></p>
+                <?php endif; ?>
 
                 <?php if ($st === 'rejected'): ?>
                     <p class="muted" style="margin:.4rem 0">Motivo: <?= e((string) ($req['rejection_reason'] ?? '')) ?></p>

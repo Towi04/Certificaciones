@@ -20,10 +20,13 @@ Siempre se guarda en `trackings.exam_date` / `exam_time` (placeholders `{{exam_d
   y opcionales `venue`, `city`, `address` (sede).
 - En Admin → Grupos → Fechas: una línea
   `fecha|hora|límite|etiqueta|sede|ciudad|dirección`.
-- El alumno elige solo convocatorias con inscripción abierta; ve la sede en el selector.
+- Checkout: el alumno elige **sede** y luego ve solo las convocatorias abiertas de esa sede.
+- API: `GET /api/examen-slots/{slug}?venue_id=…` filtra sesiones; sin `venue_id` lista sedes.
 - Al comprar se guarda la sede en `trackings.extra_json.exam_schedule`
   (placeholders `{{exam_venue}}`, `{{exam_city}}`, `{{exam_address}}`, `{{exam_venue_line}}`).
 - Cutover UKS online → presencial: ver `docs/products/uks-presencial-cutover.md`.
+- Pendiente (fase posterior): reglas recurrentes por sede (p. ej. todos los martes) sin
+  teclear cada fecha; hoy se cargan sesiones explícitas en el textarea.
 
 ## Admin
 - **Grupos → Fechas y horarios**: selector de modo + textareas de slots/convocatorias.

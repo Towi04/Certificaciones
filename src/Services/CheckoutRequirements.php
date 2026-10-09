@@ -557,6 +557,7 @@ final class CheckoutRequirements
         'checkout_field_required',
         'required_docs',
         'registration_docs',
+        'student_docs_timing',
         'payments',
         'card_msi',
         'deferred',
@@ -564,6 +565,9 @@ final class CheckoutRequirements
         'step_defs',
         'pipeline_code',
     ];
+
+    public const DOCS_TIMING_BEFORE_PAYMENT = 'before_payment';
+    public const DOCS_TIMING_AFTER_PAYMENT = 'after_payment';
 
     /** @return array<string, mixed> */
     public static function config(array $product): array
@@ -759,8 +763,46 @@ final class CheckoutRequirements
     }
 
     /**
+     * Timing de los documentos del alumno configurados en el grupo.
+     * - before_payment: checkout (required_docs) — no se puede pagar sin subirlos
+     * - after_payment: portal post-compra (registration_docs) — p. ej. CENNI
+     */
+    public static function studentDocsTiming(array $product): string
+    {
+        $cfg = self::config($product);
+        $timing = strtolower(trim((string) ($cfg['student_docs_timing'] ?? '')));
+        if (in_array($timing, [self::DOCS_TIMING_BEFORE_PAYMENT, self::DOCS_TIMING_AFTER_PAYMENT], true)) {
+            return $timing;
+        }
+
+        $before = self::normalizeDocs(is_array($cfg['required_docs'] ?? null) ? $cfg['required_docs'] : []);
+        $after = self::normalizeDocs(is_array($cfg['registration_docs'] ?? null) ? $cfg['registration_docs'] : []);
+        if ($before !== []) {
+            return self::DOCS_TIMING_BEFORE_PAYMENT;
+        }
+        if ($after !== []) {
+            return self::DOCS_TIMING_AFTER_PAYMENT;
+        }
+
+        return self::DOCS_TIMING_BEFORE_PAYMENT;
+    }
+
+    /**
+     * Lista unificada de docs del alumno (checkout o portal según timing).
+     *
      * @param array<string, mixed> $product
-     * @return list<array{code:string,label:string,required:bool,accept:string}>
+     * @return list<array{code:string,label:string,description:string,required:bool,accept:string,include_in_provider_mail:bool,require_for_provider_send:bool}>
+     */
+    public static function studentDocsForProduct(array $product): array
+    {
+        return self::studentDocsTiming($product) === self::DOCS_TIMING_AFTER_PAYMENT
+            ? self::registrationDocsForProduct($product)
+            : self::docsForProduct($product);
+    }
+
+    /**
+     * @param array<string, mixed> $product
+     * @return list<array{code:string,label:string,description:string,required:bool,accept:string,include_in_provider_mail:bool,require_for_provider_send:bool}>
      */
     public static function docsForProduct(array $product): array
     {
@@ -824,7 +866,7 @@ final class CheckoutRequirements
      * Con inventario de accesos, se ignora el par legado reglamento+firma del seeder.
      *
      * @param array<string, mixed> $product
-     * @return list<array{code:string,label:string,required:bool,accept:string}>
+     * @return list<array{code:string,label:string,description:string,required:bool,accept:string,include_in_provider_mail:bool,require_for_provider_send:bool}>
      */
     public static function registrationDocsForProduct(array $product): array
     {
@@ -871,6 +913,17 @@ final class CheckoutRequirements
         return $codes === ['reglamento', 'signature'];
     }
 
+    /**
+     * Normaliza filas de documentos del alumno (checkout o portal).
+     *
+     * @param list<mixed> $rows
+     * @return list<array{code:string,label:string,description:string,required:bool,accept:string,include_in_provider_mail:bool,require_for_provider_send:bool}>
+     */
+    public static function normalizeStudentDocs(array $rows): array
+    {
+        return self::normalizeDocs($rows);
+    }
+
     /** Resuelve pipeline por config_json.pipeline_code o null si no hay override. */
     public static function pipelineCode(array $product): ?string
     {
@@ -882,7 +935,7 @@ final class CheckoutRequirements
 
     /**
      * @param list<mixed> $rows
-     * @return list<array{code:string,label:string,required:bool,accept:string}>
+     * @return list<array{code:string,label:string,description:string,required:bool,accept:string,include_in_provider_mail:bool,require_for_provider_send:bool}>
      */
     private static function normalizeDocs(array $rows): array
     {
@@ -891,13 +944,27 @@ final class CheckoutRequirements
             if (!is_array($row) || empty($row['code'])) {
                 continue;
             }
-            $code = (string) $row['code'];
+            $code = strtolower(trim((string) $row['code']));
+            $code = preg_replace('/[^a-z0-9_-]+/', '_', $code) ?? '';
+            $code = trim($code, '_');
+            if ($code === '') {
+                continue;
+            }
             $defaultAccept = self::defaultAcceptFor($code);
+            $includeMail = array_key_exists('include_in_provider_mail', $row)
+                ? (bool) $row['include_in_provider_mail']
+                : in_array($code, ['ine', 'birth_certificate', 'photo'], true);
+            $requireSend = array_key_exists('require_for_provider_send', $row)
+                ? (bool) $row['require_for_provider_send']
+                : ($includeMail && $code === 'ine');
             $out[] = [
                 'code' => $code,
                 'label' => (string) ($row['label'] ?? self::defaultLabelFor($code)),
+                'description' => trim((string) ($row['description'] ?? $row['help'] ?? '')),
                 'required' => (bool) ($row['required'] ?? true),
                 'accept' => (string) ($row['accept'] ?? $defaultAccept),
+                'include_in_provider_mail' => $includeMail,
+                'require_for_provider_send' => $requireSend,
             ];
         }
 

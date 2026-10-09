@@ -1793,8 +1793,13 @@ final class AdminController
         $svc = new TrackingService();
         $doc = $svc->findDocument($docId);
         try {
-            $svc->rejectDocument($docId, (int) Auth::id(), trim((string) ($_POST['reason'] ?? '')));
-            flash('success', 'Documento rechazado. Se notificó al alumno.');
+            $mailed = $svc->rejectDocument($docId, (int) Auth::id(), trim((string) ($_POST['reason'] ?? '')));
+            flash(
+                'success',
+                $mailed
+                    ? 'Documento rechazado. Se notificó al alumno por correo.'
+                    : 'Documento rechazado. No se pudo enviar el correo (revisa la plantilla student_document_rejected).'
+            );
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }

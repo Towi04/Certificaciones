@@ -38,8 +38,10 @@ Ejemplo:
 2026-11-15|10:00|2026-10-20|Noviembre León|Campus Centro|León, Gto.|Av. Ejemplo 123
 ```
 
-3. Actualizar texto de ayuda del checkout (presencial, llevar ID, llegada anticipada, etc.).
-4. Ajustar antelación / días según reglas nuevas de UKS.
+3. En checkout el alumno elige **sede** y luego la convocatoria de esa sede.
+4. Actualizar texto de ayuda del checkout (presencial, llevar ID, llegada anticipada, etc.).
+5. Ajustar antelación / días según reglas nuevas de UKS.
+6. En **Docs → Documentos del alumno**: INE/pasaporte PDF **antes de pagar** (ver `docs/products/student-docs.md`).
 
 ### 2) Progreso y acciones
 1. Quitar o desactivar la acción de **capturar/enviar folio y clave del día**

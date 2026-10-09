@@ -385,7 +385,8 @@ final class CheckoutController
 
         $service = new ExamScheduleService();
         $date = isset($_GET['date']) && is_string($_GET['date']) ? trim($_GET['date']) : '';
-        echo json_encode($service->checkoutPayload($product, $date), JSON_UNESCAPED_UNICODE);
+        $venueId = isset($_GET['venue_id']) && is_string($_GET['venue_id']) ? trim($_GET['venue_id']) : null;
+        echo json_encode($service->checkoutPayload($product, $date, $venueId), JSON_UNESCAPED_UNICODE);
     }
 
     public function success(string $matricula): void

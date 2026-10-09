@@ -40,9 +40,13 @@ $partner = $partner ?? null;
 $referralPromo = !$isPartnerCheckout
     ? strtoupper(trim((string) ($referralPromo ?? '')))
     : '';
+$docs = is_array($docs ?? null) ? $docs : [];
 $wizardSteps = ['datos'];
 if (!empty($reglamento)) {
     $wizardSteps[] = 'reglamento';
+}
+if ($docs !== []) {
+    $wizardSteps[] = 'documentos';
 }
 if ($needsExam) {
     $wizardSteps[] = 'agenda';
@@ -56,6 +60,7 @@ $wizardSteps[] = 'confirmar';
 $stepLabels = [
     'datos' => 'Datos',
     'reglamento' => 'Reglamento',
+    'documentos' => 'Documentos',
     'agenda' => 'Agenda',
     'paquete' => 'Paquete',
     'pago' => 'Pago',
@@ -186,6 +191,31 @@ $stepLabels = [
                     }
                     $extraCfg = is_array($examRules['extraordinary'] ?? null) ? $examRules['extraordinary'] : [];
                     ?>
+                    <?php if ($docs !== []): ?>
+                    <div class="wizard-step" data-step="documentos" hidden>
+                        <h2 class="step-title">Documentos requeridos</h2>
+                        <p class="muted" style="font-size:.88rem;margin-top:0">
+                            Sube los archivos solicitados para continuar con el registro. Sin ellos no podrás pasar al pago.
+                        </p>
+                        <div class="form-grid" style="max-width:560px">
+                            <?php foreach ($docs as $doc): ?>
+                                <label>
+                                    <?= e($doc['label']) ?><?= !empty($doc['required']) ? ' *' : '' ?>
+                                    <?php if (trim((string) ($doc['description'] ?? '')) !== ''): ?>
+                                        <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin:.2rem 0 .35rem">
+                                            <?= e((string) $doc['description']) ?>
+                                        </span>
+                                    <?php endif; ?>
+                                    <input type="file"
+                                           name="doc_<?= e($doc['code']) ?>"
+                                           accept="<?= e($doc['accept']) ?>"
+                                           <?= !empty($doc['required']) ? 'required' : '' ?>>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
                     <div class="wizard-step" data-step="agenda" hidden>
                         <h2 class="step-title">Agenda tu examen</h2>
                         <p class="muted" style="font-size:.88rem;margin-top:0"><?= e($examHelp) ?></p>
@@ -195,11 +225,17 @@ $stepLabels = [
 
                         <?php if ($examMode === 'dated_list'): ?>
                             <div class="form-grid" style="max-width:560px">
-                                <label>Convocatoria *
-                                    <select id="exam_session_select">
-                                        <option value="">— elige convocatoria —</option>
+                                <label>Sede *
+                                    <select id="exam_venue_select">
+                                        <option value="">— elige sede —</option>
                                     </select>
                                 </label>
+                                <label>Convocatoria / fecha *
+                                    <select id="exam_session_select" disabled>
+                                        <option value="">— elige sede primero —</option>
+                                    </select>
+                                </label>
+                                <p class="muted" id="exam-venue-detail" style="font-size:.8rem;margin:0;grid-column:1/-1" hidden></p>
                             </div>
                         <?php else: ?>
                             <div class="form-grid" style="max-width:480px">
@@ -390,17 +426,6 @@ $stepLabels = [
                     <p class="muted" style="margin-top:0;font-size:.88rem">Revisa que todo esté correcto antes de enviar.</p>
                     <div class="confirm-summary" id="confirm-summary"></div>
                 </div>
-
-                <?php if ($docs !== []): ?>
-                    <div class="muted" style="font-size:.82rem;margin-top:1rem;padding-top:1rem;border-top:1px solid #e6ebf2">
-                        <?php foreach ($docs as $doc): ?>
-                            <label style="display:block;margin-bottom:.5rem">
-                                <?= e($doc['label']) ?><?= $doc['required'] ? ' *' : '' ?>
-                                <input type="file" name="doc_<?= e($doc['code']) ?>" accept="<?= e($doc['accept']) ?>" <?= $doc['required'] ? 'required' : '' ?>>
-                            </label>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
 
                 <div class="wizard-nav">
                     <button type="button" class="btn btn-ghost" id="wizard-prev" hidden>Anterior</button>
@@ -710,6 +735,8 @@ $stepLabels = [
   const examDateSelect = document.getElementById('exam_date_select');
   const examTimeSelect = document.getElementById('exam_time_select');
   const examSessionSelect = document.getElementById('exam_session_select');
+  const examVenueSelect = document.getElementById('exam_venue_select');
+  const examVenueDetail = document.getElementById('exam-venue-detail');
   const examSlotHint = document.getElementById('exam-slot-hint');
   const examExtraToggle = document.getElementById('exam_extraordinary_toggle');
   const examExtraFields = document.getElementById('exam-extraordinary-fields');
@@ -718,6 +745,7 @@ $stepLabels = [
   const examSurchargeNote = document.getElementById('exam-surcharge-note');
   let examMode = 'window';
   let examExtraordinary = null;
+  let examVenuesById = {};
 
   if (!form || !prevBtn || !nextBtn || !submitBtn) {
     console.error('[checkout] Formulario o botones del wizard no encontrados.');
@@ -940,9 +968,14 @@ $stepLabels = [
     if (step === 'reglamento' && window.reglamentoWizard) {
       try { window.reglamentoWizard.validateStep(); } catch (e) { alert(e.message); return false; }
     }
+    if (step === 'documentos') {
+      return validateFieldsInStep('documentos');
+    }
     if (step === 'agenda' && needsExam) {
       if (!examDateHidden?.value || !examTimeHidden?.value) {
-        alert('Selecciona fecha y hora del examen.');
+        alert(examMode === 'dated_list'
+          ? 'Selecciona sede y convocatoria del examen.'
+          : 'Selecciona fecha y hora del examen.');
         return false;
       }
     }
@@ -1001,6 +1034,19 @@ $stepLabels = [
     }
     if (comboLabel) {
       html += '<dt>Paquete</dt><dd>' + comboLabel + '</dd>';
+    }
+    if (wizardSteps.indexOf('documentos') >= 0) {
+      const docStep = form.querySelector('.wizard-step[data-step="documentos"]');
+      const files = docStep ? docStep.querySelectorAll('input[type="file"]') : [];
+      const names = [];
+      files.forEach(function (inp) {
+        if (inp.files && inp.files[0]) names.push(inp.files[0].name);
+      });
+      html += '<dt>Documentos</dt><dd>' + (names.length ? names.join(', ') : '—') + '</dd>';
+    }
+    if (examVenueSelect && examVenueSelect.value) {
+      const vOpt = examVenueSelect.options[examVenueSelect.selectedIndex];
+      html += '<dt>Sede</dt><dd>' + (vOpt ? vOpt.textContent : examVenueSelect.value) + '</dd>';
     }
     html += '<dt>Forma de pago</dt><dd>' + payMethodLabel() + '</dd>';
     const app = creditApplication();
@@ -1395,6 +1441,69 @@ $stepLabels = [
     }
   }
 
+  function fillExamSessions(sessions) {
+    if (!examSessionSelect) return;
+    examSessionSelect.innerHTML = '<option value="">— elige convocatoria —</option>';
+    (sessions || []).forEach(function (s) {
+      const opt = document.createElement('option');
+      opt.value = s.id || s.value || '';
+      var bits = [];
+      if (s.label) bits.push(s.label);
+      bits.push(((s.exam_date || '') + ' ' + (s.exam_time || '')).trim());
+      opt.textContent = bits.filter(Boolean).join(' · ');
+      opt.dataset.date = s.exam_date || '';
+      opt.dataset.time = s.exam_time || '';
+      if (s.registration_deadline) {
+        opt.textContent += ' · límite ' + s.registration_deadline;
+      }
+      examSessionSelect.appendChild(opt);
+    });
+    examSessionSelect.disabled = false;
+    if (examSessionHidden) examSessionHidden.value = '';
+    if (examDateHidden) examDateHidden.value = '';
+    if (examTimeHidden) examTimeHidden.value = '';
+  }
+
+  function updateExamVenueDetail(venueId) {
+    if (!examVenueDetail) return;
+    var v = examVenuesById[venueId];
+    if (!v) {
+      examVenueDetail.hidden = true;
+      examVenueDetail.textContent = '';
+      return;
+    }
+    var bits = [v.name, v.city, v.address].filter(Boolean);
+    examVenueDetail.textContent = bits.join(' · ');
+    examVenueDetail.hidden = bits.length === 0;
+  }
+
+  function loadExamSessionsForVenue(venueId) {
+    if (!examSessionSelect) return;
+    if (!venueId) {
+      examSessionSelect.innerHTML = '<option value="">— elige sede primero —</option>';
+      examSessionSelect.disabled = true;
+      updateExamVenueDetail('');
+      return;
+    }
+    updateExamVenueDetail(venueId);
+    examSessionSelect.disabled = true;
+    examSessionSelect.innerHTML = '<option value="">Cargando…</option>';
+    fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(slug)
+      + '?venue_id=' + encodeURIComponent(venueId))
+      .then(r => r.json())
+      .then(data => {
+        if (!data.ok) return;
+        fillExamSessions(data.sessions || []);
+        if ((data.sessions || []).length === 0) {
+          examSessionSelect.innerHTML = '<option value="">— sin convocatorias abiertas —</option>';
+          examSessionSelect.disabled = true;
+        }
+      })
+      .catch(function () {
+        examSessionSelect.innerHTML = '<option value="">— error al cargar —</option>';
+      });
+  }
+
   function loadExamDates() {
     if (!needsExam) return;
     fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(slug))
@@ -1407,24 +1516,27 @@ $stepLabels = [
         if (examSlotHint && data.min_advance_days !== undefined && examMode !== 'dated_list') {
           examSlotHint.textContent = examAdvanceHint(data.min_advance_days);
         }
-        if (examSessionSelect && Array.isArray(data.sessions)) {
-          examSessionSelect.innerHTML = '<option value="">— elige convocatoria —</option>';
-          data.sessions.forEach(function (s) {
+        if (examMode === 'dated_list' && examVenueSelect && Array.isArray(data.venues)) {
+          examVenuesById = {};
+          examVenueSelect.innerHTML = '<option value="">— elige sede —</option>';
+          data.venues.forEach(function (v) {
+            examVenuesById[v.id] = v;
             const opt = document.createElement('option');
-            opt.value = s.id || s.value || '';
-            var bits = [];
-            if (s.label) bits.push(s.label);
-            bits.push(((s.exam_date || '') + ' ' + (s.exam_time || '')).trim());
-            if (s.venue) bits.push(s.venue);
-            else if (s.city) bits.push(s.city);
-            opt.textContent = bits.filter(Boolean).join(' · ');
-            opt.dataset.date = s.exam_date || '';
-            opt.dataset.time = s.exam_time || '';
-            if (s.registration_deadline) {
-              opt.textContent += ' · límite ' + s.registration_deadline;
-            }
-            examSessionSelect.appendChild(opt);
+            opt.value = v.id || '';
+            var label = v.name || 'Sede';
+            if (v.city) label += ' · ' + v.city;
+            opt.textContent = label;
+            examVenueSelect.appendChild(opt);
           });
+          var preselect = data.venue_id || (data.venues.length === 1 ? data.venues[0].id : '');
+          if (preselect) {
+            examVenueSelect.value = preselect;
+            loadExamSessionsForVenue(preselect);
+          } else if (Array.isArray(data.sessions) && data.sessions.length && data.venues.length === 0) {
+            fillExamSessions(data.sessions);
+          }
+        } else if (examSessionSelect && Array.isArray(data.sessions)) {
+          fillExamSessions(data.sessions);
         }
       });
   }
@@ -1514,6 +1626,11 @@ $stepLabels = [
   if (examTimeSelect) {
     examTimeSelect.addEventListener('change', () => {
       if (examTimeHidden) examTimeHidden.value = examTimeSelect.value;
+    });
+  }
+  if (examVenueSelect) {
+    examVenueSelect.addEventListener('change', function () {
+      loadExamSessionsForVenue(examVenueSelect.value || '');
     });
   }
   if (examSessionSelect) {

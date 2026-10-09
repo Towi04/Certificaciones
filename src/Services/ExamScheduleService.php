@@ -286,17 +286,22 @@ final class ExamScheduleService
      * @param array<string, mixed> $product
      * @return list<array<string, mixed>>
      */
-    public function openSessions(array $product): array
+    public function openSessions(array $product, ?string $venueId = null): array
     {
         $rules = self::scheduleRules($product);
         if ($rules['mode'] !== self::MODE_DATED_LIST) {
             return [];
         }
         $today = (new \DateTimeImmutable('today'))->format('Y-m-d');
+        $venueId = $venueId !== null ? trim($venueId) : null;
         $out = [];
         foreach ($rules['sessions'] as $session) {
             $deadline = (string) ($session['registration_deadline'] ?? '');
             if ($deadline !== '' && $deadline < $today) {
+                continue;
+            }
+            $sessionVenueId = self::venueKeyForSession($session);
+            if ($venueId !== null && $venueId !== '' && $sessionVenueId !== $venueId) {
                 continue;
             }
             $label = (string) ($session['label'] ?? '');
@@ -307,10 +312,56 @@ final class ExamScheduleService
                 'value' => (string) $session['id'],
                 'label' => $label,
                 'kind' => self::KIND_PROVIDER_SESSION,
+                'venue_id' => $sessionVenueId,
             ];
         }
 
         return $out;
+    }
+
+    /**
+     * Sedes distintas derivadas de las convocatorias abiertas (dated_list).
+     *
+     * @param array<string, mixed> $product
+     * @return list<array{id:string,name:string,city:string,address:string}>
+     */
+    public function openVenues(array $product): array
+    {
+        $venues = [];
+        foreach ($this->openSessions($product) as $session) {
+            $id = self::venueKeyForSession($session);
+            if ($id === '' || isset($venues[$id])) {
+                continue;
+            }
+            $name = trim((string) ($session['venue'] ?? ''));
+            if ($name === '') {
+                $name = trim((string) ($session['city'] ?? ''));
+            }
+            if ($name === '') {
+                $name = 'Sede general';
+            }
+            $venues[$id] = [
+                'id' => $id,
+                'name' => $name,
+                'city' => trim((string) ($session['city'] ?? '')),
+                'address' => trim((string) ($session['address'] ?? '')),
+            ];
+        }
+
+        return array_values($venues);
+    }
+
+    /** @param array<string, mixed> $session */
+    public static function venueKeyForSession(array $session): string
+    {
+        $venue = trim((string) ($session['venue'] ?? $session['sede'] ?? ''));
+        $city = trim((string) ($session['city'] ?? $session['ciudad'] ?? ''));
+        $address = trim((string) ($session['address'] ?? $session['direccion'] ?? ''));
+        $raw = strtolower($venue . '|' . $city . '|' . $address);
+        $slug = preg_replace('/[^a-z0-9]+/', '-', $raw) ?? '';
+        $slug = trim($slug, '-');
+
+        return $slug !== '' ? $slug : 'general';
     }
 
     /**
@@ -527,6 +578,7 @@ final class ExamScheduleService
                         'venue' => (string) ($session['venue'] ?? ''),
                         'city' => (string) ($session['city'] ?? ''),
                         'address' => (string) ($session['address'] ?? ''),
+                        'venue_id' => (string) ($session['venue_id'] ?? self::venueKeyForSession($session)),
                     ];
                 }
             }
@@ -599,7 +651,7 @@ final class ExamScheduleService
      * @param array<string, mixed> $product
      * @return array<string, mixed>
      */
-    public function checkoutPayload(array $product, string $date = ''): array
+    public function checkoutPayload(array $product, string $date = '', ?string $venueId = null): array
     {
         $rules = self::scheduleRules($product);
         $minDate = $this->minSelectableDate($product);
@@ -614,8 +666,19 @@ final class ExamScheduleService
         ];
 
         if ($rules['mode'] === self::MODE_DATED_LIST) {
+            $venues = $this->openVenues($product);
+            $venueId = $venueId !== null ? trim($venueId) : '';
+            // Una sola sede: preselección implícita.
+            if ($venueId === '' && count($venues) === 1) {
+                $venueId = (string) $venues[0]['id'];
+            }
+
             return $base + [
-                'sessions' => $this->openSessions($product),
+                'venues' => $venues,
+                'venue_id' => $venueId,
+                'sessions' => $venueId !== '' || $venues === []
+                    ? $this->openSessions($product, $venueId !== '' ? $venueId : null)
+                    : [],
                 'dates' => $this->selectableDates($product),
                 'slots' => $date !== '' ? $this->slotsForDate($product, $date) : [],
             ];
