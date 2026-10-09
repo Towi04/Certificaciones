@@ -134,6 +134,7 @@ final class CheckoutService
             $examMeta = $examSchedule->validateSelection($examProduct, $examDate, $examTime, [
                 'kind' => (string) ($exam['exam_kind'] ?? ExamScheduleService::KIND_REGULAR),
                 'session_id' => (string) ($exam['exam_session_id'] ?? ''),
+                'venue_id' => (string) ($exam['exam_venue_id'] ?? ''),
                 'allow_short_advance' => !empty($exam['exam_allow_short_advance']),
             ]);
         }

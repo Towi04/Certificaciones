@@ -333,7 +333,7 @@ $pageHeading = $isEdit
             <input type="checkbox" name="exam_choose_at_checkout" id="exam_choose_at_checkout" value="1" style="margin-top:.2rem"
                 <?= !empty($extras['exam_choose_at_checkout']) ? 'checked' : '' ?>>
             <span id="exam-choose-at-checkout-label">
-                <?= $scheduleMode === 'dated_list'
+                <?= in_array($scheduleMode, ['dated_list', 'venue_schedules'], true)
                     ? 'Pedir convocatoria / sede en el checkout'
                     : 'Pedir fecha y hora de aplicación en el checkout' ?>
             </span>
@@ -346,7 +346,8 @@ $pageHeading = $isEdit
                 $modeOptions = [
                     'window' => 'Ventana continua (ELeT / Cambridge flexible Lun–Vie)',
                     'fixed_slots' => 'Horarios fijos por día (TOEFL sábados 11:00 / 13:00)',
-                    'dated_list' => 'Lista de convocatorias / sedes (Cambridge, UKS presencial…)',
+                    'dated_list' => 'Lista de convocatorias / sedes (Cambridge fechas fijas)',
+                    'venue_schedules' => 'Sedes con regla propia (UKS recurrente / ventana por sede)',
                 ];
                 foreach ($modeOptions as $modeVal => $modeLabel):
                 ?>
@@ -357,7 +358,10 @@ $pageHeading = $isEdit
             </select>
         </label>
         <p class="muted" id="schedule-mode-hint" style="font-size:.8rem;margin:-.45rem 0 .85rem;max-width:40rem">
-            <?php if ($scheduleMode === 'dated_list'): ?>
+            <?php if ($scheduleMode === 'venue_schedules'): ?>
+                Cada sede tiene su propia regla: <strong>recurrente</strong> (p. ej. martes),
+                <strong>fechas fijas</strong> o <strong>ventana abierta</strong>.
+            <?php elseif ($scheduleMode === 'dated_list'): ?>
                 El alumno elige primero la <strong>sede</strong> y luego una convocatoria abierta de esa sede.
             <?php elseif ($scheduleMode === 'fixed_slots'): ?>
                 El alumno elige entre horarios fijos (p. ej. sábados 11:00 / 13:00). Opcional: fecha extraordinaria.
@@ -370,8 +374,8 @@ $pageHeading = $isEdit
             Texto de ayuda en checkout (opcional)
             <input type="text" name="schedule_checkout_help" id="schedule_checkout_help"
                    value="<?= e((string) ($extras['schedule_checkout_help'] ?? '')) ?>"
-                   placeholder="<?= $scheduleMode === 'dated_list'
-                       ? 'Ej. Elige la sede y convocatoria con inscripción abierta…'
+                   placeholder="<?= in_array($scheduleMode, ['dated_list', 'venue_schedules'], true)
+                       ? 'Ej. Elige la sede y la fecha de aplicación…'
                        : 'Ej. Elige un sábado a las 11:00 o 13:00…' ?>"
                    style="<?= e($inputStyle) ?>">
         </label>
@@ -494,6 +498,30 @@ $pageHeading = $isEdit
             <textarea name="schedule_sessions_text" rows="6"
                       style="<?= e($inputStyle) ?>;font-family:ui-monospace,monospace;font-size:.82rem;width:100%;resize:vertical"
                       placeholder="2026-11-15|10:00|2026-10-20|Noviembre|Campus Centro|León, Gto.|Av. Ejemplo 123&#10;2027-03-12|10:00|2027-02-15|Marzo|Sede Norte|Guanajuato, Gto.|Calle Falsa 456"><?= e((string) ($extras['schedule_sessions_text'] ?? '')) ?></textarea>
+        </div>
+
+        <div id="schedule-mode-venues" style="margin-top:.35rem" <?= $scheduleMode === 'venue_schedules' ? '' : 'hidden' ?>>
+            <h3 style="margin:0 0 .45rem;font-size:.98rem;color:var(--doceo-blue)">Sedes con regla propia</h3>
+            <p class="muted" style="font-size:.8rem;margin:0 0 .55rem;max-width:44rem">
+                Un bloque por sede, separados por línea en blanco. Primera línea:
+                <code>id|nombre|ciudad|dirección|tipo</code>
+                (<code>recurring</code>, <code>dated</code> o <code>open_window</code>).<br>
+                <strong>recurring</strong> (UKS):
+                <code>dows|horas|semanas|deadline_type|dow|weeks_before</code>
+                — ej. <code>2|10:00|16|previous_weekday|3|1</code> (martes 10:00; cierra el miércoles anterior).<br>
+                <strong>dated</strong>: líneas
+                <code>fecha|hora|límite|etiqueta</code> (sin repetir la sede).<br>
+                <strong>open_window</strong>:
+                <code>días|lunvie_ini|lunvie_fin|sab_ini|sab_fin|anticipo|minutos</code>
+                — ej. <code>1,2,3,4,5|09:00|18:00|09:00|14:00|2|30</code>.
+            </p>
+            <textarea name="schedule_venues_text" rows="10"
+                      style="<?= e($inputStyle) ?>;font-family:ui-monospace,monospace;font-size:.82rem;width:100%;resize:vertical"
+                      placeholder="leon-centro|Campus Centro|León, Gto.|Av. Ejemplo 123|recurring&#10;2|10:00|16|previous_weekday|3|1&#10;&#10;gto-norte|Sede Norte|Guanajuato, Gto.|Calle Falsa 456|dated&#10;2026-11-15|10:00|2026-10-20|Noviembre&#10;2027-03-12|10:00|2027-02-15|Marzo&#10;&#10;cdmx-flex|Campus CDMX|CDMX|Insurgentes 100|open_window&#10;1,2,3,4,5|09:00|18:00|09:00|14:00|2|30"><?= e((string) ($extras['schedule_venues_text'] ?? '')) ?></textarea>
+            <p class="muted" style="font-size:.78rem;margin:.55rem 0 0">
+                Vacaciones DOCEO (fechas bloqueadas globales):
+                <a href="<?= e(url('/admin/vacaciones')) ?>">Administrar</a>
+            </p>
         </div>
     </div>
 
@@ -1387,19 +1415,24 @@ $pageHeading = $isEdit
     var windowPanel = document.getElementById('schedule-mode-window');
     var fixed = document.getElementById('schedule-mode-fixed');
     var dated = document.getElementById('schedule-mode-dated');
+    var venues = document.getElementById('schedule-mode-venues');
     var chooseLabel = document.getElementById('exam-choose-at-checkout-label');
     var modeHint = document.getElementById('schedule-mode-hint');
     var helpInput = document.getElementById('schedule_checkout_help');
+    var venueModes = { dated_list: true, venue_schedules: true };
     if (windowPanel) windowPanel.hidden = mode !== 'window';
     if (fixed) fixed.hidden = mode !== 'fixed_slots';
     if (dated) dated.hidden = mode !== 'dated_list';
+    if (venues) venues.hidden = mode !== 'venue_schedules';
     if (chooseLabel) {
-      chooseLabel.textContent = mode === 'dated_list'
+      chooseLabel.textContent = venueModes[mode]
         ? 'Pedir convocatoria / sede en el checkout'
         : 'Pedir fecha y hora de aplicación en el checkout';
     }
     if (modeHint) {
-      if (mode === 'dated_list') {
+      if (mode === 'venue_schedules') {
+        modeHint.textContent = 'Cada sede tiene su regla (recurrente, fechas fijas o ventana). El alumno elige sede y luego fecha/hora.';
+      } else if (mode === 'dated_list') {
         modeHint.textContent = 'El alumno solo elige una convocatoria abierta; fecha, hora y sede las defines abajo.';
       } else if (mode === 'fixed_slots') {
         modeHint.textContent = 'El alumno elige entre horarios fijos (p. ej. sábados 11:00 / 13:00). Opcional: fecha extraordinaria.';
@@ -1408,8 +1441,8 @@ $pageHeading = $isEdit
       }
     }
     if (helpInput) {
-      helpInput.placeholder = mode === 'dated_list'
-        ? 'Ej. Elige la sede y convocatoria con inscripción abierta…'
+      helpInput.placeholder = venueModes[mode]
+        ? 'Ej. Elige la sede y la fecha de aplicación…'
         : 'Ej. Elige un sábado a las 11:00 o 13:00…';
     }
   }

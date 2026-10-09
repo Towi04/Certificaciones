@@ -383,6 +383,7 @@ final class ProductAdminService
             'schedule_checkout_help' => trim((string) ($schedule['checkout_help'] ?? '')),
             'schedule_fixed_slots_text' => self::fixedSlotsToText($schedule['fixed_slots'] ?? []),
             'schedule_sessions_text' => self::sessionsToText($schedule['sessions'] ?? []),
+            'schedule_venues_text' => self::venuesToText($schedule['venues'] ?? []),
             'extraordinary_enabled' => !empty(($schedule['extraordinary'] ?? [])['enabled']),
             'extraordinary_surcharge' => (float) (($schedule['extraordinary'] ?? [])['surcharge_amount'] ?? 0),
             'extraordinary_label' => (string) (($schedule['extraordinary'] ?? [])['surcharge_label'] ?? 'Fecha extraordinaria'),
@@ -1867,6 +1868,7 @@ final class ProductAdminService
 
         $schedule['fixed_slots'] = self::parseFixedSlotsText((string) ($input['schedule_fixed_slots_text'] ?? ''));
         $schedule['sessions'] = self::parseSessionsText((string) ($input['schedule_sessions_text'] ?? ''));
+        $schedule['venues'] = self::parseVenuesText((string) ($input['schedule_venues_text'] ?? ''));
         if (!empty($input['extraordinary_enabled'])) {
             $schedule['extraordinary'] = [
                 'enabled' => true,
@@ -1889,6 +1891,17 @@ final class ProductAdminService
             if (trim((string) ($input['schedule_sessions_text'] ?? '')) === '') {
                 unset($schedule['sessions']);
             }
+        }
+        if ($schedule['mode'] === ExamScheduleService::MODE_VENUE_SCHEDULES) {
+            if ($schedule['venues'] === []) {
+                throw new \InvalidArgumentException(
+                    'En modo sedes con regla propia define al menos una sede (bloque id|nombre|…|tipo).'
+                );
+            }
+            // Las convocatorias viven dentro de cada sede; no uses schedule.sessions.
+            unset($schedule['sessions']);
+        } elseif (trim((string) ($input['schedule_venues_text'] ?? '')) === '') {
+            unset($schedule['venues']);
         }
         $config['schedule'] = $schedule;
 
@@ -2877,5 +2890,243 @@ final class ProductAdminService
         }
 
         return $out;
+    }
+
+    /**
+     * Texto admin de sedes con regla propia (modo venue_schedules).
+     *
+     * Bloques separados por línea en blanco.
+     * Línea 1: `id|nombre|ciudad|dirección|tipo` (tipo: recurring|dated|open_window)
+     * recurring → `dows|times|horizon_weeks|deadline_type|deadline_dow|weeks_before`
+     * dated → líneas `YYYY-MM-DD|HH:MM|límite|etiqueta`
+     * open_window → `days|lunvie_ini|lunvie_fin|sab_ini|sab_fin|min_advance|slot_min`
+     *
+     * @param mixed $raw
+     */
+    public static function venuesToText(mixed $raw): string
+    {
+        if (!is_array($raw)) {
+            return '';
+        }
+        $blocks = [];
+        foreach ($raw as $venue) {
+            if (!is_array($venue)) {
+                continue;
+            }
+            $id = trim((string) ($venue['id'] ?? ''));
+            $name = trim((string) ($venue['name'] ?? $venue['venue'] ?? ''));
+            if ($id === '' && $name === '') {
+                continue;
+            }
+            if ($id === '') {
+                $id = VenueScheduleEngine::sanitizeId($name);
+            }
+            $rule = is_array($venue['rule'] ?? null) ? $venue['rule'] : [];
+            $type = strtolower(trim((string) ($rule['type'] ?? VenueScheduleEngine::RULE_DATED)));
+            if (!in_array($type, [
+                VenueScheduleEngine::RULE_RECURRING,
+                VenueScheduleEngine::RULE_DATED,
+                VenueScheduleEngine::RULE_OPEN_WINDOW,
+            ], true)) {
+                $type = VenueScheduleEngine::RULE_DATED;
+            }
+            $lines = [
+                $id
+                . '|' . $name
+                . '|' . trim((string) ($venue['city'] ?? ''))
+                . '|' . trim((string) ($venue['address'] ?? ''))
+                . '|' . $type,
+            ];
+            if ($type === VenueScheduleEngine::RULE_RECURRING) {
+                $dows = is_array($rule['dows'] ?? null) ? $rule['dows'] : [2];
+                $times = is_array($rule['times'] ?? null) ? $rule['times'] : ['10:00'];
+                $deadline = is_array($rule['deadline'] ?? null) ? $rule['deadline'] : [];
+                $lines[] = implode('|', [
+                    implode(',', array_map('strval', $dows)),
+                    implode(',', array_map('strval', $times)),
+                    (string) max(1, (int) ($rule['horizon_weeks'] ?? 16)),
+                    (string) ($deadline['type'] ?? 'previous_weekday'),
+                    (string) (int) ($deadline['dow'] ?? 3),
+                    (string) max(1, (int) ($deadline['weeks_before'] ?? 1)),
+                ]);
+            } elseif ($type === VenueScheduleEngine::RULE_OPEN_WINDOW) {
+                $daysCfg = is_array($rule['days'] ?? null) ? $rule['days'] : [];
+                $dayList = [];
+                foreach ([0, 1, 2, 3, 4, 5, 6] as $d) {
+                    if (!empty($daysCfg[(string) $d]) || !empty($daysCfg[$d])) {
+                        $dayList[] = (string) $d;
+                    }
+                }
+                if ($dayList === []) {
+                    $dayList = ['1', '2', '3', '4', '5'];
+                }
+                $weekdays = is_array($rule['weekdays'] ?? null) ? $rule['weekdays'] : [];
+                $saturday = is_array($rule['saturday'] ?? null) ? $rule['saturday'] : [];
+                $lines[] = implode('|', [
+                    implode(',', $dayList),
+                    (string) ($weekdays['start'] ?? '09:00'),
+                    (string) ($weekdays['end'] ?? '18:00'),
+                    (string) ($saturday['start'] ?? '09:00'),
+                    (string) ($saturday['end'] ?? '14:00'),
+                    (string) max(0, (int) ($rule['min_advance_days'] ?? 2)),
+                    (string) max(15, (int) ($rule['slot_minutes'] ?? 30)),
+                ]);
+            } else {
+                foreach (is_array($rule['sessions'] ?? null) ? $rule['sessions'] : [] as $session) {
+                    if (!is_array($session)) {
+                        continue;
+                    }
+                    $date = ExamScheduleService::normalizeDateStatic((string) ($session['exam_date'] ?? ''));
+                    if ($date === null) {
+                        continue;
+                    }
+                    $time = ExamScheduleService::normalizeClock((string) ($session['exam_time'] ?? '10:00')) ?? '10:00';
+                    $deadline = ExamScheduleService::normalizeDateStatic((string) ($session['registration_deadline'] ?? '')) ?? '';
+                    $label = trim((string) ($session['label'] ?? ''));
+                    $lines[] = $date . '|' . $time . '|' . $deadline . '|' . $label;
+                }
+            }
+            $blocks[] = implode("\n", $lines);
+        }
+
+        return implode("\n\n", $blocks);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function parseVenuesText(string $raw): array
+    {
+        $raw = trim(str_replace("\r\n", "\n", $raw));
+        if ($raw === '') {
+            return [];
+        }
+        $chunks = preg_split('/\n\s*\n/', $raw) ?: [];
+        $out = [];
+        foreach ($chunks as $chunk) {
+            $lines = [];
+            foreach (preg_split('/\n/', $chunk) ?: [] as $line) {
+                $line = trim((string) $line);
+                if ($line === '' || str_starts_with($line, '#')) {
+                    continue;
+                }
+                $lines[] = $line;
+            }
+            if ($lines === []) {
+                continue;
+            }
+            $header = array_map('trim', explode('|', $lines[0]));
+            $id = VenueScheduleEngine::sanitizeId((string) ($header[0] ?? ''));
+            $name = trim((string) ($header[1] ?? ''));
+            $city = trim((string) ($header[2] ?? ''));
+            $address = trim((string) ($header[3] ?? ''));
+            $type = strtolower(trim((string) ($header[4] ?? VenueScheduleEngine::RULE_DATED)));
+            if ($id === '' && $name !== '') {
+                $id = VenueScheduleEngine::sanitizeId($name);
+            }
+            if ($id === '') {
+                continue;
+            }
+            if ($name === '') {
+                $name = $id;
+            }
+            if (!in_array($type, [
+                VenueScheduleEngine::RULE_RECURRING,
+                VenueScheduleEngine::RULE_DATED,
+                VenueScheduleEngine::RULE_OPEN_WINDOW,
+            ], true)) {
+                $type = VenueScheduleEngine::RULE_DATED;
+            }
+            $rule = ['type' => $type];
+            $body = array_slice($lines, 1);
+            if ($type === VenueScheduleEngine::RULE_RECURRING) {
+                $parts = array_map('trim', explode('|', $body[0] ?? '2|10:00|16|previous_weekday|3|1'));
+                $dows = [];
+                foreach (explode(',', (string) ($parts[0] ?? '2')) as $d) {
+                    $n = (int) trim($d);
+                    if ($n >= 0 && $n <= 6) {
+                        $dows[] = $n;
+                    }
+                }
+                $times = [];
+                foreach (explode(',', (string) ($parts[1] ?? '10:00')) as $t) {
+                    $clock = ExamScheduleService::normalizeClock(trim($t));
+                    if ($clock !== null) {
+                        $times[] = $clock;
+                    }
+                }
+                $deadlineType = strtolower(trim((string) ($parts[3] ?? 'previous_weekday')));
+                $rule = [
+                    'type' => VenueScheduleEngine::RULE_RECURRING,
+                    'dows' => $dows !== [] ? $dows : [2],
+                    'times' => $times !== [] ? $times : ['10:00'],
+                    'horizon_weeks' => max(1, min(52, (int) ($parts[2] ?? 16))),
+                    'deadline' => [
+                        'type' => $deadlineType === 'days_before' ? 'days_before' : 'previous_weekday',
+                        'dow' => (int) ($parts[4] ?? 3),
+                        'weeks_before' => max(1, (int) ($parts[5] ?? 1)),
+                        'days_before' => max(0, (int) ($parts[5] ?? 6)),
+                    ],
+                ];
+            } elseif ($type === VenueScheduleEngine::RULE_OPEN_WINDOW) {
+                $parts = array_map('trim', explode('|', $body[0] ?? '1,2,3,4,5|09:00|18:00|09:00|14:00|2|30'));
+                $days = [];
+                foreach ([0, 1, 2, 3, 4, 5, 6] as $d) {
+                    $days[(string) $d] = false;
+                }
+                foreach (explode(',', (string) ($parts[0] ?? '1,2,3,4,5')) as $d) {
+                    $n = (int) trim($d);
+                    if ($n >= 0 && $n <= 6) {
+                        $days[(string) $n] = true;
+                    }
+                }
+                $rule = [
+                    'type' => VenueScheduleEngine::RULE_OPEN_WINDOW,
+                    'days' => $days,
+                    'weekdays' => [
+                        'start' => (string) ($parts[1] ?? '09:00'),
+                        'end' => (string) ($parts[2] ?? '18:00'),
+                    ],
+                    'saturday' => [
+                        'start' => (string) ($parts[3] ?? '09:00'),
+                        'end' => (string) ($parts[4] ?? '14:00'),
+                    ],
+                    'min_advance_days' => max(0, (int) ($parts[5] ?? 2)),
+                    'slot_minutes' => max(15, (int) ($parts[6] ?? 30)),
+                ];
+            } else {
+                $sessions = [];
+                foreach ($body as $i => $line) {
+                    $parts = array_map('trim', explode('|', $line));
+                    $date = ExamScheduleService::normalizeDateStatic((string) ($parts[0] ?? ''));
+                    if ($date === null) {
+                        continue;
+                    }
+                    $time = ExamScheduleService::normalizeClock((string) ($parts[1] ?? '10:00')) ?? '10:00';
+                    $deadline = ExamScheduleService::normalizeDateStatic((string) ($parts[2] ?? ''));
+                    $sessions[] = [
+                        'id' => $date . '_' . str_replace(':', '', $time) . '_' . $i,
+                        'exam_date' => $date,
+                        'exam_time' => $time,
+                        'registration_deadline' => $deadline,
+                        'label' => (string) ($parts[3] ?? ''),
+                    ];
+                }
+                $rule = [
+                    'type' => VenueScheduleEngine::RULE_DATED,
+                    'sessions' => $sessions,
+                ];
+            }
+            $out[] = [
+                'id' => $id,
+                'name' => $name,
+                'city' => $city,
+                'address' => $address,
+                'active' => true,
+                'rule' => $rule,
+            ];
+        }
+
+        return VenueScheduleEngine::normalizeVenues(['venues' => $out]);
     }
 }
