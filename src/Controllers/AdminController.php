@@ -2114,6 +2114,26 @@ final class AdminController
         ]);
     }
 
+    public function partnerMetrics(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        $partner = (new \App\Repositories\PartnerRepository())->find((int) $id);
+        if ($partner === null) {
+            http_response_code(404);
+            view('errors/404', ['title' => 'Partner no encontrado', 'layout' => 'admin']);
+
+            return;
+        }
+        $metrics = (new \App\Services\PartnerAdminMetricsService())->forPartner($partner);
+        view('admin/partner_metrics', [
+            'title' => 'Avance partner',
+            'partner' => $partner,
+            'metrics' => $metrics,
+            'tierLabels' => \App\Services\PartnerAdminService::tierLabels(),
+            'layout' => 'admin',
+        ]);
+    }
+
     public function partnerUpdate(string $id): void
     {
         Auth::requireRole(['admin']);
