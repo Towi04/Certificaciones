@@ -1175,12 +1175,20 @@ final class AdminController
         $stepDefs = GroupStepConfig::defsFromConfig($productCfg);
         // step_defs del grupo manda; si no hay, plantilla pipeline (legado).
         $steps = $svc->progressStepsForTracking($tracking);
+        $docsProduct = [
+            'type' => $tracking['product_type'] ?? '',
+            'product_type' => $tracking['product_type'] ?? '',
+            'config_json' => $tracking['config_json'] ?? null,
+            'group_config_json' => $tracking['group_config_json'] ?? null,
+        ];
+        $studentDocsReport = $svc->studentDocsApprovalReport((int) $tracking['id'], $docsProduct);
         view('admin/tracking', [
             'title' => 'Caso ' . $tracking['matricula'],
             'tracking' => $tracking,
             'steps' => $steps,
             'logs' => $svc->logs((int) $tracking['id']),
             'documents' => $svc->documentsForTracking((int) $tracking['id']),
+            'studentDocsReport' => $studentDocsReport,
             'moodleConfigured' => \App\Services\MoodleEnrolmentService::isConfigured(),
             'exportTemplateCode' => $productCfg['export_template_code'] ?? null,
             'importTemplateCode' => $productCfg['import_template_code'] ?? null,

@@ -421,6 +421,7 @@ final class ProductAdminService
             'checkout_field_required' => $checkoutFieldRequired,
             'student_docs_timing' => CheckoutRequirements::studentDocsTiming(['config_json' => null, 'group_config_json' => $cfg]),
             'student_docs' => CheckoutRequirements::studentDocsForProduct(['config_json' => null, 'group_config_json' => $cfg]),
+            'student_docs_gate' => CheckoutRequirements::studentDocsGateEnabled(['config_json' => null, 'group_config_json' => $cfg]),
             'pay_transfer' => in_array('transfer_proof', $order, true),
             'pay_oxxo' => in_array('openpay_store', $order, true),
             'pay_card' => in_array('openpay_card', $order, true),
@@ -2161,6 +2162,9 @@ final class ProductAdminService
             $config['required_docs'] = $docs;
             $config['registration_docs'] = [];
         }
+        $config['student_docs_gate'] = [
+            'block_until_approved' => !empty($input['student_docs_gate']),
+        ];
 
         return $config;
     }

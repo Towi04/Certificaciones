@@ -721,6 +721,14 @@ $extraColHeader = count($extraColLabels) === 1
                         <td>
                             <span class="pill"><?= e((string) ($r['current_step_code'] ?? '—')) ?></span>
                             <div class="muted" style="font-size:.72rem"><?= e((string) ($r['tracking_status'] ?? '')) ?></div>
+                            <?php if ((int) ($r['docs_pending_count'] ?? 0) > 0): ?>
+                                <div style="margin-top:.25rem">
+                                    <span class="pill" style="background:#fff4d6;color:#92400e;font-size:.72rem"
+                                          title="Documentos del alumno pendientes de aprobar">
+                                        Docs ×<?= (int) $r['docs_pending_count'] ?>
+                                    </span>
+                                </div>
+                            <?php endif; ?>
                         </td>
                         <td style="white-space:nowrap;font-size:.82rem">
                             <?php if ($exam === ''): ?>

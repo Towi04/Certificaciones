@@ -483,6 +483,9 @@ final class ProviderRequestService
             );
         }
 
+        // Gate: docs required del alumno deben estar aprobados (si el grupo lo pide).
+        (new TrackingService())->assertStudentDocsApprovedForOps($trackingId, $product);
+
         $tmpFiles = [];
         try {
             $vars = $this->buildMailVars(

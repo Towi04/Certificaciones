@@ -919,6 +919,17 @@ $pageHeading = $isEdit
                 </span>
             </label>
         </fieldset>
+        <label style="display:flex;gap:.5rem;align-items:flex-start;font-size:.88rem;font-weight:600;margin:0 0 1rem;padding:.75rem 1rem;border:1px solid #dbe3ef;border-radius:12px;background:#fff">
+            <input type="checkbox" name="student_docs_gate" value="1" style="margin-top:.2rem"
+                <?= !empty($extras['student_docs_gate']) ? 'checked' : '' ?>>
+            <span>
+                Bloquear envío a proveedor hasta que los docs obligatorios estén <strong>aprobados</strong>
+                <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin-top:.15rem">
+                    Si está activo, Operaciones no puede enviar la solicitud al proveedor mientras haya
+                    documentos required pendientes, rechazados o sin subir.
+                </span>
+            </span>
+        </label>
         <div id="student-docs-list" style="display:grid;gap:.85rem">
             <?php if ($studentDocs === []): ?>
                 <p class="muted" id="student-docs-empty" style="font-size:.82rem;margin:0">
