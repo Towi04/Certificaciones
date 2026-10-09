@@ -11,6 +11,7 @@ use App\Support\Settings;
  * - window: ventana continua (ELeT / Cambridge flexible)
  * - fixed_slots: días/horas fijas (TOEFL sábados 11:00 / 13:00) + extraordinarias
  * - dated_list: fechas concretas del proveedor (Cambridge) con deadline de inscripción
+ * - venue_schedules: sedes con regla propia (recurring / dated / open_window)
  *
  * Siempre persiste en trackings.exam_date / exam_time para placeholders de correo.
  */
@@ -21,6 +22,7 @@ final class ExamScheduleService
     public const MODE_WINDOW = 'window';
     public const MODE_FIXED_SLOTS = 'fixed_slots';
     public const MODE_DATED_LIST = 'dated_list';
+    public const MODE_VENUE_SCHEDULES = 'venue_schedules';
 
     public const KIND_REGULAR = 'regular';
     public const KIND_EXTRAORDINARY = 'extraordinary';
@@ -126,6 +128,11 @@ final class ExamScheduleService
             ];
         }
 
+        $venues = VenueScheduleEngine::normalizeVenues($schedule);
+        if ($mode === self::MODE_VENUE_SCHEDULES) {
+            $sessions = VenueScheduleEngine::materializeSessions($venues, array_values($blocked));
+        }
+
         return [
             'mode' => $mode,
             'slot_minutes' => max(15, (int) ($exam['slot_minutes'] ?? 30)),
@@ -156,6 +163,7 @@ final class ExamScheduleService
                     ?: 'Fecha extraordinaria',
             ],
             'sessions' => $sessions,
+            'venues' => $venues,
             'checkout_help' => trim((string) ($schedule['checkout_help'] ?? '')),
         ];
     }
@@ -164,9 +172,17 @@ final class ExamScheduleService
     {
         $mode = strtolower(trim($mode));
 
-        return in_array($mode, [self::MODE_WINDOW, self::MODE_FIXED_SLOTS, self::MODE_DATED_LIST], true)
-            ? $mode
-            : self::MODE_WINDOW;
+        return in_array(
+            $mode,
+            [self::MODE_WINDOW, self::MODE_FIXED_SLOTS, self::MODE_DATED_LIST, self::MODE_VENUE_SCHEDULES],
+            true
+        ) ? $mode : self::MODE_WINDOW;
+    }
+
+    /** ¿El modo usa selector de sede en checkout? */
+    public static function usesVenuePicker(string $mode): bool
+    {
+        return in_array($mode, [self::MODE_DATED_LIST, self::MODE_VENUE_SCHEDULES], true);
     }
 
     /** @return list<string> */
@@ -213,7 +229,7 @@ final class ExamScheduleService
     public function minSelectableDate(array $product): string
     {
         $rules = self::scheduleRules($product);
-        if ($rules['mode'] === self::MODE_DATED_LIST) {
+        if (self::usesVenuePicker((string) $rules['mode'])) {
             $today = (new \DateTimeImmutable('today'))->format('Y-m-d');
             $min = null;
             foreach ($rules['sessions'] as $session) {
@@ -227,6 +243,20 @@ final class ExamScheduleService
                 }
                 if ($min === null || $d < $min) {
                     $min = $d;
+                }
+            }
+            // Sedes open_window: anticipo propio (mínimo entre sedes).
+            if ($rules['mode'] === self::MODE_VENUE_SCHEDULES) {
+                foreach (is_array($rules['venues'] ?? null) ? $rules['venues'] : [] as $venue) {
+                    $rule = is_array($venue['rule'] ?? null) ? $venue['rule'] : [];
+                    if (($rule['type'] ?? '') !== VenueScheduleEngine::RULE_OPEN_WINDOW) {
+                        continue;
+                    }
+                    $adv = max(0, (int) ($rule['min_advance_days'] ?? 2));
+                    $candidate = (new \DateTimeImmutable('today'))->modify('+' . $adv . ' days')->format('Y-m-d');
+                    if ($min === null || $candidate < $min) {
+                        $min = $candidate;
+                    }
                 }
             }
 
@@ -246,7 +276,7 @@ final class ExamScheduleService
     public function selectableDates(array $product, int $horizonDays = 90): array
     {
         $rules = self::scheduleRules($product);
-        if ($rules['mode'] === self::MODE_DATED_LIST) {
+        if (self::usesVenuePicker((string) $rules['mode'])) {
             $today = (new \DateTimeImmutable('today'))->format('Y-m-d');
             $out = [];
             foreach ($rules['sessions'] as $session) {
@@ -289,7 +319,7 @@ final class ExamScheduleService
     public function openSessions(array $product, ?string $venueId = null): array
     {
         $rules = self::scheduleRules($product);
-        if ($rules['mode'] !== self::MODE_DATED_LIST) {
+        if (!self::usesVenuePicker((string) $rules['mode'])) {
             return [];
         }
         $today = (new \DateTimeImmutable('today'))->format('Y-m-d');
@@ -300,7 +330,7 @@ final class ExamScheduleService
             if ($deadline !== '' && $deadline < $today) {
                 continue;
             }
-            $sessionVenueId = self::venueKeyForSession($session);
+            $sessionVenueId = (string) ($session['venue_id'] ?? self::venueKeyForSession($session));
             if ($venueId !== null && $venueId !== '' && $sessionVenueId !== $venueId) {
                 continue;
             }
@@ -320,13 +350,33 @@ final class ExamScheduleService
     }
 
     /**
-     * Sedes distintas derivadas de las convocatorias abiertas (dated_list).
+     * Sedes activas para el picker de checkout.
      *
      * @param array<string, mixed> $product
-     * @return list<array{id:string,name:string,city:string,address:string}>
+     * @return list<array{id:string,name:string,city:string,address:string,rule_type:string}>
      */
     public function openVenues(array $product): array
     {
+        $rules = self::scheduleRules($product);
+        if ($rules['mode'] === self::MODE_VENUE_SCHEDULES) {
+            $out = [];
+            foreach (is_array($rules['venues'] ?? null) ? $rules['venues'] : [] as $venue) {
+                if (empty($venue['active'])) {
+                    continue;
+                }
+                $rule = is_array($venue['rule'] ?? null) ? $venue['rule'] : [];
+                $out[] = [
+                    'id' => (string) ($venue['id'] ?? ''),
+                    'name' => (string) ($venue['name'] ?? ''),
+                    'city' => (string) ($venue['city'] ?? ''),
+                    'address' => (string) ($venue['address'] ?? ''),
+                    'rule_type' => (string) ($rule['type'] ?? VenueScheduleEngine::RULE_DATED),
+                ];
+            }
+
+            return array_values(array_filter($out, static fn (array $v): bool => $v['id'] !== ''));
+        }
+
         $venues = [];
         foreach ($this->openSessions($product) as $session) {
             $id = self::venueKeyForSession($session);
@@ -345,10 +395,28 @@ final class ExamScheduleService
                 'name' => $name,
                 'city' => trim((string) ($session['city'] ?? '')),
                 'address' => trim((string) ($session['address'] ?? '')),
+                'rule_type' => VenueScheduleEngine::RULE_DATED,
             ];
         }
 
         return array_values($venues);
+    }
+
+    /** @return array<string, mixed>|null */
+    public function findVenue(array $product, string $venueId): ?array
+    {
+        $venueId = trim($venueId);
+        if ($venueId === '') {
+            return null;
+        }
+        $rules = self::scheduleRules($product);
+        foreach (is_array($rules['venues'] ?? null) ? $rules['venues'] : [] as $venue) {
+            if ((string) ($venue['id'] ?? '') === $venueId) {
+                return $venue;
+            }
+        }
+
+        return null;
     }
 
     /** @param array<string, mixed> $session */
@@ -376,7 +444,7 @@ final class ExamScheduleService
         }
 
         $rules = self::scheduleRules($product);
-        if ($rules['mode'] === self::MODE_DATED_LIST) {
+        if (self::usesVenuePicker((string) $rules['mode'])) {
             $slots = [];
             foreach ($this->openSessions($product) as $session) {
                 if ((string) ($session['exam_date'] ?? '') !== $date) {
@@ -561,8 +629,10 @@ final class ExamScheduleService
         $timeShort = substr($time, 0, 5);
         $sessionId = trim((string) ($options['session_id'] ?? ''));
 
-        if ($rules['mode'] === self::MODE_DATED_LIST) {
-            foreach ($this->openSessions($product) as $session) {
+        if (self::usesVenuePicker((string) $rules['mode'])) {
+            $venueIdOpt = trim((string) ($options['venue_id'] ?? ''));
+            // Sesión materializada (dated / recurring).
+            foreach ($this->openSessions($product, $venueIdOpt !== '' ? $venueIdOpt : null) as $session) {
                 $matchId = $sessionId === '' || $sessionId === (string) ($session['id'] ?? '');
                 if (
                     $matchId
@@ -580,6 +650,45 @@ final class ExamScheduleService
                         'address' => (string) ($session['address'] ?? ''),
                         'venue_id' => (string) ($session['venue_id'] ?? self::venueKeyForSession($session)),
                     ];
+                }
+            }
+            // open_window por sede.
+            if ($rules['mode'] === self::MODE_VENUE_SCHEDULES) {
+                $venue = $venueIdOpt !== '' ? $this->findVenue($product, $venueIdOpt) : null;
+                if ($venue !== null) {
+                    $rule = is_array($venue['rule'] ?? null) ? $venue['rule'] : [];
+                    if (($rule['type'] ?? '') === VenueScheduleEngine::RULE_OPEN_WINDOW) {
+                        $blocked = is_array($rules['blocked_dates'] ?? null) ? $rules['blocked_dates'] : [];
+                        if (in_array($date, $blocked, true)) {
+                            throw new \InvalidArgumentException('Esa fecha no está disponible (bloqueada / vacaciones).');
+                        }
+                        $dates = VenueScheduleEngine::openWindowDates($venue, $blocked);
+                        if (!in_array($date, $dates, true)) {
+                            throw new \InvalidArgumentException('Esa fecha no está disponible en la sede seleccionada.');
+                        }
+                        $okSlot = false;
+                        foreach (VenueScheduleEngine::openWindowSlotsForDate($venue, $date) as $slot) {
+                            if ((string) ($slot['value'] ?? '') === $timeShort) {
+                                $okSlot = true;
+                                break;
+                            }
+                        }
+                        if (!$okSlot) {
+                            throw new \InvalidArgumentException('Esa hora no está disponible en la sede seleccionada.');
+                        }
+
+                        return [
+                            'kind' => self::KIND_REGULAR,
+                            'session_id' => null,
+                            'surcharge' => 0.0,
+                            'requires_admin' => false,
+                            'label' => (string) ($venue['name'] ?? ''),
+                            'venue' => (string) ($venue['name'] ?? ''),
+                            'city' => (string) ($venue['city'] ?? ''),
+                            'address' => (string) ($venue['address'] ?? ''),
+                            'venue_id' => (string) ($venue['id'] ?? ''),
+                        ];
+                    }
                 }
             }
             throw new \InvalidArgumentException(
@@ -665,23 +774,57 @@ final class ExamScheduleService
             'extraordinary' => $rules['extraordinary'],
         ];
 
-        if ($rules['mode'] === self::MODE_DATED_LIST) {
+        if (self::usesVenuePicker((string) $rules['mode'])) {
             $venues = $this->openVenues($product);
             $venueId = $venueId !== null ? trim($venueId) : '';
-            // Una sola sede: preselección implícita.
             if ($venueId === '' && count($venues) === 1) {
                 $venueId = (string) $venues[0]['id'];
             }
+            $venueMeta = $venueId !== '' ? $this->findVenue($product, $venueId) : null;
+            $ruleType = '';
+            if ($venueMeta !== null) {
+                $ruleType = (string) (($venueMeta['rule']['type'] ?? '') ?: '');
+            } elseif ($venues !== []) {
+                foreach ($venues as $v) {
+                    if ((string) ($v['id'] ?? '') === $venueId) {
+                        $ruleType = (string) ($v['rule_type'] ?? '');
+                        break;
+                    }
+                }
+            }
 
-            return $base + [
+            $payload = [
                 'venues' => $venues,
                 'venue_id' => $venueId,
-                'sessions' => $venueId !== '' || $venues === []
-                    ? $this->openSessions($product, $venueId !== '' ? $venueId : null)
-                    : [],
-                'dates' => $this->selectableDates($product),
-                'slots' => $date !== '' ? $this->slotsForDate($product, $date) : [],
+                'venue_rule_type' => $ruleType,
+                'sessions' => [],
+                'dates' => [],
+                'slots' => [],
             ];
+
+            if ($ruleType === VenueScheduleEngine::RULE_OPEN_WINDOW && $venueMeta !== null) {
+                $blocked = is_array($rules['blocked_dates'] ?? null) ? $rules['blocked_dates'] : [];
+                $payload['dates'] = VenueScheduleEngine::openWindowDates($venueMeta, $blocked);
+                $payload['min_advance_days'] = (int) (($venueMeta['rule']['min_advance_days'] ?? 2));
+                if ($payload['dates'] !== []) {
+                    $payload['min_date'] = $payload['dates'][0];
+                    $payload['min_date_label'] = self::formatDateEs($payload['dates'][0]);
+                }
+                if ($date !== '') {
+                    $payload['slots'] = VenueScheduleEngine::openWindowSlotsForDate($venueMeta, $date);
+                    $payload['unavailable_reason'] = $payload['slots'] === []
+                        ? 'Esa fecha no tiene horarios en esta sede.'
+                        : null;
+                }
+            } else {
+                $payload['sessions'] = $venueId !== '' || $venues === []
+                    ? $this->openSessions($product, $venueId !== '' ? $venueId : null)
+                    : [];
+                $payload['dates'] = $this->selectableDates($product);
+                $payload['slots'] = $date !== '' ? $this->slotsForDate($product, $date) : [];
+            }
+
+            return $base + $payload;
         }
 
         if ($date === '') {

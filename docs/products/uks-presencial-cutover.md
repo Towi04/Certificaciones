@@ -11,37 +11,43 @@ Este documento es la checklist para el día del cambio, sin tocar producción an
 | Pieza | Estado |
 |-------|--------|
 | Modo agenda `dated_list` (convocatorias con fecha/hora/límite) | Listo (Cambridge) |
+| Modo agenda `venue_schedules` (regla por sede: recurring / dated / open_window) | Listo |
 | Campos opcionales de sede en cada convocatoria (`venue` / `city` / `address`) | Listo |
-| Checkout: alumno elige convocatoria y ve la sede en el selector | Listo |
+| Checkout: alumno elige sede y luego fecha/convocatoria | Listo |
 | Placeholders de correo `{{exam_venue}}`, `{{exam_city}}`, `{{exam_address}}`, `{{exam_venue_line}}` | Listo |
 | Flujo actual UKS online (ventana + folio/clave + CSV) | Sin cambios |
 
 ## Qué NO hay que hacer todavía
 
-- No cambiar el grupo `uks-elet` a `dated_list` hasta que UKS cierre online.
+- No cambiar el grupo `uks-elet` a `venue_schedules` / `dated_list` hasta que UKS cierre online.
 - No quitar el paso de folio/clave mientras aún se apliquen exámenes en línea.
 - No borrar plantillas `student_elet_exam_access` ni export/import UKS.
 
 ## Día del cutover (cuando UKS diga “ya solo presencial”)
 
 ### 1) Grupo UKS → Fechas y horarios
-1. Modo de agenda → **Lista de convocatorias / sedes**.
-2. Cargar sedes/convocatorias, una línea por fecha:
+1. Modo de agenda → **Sedes con regla propia** (`venue_schedules`).
+   Si UKS solo manda fechas sueltas (sin patrón semanal), puedes usar
+   **Lista de convocatorias** (`dated_list`) como Cambridge.
+2. Con `venue_schedules` + regla **recurring** (ej. martes 10:00, cierra el miércoles anterior):
 
 ```
-YYYY-MM-DD|HH:MM|YYYY-MM-DD|Etiqueta|Nombre sede|Ciudad|Dirección
+leon-centro|Campus Centro|León, Gto.|Av. Ejemplo 123|recurring
+2|10:00|16|previous_weekday|3|1
 ```
 
-Ejemplo:
+   Con fechas fijas por sede (`dated`):
 
 ```
-2026-11-15|10:00|2026-10-20|Noviembre León|Campus Centro|León, Gto.|Av. Ejemplo 123
+leon-centro|Campus Centro|León, Gto.|Av. Ejemplo 123|dated
+2026-11-15|10:00|2026-10-20|Noviembre
 ```
 
-3. En checkout el alumno elige **sede** y luego la convocatoria de esa sede.
+3. En checkout el alumno elige **sede** y luego la fecha/convocatoria de esa sede.
 4. Actualizar texto de ayuda del checkout (presencial, llevar ID, llegada anticipada, etc.).
-5. Ajustar antelación / días según reglas nuevas de UKS.
+5. Ajustar horizonte / deadline / anticipo según reglas nuevas de UKS.
 6. En **Docs → Documentos del alumno**: INE/pasaporte PDF **antes de pagar** (ver `docs/products/student-docs.md`).
+7. Detalle de modos: `docs/products/exam-schedule-modes.md`.
 
 ### 2) Progreso y acciones
 1. Quitar o desactivar la acción de **capturar/enviar folio y clave del día**
@@ -86,5 +92,5 @@ No hace falta activarlo para ELeT a menos que UKS pase a venderte lotes de códi
 ## Resumen
 
 - **Hoy:** no cambies nada de UKS; el online sigue igual.
-- **Listo desde ya:** cargar sedes vía convocatorias + correos con sede (mismo mecanismo Cambridge).
+- **Listo desde ya:** `venue_schedules` (recurring/dated/open_window) y `dated_list` + correos con sede.
 - **Al cutover:** cambiar modo de agenda del grupo, cargar sedes, quitar folio/clave del progreso y actualizar plantillas.

@@ -190,6 +190,7 @@ final class CheckoutController
                         'exam_time' => trim((string) ($_POST['exam_time'] ?? '')),
                         'exam_kind' => trim((string) ($_POST['exam_kind'] ?? 'regular')),
                         'exam_session_id' => trim((string) ($_POST['exam_session_id'] ?? '')),
+                        'exam_venue_id' => trim((string) ($_POST['exam_venue_id'] ?? '')),
                         'exam_allow_short_advance' => !empty($_POST['exam_allow_short_advance']),
                     ]
                     : null,

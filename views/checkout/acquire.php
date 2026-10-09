@@ -104,6 +104,7 @@ $stepLabels = [
                 <?php if ($needsExam): ?>
                     <input type="hidden" name="exam_date" id="exam_date" value="">
                     <input type="hidden" name="exam_time" id="exam_time" value="">
+                    <input type="hidden" name="exam_venue_id" id="exam_venue_id" value="">
                 <?php endif; ?>
 
                 
@@ -181,11 +182,13 @@ $stepLabels = [
                     <?php
                     $examRules = \App\Services\ExamScheduleService::scheduleRules($product ?? []);
                     $examMode = (string) ($examRules['mode'] ?? 'window');
+                    $usesVenuePicker = \App\Services\ExamScheduleService::usesVenuePicker($examMode);
                     $examHelp = trim((string) ($examRules['checkout_help'] ?? ''));
                     if ($examHelp === '') {
                         $examHelp = match ($examMode) {
                             'fixed_slots' => 'Elige un horario regular (p. ej. sábado 11:00 o 13:00). Si necesitas otra fecha, solicita extraordinaria (con costo extra y autorización).',
                             'dated_list' => 'Elige una convocatoria abierta del proveedor. La inscripción cierra en la fecha límite indicada.',
+                            'venue_schedules' => 'Elige primero la sede y luego la fecha u horario disponible según las reglas de esa sede.',
                             default => 'Elige fecha y hora disponible según el calendario del examen.',
                         };
                     }
@@ -223,18 +226,31 @@ $stepLabels = [
                         <input type="hidden" name="exam_session_id" id="exam_session_id" value="">
                         <input type="hidden" name="exam_allow_short_advance" id="exam_allow_short_advance" value="0">
 
-                        <?php if ($examMode === 'dated_list'): ?>
+                        <?php if ($usesVenuePicker): ?>
                             <div class="form-grid" style="max-width:560px">
                                 <label>Sede *
                                     <select id="exam_venue_select">
                                         <option value="">— elige sede —</option>
                                     </select>
                                 </label>
-                                <label>Convocatoria / fecha *
-                                    <select id="exam_session_select" disabled>
-                                        <option value="">— elige sede primero —</option>
-                                    </select>
-                                </label>
+                                <div id="exam-venue-sessions-wrap" <?= $examMode === 'venue_schedules' ? 'hidden' : '' ?>>
+                                    <label>Convocatoria / fecha *
+                                        <select id="exam_session_select" disabled>
+                                            <option value="">— elige sede primero —</option>
+                                        </select>
+                                    </label>
+                                </div>
+                                <div id="exam-venue-window-wrap" class="form-grid" style="grid-column:1/-1;max-width:480px;display:none;gap:.75rem;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+                                    <label>Fecha del examen *
+                                        <input type="date" id="exam_date_select" lang="es-MX"
+                                               min="<?= e($examMinDate ?? '') ?>">
+                                    </label>
+                                    <label>Hora *
+                                        <select id="exam_time_select" disabled>
+                                            <option value="">— elige hora —</option>
+                                        </select>
+                                    </label>
+                                </div>
                                 <p class="muted" id="exam-venue-detail" style="font-size:.8rem;margin:0;grid-column:1/-1" hidden></p>
                             </div>
                         <?php else: ?>
@@ -283,8 +299,10 @@ $stepLabels = [
                         <p class="muted" id="exam-slot-hint" style="font-size:.82rem;margin-top:.5rem">
                             <?php
                             $examAdvanceDays = (int) ($examAdvanceDays ?? 2);
-                            if ($examMode === 'dated_list') {
-                                echo 'Solo se muestran convocatorias con inscripción abierta.';
+                            if ($usesVenuePicker) {
+                                echo $examMode === 'venue_schedules'
+                                    ? 'Elige la sede; luego verás las fechas u horarios disponibles de esa sede.'
+                                    : 'Solo se muestran convocatorias con inscripción abierta.';
                             } elseif ($examAdvanceDays <= 0) {
                                 echo 'Puedes agendar desde hoy (sin días de antelación).';
                             } elseif ($examAdvanceDays === 1) {
@@ -732,11 +750,14 @@ $stepLabels = [
   const examTimeHidden = document.getElementById('exam_time');
   const examKindHidden = document.getElementById('exam_kind');
   const examSessionHidden = document.getElementById('exam_session_id');
+  const examVenueIdHidden = document.getElementById('exam_venue_id');
   const examDateSelect = document.getElementById('exam_date_select');
   const examTimeSelect = document.getElementById('exam_time_select');
   const examSessionSelect = document.getElementById('exam_session_select');
   const examVenueSelect = document.getElementById('exam_venue_select');
   const examVenueDetail = document.getElementById('exam-venue-detail');
+  const examVenueSessionsWrap = document.getElementById('exam-venue-sessions-wrap');
+  const examVenueWindowWrap = document.getElementById('exam-venue-window-wrap');
   const examSlotHint = document.getElementById('exam-slot-hint');
   const examExtraToggle = document.getElementById('exam_extraordinary_toggle');
   const examExtraFields = document.getElementById('exam-extraordinary-fields');
@@ -746,6 +767,21 @@ $stepLabels = [
   let examMode = 'window';
   let examExtraordinary = null;
   let examVenuesById = {};
+  let examVenueRuleType = '';
+
+  function usesVenuePickerMode(mode) {
+    return mode === 'dated_list' || mode === 'venue_schedules';
+  }
+
+  function setVenuePickerMode(ruleType) {
+    examVenueRuleType = ruleType || '';
+    const hasRule = examVenueRuleType !== '';
+    const isOpen = examVenueRuleType === 'open_window';
+    if (examVenueSessionsWrap) examVenueSessionsWrap.hidden = !hasRule || isOpen;
+    if (examVenueWindowWrap) {
+      examVenueWindowWrap.style.display = hasRule && isOpen ? 'grid' : 'none';
+    }
+  }
 
   if (!form || !prevBtn || !nextBtn || !submitBtn) {
     console.error('[checkout] Formulario o botones del wizard no encontrados.');
@@ -973,9 +1009,13 @@ $stepLabels = [
     }
     if (step === 'agenda' && needsExam) {
       if (!examDateHidden?.value || !examTimeHidden?.value) {
-        alert(examMode === 'dated_list'
-          ? 'Selecciona sede y convocatoria del examen.'
+        alert(usesVenuePickerMode(examMode)
+          ? 'Selecciona sede y fecha/hora del examen.'
           : 'Selecciona fecha y hora del examen.');
+        return false;
+      }
+      if (usesVenuePickerMode(examMode) && examVenueIdHidden && !examVenueIdHidden.value) {
+        alert('Selecciona la sede del examen.');
         return false;
       }
     }
@@ -1477,30 +1517,70 @@ $stepLabels = [
     examVenueDetail.hidden = bits.length === 0;
   }
 
+  function clearExamSelection() {
+    if (examSessionHidden) examSessionHidden.value = '';
+    if (examDateHidden) examDateHidden.value = '';
+    if (examTimeHidden) examTimeHidden.value = '';
+    if (examKindHidden) examKindHidden.value = 'regular';
+    if (examTimeSelect) {
+      examTimeSelect.innerHTML = '<option value="">— elige hora —</option>';
+      examTimeSelect.disabled = true;
+    }
+    if (examDateSelect) examDateSelect.value = '';
+    setExamDateWarn('');
+  }
+
   function loadExamSessionsForVenue(venueId) {
-    if (!examSessionSelect) return;
+    if (examVenueIdHidden) examVenueIdHidden.value = venueId || '';
     if (!venueId) {
-      examSessionSelect.innerHTML = '<option value="">— elige sede primero —</option>';
-      examSessionSelect.disabled = true;
+      if (examSessionSelect) {
+        examSessionSelect.innerHTML = '<option value="">— elige sede primero —</option>';
+        examSessionSelect.disabled = true;
+      }
+      setVenuePickerMode(examMode === 'venue_schedules' ? '' : 'dated');
       updateExamVenueDetail('');
+      clearExamSelection();
       return;
     }
     updateExamVenueDetail(venueId);
-    examSessionSelect.disabled = true;
-    examSessionSelect.innerHTML = '<option value="">Cargando…</option>';
+    clearExamSelection();
+    if (examSessionSelect) {
+      examSessionSelect.disabled = true;
+      examSessionSelect.innerHTML = '<option value="">Cargando…</option>';
+    }
     fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(slug)
       + '?venue_id=' + encodeURIComponent(venueId))
       .then(r => r.json())
       .then(data => {
         if (!data.ok) return;
-        fillExamSessions(data.sessions || []);
-        if ((data.sessions || []).length === 0) {
-          examSessionSelect.innerHTML = '<option value="">— sin convocatorias abiertas —</option>';
-          examSessionSelect.disabled = true;
+        var ruleType = data.venue_rule_type
+          || (examVenuesById[venueId] && examVenuesById[venueId].rule_type)
+          || (examMode === 'dated_list' ? 'dated' : '');
+        setVenuePickerMode(ruleType);
+        if (ruleType === 'open_window') {
+          if (examDateSelect && data.min_date) examDateSelect.min = data.min_date;
+          if (examSlotHint && data.min_advance_days !== undefined) {
+            examSlotHint.textContent = examAdvanceHint(data.min_advance_days);
+          }
+          if (examSessionSelect) {
+            examSessionSelect.innerHTML = '<option value="">— usa fecha y hora abajo —</option>';
+            examSessionSelect.disabled = true;
+          }
+        } else {
+          fillExamSessions(data.sessions || []);
+          if (examSessionSelect && (data.sessions || []).length === 0) {
+            examSessionSelect.innerHTML = '<option value="">— sin convocatorias abiertas —</option>';
+            examSessionSelect.disabled = true;
+          }
+          if (examSlotHint && examMode === 'venue_schedules') {
+            examSlotHint.textContent = 'Solo se muestran fechas con inscripción abierta en esta sede.';
+          }
         }
       })
       .catch(function () {
-        examSessionSelect.innerHTML = '<option value="">— error al cargar —</option>';
+        if (examSessionSelect) {
+          examSessionSelect.innerHTML = '<option value="">— error al cargar —</option>';
+        }
       });
   }
 
@@ -1513,10 +1593,10 @@ $stepLabels = [
         examMode = data.mode || 'window';
         examExtraordinary = data.extraordinary || null;
         if (examDateSelect && data.min_date) examDateSelect.min = data.min_date;
-        if (examSlotHint && data.min_advance_days !== undefined && examMode !== 'dated_list') {
+        if (examSlotHint && data.min_advance_days !== undefined && !usesVenuePickerMode(examMode)) {
           examSlotHint.textContent = examAdvanceHint(data.min_advance_days);
         }
-        if (examMode === 'dated_list' && examVenueSelect && Array.isArray(data.venues)) {
+        if (usesVenuePickerMode(examMode) && examVenueSelect && Array.isArray(data.venues)) {
           examVenuesById = {};
           examVenueSelect.innerHTML = '<option value="">— elige sede —</option>';
           data.venues.forEach(function (v) {
@@ -1533,7 +1613,12 @@ $stepLabels = [
             examVenueSelect.value = preselect;
             loadExamSessionsForVenue(preselect);
           } else if (Array.isArray(data.sessions) && data.sessions.length && data.venues.length === 0) {
+            setVenuePickerMode('dated');
             fillExamSessions(data.sessions);
+          } else if (examMode === 'venue_schedules') {
+            setVenuePickerMode('');
+          } else {
+            setVenuePickerMode('dated');
           }
         } else if (examSessionSelect && Array.isArray(data.sessions)) {
           fillExamSessions(data.sessions);
@@ -1591,7 +1676,11 @@ $stepLabels = [
       return;
     }
 
-    fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(slug) + '?date=' + encodeURIComponent(date))
+    var venueQs = (examVenueIdHidden && examVenueIdHidden.value)
+      ? '&venue_id=' + encodeURIComponent(examVenueIdHidden.value)
+      : '';
+    fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(slug)
+      + '?date=' + encodeURIComponent(date) + venueQs)
       .then(r => r.json())
       .then(data => {
         if (!data.ok || !data.slots) return;
@@ -1620,6 +1709,7 @@ $stepLabels = [
       if (examDateHidden) examDateHidden.value = d;
       if (examTimeHidden) examTimeHidden.value = '';
       if (examKindHidden) examKindHidden.value = 'regular';
+      if (examSessionHidden) examSessionHidden.value = '';
       loadExamSlots(d);
     });
   }
@@ -1640,6 +1730,9 @@ $stepLabels = [
       if (examDateHidden) examDateHidden.value = opt && opt.dataset.date ? opt.dataset.date : '';
       if (examTimeHidden) examTimeHidden.value = opt && opt.dataset.time ? opt.dataset.time : '';
       if (examKindHidden) examKindHidden.value = 'provider_session';
+      if (examVenueSelect && examVenueIdHidden) {
+        examVenueIdHidden.value = examVenueSelect.value || '';
+      }
     });
   }
   if (examExtraToggle) {
