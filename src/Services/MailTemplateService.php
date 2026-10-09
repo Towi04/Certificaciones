@@ -75,8 +75,18 @@ final class MailTemplateService
             'comprobante_url' => 'URL comprobante (alias de pago_proveedor)',
             'workbook_url' => 'URL plantilla Excel rellenada',
             'documentos_html' => 'Lista HTML de enlaces a documentos',
+            'student_docs_html' => 'Lista HTML de docs del alumno (aprobados)',
+            'doc_*_url' => 'URL firmada de un doc del alumno (ej. {{doc_ine_url}})',
+            'doc_*_label' => 'Etiqueta del doc del alumno (ej. {{doc_ine_label}})',
+            'ine_url' => 'Alias de {{doc_ine_url}}',
             'attachment_note' => 'Nota: documentos por enlace (sin adjuntos)',
             'workbook_note' => 'Nota breve del Excel por enlace',
+        ],
+        'Rechazo de documento' => [
+            'doc_label' => 'Nombre del documento rechazado',
+            'rejection_reason' => 'Motivo del rechazo',
+            'case_url' => 'URL del caso del alumno',
+            'student_name' => 'Nombre del alumno',
         ],
         'Campus Moodle' => [
             'moodle_url' => 'URL Campus / Moodle',

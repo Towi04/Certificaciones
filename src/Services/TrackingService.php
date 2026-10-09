@@ -452,6 +452,7 @@ final class TrackingService
             $out[] = [
                 'code' => $req['code'],
                 'label' => $req['label'],
+                'description' => (string) ($req['description'] ?? ''),
                 'required' => $req['required'],
                 'accept' => $req['accept'],
                 'status' => $doc ? (string) $doc['status'] : null,
@@ -590,7 +591,8 @@ final class TrackingService
         }
     }
 
-    public function rejectDocument(int $docId, int $adminUserId, string $reason): void
+    /** @return bool true si se envió correo al alumno */
+    public function rejectDocument(int $docId, int $adminUserId, string $reason): bool
     {
         $reason = trim($reason);
         if ($reason === '') {
@@ -605,12 +607,76 @@ final class TrackingService
              WHERE id = ?'
         )->execute([$reason, $adminUserId, $docId]);
 
+        $mailed = false;
         if (!empty($doc['tracking_id'])) {
             $trackingId = (int) $doc['tracking_id'];
             $this->pdo->prepare(
                 'UPDATE trackings SET status = \'waiting_student\' WHERE id = ?'
             )->execute([$trackingId]);
             $this->log($trackingId, 'doc_rejected', 'Rechazado ' . $doc['doc_type'] . ': ' . $reason, $adminUserId);
+            $mailed = $this->notifyStudentDocumentRejected($trackingId, $doc, $reason);
+        }
+
+        return $mailed;
+    }
+
+    /**
+     * @param array<string, mixed> $doc
+     */
+    private function notifyStudentDocumentRejected(int $trackingId, array $doc, string $reason): bool
+    {
+        $tracking = $this->find($trackingId);
+        if ($tracking === null) {
+            return false;
+        }
+        $to = trim((string) ($tracking['student_email'] ?? ''));
+        if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            return false;
+        }
+
+        $docType = (string) ($doc['doc_type'] ?? '');
+        $docLabel = $docType;
+        $product = [
+            'type' => $tracking['product_type'] ?? '',
+            'config_json' => $tracking['config_json'] ?? null,
+            'group_config_json' => $tracking['group_config_json'] ?? null,
+        ];
+        foreach (array_merge(
+            CheckoutRequirements::docsForProduct($product),
+            CheckoutRequirements::registrationDocsForProduct($product)
+        ) as $req) {
+            if (($req['code'] ?? '') === $docType) {
+                $docLabel = (string) $req['label'];
+                break;
+            }
+        }
+
+        $base = rtrim((string) (\App\Config\Env::get('APP_URL', '') ?? ''), '/');
+        $name = trim(implode(' ', array_filter([
+            (string) ($tracking['first_name'] ?? ''),
+            (string) ($tracking['last_name_p'] ?? ''),
+        ])));
+        $vars = [
+            'name' => $name !== '' ? $name : 'alumno',
+            'full_name' => $name !== '' ? $name : 'alumno',
+            'student_name' => $name !== '' ? $name : 'alumno',
+            'doc_label' => $docLabel,
+            'doc_type' => $docType,
+            'rejection_reason' => $reason,
+            'matricula' => (string) ($tracking['matricula'] ?? ''),
+            'product_name' => (string) ($tracking['product_name'] ?? ''),
+            'case_url' => $base . '/alumno/caso/' . $trackingId,
+            'login_url' => $base . '/login',
+        ];
+
+        try {
+            (new MailTemplateService())->send('student_document_rejected', $to, $vars);
+
+            return true;
+        } catch (\Throwable $e) {
+            error_log('[Doceo] Correo rechazo documento: ' . $e->getMessage());
+
+            return false;
         }
     }
 

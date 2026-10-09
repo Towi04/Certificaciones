@@ -149,13 +149,17 @@ HTML;
             'checkout_fields' => ['email', 'first_name', 'last_name_p', 'last_name_m', 'phone'],
             'required_docs' => [
                 [
-                    'code' => 'reglamento_firmado',
-                    'label' => 'Reglamento firmado (PDF con firma en última página)',
+                    'code' => 'ine',
+                    'label' => 'INE o pasaporte escaneado (PDF)',
+                    'description' => 'PDF con ambos lados, nítido y completo. No fotos borrosas ni recortes.',
                     'required' => true,
                     'accept' => '.pdf',
+                    'include_in_provider_mail' => true,
+                    'require_for_provider_send' => true,
                 ],
             ],
             'registration_docs' => [],
+            'student_docs_timing' => 'before_payment',
             'reglamento' => [
                 'template_path' => '/assets/reglamentos/elet-reglamento.pdf',
                 'source_url' => 'https://drive.google.com/file/d/1sfP7zSPlqqpBdYaHUmz-_kM_BijRZDHW/view?usp=sharing',
@@ -225,18 +229,49 @@ HTML;
             ],
         ];
 
+        $cenniRegistrationDocs = [
+            [
+                'code' => 'ine',
+                'label' => 'INE / pasaporte',
+                'description' => 'Ambos lados en un PDF legible.',
+                'required' => true,
+                'accept' => '.pdf',
+                'include_in_provider_mail' => true,
+                'require_for_provider_send' => true,
+            ],
+            [
+                'code' => 'birth_certificate',
+                'label' => 'Acta de nacimiento',
+                'description' => 'PDF legible del acta.',
+                'required' => true,
+                'accept' => '.pdf',
+                'include_in_provider_mail' => true,
+                'require_for_provider_send' => false,
+            ],
+            [
+                'code' => 'photo',
+                'label' => 'Fotografía',
+                'description' => 'Fondo blanco, rostro visible (JPG/PNG).',
+                'required' => true,
+                'accept' => '.jpg,.jpeg,.png',
+                'include_in_provider_mail' => true,
+                'require_for_provider_send' => false,
+            ],
+        ];
+
         $eletCenniConfig = [
             'pipeline_code' => 'elet_cenni_uks',
             'checkout_fields' => [],
             'required_docs' => [],
-            'registration_docs' => [],
+            'registration_docs' => $cenniRegistrationDocs,
+            'student_docs_timing' => 'after_payment',
             'card_msi' => ['enabled' => false, 'months' => [], 'min_amount' => 0],
             'bundled_with' => 'ELET-UKS',
             'starts_after' => 'exam_completed',
             'deadline_days' => 15,
             'performed_by' => 'uks',
             'uks_upload' => true,
-            'doceo_collects_docs' => false,
+            'doceo_collects_docs' => true,
             'sep_consulta_url' => 'https://cennisistema.sep.gob.mx/cenni/consulta/consultaEstatus.jsp',
             'import_template_code' => 'uks_elet_reporte',
             'auto_cancel_if_not_started_days' => 15,
@@ -353,9 +388,24 @@ HTML;
             'card_msi' => ['enabled' => false, 'months' => [1], 'min_amount' => 0],
         ];
 
+        $ineBeforePayment = [
+            [
+                'code' => 'ine',
+                'label' => 'INE o pasaporte escaneado (PDF)',
+                'description' => 'PDF con ambos lados, nítido y completo. No fotos borrosas ni recortes.',
+                'required' => true,
+                'accept' => '.pdf',
+                'include_in_provider_mail' => true,
+                'require_for_provider_send' => true,
+            ],
+        ];
+
         $cambridgeFlexibleConfig = $standardCertConfig;
         $cambridgeFlexibleConfig['pipeline_code'] = 'toefl_lf';
         $cambridgeFlexibleConfig['initial_step_code'] = 'registro';
+        $cambridgeFlexibleConfig['required_docs'] = $ineBeforePayment;
+        $cambridgeFlexibleConfig['registration_docs'] = [];
+        $cambridgeFlexibleConfig['student_docs_timing'] = 'before_payment';
         $cambridgeFlexibleConfig['exam'] = [
             'choose_at_checkout' => true,
             'slot_minutes' => 60,
@@ -374,6 +424,9 @@ HTML;
         $cambridgeFixedConfig = $standardCertConfig;
         $cambridgeFixedConfig['pipeline_code'] = 'toefl_lf';
         $cambridgeFixedConfig['initial_step_code'] = 'registro';
+        $cambridgeFixedConfig['required_docs'] = $ineBeforePayment;
+        $cambridgeFixedConfig['registration_docs'] = [];
+        $cambridgeFixedConfig['student_docs_timing'] = 'before_payment';
         $cambridgeFixedConfig['exam'] = [
             'choose_at_checkout' => true,
             'slot_minutes' => 30,
@@ -383,7 +436,7 @@ HTML;
         $cambridgeFixedConfig['schedule'] = [
             'mode' => 'dated_list',
             'min_advance_days' => 0,
-            'checkout_help' => 'Elige una convocatoria abierta. El proveedor fija fecha/hora y la fecha límite de inscripción.',
+            'checkout_help' => 'Elige primero la sede y luego una convocatoria abierta de esa sede.',
             'sessions' => [
                 // El admin reemplaza estas fechas cada ~6 meses desde el grupo.
                 [
@@ -392,6 +445,9 @@ HTML;
                     'exam_time' => '10:00',
                     'registration_deadline' => date('Y-m-d', strtotime('first saturday of November -25 days')),
                     'label' => 'Convocatoria ejemplo (editar)',
+                    'venue' => 'Campus Centro',
+                    'city' => 'León, Gto.',
+                    'address' => 'Av. Ejemplo 123',
                 ],
             ],
         ];
@@ -1003,6 +1059,7 @@ HTML;
                     . '</ul>'
                     . '{{documentos_html}}'
                     . '<p>Enlaces individuales (si los necesitas): '
+                    . '<a href="{{doc_ine_url}}">INE / identificación</a> · '
                     . '<a href="{{reglamento_url}}">Reglamento</a> · '
                     . '<a href="{{comprobante_url}}">Comprobante</a> · '
                     . '<a href="{{workbook_url}}">Excel</a></p>'
@@ -1045,6 +1102,17 @@ HTML;
                     . '<p>Ya puedes dar seguimiento desde tu portal.</p>'
                     . '<p>— Instituto DOCEO</p>',
             ],
+            [
+                'code' => 'student_document_rejected',
+                'name' => 'Alumno · Documento rechazado',
+                'subject' => 'Debes volver a subir: {{doc_label}} · {{matricula}}',
+                'body' => '<p>Hola {{student_name}},</p>'
+                    . '<p>Revisamos el documento <strong>{{doc_label}}</strong> de tu caso '
+                    . '<strong>{{matricula}}</strong> y necesitamos que lo vuelvas a cargar.</p>'
+                    . '<p><strong>Motivo:</strong> {{rejection_reason}}</p>'
+                    . '<p><a href="{{case_url}}">Subir de nuevo desde tu portal</a></p>'
+                    . '<p>— Instituto DOCEO</p>',
+            ],
         ];
 
         foreach ($templates as $tpl) {
@@ -1053,6 +1121,29 @@ HTML;
             }
             $repo->upsert($tpl['code'], $tpl['name'], $tpl['subject'], $tpl['body'], 'automatic');
             $log[] = 'Plantilla correo creada: ' . $tpl['code'];
+        }
+
+        // Plantilla UKS existente: añadir enlace INE si aún no lo tiene.
+        $uksTpl = $repo->findByCode('uks_solicitud');
+        if ($uksTpl !== null) {
+            $body = (string) ($uksTpl['body_html'] ?? '');
+            if ($body !== '' && !str_contains($body, 'doc_ine_url')) {
+                $body = str_replace(
+                    '<a href="{{reglamento_url}}">Reglamento</a>',
+                    '<a href="{{doc_ine_url}}">INE / identificación</a> · <a href="{{reglamento_url}}">Reglamento</a>',
+                    $body
+                );
+                if (str_contains($body, 'doc_ine_url')) {
+                    $repo->upsert(
+                        'uks_solicitud',
+                        (string) ($uksTpl['name'] ?? 'UKS · Solicitud de examen'),
+                        (string) ($uksTpl['subject'] ?? ''),
+                        $body,
+                        (string) ($uksTpl['trigger_mode'] ?? 'automatic')
+                    );
+                    $log[] = 'Plantilla uks_solicitud: añadido {{doc_ine_url}}';
+                }
+            }
         }
     }
 }

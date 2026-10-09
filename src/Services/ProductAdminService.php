@@ -418,6 +418,8 @@ final class ProductAdminService
             'instruction_docs' => ExamInstructionAssets::normalizeDocuments($instr),
             'checkout_fields' => $checkoutFields,
             'checkout_field_required' => $checkoutFieldRequired,
+            'student_docs_timing' => CheckoutRequirements::studentDocsTiming(['config_json' => null, 'group_config_json' => $cfg]),
+            'student_docs' => CheckoutRequirements::studentDocsForProduct(['config_json' => null, 'group_config_json' => $cfg]),
             'pay_transfer' => in_array('transfer_proof', $order, true),
             'pay_oxxo' => in_array('openpay_store', $order, true),
             'pay_card' => in_array('openpay_card', $order, true),
@@ -2043,6 +2045,8 @@ final class ProductAdminService
             unset($config['checkout_field_required']);
         }
 
+        $config = $this->applyStudentDocsConfig($config, $input);
+
         $pipelineCode = strtolower(trim((string) ($input['pipeline_code'] ?? '')));
         $pipelineCode = preg_replace('/[^a-z0-9_-]+/', '_', $pipelineCode) ?? '';
         $pipelineCode = trim($pipelineCode, '_');
@@ -2060,6 +2064,82 @@ final class ProductAdminService
         // Pasos unificados (botón ops + correo + admin_only) pisan on_steps / sync provider.
         if (isset($input['pipeline_steps']) && is_array($input['pipeline_steps'])) {
             $config = GroupStepConfig::applyFromGroupInput($input, $config);
+        }
+
+        return $config;
+    }
+
+    /**
+     * Documentos del alumno: una lista + timing (antes/después de pagar).
+     *
+     * @param array<string, mixed> $config
+     * @param array<string, mixed> $input
+     * @return array<string, mixed>
+     */
+    private function applyStudentDocsConfig(array $config, array $input): array
+    {
+        // Solo cuando el editor de docs del grupo está en el POST.
+        if (empty($input['student_docs_editor'])) {
+            return $config;
+        }
+
+        $timing = strtolower(trim((string) ($input['student_docs_timing'] ?? CheckoutRequirements::DOCS_TIMING_BEFORE_PAYMENT)));
+        if ($timing !== CheckoutRequirements::DOCS_TIMING_AFTER_PAYMENT) {
+            $timing = CheckoutRequirements::DOCS_TIMING_BEFORE_PAYMENT;
+        }
+
+        $codes = $input['student_doc_code'] ?? [];
+        $labels = $input['student_doc_label'] ?? [];
+        $descriptions = $input['student_doc_description'] ?? [];
+        $accepts = $input['student_doc_accept'] ?? [];
+        $requiredFlags = $input['student_doc_required'] ?? [];
+        $includeMail = $input['student_doc_include_mail'] ?? [];
+        $requireSend = $input['student_doc_require_send'] ?? [];
+        if (!is_array($codes)) {
+            $codes = [];
+        }
+
+        $rows = [];
+        foreach ($codes as $i => $codeRaw) {
+            $code = strtolower(trim((string) $codeRaw));
+            $code = preg_replace('/[^a-z0-9_-]+/', '_', $code) ?? '';
+            $code = trim($code, '_');
+            if ($code === '') {
+                continue;
+            }
+            $label = trim((string) (is_array($labels) ? ($labels[$i] ?? '') : ''));
+            $desc = trim((string) (is_array($descriptions) ? ($descriptions[$i] ?? '') : ''));
+            $accept = trim((string) (is_array($accepts) ? ($accepts[$i] ?? '') : ''));
+            $flagOn = static function (mixed $flags, int|string $idx): bool {
+                if (!is_array($flags) || !array_key_exists($idx, $flags)) {
+                    return false;
+                }
+                $v = $flags[$idx];
+
+                return $v === true || $v === 1 || $v === '1' || $v === 'on';
+            };
+            $required = $flagOn($requiredFlags, $i);
+            $include = $flagOn($includeMail, $i);
+            $require = $flagOn($requireSend, $i);
+            $rows[] = [
+                'code' => $code,
+                'label' => $label !== '' ? $label : $code,
+                'description' => $desc,
+                'accept' => $accept !== '' ? $accept : '.pdf',
+                'required' => $required,
+                'include_in_provider_mail' => $include,
+                'require_for_provider_send' => $require,
+            ];
+        }
+
+        $docs = CheckoutRequirements::normalizeStudentDocs($rows);
+        $config['student_docs_timing'] = $timing;
+        if ($timing === CheckoutRequirements::DOCS_TIMING_AFTER_PAYMENT) {
+            $config['registration_docs'] = $docs;
+            $config['required_docs'] = [];
+        } else {
+            $config['required_docs'] = $docs;
+            $config['registration_docs'] = [];
         }
 
         return $config;

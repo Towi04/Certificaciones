@@ -358,7 +358,7 @@ $pageHeading = $isEdit
         </label>
         <p class="muted" id="schedule-mode-hint" style="font-size:.8rem;margin:-.45rem 0 .85rem;max-width:40rem">
             <?php if ($scheduleMode === 'dated_list'): ?>
-                El alumno solo elige una convocatoria abierta; fecha, hora y sede las defines abajo.
+                El alumno elige primero la <strong>sede</strong> y luego una convocatoria abierta de esa sede.
             <?php elseif ($scheduleMode === 'fixed_slots'): ?>
                 El alumno elige entre horarios fijos (p. ej. sábados 11:00 / 13:00). Opcional: fecha extraordinaria.
             <?php else: ?>
@@ -851,7 +851,145 @@ $pageHeading = $isEdit
     </div>
 
     <div class="group-panel" data-panel="docs" hidden>
-        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Docs para correos</h2>
+        <?php
+        $studentDocs = is_array($extras['student_docs'] ?? null) ? $extras['student_docs'] : [];
+        $studentDocsTiming = (string) ($extras['student_docs_timing'] ?? 'before_payment');
+        if ($studentDocsTiming !== 'after_payment') {
+            $studentDocsTiming = 'before_payment';
+        }
+        ?>
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Documentos del alumno</h2>
+        <input type="hidden" name="student_docs_editor" value="1">
+        <p class="muted" style="font-size:.82rem;margin:0 0 .75rem;max-width:42rem">
+            Archivos que el alumno debe subir (INE, acta, etc.). <strong>No es el reglamento digital</strong>
+            (eso se configura en la pestaña Reglamento). Cada código genera el placeholder
+            <code>{{doc_&lt;código&gt;_url}}</code> para correos a proveedores.
+        </p>
+        <fieldset style="border:1px solid #dbe3ef;border-radius:12px;padding:.85rem 1rem;margin:0 0 1rem;background:#f8fafc">
+            <legend class="muted" style="font-size:.85rem;font-weight:700;padding:0 .35rem">¿Cuándo pedirlos?</legend>
+            <label style="display:flex;gap:.5rem;align-items:flex-start;font-size:.88rem;font-weight:600;margin-bottom:.55rem">
+                <input type="radio" name="student_docs_timing" value="before_payment" style="margin-top:.2rem"
+                    <?= $studentDocsTiming === 'before_payment' ? 'checked' : '' ?>>
+                <span>
+                    Obligatorios para registrarse / <strong>antes de pagar</strong>
+                    <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin-top:.15rem">
+                        UKS, Cambridge y similares: sin el archivo no puede confirmar el pago.
+                    </span>
+                </span>
+            </label>
+            <label style="display:flex;gap:.5rem;align-items:flex-start;font-size:.88rem;font-weight:600">
+                <input type="radio" name="student_docs_timing" value="after_payment" style="margin-top:.2rem"
+                    <?= $studentDocsTiming === 'after_payment' ? 'checked' : '' ?>>
+                <span>
+                    Permitir pagar y <strong>subir después</strong> (portal del alumno)
+                    <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin-top:.15rem">
+                        Trámite CENNI y casos donde la documentación sigue al pago.
+                    </span>
+                </span>
+            </label>
+        </fieldset>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.75rem">
+            <button type="button" class="btn btn-ghost btn-sm" id="student-doc-preset-ine">+ Preset INE/pasaporte</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="student-doc-preset-cenni">+ Preset paquete CENNI</button>
+        </div>
+        <div id="student-docs-list" style="display:grid;gap:.85rem">
+            <?php if ($studentDocs === []): ?>
+                <p class="muted" id="student-docs-empty" style="font-size:.82rem;margin:0">Ningún documento configurado.</p>
+            <?php endif; ?>
+            <?php foreach ($studentDocs as $sdIdx => $sdRow): ?>
+                <div class="student-doc-row panel" style="margin:0;padding:.85rem;border:1px solid #e6edf7;border-radius:12px;background:#fafcff">
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.65rem">
+                        <label class="muted" style="<?= e($labelStyle) ?>">
+                            Código (placeholder)
+                            <input type="text" name="student_doc_code[]"
+                                   value="<?= e((string) ($sdRow['code'] ?? '')) ?>"
+                                   placeholder="ine" pattern="[a-z0-9_\-]*"
+                                   style="<?= e($inputStyle) ?>">
+                            <span class="muted" style="font-size:.72rem;font-weight:500">→ {{doc_<?= e((string) ($sdRow['code'] ?? 'codigo')) ?>_url}}</span>
+                        </label>
+                        <label class="muted" style="<?= e($labelStyle) ?>">
+                            Etiqueta
+                            <input type="text" name="student_doc_label[]"
+                                   value="<?= e((string) ($sdRow['label'] ?? '')) ?>"
+                                   placeholder="INE o pasaporte (PDF)"
+                                   style="<?= e($inputStyle) ?>">
+                        </label>
+                        <label class="muted" style="<?= e($labelStyle) ?>">
+                            Accept
+                            <input type="text" name="student_doc_accept[]"
+                                   value="<?= e((string) ($sdRow['accept'] ?? '.pdf')) ?>"
+                                   placeholder=".pdf"
+                                   style="<?= e($inputStyle) ?>">
+                        </label>
+                        <label class="muted" style="<?= e($labelStyle) ?>;grid-column:1/-1">
+                            Descripción / instrucciones
+                            <textarea name="student_doc_description[]" rows="2"
+                                      placeholder="Escanea ambos lados en un solo PDF, legible…"
+                                      style="<?= e($inputStyle) ?>;resize:vertical"><?= e((string) ($sdRow['description'] ?? '')) ?></textarea>
+                        </label>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:1rem;margin-top:.65rem;font-size:.82rem;font-weight:600">
+                        <label style="display:flex;align-items:center;gap:.35rem">
+                            <input type="hidden" name="student_doc_required[<?= (int) $sdIdx ?>]" value="0">
+                            <input type="checkbox" name="student_doc_required[<?= (int) $sdIdx ?>]" value="1"
+                                <?= !empty($sdRow['required']) ? 'checked' : '' ?>> Obligatorio
+                        </label>
+                        <label style="display:flex;align-items:center;gap:.35rem">
+                            <input type="hidden" name="student_doc_include_mail[<?= (int) $sdIdx ?>]" value="0">
+                            <input type="checkbox" name="student_doc_include_mail[<?= (int) $sdIdx ?>]" value="1"
+                                <?= !empty($sdRow['include_in_provider_mail']) ? 'checked' : '' ?>> Incluir en correo proveedor
+                        </label>
+                        <label style="display:flex;align-items:center;gap:.35rem">
+                            <input type="hidden" name="student_doc_require_send[<?= (int) $sdIdx ?>]" value="0">
+                            <input type="checkbox" name="student_doc_require_send[<?= (int) $sdIdx ?>]" value="1"
+                                <?= !empty($sdRow['require_for_provider_send']) ? 'checked' : '' ?>> Requerido para enviar a proveedor
+                        </label>
+                    </div>
+                    <button type="button" class="btn btn-ghost btn-sm student-doc-remove" style="margin-top:.65rem">Quitar</button>
+                </div>
+            <?php endforeach; ?>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" id="student-doc-add" style="margin-top:.85rem">+ Agregar documento</button>
+        <template id="student-doc-row-template">
+            <div class="student-doc-row panel" style="margin:0;padding:.85rem;border:1px solid #e6edf7;border-radius:12px;background:#fafcff">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.65rem">
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Código (placeholder)
+                        <input type="text" name="student_doc_code[]" value="" placeholder="ine" style="<?= e($inputStyle) ?>">
+                    </label>
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Etiqueta
+                        <input type="text" name="student_doc_label[]" value="" placeholder="INE o pasaporte (PDF)" style="<?= e($inputStyle) ?>">
+                    </label>
+                    <label class="muted" style="<?= e($labelStyle) ?>">
+                        Accept
+                        <input type="text" name="student_doc_accept[]" value=".pdf" placeholder=".pdf" style="<?= e($inputStyle) ?>">
+                    </label>
+                    <label class="muted" style="<?= e($labelStyle) ?>;grid-column:1/-1">
+                        Descripción / instrucciones
+                        <textarea name="student_doc_description[]" rows="2" placeholder="Instrucciones de carga…" style="<?= e($inputStyle) ?>;resize:vertical"></textarea>
+                    </label>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:1rem;margin-top:.65rem;font-size:.82rem;font-weight:600">
+                    <label style="display:flex;align-items:center;gap:.35rem">
+                        <input type="hidden" data-student-doc-flag="required" value="0">
+                        <input type="checkbox" data-student-doc-flag="required" value="1" checked> Obligatorio
+                    </label>
+                    <label style="display:flex;align-items:center;gap:.35rem">
+                        <input type="hidden" data-student-doc-flag="include_mail" value="0">
+                        <input type="checkbox" data-student-doc-flag="include_mail" value="1" checked> Incluir en correo proveedor
+                    </label>
+                    <label style="display:flex;align-items:center;gap:.35rem">
+                        <input type="hidden" data-student-doc-flag="require_send" value="0">
+                        <input type="checkbox" data-student-doc-flag="require_send" value="1"> Requerido para enviar a proveedor
+                    </label>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm student-doc-remove" style="margin-top:.65rem">Quitar</button>
+            </div>
+        </template>
+
+        <hr style="margin:1.5rem 0;border:none;border-top:1px solid #e6ebf2">
+        <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Docs para correos (instrucciones)</h2>
         <?php
         $instructionDocs = is_array($extras['instruction_docs'] ?? null) ? $extras['instruction_docs'] : [];
         if ($instructionDocs === []) {
@@ -1312,6 +1450,93 @@ $pageHeading = $isEdit
     }
     toggle.addEventListener('change', sync);
     sync();
+  })();
+
+  (function setupStudentDocs() {
+    var list = document.getElementById('student-docs-list');
+    var tpl = document.getElementById('student-doc-row-template');
+    var addBtn = document.getElementById('student-doc-add');
+    var empty = document.getElementById('student-docs-empty');
+    var form = document.getElementById('group-form');
+    if (!list || !tpl || !addBtn) return;
+
+    function reindexFlags() {
+      list.querySelectorAll('.student-doc-row').forEach(function (row, idx) {
+        row.querySelectorAll('[data-student-doc-flag]').forEach(function (el) {
+          var key = el.getAttribute('data-student-doc-flag');
+          if (!key) return;
+          el.setAttribute('name', 'student_doc_' + key + '[' + idx + ']');
+        });
+        row.querySelectorAll('input[name^="student_doc_required"], input[name^="student_doc_include_mail"], input[name^="student_doc_require_send"]').forEach(function (el) {
+          var n = el.getAttribute('name') || '';
+          if (n.indexOf('student_doc_required') === 0) el.setAttribute('name', 'student_doc_required[' + idx + ']');
+          if (n.indexOf('student_doc_include_mail') === 0) el.setAttribute('name', 'student_doc_include_mail[' + idx + ']');
+          if (n.indexOf('student_doc_require_send') === 0) el.setAttribute('name', 'student_doc_require_send[' + idx + ']');
+        });
+      });
+      if (empty) empty.hidden = list.querySelectorAll('.student-doc-row').length > 0;
+    }
+
+    function addRow(preset) {
+      var node = tpl.content.cloneNode(true);
+      var row = node.querySelector('.student-doc-row');
+      if (row && preset) {
+        var code = row.querySelector('[name="student_doc_code[]"]');
+        var label = row.querySelector('[name="student_doc_label[]"]');
+        var accept = row.querySelector('[name="student_doc_accept[]"]');
+        var desc = row.querySelector('[name="student_doc_description[]"]');
+        if (code) code.value = preset.code || '';
+        if (label) label.value = preset.label || '';
+        if (accept) accept.value = preset.accept || '.pdf';
+        if (desc) desc.value = preset.description || '';
+        row.querySelectorAll('input[type="checkbox"][data-student-doc-flag]').forEach(function (cb) {
+          var key = cb.getAttribute('data-student-doc-flag');
+          if (key === 'required') cb.checked = preset.required !== false;
+          if (key === 'include_mail') cb.checked = !!preset.include_in_provider_mail;
+          if (key === 'require_send') cb.checked = !!preset.require_for_provider_send;
+        });
+      }
+      list.appendChild(node);
+      reindexFlags();
+    }
+
+    addBtn.addEventListener('click', function () { addRow(null); });
+    list.addEventListener('click', function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest('.student-doc-remove') : null;
+      if (!btn) return;
+      var row = btn.closest('.student-doc-row');
+      if (row) row.remove();
+      reindexFlags();
+    });
+
+    var presetIne = document.getElementById('student-doc-preset-ine');
+    if (presetIne) {
+      presetIne.addEventListener('click', function () {
+        addRow({
+          code: 'ine',
+          label: 'INE o pasaporte escaneado (PDF)',
+          accept: '.pdf',
+          description: 'PDF con ambos lados, nítido y completo. No fotos borrosas ni recortes.',
+          required: true,
+          include_in_provider_mail: true,
+          require_for_provider_send: true
+        });
+      });
+    }
+    var presetCenni = document.getElementById('student-doc-preset-cenni');
+    if (presetCenni) {
+      presetCenni.addEventListener('click', function () {
+        [
+          { code: 'ine', label: 'INE / pasaporte', accept: '.pdf', description: 'Ambos lados en un PDF', required: true, include_in_provider_mail: true, require_for_provider_send: true },
+          { code: 'birth_certificate', label: 'Acta de nacimiento', accept: '.pdf', description: 'PDF legible', required: true, include_in_provider_mail: true, require_for_provider_send: false },
+          { code: 'photo', label: 'Fotografía', accept: '.jpg,.jpeg,.png', description: 'Fondo blanco, rostro visible', required: true, include_in_provider_mail: true, require_for_provider_send: false }
+        ].forEach(addRow);
+      });
+    }
+    if (form) {
+      form.addEventListener('submit', reindexFlags);
+    }
+    reindexFlags();
   })();
 
   (function setupInstructionDocs() {

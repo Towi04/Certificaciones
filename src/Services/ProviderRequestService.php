@@ -735,11 +735,27 @@ final class ProviderRequestService
             }
         }
 
+        $studentDocVars = $this->studentDocumentMailVars(
+            (int) $tracking['id'],
+            (int) $purchase['id'],
+            $product,
+            $mailCode,
+            $fileLinks
+        );
+
         $workbookNote = $workbookUrl !== ''
             ? 'Plantilla Excel disponible por enlace seguro.'
             : '';
 
-        return [
+        $docsHtml = $this->documentosHtml(
+            $reglamentoUrl,
+            $comprobanteUrl,
+            $workbookUrl,
+            is_array($studentDocVars['_student_docs_list'] ?? null) ? $studentDocVars['_student_docs_list'] : []
+        );
+        unset($studentDocVars['_student_docs_list']);
+
+        return array_merge([
             'certificacion' => $fields['product_name'],
             'product_name' => $fields['product_name'],
             'full_name' => $fields['full_name'],
@@ -752,14 +768,15 @@ final class ProviderRequestService
             'comprobante_url' => $comprobanteUrl,
             'pago_proveedor' => $comprobanteUrl,
             'workbook_url' => $workbookUrl,
-            'documentos_html' => $this->documentosHtml($reglamentoUrl, $comprobanteUrl, $workbookUrl),
+            'documentos_html' => $docsHtml,
+            'student_docs_html' => (string) ($studentDocVars['student_docs_html'] ?? ''),
             'attachment_note' => 'Documentos por enlace seguro (sin adjuntos en el correo).',
             'workbook_note' => $workbookNote,
             'first_name' => $fields['first_name'],
             'last_name_p' => $fields['last_name_p'],
             'last_name_m' => $fields['last_name_m'],
             '_workbook_skip' => $varsWorkbookSkip,
-        ];
+        ], $studentDocVars);
     }
 
     /**
@@ -1124,12 +1141,32 @@ final class ProviderRequestService
         }
     }
 
-    private function documentosHtml(string $reglamentoUrl, string $comprobanteUrl, string $workbookUrl = ''): string
-    {
-        if ($reglamentoUrl === '' && $comprobanteUrl === '' && $workbookUrl === '') {
+    /**
+     * @param list<array{label:string,url:string}> $studentDocs
+     */
+    private function documentosHtml(
+        string $reglamentoUrl,
+        string $comprobanteUrl,
+        string $workbookUrl = '',
+        array $studentDocs = []
+    ): string {
+        if (
+            $reglamentoUrl === ''
+            && $comprobanteUrl === ''
+            && $workbookUrl === ''
+            && $studentDocs === []
+        ) {
             return '';
         }
         $html = '<p><strong>Documentos:</strong></p><ul>';
+        foreach ($studentDocs as $row) {
+            $url = trim((string) ($row['url'] ?? ''));
+            $label = trim((string) ($row['label'] ?? 'Documento'));
+            if ($url === '') {
+                continue;
+            }
+            $html .= '<li><a href="' . htmlspecialchars($url) . '">' . htmlspecialchars($label) . '</a></li>';
+        }
         if ($reglamentoUrl !== '') {
             $html .= '<li><a href="' . htmlspecialchars($reglamentoUrl) . '">Reglamento firmado</a></li>';
         }
@@ -1142,6 +1179,101 @@ final class ProviderRequestService
         $html .= '</ul>';
 
         return $html;
+    }
+
+    /**
+     * Placeholders {{doc_<code>_url}} / {{doc_<code>_label}} y {{student_docs_html}}
+     * a partir de documentos subidos por el alumno (preferencia: approved).
+     *
+     * @param array<string, mixed> $product
+     * @return array<string, mixed>
+     */
+    private function studentDocumentMailVars(
+        int $trackingId,
+        int $purchaseId,
+        array $product,
+        string $mailCode,
+        SignedFileLinkService $fileLinks
+    ): array {
+        $configured = array_merge(
+            CheckoutRequirements::docsForProduct($product),
+            CheckoutRequirements::registrationDocsForProduct($product)
+        );
+        /** @var array<string, array<string, mixed>> $byCode */
+        $byCode = [];
+        foreach ($configured as $row) {
+            $code = (string) ($row['code'] ?? '');
+            if ($code === '' || isset($byCode[$code])) {
+                continue;
+            }
+            $byCode[$code] = $row;
+        }
+        if ($byCode === []) {
+            return ['student_docs_html' => '', '_student_docs_list' => []];
+        }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT id, doc_type, status, original_name
+             FROM documents
+             WHERE (tracking_id = ? OR purchase_id = ?)
+             ORDER BY id DESC'
+        );
+        $stmt->execute([$trackingId, $purchaseId]);
+        /** @var array<string, array<string, mixed>> $latest */
+        $latest = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $type = (string) ($row['doc_type'] ?? '');
+            if ($type === '' || isset($latest[$type])) {
+                continue;
+            }
+            $latest[$type] = $row;
+        }
+
+        $vars = ['student_docs_html' => ''];
+        $list = [];
+        $li = [];
+        foreach ($byCode as $code => $meta) {
+            $include = !empty($meta['include_in_provider_mail']);
+            $require = !empty($meta['require_for_provider_send']);
+            $label = (string) ($meta['label'] ?? $code);
+            $doc = $latest[$code] ?? null;
+            $url = '';
+            if ($doc !== null && (string) ($doc['status'] ?? '') === 'approved') {
+                $url = $fileLinks->documentLink((int) $doc['id']);
+            }
+            $vars['doc_' . $code . '_url'] = $url;
+            $vars['doc_' . $code . '_label'] = $label;
+            // Alias corto p. ej. {{ine_url}}
+            if (!isset($vars[$code . '_url'])) {
+                $vars[$code . '_url'] = $url;
+            }
+
+            $placeholder = '{{doc_' . $code . '_url}}';
+            $mailWants = $mailCode !== '' && MailTemplateService::templateHaystackContains($mailCode, [
+                $placeholder,
+                'doc_' . $code . '_url',
+                '{{' . $code . '_url}}',
+                $code . '_url',
+            ]);
+
+            if ($require && $url === '') {
+                throw new \RuntimeException(
+                    'Falta el documento aprobado «' . $label . '» para enviar el correo al proveedor '
+                    . '(placeholder ' . $placeholder . ').'
+                );
+            }
+            if (($include || $mailWants) && $url !== '') {
+                $list[] = ['label' => $label, 'url' => $url];
+                $li[] = '<li><a href="' . htmlspecialchars($url) . '">' . htmlspecialchars($label) . '</a></li>';
+            }
+        }
+        if ($li !== []) {
+            $vars['student_docs_html'] = '<p><strong>Documentos del alumno:</strong></p><ul>'
+                . implode('', $li) . '</ul>';
+        }
+        $vars['_student_docs_list'] = $list;
+
+        return $vars;
     }
 
     /**
