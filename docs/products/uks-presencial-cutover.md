@@ -92,6 +92,7 @@ Checklist completa (matriz A–D, rollback, combo): **`docs/products/cutover-pha
 ```bash
 php bin/ensure-cutover-config.php
 php bin/cutover-readiness.php
+php bin/cutover-phase8-matrix.php
 ```
 
 1. En un grupo de prueba (o Cambridge) carga 2 convocatorias con sede.

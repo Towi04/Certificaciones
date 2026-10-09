@@ -11,9 +11,14 @@ php bin/ensure-cutover-config.php
 
 # Readiness: motores + grupos + plantillas
 php bin/cutover-readiness.php
+
+# Matriz A–D a nivel servicios (lógica; marca MANUAL lo que pide UI/BD)
+php bin/cutover-phase8-matrix.php
 ```
 
-Exit `0` = listo a nivel config. Luego corre la **matriz manual** abajo.
+Exit `0` en readiness + matrix = listo a nivel código/config.
+Los pasos marcados `MANUAL` en la matrix (correo real, approve UI, compra combo)
+se ejecutan en staging/prod con la checklist abajo.
 
 ## Matriz QA manual
 
@@ -89,11 +94,12 @@ Detalle de agenda: `docs/products/uks-presencial-cutover.md`.
 - [x] `{{doc_ine_url}}` en plantilla proveedor
 - [x] Checkout sede → disponibilidad
 - [x] Gate ops docs aprobados
-- [ ] Matriz manual A–D ejecutada el día del cutover (esta checklist)
+- [x] Matriz lógica A–D (`php bin/cutover-phase8-matrix.php`)
+- [ ] Pasos MANUAL de la matriz (correo/UI/compra) el día del cutover
 
 ## Fases
 
 | Fase | Estado |
 |------|--------|
 | 0–7 + gate | Hechas |
-| **8 QA** | **Esta (última)** |
+| **8 QA** | Herramientas + matriz lógica listas; MANUAL el día del cutover |
