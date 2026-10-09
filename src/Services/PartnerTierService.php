@@ -58,6 +58,12 @@ final class PartnerTierService
             if (!isset($have['tier_evaluated_at'])) {
                 $pdo->exec('ALTER TABLE partners ADD COLUMN tier_evaluated_at DATETIME NULL AFTER agreement_ends_at');
             }
+            if (!isset($have['legacy_sales_bonus'])) {
+                $pdo->exec(
+                    'ALTER TABLE partners
+                     ADD COLUMN legacy_sales_bonus INT UNSIGNED NOT NULL DEFAULT 0 AFTER notes'
+                );
+            }
             self::$schemaReady = true;
         } catch (\Throwable $e) {
             error_log('[Doceo] partner tier schema: ' . $e->getMessage());
@@ -239,6 +245,15 @@ final class PartnerTierService
         return (int) $stmt->fetchColumn();
     }
 
+    /**
+     * Ajuste temporal (admin) por alumnos/certificaciones anteriores fuera del PDV.
+     * Suma al conteo del convenio; no altera las ventas del mes.
+     */
+    public static function legacySalesBonus(array $partner): int
+    {
+        return max(0, (int) ($partner['legacy_sales_bonus'] ?? 0));
+    }
+
     public function lastSaleDate(int $partnerId): ?string
     {
         $stmt = $this->pdo->prepare(
@@ -341,11 +356,13 @@ final class PartnerTierService
         $monthStart = date('Y-m-01');
         $monthEnd = date('Y-m-t');
 
-        $yearSales = $this->countCertificationSales(
+        $systemYearSales = $this->countCertificationSales(
             (int) $partner['id'],
             $period['start'],
             min($today, $period['end'])
         );
+        $legacyBonus = self::legacySalesBonus($partner);
+        $yearSales = $systemYearSales + $legacyBonus;
         $monthSales = $this->countCertificationSales(
             (int) $partner['id'],
             max($monthStart, $period['start']),
@@ -400,6 +417,8 @@ final class PartnerTierService
             'period_end' => $period['end'],
             'days_left' => $daysLeft,
             'month_sales' => $monthSales,
+            'system_year_sales' => $systemYearSales,
+            'legacy_sales_bonus' => $legacyBonus,
             'year_sales' => $yearSales,
             'last_sale_date' => $lastSale,
             'current_tier' => $currentTier,
@@ -443,7 +462,8 @@ final class PartnerTierService
                 continue;
             }
             $to = $force ? min($asOf, $period['end']) : $period['end'];
-            $sales = $this->countCertificationSales((int) $p['id'], $period['start'], $to);
+            $sales = $this->countCertificationSales((int) $p['id'], $period['start'], $to)
+                + self::legacySalesBonus($p);
             $earned = $this->tierForSales($sales, $cfg) ?? 'a';
             $current = strtolower(trim((string) ($p['tier'] ?? 'a')));
             if ($current === $earned) {
@@ -533,7 +553,7 @@ final class PartnerTierService
                 (int) $p['id'],
                 $period['start'],
                 min($today->format('Y-m-d'), $period['end'])
-            );
+            ) + self::legacySalesBonus($p);
             if ($sales > $maxSales) {
                 $skipped++;
                 continue;

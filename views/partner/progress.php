@@ -39,6 +39,12 @@
             <div class="stat">
                 <div class="label">Ventas del convenio</div>
                 <div class="value" style="font-size:1.2rem"><?= (int) ($tierProgress['year_sales'] ?? 0) ?></div>
+                <?php if ((int) ($tierProgress['legacy_sales_bonus'] ?? 0) > 0): ?>
+                    <div class="muted" style="font-size:.75rem;margin-top:.25rem">
+                        <?= (int) ($tierProgress['system_year_sales'] ?? 0) ?> en sistema
+                        + <?= (int) ($tierProgress['legacy_sales_bonus'] ?? 0) ?> históricas
+                    </div>
+                <?php endif; ?>
             </div>
         <?php endif; ?>
     </div>

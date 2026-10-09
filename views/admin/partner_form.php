@@ -104,6 +104,19 @@ $action = $isEdit
                 <a href="<?= e(url('/admin/partners/niveles')) ?>">Niveles partner</a>.
             </span>
         </label>
+        <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+            Ventas históricas (temporal)
+            <input type="number" name="legacy_sales_bonus" min="0" step="1"
+                   value="<?= (int) ($partner['legacy_sales_bonus'] ?? 0) ?>"
+                   style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            <span class="muted" style="font-size:.78rem;font-weight:500">
+                Cantidad de certificaciones/alumnos de este partner que ya están en
+                <a href="<?= e(url('/admin/publicidad/contactos')) ?>">clientes anteriores</a>
+                (fuera del PDV) y deben sumar al conteo del convenio actual
+                (p. ej. desde agosto 2026). No altera las ventas del mes ni el crédito.
+                Cuando todo fluya por el sistema, déjalo en 0.
+            </span>
+        </label>
     </div>
     <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-top:.75rem">
         Notas internas
