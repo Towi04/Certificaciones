@@ -240,22 +240,31 @@ HTML;
                 'require_for_provider_send' => true,
             ],
             [
-                'code' => 'birth_certificate',
-                'label' => 'Acta de nacimiento',
-                'description' => 'PDF legible del acta.',
+                'code' => 'curp',
+                'label' => 'CURP',
+                'description' => 'PDF o imagen legible de la CURP.',
+                'required' => true,
+                'accept' => '.pdf,.jpg,.jpeg,.png',
+                'include_in_provider_mail' => true,
+                'require_for_provider_send' => true,
+            ],
+            [
+                'code' => 'solicitud',
+                'label' => 'Solicitud',
+                'description' => 'Solicitud del trámite completa y firmada (PDF).',
                 'required' => true,
                 'accept' => '.pdf',
                 'include_in_provider_mail' => true,
-                'require_for_provider_send' => false,
+                'require_for_provider_send' => true,
             ],
             [
-                'code' => 'photo',
-                'label' => 'Fotografía',
-                'description' => 'Fondo blanco, rostro visible (JPG/PNG).',
+                'code' => 'certificado_constancia',
+                'label' => 'Certificado / constancia',
+                'description' => 'Certificado o constancia que respalda el trámite (PDF).',
                 'required' => true,
-                'accept' => '.jpg,.jpeg,.png',
+                'accept' => '.pdf',
                 'include_in_provider_mail' => true,
-                'require_for_provider_send' => false,
+                'require_for_provider_send' => true,
             ],
         ];
 
@@ -290,20 +299,8 @@ HTML;
             'min_amount' => 0,
         ];
         $sharedCheckoutFields = ['email', 'first_name', 'last_name_p', 'last_name_m', 'phone'];
-        $standardRegistrationDocs = [
-            [
-                'code' => 'reglamento',
-                'label' => 'Reglamento firmado (PDF)',
-                'required' => true,
-                'accept' => '.pdf',
-            ],
-            [
-                'code' => 'signature',
-                'label' => 'Firma (imagen)',
-                'required' => true,
-                'accept' => '.jpg,.jpeg,.png',
-            ],
-        ];
+        // El reglamento ya no vive en registration_docs (eso es solo docs del alumno).
+        // Si el grupo lo requiere: pestaña Reglamento (firma digital o PDF escaneado).
 
         // El proceso de compra vive en el grupo; el producto solo personaliza contenido.
         $eletUksConfig['payments'] = $sharedPayments;
@@ -312,7 +309,8 @@ HTML;
         $standardCertConfig = [
             'checkout_fields' => $sharedCheckoutFields,
             'required_docs' => [],
-            'registration_docs' => $standardRegistrationDocs,
+            'registration_docs' => [],
+            'student_docs_timing' => 'before_payment',
             'payments' => $sharedPayments,
             'card_msi' => $sharedCardMsi,
         ];
@@ -745,8 +743,7 @@ HTML;
             $p['is_active'] = $p['is_active'] ?? 1;
             $p['is_public'] = $p['is_public'] ?? 1;
             $p['cost_price'] = $p['cost_price'] ?? 0;
-            // Checkout mínimo por defecto: contacto + pago.
-            // Reglamento/firma se piden después en el caso del alumno (registration_docs).
+            // Checkout mínimo por defecto: contacto + pago (proceso del grupo).
             if (!isset($p['config_json'])) {
                 // Sin overrides: hereda pagos/MSI/proceso del grupo de proveedor.
                 $p['config_json'] = json_encode(new \stdClass());

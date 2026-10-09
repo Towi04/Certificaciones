@@ -889,9 +889,12 @@ $pageHeading = $isEdit
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Documentos del alumno</h2>
         <input type="hidden" name="student_docs_editor" value="1">
         <p class="muted" style="font-size:.82rem;margin:0 0 .75rem;max-width:42rem">
-            Archivos que el alumno debe subir (INE, acta, etc.). <strong>No es el reglamento digital</strong>
-            (eso se configura en la pestaña Reglamento). Cada código genera el placeholder
-            <code>{{doc_&lt;código&gt;_url}}</code> para correos a proveedores.
+            Solo archivos que el alumno (o el partner) debe <strong>subir</strong>: INE, CURP, solicitud, constancia, etc.
+            Define el código, la etiqueta y la descripción/instrucciones de cada uno.
+            Cada código genera <code>{{doc_&lt;código&gt;_url}}</code> en correos.
+            <br><strong>El reglamento no va aquí</strong>: se configura en la pestaña
+            <a href="#rules" data-tab-jump="rules">Reglamento</a>
+            (link + firma digital o PDF escaneado, como hasta ahora).
         </p>
         <fieldset style="border:1px solid #dbe3ef;border-radius:12px;padding:.85rem 1rem;margin:0 0 1rem;background:#f8fafc">
             <legend class="muted" style="font-size:.85rem;font-weight:700;padding:0 .35rem">¿Cuándo pedirlos?</legend>
@@ -901,7 +904,7 @@ $pageHeading = $isEdit
                 <span>
                     Obligatorios para registrarse / <strong>antes de pagar</strong>
                     <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin-top:.15rem">
-                        UKS, Cambridge y similares: sin el archivo no puede confirmar el pago.
+                        Sin el archivo no puede confirmar el registro/pago.
                     </span>
                 </span>
             </label>
@@ -911,18 +914,16 @@ $pageHeading = $isEdit
                 <span>
                     Permitir pagar y <strong>subir después</strong> (portal del alumno)
                     <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin-top:.15rem">
-                        Trámite CENNI y casos donde la documentación sigue al pago.
+                        Útil en trámites (p. ej. CENNI) donde la documentación sigue al pago.
                     </span>
                 </span>
             </label>
         </fieldset>
-        <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.75rem">
-            <button type="button" class="btn btn-ghost btn-sm" id="student-doc-preset-ine">+ Preset INE/pasaporte</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="student-doc-preset-cenni">+ Preset paquete CENNI</button>
-        </div>
         <div id="student-docs-list" style="display:grid;gap:.85rem">
             <?php if ($studentDocs === []): ?>
-                <p class="muted" id="student-docs-empty" style="font-size:.82rem;margin:0">Ningún documento configurado.</p>
+                <p class="muted" id="student-docs-empty" style="font-size:.82rem;margin:0">
+                    Ningún documento configurado. Usa «Agregar documento» para definir qué deben subir.
+                </p>
             <?php endif; ?>
             <?php foreach ($studentDocs as $sdIdx => $sdRow): ?>
                 <div class="student-doc-row panel" style="margin:0;padding:.85rem;border:1px solid #e6edf7;border-radius:12px;background:#fafcff">
@@ -1144,14 +1145,20 @@ $pageHeading = $isEdit
 
     <div class="group-panel" data-panel="rules" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Reglamento</h2>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .85rem;max-width:42rem">
+            Aquí se configura el PDF/link del reglamento del examen (como siempre).
+            En el checkout el alumno o el partner puede <strong>firmarlo en pantalla</strong>
+            o <strong>descargarlo, firmarlo en papel y subir el PDF escaneado</strong>.
+            No uses la pestaña Documentos para el reglamento.
+        </p>
         <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:.75rem">
             <input type="checkbox" name="reglamento_enabled" value="1" style="margin-top:.2rem"
                 <?= !empty($extras['reglamento_enabled']) ? 'checked' : '' ?>>
             <span>
                 Este grupo requiere reglamento firmado
                 <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin-top:.15rem">
-                    Si se marca, el alumno deberá firmarlo <strong>antes de pagar</strong>
-                    (queda como paso obligatorio del checkout). No hace falta otro check aparte.
+                    Si se marca, es un paso obligatorio del checkout <strong>antes de pagar</strong>
+                    (firma digital o PDF escaneado).
                 </span>
             </span>
         </label>
@@ -1510,30 +1517,13 @@ $pageHeading = $isEdit
       if (empty) empty.hidden = list.querySelectorAll('.student-doc-row').length > 0;
     }
 
-    function addRow(preset) {
+    function addRow() {
       var node = tpl.content.cloneNode(true);
-      var row = node.querySelector('.student-doc-row');
-      if (row && preset) {
-        var code = row.querySelector('[name="student_doc_code[]"]');
-        var label = row.querySelector('[name="student_doc_label[]"]');
-        var accept = row.querySelector('[name="student_doc_accept[]"]');
-        var desc = row.querySelector('[name="student_doc_description[]"]');
-        if (code) code.value = preset.code || '';
-        if (label) label.value = preset.label || '';
-        if (accept) accept.value = preset.accept || '.pdf';
-        if (desc) desc.value = preset.description || '';
-        row.querySelectorAll('input[type="checkbox"][data-student-doc-flag]').forEach(function (cb) {
-          var key = cb.getAttribute('data-student-doc-flag');
-          if (key === 'required') cb.checked = preset.required !== false;
-          if (key === 'include_mail') cb.checked = !!preset.include_in_provider_mail;
-          if (key === 'require_send') cb.checked = !!preset.require_for_provider_send;
-        });
-      }
       list.appendChild(node);
       reindexFlags();
     }
 
-    addBtn.addEventListener('click', function () { addRow(null); });
+    addBtn.addEventListener('click', function () { addRow(); });
     list.addEventListener('click', function (ev) {
       var btn = ev.target && ev.target.closest ? ev.target.closest('.student-doc-remove') : null;
       if (!btn) return;
@@ -1541,36 +1531,23 @@ $pageHeading = $isEdit
       if (row) row.remove();
       reindexFlags();
     });
-
-    var presetIne = document.getElementById('student-doc-preset-ine');
-    if (presetIne) {
-      presetIne.addEventListener('click', function () {
-        addRow({
-          code: 'ine',
-          label: 'INE o pasaporte escaneado (PDF)',
-          accept: '.pdf',
-          description: 'PDF con ambos lados, nítido y completo. No fotos borrosas ni recortes.',
-          required: true,
-          include_in_provider_mail: true,
-          require_for_provider_send: true
-        });
-      });
-    }
-    var presetCenni = document.getElementById('student-doc-preset-cenni');
-    if (presetCenni) {
-      presetCenni.addEventListener('click', function () {
-        [
-          { code: 'ine', label: 'INE / pasaporte', accept: '.pdf', description: 'Ambos lados en un PDF', required: true, include_in_provider_mail: true, require_for_provider_send: true },
-          { code: 'birth_certificate', label: 'Acta de nacimiento', accept: '.pdf', description: 'PDF legible', required: true, include_in_provider_mail: true, require_for_provider_send: false },
-          { code: 'photo', label: 'Fotografía', accept: '.jpg,.jpeg,.png', description: 'Fondo blanco, rostro visible', required: true, include_in_provider_mail: true, require_for_provider_send: false }
-        ].forEach(addRow);
-      });
-    }
     if (form) {
       form.addEventListener('submit', reindexFlags);
     }
     reindexFlags();
   })();
+
+  document.querySelectorAll('[data-tab-jump]').forEach(function (link) {
+    link.addEventListener('click', function (ev) {
+      var name = link.getAttribute('data-tab-jump');
+      if (!name) return;
+      var tab = document.querySelector('.group-tab[data-tab="' + name + '"]');
+      if (tab) {
+        ev.preventDefault();
+        tab.click();
+      }
+    });
+  });
 
   (function setupInstructionDocs() {
     var list = document.getElementById('instruction-docs-list');
