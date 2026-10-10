@@ -198,7 +198,7 @@ $stepLabels = [
                     <div class="wizard-step" data-step="documentos" hidden>
                         <h2 class="step-title">Documentos requeridos</h2>
                         <p class="muted" style="font-size:.88rem;margin-top:0">
-                            Sube los archivos solicitados para continuar con el registro. Sin ellos no podrás pasar al pago.
+                            Sube los archivos solicitados para continuar con el registro.
                         </p>
                         <div class="form-grid" style="max-width:560px">
                             <?php foreach ($docs as $doc): ?>

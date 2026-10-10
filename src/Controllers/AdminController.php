@@ -645,7 +645,7 @@ final class AdminController
         csrf_verify();
         try {
             $id = (new \App\Services\ComboAdminService())->create($_POST, $_POST['product_ids'] ?? []);
-            flash('success', 'Combo creado. Ya aparecerá en el checkout de sus productos.');
+            flash('success', 'Combo creado. Ya puedes subir imagen y afinar el contenido del catálogo.');
             redirect('/admin/combos/' . $id);
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
@@ -699,6 +699,38 @@ final class AdminController
             flash('error', $e->getMessage());
             redirect('/admin/combos/' . (int) $id);
         }
+    }
+
+    public function comboLogoUpload(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $comboId = (int) $id;
+        try {
+            $file = $_FILES['logo'] ?? null;
+            if ($file === null || !is_array($file)) {
+                throw new \InvalidArgumentException('Selecciona una imagen para el combo.');
+            }
+            (new \App\Services\ComboMediaService())->uploadLogo($comboId, $file);
+            flash('success', 'Imagen del combo actualizada.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/combos/' . $comboId . '#catalogo');
+    }
+
+    public function comboLogoClear(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $comboId = (int) $id;
+        try {
+            (new \App\Services\ComboMediaService())->clearLogo($comboId);
+            flash('success', 'Imagen propia eliminada. En catálogo se usará la de la certificación.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        redirect('/admin/combos/' . $comboId . '#catalogo');
     }
 
     public function productGroups(): void

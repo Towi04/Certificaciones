@@ -370,6 +370,7 @@ final class ComboAdminService
             $slug = self::slugify($slug);
         }
         $description = trim((string) ($input['description'] ?? ''));
+        $shortDescription = trim((string) ($input['short_description'] ?? ''));
         $public = round(max(0, (float) ($input['public_price'] ?? 0)), 2);
         $catalogRaw = $input['catalog_price'] ?? '';
         if ($catalogRaw === '' || $catalogRaw === null) {
@@ -383,7 +384,9 @@ final class ComboAdminService
             'code' => $code,
             'slug' => $slug,
             'description' => $description !== '' ? $description : null,
+            'short_description' => $shortDescription !== '' ? $shortDescription : null,
             'is_active' => !empty($input['is_active']) ? 1 : 0,
+            'is_public' => !empty($input['is_public']) ? 1 : 0,
             'is_star' => !empty($input['is_star']) ? 1 : 0,
             'public_price' => $public,
             'catalog_price' => $catalog,

@@ -59,10 +59,43 @@ $num = static function (mixed $v): string {
                    placeholder="auto" style="<?= e($inputStyle) ?>">
         </label>
     </div>
-    <label class="muted" style="<?= e($labelStyle) ?>;margin-top:1rem">
-        Descripción (visible al alumno)
-        <textarea name="description" rows="3" style="<?= e($inputStyle) ?>"><?= e((string) ($combo['description'] ?? '')) ?></textarea>
-    </label>
+    <h2 id="catalogo" style="font-size:1.05rem;color:var(--doceo-blue);margin:1.25rem 0 .5rem">Contenido del catálogo</h2>
+    <p class="muted" style="font-size:.85rem;margin-top:0">
+        Resumen y descripción con HTML (como en productos). Si los dejas vacíos, el catálogo
+        mostrará por defecto la información de las <strong>certificaciones</strong> del combo.
+        La imagen propia se sube abajo tras crear el combo.
+    </p>
+    <div class="html-field" style="margin-bottom:.75rem" data-html-field>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.35rem">
+            <span class="muted" style="font-size:.88rem;font-weight:600">Resumen (tarjeta del catálogo)</span>
+            <button type="button" class="btn btn-ghost btn-sm html-preview-toggle" aria-pressed="false"
+                    title="Ver texto sin código HTML">
+                &lt;/&gt;
+            </button>
+        </div>
+        <textarea name="short_description" rows="3" class="html-field-source"
+                  style="<?= e($inputStyle) ?>;width:100%;display:block"
+                  placeholder="Ej. Certificación + preparación con <strong>precio preferencial</strong>"><?= e((string) ($combo['short_description'] ?? '')) ?></textarea>
+        <div class="html-field-preview" hidden></div>
+        <p class="muted html-field-hint" style="font-size:.78rem;margin:.35rem 0 0">
+            HTML sencillo (<code>&lt;strong&gt;</code>, <code>&lt;em&gt;</code>, enlaces). Pulsa <code>&lt;/&gt;</code> para previsualizar.
+        </p>
+    </div>
+    <div class="html-field" style="margin-bottom:.75rem" data-html-field>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.35rem">
+            <span class="muted" style="font-size:.88rem;font-weight:600">Descripción (ficha del paquete)</span>
+            <button type="button" class="btn btn-ghost btn-sm html-preview-toggle" aria-pressed="false"
+                    title="Ver texto sin código HTML">
+                &lt;/&gt;
+            </button>
+        </div>
+        <textarea name="description" rows="5" class="html-field-source"
+                  style="<?= e($inputStyle) ?>;width:100%;display:block"><?= e((string) ($combo['description'] ?? '')) ?></textarea>
+        <div class="html-field-preview" hidden></div>
+        <p class="muted html-field-hint" style="font-size:.78rem;margin:.35rem 0 0">
+            Pulsa <code>&lt;/&gt;</code> para ver el texto sin etiquetas HTML.
+        </p>
+    </div>
 
     <h2 style="font-size:1.05rem;color:var(--doceo-blue);margin:1.25rem 0 .5rem">Productos del combo *</h2>
     <p class="muted" style="font-size:.85rem;margin-top:0">
@@ -147,6 +180,11 @@ $num = static function (mixed $v): string {
         Combo activo
     </label>
     <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;font-weight:600;margin-top:.35rem">
+        <input type="checkbox" name="is_public" value="1"
+            <?= $isEdit ? (!empty($combo['is_public']) ? 'checked' : '') : 'checked' ?>>
+        Visible en catálogo (pestaña Combos)
+    </label>
+    <label class="muted" style="display:flex;align-items:center;gap:.5rem;font-size:.9rem;font-weight:600;margin-top:.35rem">
         <input type="checkbox" name="is_star" value="1" <?= !empty($combo['is_star']) ? 'checked' : '' ?>>
         Destacado
     </label>
@@ -158,6 +196,38 @@ $num = static function (mixed $v): string {
 </form>
 
 <?php if ($isEdit): ?>
+<div class="panel" style="margin-top:1rem;max-width:960px">
+    <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Imagen del combo</h2>
+    <p class="muted" style="font-size:.88rem;margin-top:0">
+        Opcional. Si no subes una, el catálogo usará la imagen de la primera certificación del paquete.
+    </p>
+    <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+        <div style="width:150px;height:110px;background:#f4f7fb;border-radius:14px;display:flex;align-items:center;justify-content:center;padding:.75rem;border:1px solid #e6ebf2">
+            <img src="<?= e(asset(!empty($combo['logo_path']) ? (string) $combo['logo_path'] : '/assets/brand/logo.png')) ?>"
+                 alt="" style="max-width:100%;max-height:100%;object-fit:contain">
+        </div>
+        <form method="post" action="<?= e(url('/admin/combos/' . (int) $combo['id'] . '/logo')) ?>"
+              enctype="multipart/form-data" style="display:grid;gap:.65rem;min-width:260px">
+            <?= csrf_field() ?>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Subir imagen
+                <input type="file" name="logo" required accept=".jpg,.jpeg,.png,.webp,.gif,.svg">
+            </label>
+            <button class="btn btn-accent btn-sm" type="submit">Actualizar imagen</button>
+        </form>
+        <?php if (!empty($combo['logo_path'])): ?>
+            <form method="post" action="<?= e(url('/admin/combos/' . (int) $combo['id'] . '/logo/quitar')) ?>"
+                  onsubmit="return confirm('¿Quitar la imagen propia del combo?');">
+                <?= csrf_field() ?>
+                <button class="btn btn-ghost btn-sm" type="submit">Quitar imagen propia</button>
+            </form>
+        <?php endif; ?>
+    </div>
+    <?php if (empty($combo['logo_path'])): ?>
+        <p class="muted" style="font-size:.8rem;margin:0">Sin imagen propia (fallback a certificación / logo DOCEO).</p>
+    <?php endif; ?>
+</div>
+
 <form method="post" action="<?= e(url('/admin/combos/' . (int) $combo['id'] . '/eliminar')) ?>"
       onsubmit="return confirm('¿Eliminar este combo? Solo si no tiene compras.');"
       style="margin-top:1rem">
@@ -165,6 +235,58 @@ $num = static function (mixed $v): string {
     <button class="icon-btn" type="submit" title="Eliminar" aria-label="Eliminar"><?= icon('trash') ?></button>
 </form>
 <?php endif; ?>
+
+<style>
+.html-field-preview {
+    padding: .65rem .75rem;
+    border: 1px solid #cfd8e6;
+    border-radius: 10px;
+    background: #fbfcfe;
+    min-height: 4.5rem;
+    font-size: .9rem;
+    line-height: 1.45;
+}
+.html-field-preview a { color: var(--doceo-blue); }
+.html-field-preview ul,
+.html-field-preview ol { margin: .35rem 0 .35rem 1.1rem; padding: 0; }
+</style>
+
+<script>
+(function () {
+  document.querySelectorAll('[data-html-field]').forEach(function (wrap) {
+    var toggleBtn = wrap.querySelector('.html-preview-toggle');
+    var textarea = wrap.querySelector('.html-field-source');
+    var preview = wrap.querySelector('.html-field-preview');
+    var hint = wrap.querySelector('.html-field-hint');
+    if (!toggleBtn || !textarea || !preview) return;
+
+    function updatePreview() {
+      preview.innerHTML = textarea.value;
+    }
+
+    function setPreviewMode(on) {
+      toggleBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      toggleBtn.title = on ? 'Ver código HTML' : 'Ver texto sin código HTML';
+      textarea.hidden = on;
+      preview.hidden = !on;
+      if (hint) {
+        hint.innerHTML = on
+          ? 'Vista previa renderizada. Pulsa <code>&lt;/&gt;</code> para volver al código HTML.'
+          : 'Pulsa <code>&lt;/&gt;</code> para ver el texto sin etiquetas HTML.';
+      }
+      if (on) updatePreview();
+    }
+
+    toggleBtn.addEventListener('click', function () {
+      setPreviewMode(toggleBtn.getAttribute('aria-pressed') !== 'true');
+    });
+
+    textarea.addEventListener('input', function () {
+      if (toggleBtn.getAttribute('aria-pressed') === 'true') updatePreview();
+    });
+  });
+})();
+</script>
 
 <script>
 (function () {

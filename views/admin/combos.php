@@ -8,6 +8,7 @@
             Define paquetes con precio propio (público y partners): certificación + curso,
             certificación + trámite CENNI/CONOCER, o los tres. En el checkout el alumno verá
             “Convertir en combo” al adquirir cualquiera de los productos del paquete.
+            El resumen, descripción HTML e imagen se usan en la pestaña Combos del catálogo.
         </p>
     </div>
     <a class="btn btn-accent" href="<?= e(url('/admin/combos/nuevo')) ?>">Nuevo combo</a>
@@ -21,9 +22,10 @@
                 <th>Código</th>
                 <th>Nombre</th>
                 <th>Ítems</th>
-                <th>Público</th>
+                <th>Precio</th>
                 <th>Lista</th>
                 <th>Activo</th>
+                <th>Catálogo</th>
                 <th></th>
             </tr>
             </thead>
@@ -36,6 +38,7 @@
                     <td><?= money($c['public_price']) ?></td>
                     <td><?= money($c['catalog_price']) ?></td>
                     <td><?= !empty($c['is_active']) ? 'Sí' : 'No' ?></td>
+                    <td><?= !array_key_exists('is_public', $c) || !empty($c['is_public']) ? 'Sí' : 'No' ?></td>
                     <td>
                         <span class="row-actions">
                             <a class="icon-btn" href="<?= e(url('/admin/combos/' . (int) $c['id'])) ?>" title="Editar" aria-label="Editar"><?= icon('edit') ?></a>
@@ -49,7 +52,7 @@
                 </tr>
             <?php endforeach; ?>
             <?php if ($combos === []): ?>
-                <tr><td colspan="7" class="muted">Aún no hay combos. Crea uno con al menos 2 productos.</td></tr>
+                <tr><td colspan="8" class="muted">Aún no hay combos. Crea uno con al menos 2 productos.</td></tr>
             <?php endif; ?>
             </tbody>
         </table>
