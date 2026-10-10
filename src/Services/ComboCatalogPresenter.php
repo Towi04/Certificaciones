@@ -46,7 +46,7 @@ final class ComboCatalogPresenter
 
         $anchor = $this->anchorProduct($certs, $items);
 
-        return [
+        $card = [
             'id' => (int) ($combo['id'] ?? 0),
             'code' => (string) ($combo['code'] ?? ''),
             'name' => (string) ($combo['name'] ?? ''),
@@ -72,6 +72,11 @@ final class ComboCatalogPresenter
             'items' => $items,
             'certification_items' => $certs,
         ];
+        foreach (array_keys(PartnerAdminService::specialPriceFieldLabels()) as $specialCol) {
+            $card[$specialCol] = $combo[$specialCol] ?? null;
+        }
+
+        return $card;
     }
 
     /**
