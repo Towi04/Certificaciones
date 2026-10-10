@@ -199,6 +199,9 @@ final class ProductRepository
         if ($section === 'cursos') {
             return 'cursos';
         }
+        if (in_array($section, ['combos', 'combo', 'paquetes', 'paquete'], true)) {
+            return 'combos';
+        }
         if ($section === 'all' || $section === 'todos') {
             return 'all';
         }

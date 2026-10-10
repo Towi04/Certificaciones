@@ -5,28 +5,32 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Auth\Auth;
+use App\Repositories\ComboRepository;
 use App\Repositories\ProductMediaRepository;
 use App\Repositories\ProductRepository;
-use App\Repositories\PurchaseRepository;
-use App\Repositories\TrackingRepository;
 use App\Repositories\PartnerRepository;
 use App\Services\CatalogFilterService;
+use App\Services\ComboCatalogPresenter;
 use App\Services\PartnerDirectoryService;
 use App\Services\PartnerRegistrationService;
 use App\Services\PricingService;
 use App\Support\Pagination;
-use App\Support\Settings;
 
 final class CatalogController
 {
     public function home(): void
     {
         $repo = new ProductRepository();
+        $comboRepo = new ComboRepository();
+        $presenter = new ComboCatalogPresenter($comboRepo);
         $stars = [];
         $products = [];
         $pagination = null;
         $dbOk = true;
-        $sectionCounts = ['certificaciones' => 0, 'cursos' => 0];
+        $sectionCounts = ['certificaciones' => 0, 'cursos' => 0, 'combos' => 0];
+        $section = 'certificaciones';
+        $sort = 'relevantes';
+        $catalogFilters = [];
         try {
             $section = ProductRepository::normalizeCatalogSection(
                 is_string($_GET['seccion'] ?? null) ? (string) $_GET['seccion'] : 'certificaciones'
@@ -44,21 +48,37 @@ final class CatalogController
 
             $sectionCounts['certificaciones'] = $repo->publicCatalogCount('all', null, false, 'certificaciones');
             $sectionCounts['cursos'] = $repo->publicCatalogCount('all', null, false, 'cursos');
+            $sectionCounts['combos'] = $comboRepo->publicCatalogCount(null, false);
 
-            $stars = $repo->starProducts(null, $section);
-            $total = $repo->publicCatalogCount($filter, $q, false, $section);
-            // Por defecto mostrar todas: si solo salen 20 parece que no hay más.
-            $pagination = Pagination::fromRequest($total, 'all');
-            $products = $repo->publicCatalog(
-                $filter,
-                $q,
-                false,
-                $pagination['limit'],
-                $pagination['offset'],
-                $section,
-                $sort
-            );
-            $catalogFilters = (new CatalogFilterService())->catalogFilters($section);
+            if ($section === 'combos') {
+                // Filtros laterales de producto no aplican a combos.
+                $filter = 'all';
+                $stars = $presenter->presentCards($comboRepo->starCombos(null));
+                $total = $comboRepo->publicCatalogCount($q, false);
+                $pagination = Pagination::fromRequest($total, 'all');
+                $products = $presenter->presentCards($comboRepo->publicCatalog(
+                    $q,
+                    false,
+                    $pagination['limit'],
+                    $pagination['offset'],
+                    $sort
+                ));
+                $catalogFilters = [];
+            } else {
+                $stars = $repo->starProducts(null, $section);
+                $total = $repo->publicCatalogCount($filter, $q, false, $section);
+                $pagination = Pagination::fromRequest($total, 'all');
+                $products = $repo->publicCatalog(
+                    $filter,
+                    $q,
+                    false,
+                    $pagination['limit'],
+                    $pagination['offset'],
+                    $section,
+                    $sort
+                );
+                $catalogFilters = (new CatalogFilterService())->catalogFilters($section);
+            }
         } catch (\Throwable $e) {
             $dbOk = false;
             $catalogFilters = [];
@@ -79,28 +99,32 @@ final class CatalogController
                         $p['partner_price'] = $pricing->partnerPriceForProduct($p, (string) $partner['tier']);
                         $out[] = $p;
                     }
+
                     return $out;
                 };
-                // Con precio partner: reordenar la página actual por precio partner visible.
                 if (in_array($sort ?? 'relevantes', ['precio_asc', 'precio_desc'], true)
                     && ($pagination['limit'] ?? null) === null
                 ) {
-                    // Todas las filas ya vienen; anotar y ordenar por precio partner.
                     $products = $annotate($products);
                     $dir = ($sort === 'precio_desc') ? -1 : 1;
                     usort($products, static function (array $a, array $b) use ($dir): int {
                         $pa = (float) ($a['partner_price'] ?? 0);
                         $pb = (float) ($b['partner_price'] ?? 0);
+
                         return $pa === $pb ? 0 : ($pa < $pb ? -1 * $dir : 1 * $dir);
                     });
                 } elseif (in_array($sort ?? 'relevantes', ['precio_asc', 'precio_desc'], true)) {
-                    // Paginado: traer todo, ordenar por partner y rebanar.
-                    $all = $repo->publicCatalog($filter, $q, false, null, null, $section ?? 'certificaciones', 'relevantes');
+                    if (($section ?? '') === 'combos') {
+                        $all = $presenter->presentCards($comboRepo->publicCatalog($q, false, null, null, 'relevantes'));
+                    } else {
+                        $all = $repo->publicCatalog($filter, $q, false, null, null, $section ?? 'certificaciones', 'relevantes');
+                    }
                     $all = $annotate($all);
                     $dir = ($sort === 'precio_desc') ? -1 : 1;
                     usort($all, static function (array $a, array $b) use ($dir): int {
                         $pa = (float) ($a['partner_price'] ?? 0);
                         $pb = (float) ($b['partner_price'] ?? 0);
+
                         return $pa === $pb ? 0 : ($pa < $pb ? -1 * $dir : 1 * $dir);
                     });
                     $offset = (int) ($pagination['offset'] ?? 0);
@@ -144,8 +168,14 @@ final class CatalogController
             ];
         }
 
+        $title = match ($section ?? 'certificaciones') {
+            'cursos' => 'Cursos',
+            'combos' => 'Combos',
+            default => 'Certificaciones',
+        };
+
         view('catalog/home', [
-            'title' => $section === 'cursos' ? 'Cursos' : 'Certificaciones',
+            'title' => $title,
             'stars' => $stars,
             'products' => $products,
             'pagination' => $pagination,
@@ -204,5 +234,44 @@ final class CatalogController
             'partnerPrice' => $partnerPrice,
         ]);
     }
-}
 
+    public function showCombo(string $slug): void
+    {
+        $comboRepo = new ComboRepository();
+        $combo = $comboRepo->findPublicBySlug($slug);
+        if ($combo === null) {
+            http_response_code(404);
+            view('errors/404', ['title' => 'Paquete no encontrado']);
+
+            return;
+        }
+
+        $presented = (new ComboCatalogPresenter($comboRepo))->presentCard($combo);
+        $user = Auth::user();
+        $partner = null;
+        $partnerPrice = null;
+        if (($user['role'] ?? '') === 'partner') {
+            try {
+                $partner = (new PartnerRegistrationService())->partnerForUser((int) Auth::id());
+                $partnerPrice = (new PricingService())->partnerPriceForProduct($presented, (string) $partner['tier']);
+            } catch (\Throwable) {
+                $partner = null;
+            }
+        }
+
+        $acquireSlug = (string) ($presented['acquire_slug'] ?? '');
+        $ctaUrl = $acquireSlug !== ''
+            ? url('/adquirir/' . rawurlencode($acquireSlug) . '?combo_id=' . (int) $presented['id'])
+            : url('/catalogo?seccion=combos');
+
+        view('catalog/combo_show', [
+            'title' => $presented['name'],
+            'combo' => $presented,
+            'user' => $user,
+            'partner' => $partner,
+            'partnerPrice' => $partnerPrice,
+            'ctaUrl' => $ctaUrl,
+            'layout' => (($user['role'] ?? '') === 'partner') ? 'partner' : 'main',
+        ]);
+    }
+}

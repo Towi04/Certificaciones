@@ -6,23 +6,31 @@
 /** @var string $filter */
 /** @var string $q */
 /** @var string $section */
-/** @var array{certificaciones:int,cursos:int} $sectionCounts */
+/** @var array{certificaciones:int,cursos:int,combos?:int} $sectionCounts */
 $filter = is_string($filter ?? null) ? $filter : 'all';
 $q = is_string($q ?? null) ? $q : '';
-$section = is_string($section ?? null) ? $section : 'certificaciones';
-if ($section !== 'cursos') {
+$section = \App\Repositories\ProductRepository::normalizeCatalogSection(
+    is_string($section ?? null) ? $section : 'certificaciones'
+);
+if ($section === 'all') {
     $section = 'certificaciones';
 }
 $catalogFilters = is_array($catalogFilters ?? null) ? $catalogFilters : [];
-$sectionCounts = is_array($sectionCounts ?? null) ? $sectionCounts : ['certificaciones' => 0, 'cursos' => 0];
+$sectionCounts = is_array($sectionCounts ?? null)
+    ? $sectionCounts
+    : ['certificaciones' => 0, 'cursos' => 0, 'combos' => 0];
 $user = $user ?? null;
 $isCourses = $section === 'cursos';
+$isCombos = $section === 'combos';
 $basePath = '/partner/registrar';
 $qsSection = 'seccion=' . urlencode($section);
 $qsExtra = $qsSection . ($q !== '' ? '&q=' . urlencode($q) : '');
-$searchPlaceholder = $isCourses
-    ? 'Buscar curso, proveedor…'
-    : 'Buscar certificación, proveedor…';
+$searchPlaceholder = match (true) {
+    $isCombos => 'Buscar combo, paquete…',
+    $isCourses => 'Buscar curso, proveedor…',
+    default => 'Buscar certificación, proveedor…',
+};
+$resultNoun = $isCombos ? 'combo' : 'producto';
 $totalShown = count($products);
 ?>
 <div data-tour="partner-nav" hidden aria-hidden="true"></div>
@@ -30,37 +38,41 @@ $totalShown = count($products);
 <div data-tour="register-header">
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)">Registrar alumno</h1>
 <p class="muted" style="max-width:48rem">
-    Elige el producto. Se muestra tu precio de nivel
+    Elige el producto o combo. Se muestra tu precio de nivel
     <strong><?= e(\App\Services\PartnerAdminService::tierLabel($partner['tier'] ?? null)) ?></strong>.
 </p>
 </div>
 
 <nav class="catalog-section-tabs" role="tablist" aria-label="Secciones del catálogo">
     <?php
-    $tabCertQs = http_build_query(array_filter([
-        'seccion' => 'certificaciones',
-        'q' => $q !== '' ? $q : null,
-        'filtro' => ($filter !== 'all' && $section === 'certificaciones') ? $filter : null,
-    ], static fn ($v) => $v !== null && $v !== ''));
-    $tabCourseQs = http_build_query(array_filter([
-        'seccion' => 'cursos',
-        'q' => $q !== '' ? $q : null,
-        'filtro' => ($filter !== 'all' && $section === 'cursos') ? $filter : null,
-    ], static fn ($v) => $v !== null && $v !== ''));
+    $tabQs = static function (string $sec) use ($q, $filter): string {
+        return http_build_query(array_filter([
+            'seccion' => $sec,
+            'q' => $q !== '' ? $q : null,
+            'filtro' => ($filter !== 'all' && $sec !== 'combos') ? $filter : null,
+        ], static fn ($v) => $v !== null && $v !== ''));
+    };
     ?>
-    <a class="catalog-section-tab <?= !$isCourses ? 'active' : '' ?>"
+    <a class="catalog-section-tab <?= (!$isCourses && !$isCombos) ? 'active' : '' ?>"
        role="tab"
-       aria-selected="<?= !$isCourses ? 'true' : 'false' ?>"
-       href="<?= e(url($basePath . '?' . $tabCertQs)) ?>">
+       aria-selected="<?= (!$isCourses && !$isCombos) ? 'true' : 'false' ?>"
+       href="<?= e(url($basePath . '?' . $tabQs('certificaciones'))) ?>">
         Certificaciones
         <span class="catalog-section-count"><?= (int) ($sectionCounts['certificaciones'] ?? 0) ?></span>
     </a>
     <a class="catalog-section-tab <?= $isCourses ? 'active' : '' ?>"
        role="tab"
        aria-selected="<?= $isCourses ? 'true' : 'false' ?>"
-       href="<?= e(url($basePath . '?' . $tabCourseQs)) ?>">
+       href="<?= e(url($basePath . '?' . $tabQs('cursos'))) ?>">
         Cursos
         <span class="catalog-section-count"><?= (int) ($sectionCounts['cursos'] ?? 0) ?></span>
+    </a>
+    <a class="catalog-section-tab <?= $isCombos ? 'active' : '' ?>"
+       role="tab"
+       aria-selected="<?= $isCombos ? 'true' : 'false' ?>"
+       href="<?= e(url($basePath . '?' . $tabQs('combos'))) ?>">
+        Combos
+        <span class="catalog-section-count"><?= (int) ($sectionCounts['combos'] ?? 0) ?></span>
     </a>
 </nav>
 
@@ -104,7 +116,7 @@ $totalShown = count($products);
                 <button class="btn btn-primary" type="submit">Buscar</button>
             </form>
             <div class="muted" id="partner-catalog-result-count">
-                <?= (int) $totalShown ?> producto<?= (int) $totalShown === 1 ? '' : 's' ?>
+                <?= (int) $totalShown ?> <?= e($resultNoun) ?><?= (int) $totalShown === 1 ? '' : 's' ?>
             </div>
         </div>
 

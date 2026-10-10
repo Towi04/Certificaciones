@@ -1372,6 +1372,22 @@ $stepLabels = [
       refreshQuote();
     });
   });
+  // Deep-link desde ficha de paquete: /adquirir/{slug}?combo_id=123
+  (function preselectComboFromQuery() {
+    try {
+      var params = new URLSearchParams(window.location.search || '');
+      var wanted = String(params.get('combo_id') || '').trim();
+      if (!wanted || !comboIdInput) return;
+      var radio = document.querySelector('input[name="combo_preset"][value="' + wanted.replace(/"/g, '') + '"]');
+      if (radio) {
+        radio.checked = true;
+        radio.dispatchEvent(new Event('change', { bubbles: true }));
+        return;
+      }
+      comboIdInput.value = wanted;
+      refreshQuote();
+    } catch (e) {}
+  })();
   document.querySelectorAll('.combo-addon').forEach(function (cb) {
     cb.addEventListener('change', function () {
       // Al armar a la carta, limpiamos preset fijo y resolvemos por set exacto

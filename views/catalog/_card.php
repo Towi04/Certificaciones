@@ -2,14 +2,24 @@
 <?php
 $isPartner = !empty($partner) || (($user['role'] ?? '') === 'partner');
 $isAdminViewer = (\App\Auth\Auth::role() === 'admin');
-$productUrl = $isPartner
-    ? url('/adquirir/' . $p['slug'])
-    : url('/producto/' . $p['slug']);
-$adminEditUrl = $isAdminViewer
-    ? url('/admin/productos/' . (int) ($p['id'] ?? 0)
-        . '?return_to=' . rawurlencode('/producto/' . (string) ($p['slug'] ?? ''))
-        . '#contenido')
-    : '';
+$isCombo = (($p['catalog_kind'] ?? '') === 'combo');
+if ($isCombo) {
+    $productUrl = url('/paquete/' . $p['slug']);
+    $adminEditUrl = $isAdminViewer
+        ? url('/admin/combos/' . (int) ($p['id'] ?? 0) . '#catalogo')
+        : '';
+    $adminEditTitle = 'Editar combo';
+} else {
+    $productUrl = $isPartner
+        ? url('/adquirir/' . $p['slug'])
+        : url('/producto/' . $p['slug']);
+    $adminEditUrl = $isAdminViewer
+        ? url('/admin/productos/' . (int) ($p['id'] ?? 0)
+            . '?return_to=' . rawurlencode('/producto/' . (string) ($p['slug'] ?? ''))
+            . '#contenido')
+        : '';
+    $adminEditTitle = 'Editar producto';
+}
 // Preferir precio de nivel; si falta anotación, no mostrar lista como si fuera partner price.
 $hasPartnerPrice = $isPartner && array_key_exists('partner_price', $p) && $p['partner_price'] !== null && $p['partner_price'] !== '';
 $displayPrice = $hasPartnerPrice
@@ -30,7 +40,7 @@ $searchBlob = mb_strtolower(trim(implode(' ', array_filter([
     <?php if ($isAdminViewer && $adminEditUrl !== ''): ?>
         <a class="catalog-admin-edit catalog-admin-edit--card"
            href="<?= e($adminEditUrl) ?>"
-           title="Editar producto" aria-label="Editar producto"><?= icon('edit') ?></a>
+           title="<?= e($adminEditTitle) ?>" aria-label="<?= e($adminEditTitle) ?>"><?= icon('edit') ?></a>
     <?php endif; ?>
     <a class="product-card product-card-link" href="<?= e($productUrl) ?>"
        data-search="<?= e($searchBlob) ?>">

@@ -28,11 +28,18 @@ ALTER TABLE combos
   ADD COLUMN is_public TINYINT(1) NOT NULL DEFAULT 1 AFTER is_active;
 ```
 
+## Catálogo público
+
+- Pestaña `/catalogo?seccion=combos`
+- Ficha `/paquete/{slug}` (alias `/combo/{slug}`)
+- CTA → `/adquirir/{cert-slug}?combo_id={id}` (preselecciona el paquete)
+- Partner: misma pestaña en `/partner/registrar?seccion=combos`
+
 ## Estado del plan
 
 | Fase | Estado |
 |------|--------|
 | 1 Schema + admin | Lista |
-| 2 Tab catálogo + presenter | Pendiente |
-| 3 Ficha `/paquete/{slug}` | Pendiente |
-| 4 Checkout CTA + QA | Pendiente |
+| 2 Tab catálogo + presenter | Lista |
+| 3 Ficha `/paquete/{slug}` | Base en Fase 2 (pulido pendiente) |
+| 4 Checkout CTA + QA | Parcial (deep-link `combo_id`) |
