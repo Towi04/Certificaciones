@@ -400,6 +400,19 @@ HTML;
             ],
         ];
 
+        $cambridgeReglamentoBase = [
+            'template_path' => '/assets/reglamentos/linguaskill-terminos-condiciones.pdf',
+            'source_url' => '',
+            'signature_mode' => 'fill_acroform',
+            'required_before_checkout' => true,
+            'flatten' => true,
+            'form_fields' => [
+                'name' => ['NOMBRE'],
+                'date' => ['FECHA'],
+                'initials' => ['FIRMA O INICIALES'],
+            ],
+        ];
+
         $cambridgeFlexibleConfig = $standardCertConfig;
         $cambridgeFlexibleConfig['pipeline_code'] = 'toefl_lf';
         $cambridgeFlexibleConfig['initial_step_code'] = 'registro';
@@ -407,6 +420,9 @@ HTML;
         $cambridgeFlexibleConfig['registration_docs'] = [];
         $cambridgeFlexibleConfig['student_docs_timing'] = 'before_payment';
         $cambridgeFlexibleConfig['student_docs_gate'] = ['block_until_approved' => true];
+        $cambridgeFlexibleConfig['reglamento'] = $cambridgeReglamentoBase + [
+            'doc_code' => 'reglamento_cambridge_flexible',
+        ];
         $cambridgeFlexibleConfig['exam'] = [
             'choose_at_checkout' => true,
             'slot_minutes' => 60,
@@ -429,6 +445,9 @@ HTML;
         $cambridgeFixedConfig['registration_docs'] = [];
         $cambridgeFixedConfig['student_docs_timing'] = 'before_payment';
         $cambridgeFixedConfig['student_docs_gate'] = ['block_until_approved' => true];
+        $cambridgeFixedConfig['reglamento'] = $cambridgeReglamentoBase + [
+            'doc_code' => 'reglamento_cambridge_fixed',
+        ];
         $cambridgeFixedConfig['exam'] = [
             'choose_at_checkout' => true,
             'slot_minutes' => 30,

@@ -4234,7 +4234,9 @@ final class AdminController
             'exam_slot_minutes', 'exam_validity_months', 'schedule_min_advance_days',
             'schedule_weekdays_start', 'schedule_weekdays_end', 'schedule_saturday_start',
             'schedule_saturday_end', 'reglamento_template_path', 'reglamento_source_url',
-            'reglamento_doc_code', 'pipeline_code', 'initial_step_code',
+            'reglamento_doc_code', 'reglamento_signature_mode',
+            'reglamento_field_name', 'reglamento_field_date', 'reglamento_field_initials',
+            'pipeline_code', 'initial_step_code',
         ];
         foreach ($scalarExtras as $key) {
             if (array_key_exists($key, $old)) {
@@ -4242,7 +4244,7 @@ final class AdminController
             }
         }
         foreach ([
-            'exam_choose_at_checkout', 'schedule_available_365', 'reglamento_enabled',
+            'exam_choose_at_checkout', 'schedule_available_365', 'reglamento_enabled', 'reglamento_flatten',
             'pay_transfer', 'pay_oxxo', 'pay_card', 'msi_enabled',
             'email_registration_enabled', 'email_payment_enabled',
         ] as $flag) {
@@ -4250,11 +4252,11 @@ final class AdminController
                 // Si el POST no trae el checkbox, queda apagado.
                 if (str_starts_with($flag, 'email_') || str_starts_with($flag, 'pay_') || $flag === 'msi_enabled'
                     || $flag === 'exam_choose_at_checkout' || $flag === 'schedule_available_365'
-                    || $flag === 'reglamento_enabled'
+                    || $flag === 'reglamento_enabled' || $flag === 'reglamento_flatten'
                 ) {
                     // Solo override flags that exist as form fields when we have old input
                     if (array_key_exists($flag, $old) || in_array($flag, [
-                        'exam_choose_at_checkout', 'schedule_available_365', 'reglamento_enabled',
+                        'exam_choose_at_checkout', 'schedule_available_365', 'reglamento_enabled', 'reglamento_flatten',
                         'pay_transfer', 'pay_oxxo', 'pay_card', 'msi_enabled',
                         'email_registration_enabled', 'email_payment_enabled',
                     ], true)) {

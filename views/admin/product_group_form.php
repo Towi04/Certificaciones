@@ -1213,6 +1213,45 @@ $pageHeading = $isEdit
                 <span id="doc-code-hint" style="font-weight:500;font-size:.78rem"></span>
             </label>
         </div>
+        <div id="reglamento-acroform-options" style="margin-top:.85rem;padding:.85rem;border:1px solid #e6edf7;border-radius:12px;background:#fafcff<?= $regMode === 'fill_acroform' ? '' : ';display:none' ?>">
+            <p class="muted" style="font-size:.82rem;margin:0 0 .65rem;max-width:42rem">
+                Aliases de campos AcroForm del PDF (separados por coma). Deben coincidir con los nombres internos del formulario.
+            </p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem">
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Campo nombre
+                    <input type="text" name="reglamento_field_name"
+                           value="<?= e((string) ($extras['reglamento_field_name'] ?? 'NOMBRE')) ?>"
+                           placeholder="NOMBRE"
+                           style="<?= e($inputStyle) ?>">
+                </label>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Campo fecha
+                    <input type="text" name="reglamento_field_date"
+                           value="<?= e((string) ($extras['reglamento_field_date'] ?? 'FECHA')) ?>"
+                           placeholder="FECHA"
+                           style="<?= e($inputStyle) ?>">
+                </label>
+                <label class="muted" style="<?= e($labelStyle) ?>">
+                    Campo firma / iniciales
+                    <input type="text" name="reglamento_field_initials"
+                           value="<?= e((string) ($extras['reglamento_field_initials'] ?? 'FIRMA O INICIALES')) ?>"
+                           placeholder="FIRMA O INICIALES"
+                           style="<?= e($inputStyle) ?>">
+                </label>
+            </div>
+            <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.88rem;font-weight:600;margin-top:.75rem">
+                <input type="hidden" name="reglamento_flatten" value="0">
+                <input type="checkbox" name="reglamento_flatten" value="1" style="margin-top:.2rem"
+                    <?= !array_key_exists('reglamento_flatten', $extras) || !empty($extras['reglamento_flatten']) ? 'checked' : '' ?>>
+                <span>
+                    Aplanar campos tras rellenar
+                    <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin-top:.15rem">
+                        Recomendado: el PDF queda “impreso” y ya no se puede editar en Acrobat.
+                    </span>
+                </span>
+            </label>
+        </div>
     </div>
 
     <div class="group-panel" data-panel="payments" hidden>
@@ -1577,6 +1616,17 @@ $pageHeading = $isEdit
     });
   });
 
+  (function setupReglamentoModeUi() {
+    var modeSelect = document.querySelector('[name="reglamento_signature_mode"]');
+    var acroOpts = document.getElementById('reglamento-acroform-options');
+    if (!modeSelect || !acroOpts) return;
+    function sync() {
+      acroOpts.style.display = modeSelect.value === 'fill_acroform' ? '' : 'none';
+    }
+    modeSelect.addEventListener('change', sync);
+    sync();
+  })();
+
   (function setupInstructionDocs() {
     var list = document.getElementById('instruction-docs-list');
     var tpl = document.getElementById('instruction-doc-row-template');
@@ -1860,19 +1910,25 @@ $pageHeading = $isEdit
       var doc = val('reglamento_doc_code', autoDoc()).toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_|_$/g, '');
       var sigMode = val('reglamento_signature_mode', 'append_to_pdf');
       if (sigMode !== 'fill_acroform') sigMode = 'append_to_pdf';
+      var flattenChk = document.querySelector('[name="reglamento_flatten"][type="checkbox"]');
+      var flatten = sigMode === 'fill_acroform' && (!flattenChk || flattenChk.checked);
       base.reglamento = {
         template_path: path,
         source_url: source,
         signature_mode: sigMode,
         required_before_checkout: true,
         doc_code: doc || autoDoc(),
-        flatten: sigMode === 'fill_acroform'
+        flatten: flatten
       };
       if (sigMode === 'fill_acroform') {
+        function aliases(raw, fallback) {
+          var parts = String(raw || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+          return parts.length ? parts : fallback;
+        }
         base.reglamento.form_fields = {
-          name: ['NOMBRE'],
-          date: ['FECHA'],
-          initials: ['FIRMA O INICIALES']
+          name: aliases(val('reglamento_field_name', 'NOMBRE'), ['NOMBRE']),
+          date: aliases(val('reglamento_field_date', 'FECHA'), ['FECHA']),
+          initials: aliases(val('reglamento_field_initials', 'FIRMA O INICIALES'), ['FIRMA O INICIALES'])
         };
       }
     } else {
