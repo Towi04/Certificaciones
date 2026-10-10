@@ -411,6 +411,13 @@ final class ProductAdminService
             'reglamento_template_path' => (string) ($reg['template_path'] ?? ''),
             'reglamento_source_url' => (string) ($reg['source_url'] ?? ''),
             'reglamento_doc_code' => (string) ($reg['doc_code'] ?? ''),
+            'reglamento_signature_mode' => in_array(
+                strtolower(trim((string) ($reg['signature_mode'] ?? 'append_to_pdf'))),
+                ['append_to_pdf', 'fill_acroform'],
+                true
+            )
+                ? strtolower(trim((string) ($reg['signature_mode'] ?? 'append_to_pdf')))
+                : 'append_to_pdf',
             'instruction_pdf_path' => trim((string) ($instr['pdf_path'] ?? '')),
             'instruction_pdf_url' => trim((string) ($instr['pdf_url'] ?? '')),
             'instruction_pdf_label' => trim((string) ($instr['pdf_label'] ?? '')),
@@ -1993,14 +2000,27 @@ final class ProductAdminService
                     'El código de documento "' . $docCode . '" ya lo usa el grupo ' . $conflict . '. Elige otro.'
                 );
             }
+            $mode = strtolower(trim((string) ($input['reglamento_signature_mode'] ?? 'append_to_pdf')));
+            if (!in_array($mode, ['append_to_pdf', 'fill_acroform'], true)) {
+                $mode = 'append_to_pdf';
+            }
             // Si el grupo pide reglamento firmado, siempre es obligatorio antes de pagar.
             $config['reglamento'] = [
                 'template_path' => $path,
                 'source_url' => $source,
-                'signature_mode' => 'append_to_pdf',
+                'signature_mode' => $mode,
                 'required_before_checkout' => true,
                 'doc_code' => $docCode,
+                'flatten' => $mode === 'fill_acroform',
             ];
+            if ($mode === 'fill_acroform') {
+                // Linguaskill / Cambridge: campos AcroForm inventariados en Fase 0.
+                $config['reglamento']['form_fields'] = [
+                    'name' => ['NOMBRE'],
+                    'date' => ['FECHA'],
+                    'initials' => ['FIRMA O INICIALES'],
+                ];
+            }
         } else {
             unset($config['reglamento']);
         }

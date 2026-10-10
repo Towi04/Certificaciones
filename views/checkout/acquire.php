@@ -2,7 +2,7 @@
 /** @var array<string,mixed> $product */
 /** @var list<array{code:string,label:string,required:bool,type:string}> $fields */
 /** @var list<array{code:string,label:string,required:bool,accept:string}> $docs */
-/** @var array{template_url:string,doc_code:string,required_before_checkout:bool}|null $reglamento */
+/** @var array{template_url:string,doc_code:string,required_before_checkout:bool,signature_mode?:string,flatten?:bool,form_fields?:array<string,list<string>>}|null $reglamento */
 /** @var array<string,string> $prefill */
 /** @var array<string,mixed> $quote */
 /** @var bool $openpayReady */

@@ -1,15 +1,47 @@
 <?php
-/** @var array{template_url:string,doc_code:string,required_before_checkout?:bool} $reglamento */
+/**
+ * @var array{
+ *   template_url:string,
+ *   doc_code:string,
+ *   required_before_checkout?:bool,
+ *   signature_mode?:string,
+ *   flatten?:bool,
+ *   form_fields?:array<string, list<string>>
+ * } $reglamento
+ */
 $docCode = (string) ($reglamento['doc_code'] ?? $reglamento['template_code'] ?? 'reglamento');
 $templateUrl = (string) ($reglamento['template_url'] ?? $reglamento['url'] ?? '');
 $docField = 'doc_' . $docCode;
+$signatureMode = strtolower(trim((string) ($reglamento['signature_mode'] ?? 'append_to_pdf')));
+if (!in_array($signatureMode, ['append_to_pdf', 'fill_acroform'], true)) {
+    $signatureMode = 'append_to_pdf';
+}
+$isFillAcroform = $signatureMode === 'fill_acroform';
+$flatten = array_key_exists('flatten', $reglamento)
+    ? (bool) $reglamento['flatten']
+    : $isFillAcroform;
+$formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_fields'] : [
+    'name' => ['NOMBRE'],
+    'date' => ['FECHA'],
+    'initials' => ['FIRMA O INICIALES'],
+];
 ?>
-<div class="reglamento-block" id="reglamento-block">
-    <p class="muted" style="margin-top:0;font-size:.88rem">
-        Lee el reglamento. Puedes <strong>firmarlo en pantalla</strong> (ideal si pasas el iPad/mouse al alumno)
-        o <strong>descargarlo, firmarlo en papel y subir el PDF escaneado</strong>.
-    </p>
+<div class="reglamento-block" id="reglamento-block"
+     data-signature-mode="<?= e($signatureMode) ?>">
+    <?php if ($isFillAcroform): ?>
+        <p class="muted" style="margin-top:0;font-size:.88rem">
+            Lee los términos y condiciones. Al marcar la casilla, el sistema generará el PDF
+            con tu <strong>nombre</strong>, la <strong>fecha</strong> y tus <strong>iniciales</strong>
+            a partir de los datos del registro. No necesitas descargar ni firmar a mano.
+        </p>
+    <?php else: ?>
+        <p class="muted" style="margin-top:0;font-size:.88rem">
+            Lee el reglamento. Puedes <strong>firmarlo en pantalla</strong> (ideal si pasas el iPad/mouse al alumno)
+            o <strong>descargarlo, firmarlo en papel y subir el PDF escaneado</strong>.
+        </p>
+    <?php endif; ?>
 
+    <?php if (!$isFillAcroform): ?>
     <div class="reglamento-mode-tabs" role="tablist" aria-label="Cómo firmar el reglamento">
         <button type="button" class="reglamento-mode-tab active" data-reglamento-mode="digital" role="tab" aria-selected="true">
             Firma digital
@@ -18,15 +50,16 @@ $docField = 'doc_' . $docCode;
             Descargar y subir PDF
         </button>
     </div>
+    <?php endif; ?>
 
     <div class="reglamento-viewer">
         <iframe
             src="<?= e($templateUrl) ?>#toolbar=1"
-            title="Reglamento"
+            title="Reglamento / términos"
             class="reglamento-frame"
         ></iframe>
         <p class="muted" style="font-size:.82rem;margin:.5rem 0 0">
-            <a href="<?= e($templateUrl) ?>" target="_blank" rel="noopener" download>Descargar reglamento (PDF)</a>
+            <a href="<?= e($templateUrl) ?>" target="_blank" rel="noopener" download>Descargar PDF</a>
             ·
             <a href="<?= e($templateUrl) ?>" target="_blank" rel="noopener">Abrir en pestaña nueva</a>
         </p>
@@ -35,39 +68,64 @@ $docField = 'doc_' . $docCode;
     <label class="accept-box" id="reglamento-accept-box">
         <input type="checkbox" name="reglamento_accepted" id="reglamento_accepted" value="1">
         <span class="accept-box-inner">
-            <strong>He leído y acepto el reglamento del examen</strong>
-            <span class="muted">Es obligatorio marcar esta casilla para continuar con el registro.</span>
+            <?php if ($isFillAcroform): ?>
+                <strong>He leído y acepto los términos y condiciones</strong>
+                <span class="muted">Al continuar, el PDF se rellenará automáticamente con tus datos de registro.</span>
+            <?php else: ?>
+                <strong>He leído y acepto el reglamento del examen</strong>
+                <span class="muted">Es obligatorio marcar esta casilla para continuar con el registro.</span>
+            <?php endif; ?>
         </span>
     </label>
 
-    <div class="signature-block" id="reglamento-mode-digital">
-        <p style="margin:0 0 .5rem;font-weight:600;color:var(--doceo-blue);font-size:.92rem">Firma digital</p>
-        <p class="muted" style="font-size:.82rem;margin:0 0 .65rem">
-            Firma dentro del recuadro con mouse o dedo, <strong>lo más parecida a la firma del INE</strong>.
-            Se adjuntará como última página del PDF.
-        </p>
-        <div class="signature-pad-wrap">
-            <canvas id="signature-canvas" width="520" height="160" aria-label="Área de firma"></canvas>
+    <?php if ($isFillAcroform): ?>
+        <p class="muted" id="reglamento-fill-status" style="font-size:.82rem;margin:.25rem 0 0"></p>
+        <details class="reglamento-upload-fallback" style="margin-top:.85rem">
+            <summary class="muted" style="cursor:pointer;font-size:.84rem;font-weight:600">
+                ¿Problemas? Subir PDF firmado manualmente
+            </summary>
+            <div class="upload-block" style="margin-top:.65rem">
+                <p class="muted" style="font-size:.82rem;margin:0 0 .65rem">
+                    Descarga el PDF, fírmalo y súbelo aquí (solo si el relleno automático no aplica).
+                </p>
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;max-width:420px">
+                    Subir PDF firmado
+                    <input type="file" id="reglamento-upload-input" accept=".pdf,application/pdf"
+                           style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                </label>
+                <p class="muted" id="reglamento-upload-status" style="font-size:.82rem;margin:.5rem 0 0"></p>
+            </div>
+        </details>
+    <?php else: ?>
+        <div class="signature-block" id="reglamento-mode-digital">
+            <p style="margin:0 0 .5rem;font-weight:600;color:var(--doceo-blue);font-size:.92rem">Firma digital</p>
+            <p class="muted" style="font-size:.82rem;margin:0 0 .65rem">
+                Firma dentro del recuadro con mouse o dedo, <strong>lo más parecida a la firma del INE</strong>.
+                Se adjuntará como última página del PDF.
+            </p>
+            <div class="signature-pad-wrap">
+                <canvas id="signature-canvas" width="520" height="160" aria-label="Área de firma"></canvas>
+            </div>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.6rem">
+                <button type="button" class="btn btn-ghost btn-sm" id="signature-clear">Limpiar firma</button>
+                <span class="muted" id="signature-status" style="font-size:.82rem;align-self:center"></span>
+            </div>
         </div>
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.6rem">
-            <button type="button" class="btn btn-ghost btn-sm" id="signature-clear">Limpiar firma</button>
-            <span class="muted" id="signature-status" style="font-size:.82rem;align-self:center"></span>
-        </div>
-    </div>
 
-    <div class="upload-block" id="reglamento-mode-upload" hidden>
-        <p style="margin:0 0 .5rem;font-weight:600;color:var(--doceo-blue);font-size:.92rem">PDF firmado / escaneado</p>
-        <p class="muted" style="font-size:.82rem;margin:0 0 .65rem">
-            Descarga el reglamento, hazlo firmar al alumno en papel (o imprímelo firmado) y sube el PDF escaneado.
-            Debe ser un archivo <strong>.pdf</strong>.
-        </p>
-        <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;max-width:420px">
-            Subir reglamento firmado *
-            <input type="file" id="reglamento-upload-input" accept=".pdf,application/pdf"
-                   style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
-        </label>
-        <p class="muted" id="reglamento-upload-status" style="font-size:.82rem;margin:.5rem 0 0"></p>
-    </div>
+        <div class="upload-block" id="reglamento-mode-upload" hidden>
+            <p style="margin:0 0 .5rem;font-weight:600;color:var(--doceo-blue);font-size:.92rem">PDF firmado / escaneado</p>
+            <p class="muted" style="font-size:.82rem;margin:0 0 .65rem">
+                Descarga el reglamento, hazlo firmar al alumno en papel (o imprímelo firmado) y sube el PDF escaneado.
+                Debe ser un archivo <strong>.pdf</strong>.
+            </p>
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;max-width:420px">
+                Subir reglamento firmado *
+                <input type="file" id="reglamento-upload-input" accept=".pdf,application/pdf"
+                       style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+            </label>
+            <p class="muted" id="reglamento-upload-status" style="font-size:.82rem;margin:.5rem 0 0"></p>
+        </div>
+    <?php endif; ?>
 
     <input type="file" name="<?= e($docField) ?>" id="<?= e($docField) ?>" accept=".pdf" hidden>
 </div>
@@ -101,40 +159,48 @@ $docField = 'doc_' . $docCode;
 .accept-box-inner strong { color:var(--doceo-blue); font-size:.95rem; }
 .accept-box-inner .muted { font-size:.82rem; font-weight:500; }
 .accept-box:has(input:checked) { border-color:var(--doceo-blue); background:#eef4fc; }
+.reglamento-upload-fallback summary { color:var(--doceo-muted); }
 </style>
 
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script>
 (function () {
   const templateUrl = <?= json_encode($templateUrl, JSON_UNESCAPED_UNICODE) ?>;
+  const signatureMode = <?= json_encode($signatureMode, JSON_UNESCAPED_UNICODE) ?>;
+  const flattenForm = <?= $flatten ? 'true' : 'false' ?>;
+  const formFields = <?= json_encode($formFields, JSON_UNESCAPED_UNICODE) ?>;
+  const isFill = signatureMode === 'fill_acroform';
   const docInput = document.getElementById(<?= json_encode($docField) ?>);
   const canvas = document.getElementById('signature-canvas');
   const clearBtn = document.getElementById('signature-clear');
   const accepted = document.getElementById('reglamento_accepted');
   const acceptBox = document.getElementById('reglamento-accept-box');
-  const statusEl = document.getElementById('signature-status');
+  const statusEl = document.getElementById('signature-status') || document.getElementById('reglamento-fill-status');
   const uploadInput = document.getElementById('reglamento-upload-input');
   const uploadStatus = document.getElementById('reglamento-upload-status');
   const digitalPanel = document.getElementById('reglamento-mode-digital');
   const uploadPanel = document.getElementById('reglamento-mode-upload');
   const form = document.getElementById('checkout-form');
-  if (!canvas || !form || !docInput) return;
+  if (!form || !docInput || !accepted) return;
 
-  let mode = 'digital';
+  let mode = isFill ? 'fill' : 'digital';
   let drawing = false;
   let hasStroke = false;
   let reglamentoAttached = false;
   let uploadedFile = null;
 
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = '#1a2744';
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+  const ctx = canvas ? canvas.getContext('2d') : null;
+  if (ctx && canvas) {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#1a2744';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  }
 
   function setMode(next) {
+    if (isFill) return;
     mode = next === 'upload' ? 'upload' : 'digital';
     document.querySelectorAll('.reglamento-mode-tab').forEach(btn => {
       const active = btn.getAttribute('data-reglamento-mode') === mode;
@@ -157,6 +223,7 @@ $docField = 'doc_' . $docCode;
   });
 
   function pos(e) {
+    if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
@@ -168,6 +235,7 @@ $docField = 'doc_' . $docCode;
   }
 
   function start(e) {
+    if (!ctx) return;
     e.preventDefault();
     drawing = true;
     const p = pos(e);
@@ -176,7 +244,7 @@ $docField = 'doc_' . $docCode;
   }
 
   function move(e) {
-    if (!drawing) return;
+    if (!drawing || !ctx) return;
     e.preventDefault();
     const p = pos(e);
     ctx.lineTo(p.x, p.y);
@@ -187,13 +255,15 @@ $docField = 'doc_' . $docCode;
 
   function end() { drawing = false; }
 
-  canvas.addEventListener('mousedown', start);
-  canvas.addEventListener('mousemove', move);
-  canvas.addEventListener('mouseup', end);
-  canvas.addEventListener('mouseleave', end);
-  canvas.addEventListener('touchstart', start, { passive: false });
-  canvas.addEventListener('touchmove', move, { passive: false });
-  canvas.addEventListener('touchend', end);
+  if (canvas) {
+    canvas.addEventListener('mousedown', start);
+    canvas.addEventListener('mousemove', move);
+    canvas.addEventListener('mouseup', end);
+    canvas.addEventListener('mouseleave', end);
+    canvas.addEventListener('touchstart', start, { passive: false });
+    canvas.addEventListener('touchmove', move, { passive: false });
+    canvas.addEventListener('touchend', end);
+  }
 
   if (acceptBox) {
     acceptBox.addEventListener('click', e => {
@@ -202,7 +272,7 @@ $docField = 'doc_' . $docCode;
     });
   }
 
-  if (clearBtn) {
+  if (clearBtn && ctx && canvas) {
     clearBtn.addEventListener('click', () => {
       ctx.fillStyle = '#fff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -231,18 +301,83 @@ $docField = 'doc_' . $docCode;
         return;
       }
       uploadedFile = file;
+      if (isFill) mode = 'upload';
       if (uploadStatus) uploadStatus.textContent = 'Archivo listo: ' + file.name;
     });
   }
 
+  function formValue(name) {
+    const el = form.querySelector('[name="' + name + '"]');
+    return el ? String(el.value || '').trim() : '';
+  }
+
   function signerName() {
     const parts = ['first_name', 'last_name_p', 'last_name_m']
-      .map(n => {
-        const el = form.querySelector('[name="' + n + '"]');
-        return el ? String(el.value || '').trim() : '';
-      })
+      .map(formValue)
       .filter(Boolean);
     return parts.join(' ') || 'Aspirante';
+  }
+
+  function signerInitials() {
+    const parts = ['first_name', 'last_name_p', 'last_name_m']
+      .map(formValue)
+      .filter(Boolean);
+    if (parts.length === 0) return 'A';
+    return parts.map(function (p) {
+      const ch = p.charAt(0);
+      return ch ? ch.toUpperCase() : '';
+    }).join('');
+  }
+
+  function fechaHoy() {
+    try {
+      return new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
+    } catch (e) {
+      const d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+  }
+
+  function setTextField(formApi, aliases, value) {
+    const list = Array.isArray(aliases) ? aliases : [aliases];
+    for (let i = 0; i < list.length; i++) {
+      const name = String(list[i] || '').trim();
+      if (!name) continue;
+      try {
+        formApi.getTextField(name).setText(String(value || ''));
+        return true;
+      } catch (e) { /* try next alias */ }
+    }
+    return false;
+  }
+
+  async function buildFilledAcroformPdf() {
+    if (!accepted.checked) {
+      throw new Error('Debes aceptar los términos y condiciones marcando la casilla amarilla.');
+    }
+    if (typeof PDFLib === 'undefined') {
+      throw new Error('No se pudo cargar el generador de PDF. Recarga la página.');
+    }
+    const name = signerName();
+    if (!name || name === 'Aspirante') {
+      throw new Error('Completa primero tu nombre en el paso de datos personales.');
+    }
+    const res = await fetch(templateUrl);
+    if (!res.ok) throw new Error('No se pudo cargar el PDF de términos y condiciones.');
+    const templateBytes = await res.arrayBuffer();
+    const pdfDoc = await PDFLib.PDFDocument.load(templateBytes);
+    const pdfForm = pdfDoc.getForm();
+    const okName = setTextField(pdfForm, formFields.name || ['NOMBRE'], name);
+    const okDate = setTextField(pdfForm, formFields.date || ['FECHA'], fechaHoy());
+    const okInit = setTextField(pdfForm, formFields.initials || ['FIRMA O INICIALES'], signerInitials());
+    if (!okName && !okDate && !okInit) {
+      throw new Error('El PDF no tiene campos rellenables reconocidos. Usa “Subir PDF firmado” o contacta a un asesor.');
+    }
+    if (flattenForm) {
+      try { pdfForm.flatten(); } catch (e) { /* ignore flatten errors */ }
+    }
+    const bytes = await pdfDoc.save();
+    return new File([bytes], 'terminos-aceptados.pdf', { type: 'application/pdf' });
   }
 
   async function buildSignedPdf() {
@@ -254,6 +389,9 @@ $docField = 'doc_' . $docCode;
     }
     if (typeof PDFLib === 'undefined') {
       throw new Error('No se pudo cargar el generador de PDF. Recarga la página.');
+    }
+    if (!canvas) {
+      throw new Error('No se encontró el área de firma.');
     }
 
     const res = await fetch(templateUrl);
@@ -285,11 +423,19 @@ $docField = 'doc_' . $docCode;
 
   window.reglamentoWizard = {
     hasAccepted: () => accepted.checked,
-    hasSignature: () => mode === 'upload' ? !!uploadedFile : hasStroke,
+    hasSignature: () => {
+      if (uploadedFile) return true;
+      if (isFill) return accepted.checked;
+      return mode === 'upload' ? !!uploadedFile : hasStroke;
+    },
     validateStep: () => {
       if (!accepted.checked) {
-        throw new Error('Marca la casilla amarilla: aceptación del reglamento.');
+        throw new Error(isFill
+          ? 'Marca la casilla amarilla: aceptación de términos y condiciones.'
+          : 'Marca la casilla amarilla: aceptación del reglamento.');
       }
+      if (uploadedFile) return;
+      if (isFill) return;
       if (mode === 'upload') {
         if (!uploadedFile) {
           throw new Error('Sube el PDF del reglamento firmado/escaneado.');
@@ -310,11 +456,13 @@ $docField = 'doc_' . $docCode;
     }
     try {
       let file = null;
-      if (mode === 'upload') {
-        if (!accepted.checked) throw new Error('Marca la casilla de aceptación del reglamento.');
-        if (!uploadedFile) throw new Error('Sube el PDF del reglamento firmado.');
+      if (uploadedFile) {
+        if (!accepted.checked) throw new Error('Marca la casilla de aceptación.');
         file = uploadedFile;
         if (uploadStatus) uploadStatus.textContent = 'Adjuntando PDF…';
+      } else if (isFill) {
+        if (statusEl) statusEl.textContent = 'Generando PDF con tus datos…';
+        file = await buildFilledAcroformPdf();
       } else {
         if (statusEl) statusEl.textContent = 'Generando PDF firmado…';
         file = await buildSignedPdf();
@@ -323,13 +471,13 @@ $docField = 'doc_' . $docCode;
       dt.items.add(file);
       docInput.files = dt.files;
       reglamentoAttached = true;
-      if (statusEl) statusEl.textContent = 'Reglamento listo ✓';
-      if (uploadStatus) uploadStatus.textContent = 'Reglamento listo ✓';
+      if (statusEl) statusEl.textContent = 'Documento listo ✓';
+      if (uploadStatus) uploadStatus.textContent = 'Documento listo ✓';
       form.requestSubmit();
     } catch (err) {
       reglamentoAttached = false;
       if (statusEl) statusEl.textContent = '';
-      alert(err.message || 'No se pudo preparar el reglamento.');
+      alert(err.message || 'No se pudo preparar el documento.');
     }
   });
 })();
