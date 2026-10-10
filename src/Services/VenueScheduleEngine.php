@@ -8,13 +8,17 @@ namespace App\Services;
  * Reglas de agenda por sede (UKS / Cambridge).
  *
  * Tipos de rule:
- * - recurring: DOWs + horas + horizonte + deadline
+ * - recurring: DOWs + horas fijas Ó ventana (HH:MM-HH:MM) + horizonte + deadline
  * - dated: lista explícita de sesiones (sin repetir sede)
  * - open_window: días + ventana + min_advance_days
+ *
+ * Si recurring usa ventana, el API expone rule_type `recurring_window`
+ * (el alumno elige fecha del patrón y luego la hora dentro de la ventana).
  */
 final class VenueScheduleEngine
 {
     public const RULE_RECURRING = 'recurring';
+    public const RULE_RECURRING_WINDOW = 'recurring_window';
     public const RULE_DATED = 'dated';
     public const RULE_OPEN_WINDOW = 'open_window';
 
@@ -61,8 +65,35 @@ final class VenueScheduleEngine
         return $out;
     }
 
+    /** ¿La regla recurring tiene ventana horaria (el alumno elige hora)? */
+    public static function hasRecurringWindow(array $rule): bool
+    {
+        if (($rule['type'] ?? '') !== self::RULE_RECURRING) {
+            return false;
+        }
+        $window = is_array($rule['window'] ?? null) ? $rule['window'] : [];
+
+        return trim((string) ($window['start'] ?? '')) !== ''
+            && trim((string) ($window['end'] ?? '')) !== '';
+    }
+
     /**
-     * Materializa sesiones abiertas (recurring + dated). open_window no genera sessions.
+     * Tipo efectivo para checkout/API.
+     * recurring + window ⇒ recurring_window.
+     */
+    public static function effectiveRuleType(array $rule): string
+    {
+        $type = strtolower(trim((string) ($rule['type'] ?? self::RULE_DATED)));
+        if ($type === self::RULE_RECURRING && self::hasRecurringWindow($rule)) {
+            return self::RULE_RECURRING_WINDOW;
+        }
+
+        return $type !== '' ? $type : self::RULE_DATED;
+    }
+
+    /**
+     * Materializa sesiones abiertas (recurring con horas fijas + dated).
+     * open_window y recurring_window no generan sessions (usan dates + slots).
      *
      * @param list<array<string, mixed>> $venues
      * @param list<string> $blockedDates Y-m-d
@@ -79,6 +110,9 @@ final class VenueScheduleEngine
             }
             $rule = is_array($venue['rule'] ?? null) ? $venue['rule'] : [];
             $type = (string) ($rule['type'] ?? '');
+            if ($type === self::RULE_RECURRING && self::hasRecurringWindow($rule)) {
+                continue;
+            }
             $sessions = match ($type) {
                 self::RULE_RECURRING => self::expandRecurring($venue, $rule, $blocked),
                 self::RULE_DATED => self::expandDated($venue, $rule, $blocked),
@@ -165,29 +199,93 @@ final class VenueScheduleEngine
         $window = in_array($dow, [0, 6], true)
             ? (is_array($rule['saturday'] ?? null) ? $rule['saturday'] : [])
             : (is_array($rule['weekdays'] ?? null) ? $rule['weekdays'] : []);
-        $start = self::parseClock($dateYmd, (string) ($window['start'] ?? '09:00'), false);
-        $end = self::parseClock($dateYmd, (string) ($window['end'] ?? '18:00'), true);
-        if ($start === null || $end === null || $start >= $end) {
+
+        return self::buildSlotsInWindow(
+            $dateYmd,
+            (string) ($window['start'] ?? '09:00'),
+            (string) ($window['end'] ?? '18:00'),
+            max(15, (int) ($rule['slot_minutes'] ?? 30))
+        );
+    }
+
+    /**
+     * Fechas abiertas de un recurring con ventana (respeta deadline + vacaciones).
+     *
+     * @param array<string, mixed> $venue
+     * @param list<string> $blockedDates
+     * @return list<string> Y-m-d
+     */
+    public static function recurringWindowDates(array $venue, array $blockedDates = []): array
+    {
+        if (empty($venue['active'])) {
             return [];
         }
-        $slotMinutes = max(15, (int) ($rule['slot_minutes'] ?? 30));
-        $slots = [];
-        $cursor = $start;
-        while ($cursor < $end) {
-            $next = $cursor->modify('+' . $slotMinutes . ' minutes');
-            if ($next > $end) {
-                break;
+        $rule = is_array($venue['rule'] ?? null) ? $venue['rule'] : [];
+        if (!self::hasRecurringWindow($rule)) {
+            return [];
+        }
+        $blocked = array_fill_keys($blockedDates, true);
+        $dows = array_map('intval', is_array($rule['dows'] ?? null) ? $rule['dows'] : []);
+        if ($dows === []) {
+            $dows = [2];
+        }
+        $weeks = max(1, (int) ($rule['horizon_weeks'] ?? 16));
+        $deadlineCfg = is_array($rule['deadline'] ?? null) ? $rule['deadline'] : [];
+        $start = new \DateTimeImmutable('today');
+        $end = $start->modify('+' . ($weeks * 7) . ' days');
+        $today = $start->format('Y-m-d');
+        $out = [];
+        for ($d = $start; $d <= $end; $d = $d->modify('+1 day')) {
+            $dow = (int) $d->format('w');
+            if (!in_array($dow, $dows, true)) {
+                continue;
             }
-            $value = $cursor->format('H:i');
-            $slots[] = [
-                'value' => $value,
-                'label' => $value,
-                'kind' => ExamScheduleService::KIND_REGULAR,
-            ];
-            $cursor = $next;
+            $ymd = $d->format('Y-m-d');
+            if (isset($blocked[$ymd])) {
+                continue;
+            }
+            $deadline = self::deadlineForExamDate($ymd, $deadlineCfg);
+            if ($deadline !== null && $deadline < $today) {
+                continue;
+            }
+            if (self::recurringWindowSlotsForDate($venue, $ymd) === []) {
+                continue;
+            }
+            $out[] = $ymd;
         }
 
-        return $slots;
+        return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $venue
+     * @return list<array{value:string,label:string,kind:string}>
+     */
+    public static function recurringWindowSlotsForDate(array $venue, string $dateYmd): array
+    {
+        $rule = is_array($venue['rule'] ?? null) ? $venue['rule'] : [];
+        if (!self::hasRecurringWindow($rule)) {
+            return [];
+        }
+        $dt = \DateTimeImmutable::createFromFormat('Y-m-d', $dateYmd);
+        if (!$dt || $dt->format('Y-m-d') !== $dateYmd) {
+            return [];
+        }
+        $dows = array_map('intval', is_array($rule['dows'] ?? null) ? $rule['dows'] : []);
+        if ($dows === []) {
+            $dows = [2];
+        }
+        if (!in_array((int) $dt->format('w'), $dows, true)) {
+            return [];
+        }
+        $window = is_array($rule['window'] ?? null) ? $rule['window'] : [];
+
+        return self::buildSlotsInWindow(
+            $dateYmd,
+            (string) ($window['start'] ?? '10:00'),
+            (string) ($window['end'] ?? '15:00'),
+            max(15, (int) ($rule['slot_minutes'] ?? 30))
+        );
     }
 
     public static function deadlineForExamDate(string $examDate, array $deadlineCfg): ?string
@@ -241,22 +339,41 @@ final class VenueScheduleEngine
         if ($dows === []) {
             $dows = [2]; // martes por defecto (UKS)
         }
+
+        $window = null;
+        $rawWindow = is_array($rule['window'] ?? null) ? $rule['window'] : null;
+        if ($rawWindow !== null) {
+            $wStart = ExamScheduleService::normalizeClock((string) ($rawWindow['start'] ?? ''));
+            $wEnd = ExamScheduleService::normalizeClock((string) ($rawWindow['end'] ?? ''));
+            if ($wStart !== null && $wEnd !== null && $wStart < $wEnd) {
+                $window = ['start' => $wStart, 'end' => $wEnd];
+            }
+        }
+
         $times = [];
         foreach (is_array($rule['times'] ?? null) ? $rule['times'] : [] as $t) {
-            $clock = ExamScheduleService::normalizeClock((string) $t);
+            $raw = trim((string) $t);
+            if ($raw === '') {
+                continue;
+            }
+            // Permite "10:00-15:00" dentro de times (texto admin).
+            if ($window === null && str_contains($raw, '-')) {
+                $parsed = self::parseTimeRange($raw);
+                if ($parsed !== null) {
+                    $window = $parsed;
+                    continue;
+                }
+            }
+            $clock = ExamScheduleService::normalizeClock($raw);
             if ($clock !== null) {
                 $times[] = $clock;
             }
         }
-        if ($times === []) {
-            $times = ['10:00'];
-        }
-        $deadline = is_array($rule['deadline'] ?? null) ? $rule['deadline'] : [];
 
-        return [
+        $deadline = is_array($rule['deadline'] ?? null) ? $rule['deadline'] : [];
+        $out = [
             'type' => self::RULE_RECURRING,
             'dows' => $dows,
-            'times' => array_values(array_unique($times)),
             'horizon_weeks' => max(1, min(52, (int) ($rule['horizon_weeks'] ?? 16))),
             'deadline' => [
                 'type' => strtolower(trim((string) ($deadline['type'] ?? 'previous_weekday'))) === 'days_before'
@@ -267,6 +384,19 @@ final class VenueScheduleEngine
                 'days_before' => max(0, (int) ($deadline['days_before'] ?? 6)),
             ],
         ];
+
+        if ($window !== null) {
+            $out['window'] = $window;
+            $out['slot_minutes'] = max(15, (int) ($rule['slot_minutes'] ?? 30));
+            $out['times'] = [];
+        } else {
+            if ($times === []) {
+                $times = ['10:00'];
+            }
+            $out['times'] = array_values(array_unique($times));
+        }
+
+        return $out;
     }
 
     /**
@@ -430,5 +560,58 @@ final class VenueScheduleEngine
         unset($endExclusive);
 
         return $dt;
+    }
+
+    /**
+     * @return array{start:string,end:string}|null
+     */
+    public static function parseTimeRange(string $raw): ?array
+    {
+        $raw = trim($raw);
+        if ($raw === '' || !str_contains($raw, '-')) {
+            return null;
+        }
+        [$a, $b] = array_map('trim', explode('-', $raw, 2));
+        $start = ExamScheduleService::normalizeClock($a);
+        $end = ExamScheduleService::normalizeClock($b);
+        if ($start === null || $end === null || $start >= $end) {
+            return null;
+        }
+
+        return ['start' => $start, 'end' => $end];
+    }
+
+    /**
+     * @return list<array{value:string,label:string,kind:string}>
+     */
+    private static function buildSlotsInWindow(
+        string $dateYmd,
+        string $startClock,
+        string $endClock,
+        int $slotMinutes
+    ): array {
+        $start = self::parseClock($dateYmd, $startClock, false);
+        $end = self::parseClock($dateYmd, $endClock, true);
+        if ($start === null || $end === null || $start >= $end) {
+            return [];
+        }
+        $slotMinutes = max(15, $slotMinutes);
+        $slots = [];
+        $cursor = $start;
+        while ($cursor < $end) {
+            $next = $cursor->modify('+' . $slotMinutes . ' minutes');
+            if ($next > $end) {
+                break;
+            }
+            $value = $cursor->format('H:i');
+            $slots[] = [
+                'value' => $value,
+                'label' => $value,
+                'kind' => ExamScheduleService::KIND_REGULAR,
+            ];
+            $cursor = $next;
+        }
+
+        return $slots;
     }
 }

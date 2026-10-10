@@ -245,17 +245,24 @@ final class ExamScheduleService
                     $min = $d;
                 }
             }
-            // Sedes open_window: anticipo propio (mínimo entre sedes).
+            // Sedes open_window / recurring_window: fechas propias.
             if ($rules['mode'] === self::MODE_VENUE_SCHEDULES) {
+                $blocked = is_array($rules['blocked_dates'] ?? null) ? $rules['blocked_dates'] : [];
                 foreach (is_array($rules['venues'] ?? null) ? $rules['venues'] : [] as $venue) {
                     $rule = is_array($venue['rule'] ?? null) ? $venue['rule'] : [];
-                    if (($rule['type'] ?? '') !== VenueScheduleEngine::RULE_OPEN_WINDOW) {
+                    if (($rule['type'] ?? '') === VenueScheduleEngine::RULE_OPEN_WINDOW) {
+                        $adv = max(0, (int) ($rule['min_advance_days'] ?? 2));
+                        $candidate = (new \DateTimeImmutable('today'))->modify('+' . $adv . ' days')->format('Y-m-d');
+                        if ($min === null || $candidate < $min) {
+                            $min = $candidate;
+                        }
                         continue;
                     }
-                    $adv = max(0, (int) ($rule['min_advance_days'] ?? 2));
-                    $candidate = (new \DateTimeImmutable('today'))->modify('+' . $adv . ' days')->format('Y-m-d');
-                    if ($min === null || $candidate < $min) {
-                        $min = $candidate;
+                    if (VenueScheduleEngine::hasRecurringWindow($rule)) {
+                        $dates = VenueScheduleEngine::recurringWindowDates($venue, $blocked);
+                        if ($dates !== [] && ($min === null || $dates[0] < $min)) {
+                            $min = $dates[0];
+                        }
                     }
                 }
             }
@@ -370,7 +377,7 @@ final class ExamScheduleService
                     'name' => (string) ($venue['name'] ?? ''),
                     'city' => (string) ($venue['city'] ?? ''),
                     'address' => (string) ($venue['address'] ?? ''),
-                    'rule_type' => (string) ($rule['type'] ?? VenueScheduleEngine::RULE_DATED),
+                    'rule_type' => VenueScheduleEngine::effectiveRuleType($rule),
                 ];
             }
 
@@ -652,22 +659,29 @@ final class ExamScheduleService
                     ];
                 }
             }
-            // open_window por sede.
+            // open_window / recurring_window por sede.
             if ($rules['mode'] === self::MODE_VENUE_SCHEDULES) {
                 $venue = $venueIdOpt !== '' ? $this->findVenue($product, $venueIdOpt) : null;
                 if ($venue !== null) {
                     $rule = is_array($venue['rule'] ?? null) ? $venue['rule'] : [];
-                    if (($rule['type'] ?? '') === VenueScheduleEngine::RULE_OPEN_WINDOW) {
-                        $blocked = is_array($rules['blocked_dates'] ?? null) ? $rules['blocked_dates'] : [];
+                    $blocked = is_array($rules['blocked_dates'] ?? null) ? $rules['blocked_dates'] : [];
+                    $isOpenWindow = ($rule['type'] ?? '') === VenueScheduleEngine::RULE_OPEN_WINDOW;
+                    $isRecurringWindow = VenueScheduleEngine::hasRecurringWindow($rule);
+                    if ($isOpenWindow || $isRecurringWindow) {
                         if (in_array($date, $blocked, true)) {
                             throw new \InvalidArgumentException('Esa fecha no está disponible (bloqueada / vacaciones).');
                         }
-                        $dates = VenueScheduleEngine::openWindowDates($venue, $blocked);
+                        $dates = $isRecurringWindow
+                            ? VenueScheduleEngine::recurringWindowDates($venue, $blocked)
+                            : VenueScheduleEngine::openWindowDates($venue, $blocked);
                         if (!in_array($date, $dates, true)) {
                             throw new \InvalidArgumentException('Esa fecha no está disponible en la sede seleccionada.');
                         }
+                        $slots = $isRecurringWindow
+                            ? VenueScheduleEngine::recurringWindowSlotsForDate($venue, $date)
+                            : VenueScheduleEngine::openWindowSlotsForDate($venue, $date);
                         $okSlot = false;
-                        foreach (VenueScheduleEngine::openWindowSlotsForDate($venue, $date) as $slot) {
+                        foreach ($slots as $slot) {
                             if ((string) ($slot['value'] ?? '') === $timeShort) {
                                 $okSlot = true;
                                 break;
@@ -783,7 +797,9 @@ final class ExamScheduleService
             $venueMeta = $venueId !== '' ? $this->findVenue($product, $venueId) : null;
             $ruleType = '';
             if ($venueMeta !== null) {
-                $ruleType = (string) (($venueMeta['rule']['type'] ?? '') ?: '');
+                $ruleType = VenueScheduleEngine::effectiveRuleType(
+                    is_array($venueMeta['rule'] ?? null) ? $venueMeta['rule'] : []
+                );
             } elseif ($venues !== []) {
                 foreach ($venues as $v) {
                     if ((string) ($v['id'] ?? '') === $venueId) {
@@ -802,8 +818,8 @@ final class ExamScheduleService
                 'slots' => [],
             ];
 
+            $blocked = is_array($rules['blocked_dates'] ?? null) ? $rules['blocked_dates'] : [];
             if ($ruleType === VenueScheduleEngine::RULE_OPEN_WINDOW && $venueMeta !== null) {
-                $blocked = is_array($rules['blocked_dates'] ?? null) ? $rules['blocked_dates'] : [];
                 $payload['dates'] = VenueScheduleEngine::openWindowDates($venueMeta, $blocked);
                 $payload['min_advance_days'] = (int) (($venueMeta['rule']['min_advance_days'] ?? 2));
                 if ($payload['dates'] !== []) {
@@ -814,6 +830,18 @@ final class ExamScheduleService
                     $payload['slots'] = VenueScheduleEngine::openWindowSlotsForDate($venueMeta, $date);
                     $payload['unavailable_reason'] = $payload['slots'] === []
                         ? 'Esa fecha no tiene horarios en esta sede.'
+                        : null;
+                }
+            } elseif ($ruleType === VenueScheduleEngine::RULE_RECURRING_WINDOW && $venueMeta !== null) {
+                $payload['dates'] = VenueScheduleEngine::recurringWindowDates($venueMeta, $blocked);
+                if ($payload['dates'] !== []) {
+                    $payload['min_date'] = $payload['dates'][0];
+                    $payload['min_date_label'] = self::formatDateEs($payload['dates'][0]);
+                }
+                if ($date !== '') {
+                    $payload['slots'] = VenueScheduleEngine::recurringWindowSlotsForDate($venueMeta, $date);
+                    $payload['unavailable_reason'] = $payload['slots'] === []
+                        ? 'Esa fecha no tiene horarios en esta sede (o ya cerró la inscripción).'
                         : null;
                 }
             } else {

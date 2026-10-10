@@ -2908,7 +2908,9 @@ final class ProductAdminService
      *
      * Bloques separados por línea en blanco.
      * Línea 1: `id|nombre|ciudad|dirección|tipo` (tipo: recurring|dated|open_window)
-     * recurring → `dows|times|horizon_weeks|deadline_type|deadline_dow|weeks_before`
+     * recurring → `dows|times|horizon_weeks|deadline_type|deadline_dow|weeks_before[|slot_min]`
+     *   times fijas: `10:00` o `10:00,14:00`
+     *   ventana (alumno elige hora): `10:00-15:00` (+ slot_min opcional, default 30)
      * dated → líneas `YYYY-MM-DD|HH:MM|límite|etiqueta`
      * open_window → `days|lunvie_ini|lunvie_fin|sab_ini|sab_fin|min_advance|slot_min`
      *
@@ -2950,16 +2952,35 @@ final class ProductAdminService
             ];
             if ($type === VenueScheduleEngine::RULE_RECURRING) {
                 $dows = is_array($rule['dows'] ?? null) ? $rule['dows'] : [2];
-                $times = is_array($rule['times'] ?? null) ? $rule['times'] : ['10:00'];
                 $deadline = is_array($rule['deadline'] ?? null) ? $rule['deadline'] : [];
-                $lines[] = implode('|', [
-                    implode(',', array_map('strval', $dows)),
-                    implode(',', array_map('strval', $times)),
-                    (string) max(1, (int) ($rule['horizon_weeks'] ?? 16)),
-                    (string) ($deadline['type'] ?? 'previous_weekday'),
-                    (string) (int) ($deadline['dow'] ?? 3),
-                    (string) max(1, (int) ($deadline['weeks_before'] ?? 1)),
-                ]);
+                $deadlineType = (string) ($deadline['type'] ?? 'previous_weekday');
+                $sixth = $deadlineType === 'days_before'
+                    ? (string) max(0, (int) ($deadline['days_before'] ?? 6))
+                    : (string) max(1, (int) ($deadline['weeks_before'] ?? 1));
+                if (VenueScheduleEngine::hasRecurringWindow($rule)) {
+                    $window = is_array($rule['window'] ?? null) ? $rule['window'] : [];
+                    $timePart = (string) ($window['start'] ?? '10:00') . '-' . (string) ($window['end'] ?? '15:00');
+                    $row = [
+                        implode(',', array_map('strval', $dows)),
+                        $timePart,
+                        (string) max(1, (int) ($rule['horizon_weeks'] ?? 16)),
+                        $deadlineType,
+                        (string) (int) ($deadline['dow'] ?? 3),
+                        $sixth,
+                        (string) max(15, (int) ($rule['slot_minutes'] ?? 30)),
+                    ];
+                } else {
+                    $times = is_array($rule['times'] ?? null) ? $rule['times'] : ['10:00'];
+                    $row = [
+                        implode(',', array_map('strval', $dows)),
+                        implode(',', array_map('strval', $times)),
+                        (string) max(1, (int) ($rule['horizon_weeks'] ?? 16)),
+                        $deadlineType,
+                        (string) (int) ($deadline['dow'] ?? 3),
+                        $sixth,
+                    ];
+                }
+                $lines[] = implode('|', $row);
             } elseif ($type === VenueScheduleEngine::RULE_OPEN_WINDOW) {
                 $daysCfg = is_array($rule['days'] ?? null) ? $rule['days'] : [];
                 $dayList = [];
@@ -3059,18 +3080,22 @@ final class ProductAdminService
                         $dows[] = $n;
                     }
                 }
+                $timeRaw = trim((string) ($parts[1] ?? '10:00'));
+                $window = VenueScheduleEngine::parseTimeRange($timeRaw);
                 $times = [];
-                foreach (explode(',', (string) ($parts[1] ?? '10:00')) as $t) {
-                    $clock = ExamScheduleService::normalizeClock(trim($t));
-                    if ($clock !== null) {
-                        $times[] = $clock;
+                if ($window === null) {
+                    foreach (explode(',', $timeRaw) as $t) {
+                        $clock = ExamScheduleService::normalizeClock(trim($t));
+                        if ($clock !== null) {
+                            $times[] = $clock;
+                        }
                     }
                 }
                 $deadlineType = strtolower(trim((string) ($parts[3] ?? 'previous_weekday')));
                 $rule = [
                     'type' => VenueScheduleEngine::RULE_RECURRING,
                     'dows' => $dows !== [] ? $dows : [2],
-                    'times' => $times !== [] ? $times : ['10:00'],
+                    'times' => $window === null ? ($times !== [] ? $times : ['10:00']) : [],
                     'horizon_weeks' => max(1, min(52, (int) ($parts[2] ?? 16))),
                     'deadline' => [
                         'type' => $deadlineType === 'days_before' ? 'days_before' : 'previous_weekday',
@@ -3079,6 +3104,10 @@ final class ProductAdminService
                         'days_before' => max(0, (int) ($parts[5] ?? 6)),
                     ],
                 ];
+                if ($window !== null) {
+                    $rule['window'] = $window;
+                    $rule['slot_minutes'] = max(15, (int) ($parts[6] ?? 30));
+                }
             } elseif ($type === VenueScheduleEngine::RULE_OPEN_WINDOW) {
                 $parts = array_map('trim', explode('|', $body[0] ?? '1,2,3,4,5|09:00|18:00|09:00|14:00|2|30'));
                 $days = [];
