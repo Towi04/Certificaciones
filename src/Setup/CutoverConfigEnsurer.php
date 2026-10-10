@@ -18,8 +18,8 @@ final class CutoverConfigEnsurer
     {
         $log = [];
         $log = array_merge($log, $this->ensureGroupDocs('uks-elet', $this->uksExamPatch()));
-        $log = array_merge($log, $this->ensureGroupDocs('cambridge-flexible', $this->cambridgeInePatch()));
-        $log = array_merge($log, $this->ensureGroupDocs('cambridge-fixed', $this->cambridgeInePatch()));
+        $log = array_merge($log, $this->ensureGroupDocs('cambridge-flexible', $this->cambridgeInePatch('reglamento_cambridge_flexible')));
+        $log = array_merge($log, $this->ensureGroupDocs('cambridge-fixed', $this->cambridgeInePatch('reglamento_cambridge_fixed')));
         $log = array_merge($log, $this->ensureGroupDocs('uks-elet-cenni', $this->cenniPatch()));
         $log = array_merge($log, $this->ensureMailTemplates());
 
@@ -65,6 +65,40 @@ final class CutoverConfigEnsurer
                 if (!array_key_exists($key, $cfg) || $cfg[$key] === null || $cfg[$key] === '') {
                     $cfg[$key] = $value;
                     $changed[] = $key;
+                }
+                continue;
+            }
+            if ($key === 'reglamento' && is_array($value)) {
+                $current = is_array($cfg['reglamento'] ?? null) ? $cfg['reglamento'] : null;
+                if ($current === null || $current === []) {
+                    $cfg['reglamento'] = $value;
+                    $changed[] = 'reglamento';
+                    continue;
+                }
+                $nestedChanged = false;
+                foreach ($value as $nk => $nv) {
+                    if (!array_key_exists($nk, $current) || $current[$nk] === null || $current[$nk] === '') {
+                        $current[$nk] = $nv;
+                        $nestedChanged = true;
+                    }
+                }
+                // Upgrade seguro: plantilla Linguaskill con modo viejo → fill_acroform.
+                $path = (string) ($current['template_path'] ?? '');
+                $mode = strtolower(trim((string) ($current['signature_mode'] ?? '')));
+                if (
+                    str_contains($path, 'linguaskill')
+                    && ($mode === '' || $mode === 'append_to_pdf')
+                ) {
+                    $current['signature_mode'] = 'fill_acroform';
+                    $current['flatten'] = array_key_exists('flatten', $value) ? (bool) $value['flatten'] : true;
+                    if (isset($value['form_fields']) && is_array($value['form_fields'])) {
+                        $current['form_fields'] = $value['form_fields'];
+                    }
+                    $nestedChanged = true;
+                }
+                if ($nestedChanged) {
+                    $cfg['reglamento'] = $current;
+                    $changed[] = 'reglamento';
                 }
                 continue;
             }
@@ -114,13 +148,32 @@ final class CutoverConfigEnsurer
     }
 
     /** @return array<string, mixed> */
-    private function cambridgeInePatch(): array
+    private function cambridgeInePatch(string $reglamentoDocCode): array
     {
         return [
             'required_docs' => [$this->ineDoc()],
             'registration_docs' => [],
             'student_docs_timing' => 'before_payment',
             'student_docs_gate' => ['block_until_approved' => true],
+            'reglamento' => $this->cambridgeReglamento($reglamentoDocCode),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function cambridgeReglamento(string $docCode): array
+    {
+        return [
+            'template_path' => '/assets/reglamentos/linguaskill-terminos-condiciones.pdf',
+            'source_url' => '',
+            'signature_mode' => 'fill_acroform',
+            'required_before_checkout' => true,
+            'doc_code' => $docCode,
+            'flatten' => true,
+            'form_fields' => [
+                'name' => ['NOMBRE'],
+                'date' => ['FECHA'],
+                'initials' => ['FIRMA O INICIALES'],
+            ],
         ];
     }
 

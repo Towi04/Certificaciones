@@ -418,6 +418,20 @@ final class ProductAdminService
             )
                 ? strtolower(trim((string) ($reg['signature_mode'] ?? 'append_to_pdf')))
                 : 'append_to_pdf',
+            'reglamento_flatten' => array_key_exists('flatten', $reg)
+                ? (bool) $reg['flatten']
+                : (strtolower(trim((string) ($reg['signature_mode'] ?? ''))) === 'fill_acroform'),
+            'reglamento_field_name' => self::reglamentoFieldAliasesToText(
+                is_array($reg['form_fields']['name'] ?? null) ? $reg['form_fields']['name'] : ['NOMBRE']
+            ),
+            'reglamento_field_date' => self::reglamentoFieldAliasesToText(
+                is_array($reg['form_fields']['date'] ?? null) ? $reg['form_fields']['date'] : ['FECHA']
+            ),
+            'reglamento_field_initials' => self::reglamentoFieldAliasesToText(
+                is_array($reg['form_fields']['initials'] ?? null)
+                    ? $reg['form_fields']['initials']
+                    : ['FIRMA O INICIALES']
+            ),
             'instruction_pdf_path' => trim((string) ($instr['pdf_path'] ?? '')),
             'instruction_pdf_url' => trim((string) ($instr['pdf_url'] ?? '')),
             'instruction_pdf_label' => trim((string) ($instr['pdf_label'] ?? '')),
@@ -2004,6 +2018,9 @@ final class ProductAdminService
             if (!in_array($mode, ['append_to_pdf', 'fill_acroform'], true)) {
                 $mode = 'append_to_pdf';
             }
+            $flatten = $mode === 'fill_acroform'
+                ? (!array_key_exists('reglamento_flatten', $input) || !empty($input['reglamento_flatten']))
+                : false;
             // Si el grupo pide reglamento firmado, siempre es obligatorio antes de pagar.
             $config['reglamento'] = [
                 'template_path' => $path,
@@ -2011,14 +2028,22 @@ final class ProductAdminService
                 'signature_mode' => $mode,
                 'required_before_checkout' => true,
                 'doc_code' => $docCode,
-                'flatten' => $mode === 'fill_acroform',
+                'flatten' => $flatten,
             ];
             if ($mode === 'fill_acroform') {
-                // Linguaskill / Cambridge: campos AcroForm inventariados en Fase 0.
                 $config['reglamento']['form_fields'] = [
-                    'name' => ['NOMBRE'],
-                    'date' => ['FECHA'],
-                    'initials' => ['FIRMA O INICIALES'],
+                    'name' => self::parseReglamentoFieldAliases(
+                        (string) ($input['reglamento_field_name'] ?? 'NOMBRE'),
+                        ['NOMBRE']
+                    ),
+                    'date' => self::parseReglamentoFieldAliases(
+                        (string) ($input['reglamento_field_date'] ?? 'FECHA'),
+                        ['FECHA']
+                    ),
+                    'initials' => self::parseReglamentoFieldAliases(
+                        (string) ($input['reglamento_field_initials'] ?? 'FIRMA O INICIALES'),
+                        ['FIRMA O INICIALES']
+                    ),
                 ];
             }
         } else {
@@ -3188,5 +3213,37 @@ final class ProductAdminService
         }
 
         return VenueScheduleEngine::normalizeVenues(['venues' => $out]);
+    }
+
+    /** @param list<string> $aliases */
+    private static function reglamentoFieldAliasesToText(array $aliases): string
+    {
+        $clean = [];
+        foreach ($aliases as $alias) {
+            $alias = trim((string) $alias);
+            if ($alias !== '') {
+                $clean[] = $alias;
+            }
+        }
+
+        return implode(', ', $clean);
+    }
+
+    /**
+     * @param list<string> $defaults
+     * @return list<string>
+     */
+    private static function parseReglamentoFieldAliases(string $raw, array $defaults): array
+    {
+        $parts = preg_split('/\s*,\s*/', trim($raw)) ?: [];
+        $out = [];
+        foreach ($parts as $part) {
+            $part = trim((string) $part);
+            if ($part !== '') {
+                $out[] = $part;
+            }
+        }
+
+        return $out !== [] ? array_values(array_unique($out)) : $defaults;
     }
 }
