@@ -49,4 +49,24 @@ ALTER TABLE combos
 | 1 Schema + admin | Lista |
 | 2 Tab catálogo + presenter | Lista |
 | 3 Ficha `/paquete/{slug}` | Lista (pulido visual + SEO) |
-| 4 Checkout CTA + QA | Parcial (deep-link `combo_id`; QA staging pendiente) |
+| 4 Checkout CTA + QA | Lista (CLI lógica; checklist staging abajo) |
+
+## QA Fase 4
+
+### Automático (sin BD)
+
+```bash
+php bin/catalog-combos-qa.php
+```
+
+Valida rutas/UI, `ComboCatalogPresenter` (overrides vs fallback), ahorro/CTA,
+columna partner y migración. Con `.env` + BD también cuenta combos públicos.
+
+### Manual (staging)
+
+- [ ] Pestaña **Combos** + contador en `/catalogo`
+- [ ] Combo sin overrides → imagen/textos de certificaciones
+- [ ] Combo con imagen/resumen/descripción propios los muestra
+- [ ] Partner `/partner/registrar?seccion=combos` con precio de nivel
+- [ ] CTA ficha → `/adquirir/{cert}?combo_id=` preselecciona el paquete
+- [ ] Tabs responsive (mobile): Certificaciones | Cursos | Combos
