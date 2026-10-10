@@ -1132,8 +1132,12 @@ $stepLabels = [
       html += '<dt>Documentos</dt><dd>' + (names.length ? names.join(', ') : '—') + '</dd>';
     }
     if (examVenueSelect && examVenueSelect.value) {
+      const vMeta = examVenuesById[examVenueSelect.value];
       const vOpt = examVenueSelect.options[examVenueSelect.selectedIndex];
-      html += '<dt>Sede</dt><dd>' + (vOpt ? vOpt.textContent : examVenueSelect.value) + '</dd>';
+      const sedeLabel = vMeta
+        ? [vMeta.city, vMeta.name, vMeta.address].filter(Boolean).join(' · ')
+        : (vOpt ? vOpt.textContent : examVenueSelect.value);
+      html += '<dt>Sede</dt><dd>' + sedeLabel + '</dd>';
     }
     html += '<dt>Forma de pago</dt><dd>' + payMethodLabel() + '</dd>';
     const app = creditApplication();
@@ -1670,13 +1674,24 @@ $stepLabels = [
         }
         if (usesVenuePickerMode(examMode) && examVenueSelect && Array.isArray(data.venues)) {
           examVenuesById = {};
-          examVenueSelect.innerHTML = '<option value="">— elige sede —</option>';
+          examVenueSelect.innerHTML = '<option value="">— elige ciudad —</option>';
+          // Contar ciudades para desambiguar solo si hay duplicados.
+          var cityCounts = {};
+          data.venues.forEach(function (v) {
+            var c = String(v.city || '').trim().toLowerCase();
+            if (c) cityCounts[c] = (cityCounts[c] || 0) + 1;
+          });
           data.venues.forEach(function (v) {
             examVenuesById[v.id] = v;
             const opt = document.createElement('option');
             opt.value = v.id || '';
-            var label = v.name || 'Sede';
-            if (v.city) label += ' · ' + v.city;
+            var city = String(v.city || '').trim();
+            var name = String(v.name || '').trim();
+            var label = city || name || 'Sede';
+            // Si dos sedes comparten ciudad, añadir el nombre para distinguirlas.
+            if (city && name && (cityCounts[city.toLowerCase()] || 0) > 1) {
+              label = city + ' · ' + name;
+            }
             opt.textContent = label;
             examVenueSelect.appendChild(opt);
           });
