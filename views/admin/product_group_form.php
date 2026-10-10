@@ -1161,28 +1161,41 @@ $pageHeading = $isEdit
     <div class="group-panel" data-panel="rules" hidden>
         <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Reglamento</h2>
         <p class="muted" style="font-size:.82rem;margin:0 0 .85rem;max-width:42rem">
-            Aquí se configura el PDF/link del reglamento del examen (como siempre).
-            En el checkout el alumno o el partner puede <strong>firmarlo en pantalla</strong>
-            o <strong>descargarlo, firmarlo en papel y subir el PDF escaneado</strong>.
+            Aquí se configura el PDF/link del reglamento del examen.
+            El modo define cómo lo acepta el alumno en checkout.
             No uses la pestaña Documentos para el reglamento.
         </p>
+        <?php $regMode = (string) ($extras['reglamento_signature_mode'] ?? 'append_to_pdf'); ?>
         <label class="muted" style="display:flex;align-items:flex-start;gap:.5rem;font-size:.9rem;font-weight:600;margin-bottom:.75rem">
             <input type="checkbox" name="reglamento_enabled" value="1" style="margin-top:.2rem"
                 <?= !empty($extras['reglamento_enabled']) ? 'checked' : '' ?>>
             <span>
-                Este grupo requiere reglamento firmado
+                Este grupo requiere reglamento / términos
                 <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin-top:.15rem">
-                    Si se marca, es un paso obligatorio del checkout <strong>antes de pagar</strong>
-                    (firma digital o PDF escaneado).
+                    Si se marca, es un paso obligatorio del checkout <strong>antes de pagar</strong>.
                 </span>
             </span>
         </label>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem">
             <label class="muted" style="<?= e($labelStyle) ?>">
+                Modo en checkout
+                <select name="reglamento_signature_mode" style="<?= e($inputStyle) ?>">
+                    <option value="append_to_pdf" <?= $regMode === 'append_to_pdf' ? 'selected' : '' ?>>
+                        Firma digital (canvas) o subir PDF — UKS/ELeT
+                    </option>
+                    <option value="fill_acroform" <?= $regMode === 'fill_acroform' ? 'selected' : '' ?>>
+                        Solo aceptación + relleno automático — Cambridge/Linguaskill
+                    </option>
+                </select>
+                <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin-top:.25rem">
+                    Cambridge: el alumno marca “acepto” y el sistema llena NOMBRE / FECHA / FIRMA O INICIALES del PDF.
+                </span>
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
                 Ruta / URL de la plantilla PDF
                 <input type="text" name="reglamento_template_path"
                        value="<?= e((string) ($extras['reglamento_template_path'] ?? '')) ?>"
-                       placeholder="/assets/reglamentos/elet-reglamento.pdf"
+                       placeholder="/assets/reglamentos/linguaskill-terminos-condiciones.pdf"
                        style="<?= e($inputStyle) ?>">
             </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
@@ -1845,13 +1858,23 @@ $pageHeading = $isEdit
       var path = val('reglamento_template_path', '');
       var source = val('reglamento_source_url', '');
       var doc = val('reglamento_doc_code', autoDoc()).toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_|_$/g, '');
+      var sigMode = val('reglamento_signature_mode', 'append_to_pdf');
+      if (sigMode !== 'fill_acroform') sigMode = 'append_to_pdf';
       base.reglamento = {
         template_path: path,
         source_url: source,
-        signature_mode: 'append_to_pdf',
+        signature_mode: sigMode,
         required_before_checkout: true,
-        doc_code: doc || autoDoc()
+        doc_code: doc || autoDoc(),
+        flatten: sigMode === 'fill_acroform'
       };
+      if (sigMode === 'fill_acroform') {
+        base.reglamento.form_fields = {
+          name: ['NOMBRE'],
+          date: ['FECHA'],
+          initials: ['FIRMA O INICIALES']
+        };
+      }
     } else {
       delete base.reglamento;
     }

@@ -727,7 +727,10 @@ final class CheckoutRequirements
      *   template_path:string,
      *   template_url:string,
      *   doc_code:string,
-     *   required_before_checkout:bool
+     *   required_before_checkout:bool,
+     *   signature_mode:string,
+     *   flatten:bool,
+     *   form_fields:array<string, list<string>>
      * }|null
      */
     public static function reglamentoForProduct(array $product): ?array
@@ -752,6 +755,40 @@ final class CheckoutRequirements
             $url = $sourceUrl;
         }
 
+        $mode = strtolower(trim((string) ($reg['signature_mode'] ?? 'append_to_pdf')));
+        if (!in_array($mode, ['append_to_pdf', 'fill_acroform'], true)) {
+            $mode = 'append_to_pdf';
+        }
+
+        $formFields = [
+            'name' => ['NOMBRE'],
+            'date' => ['FECHA'],
+            'initials' => ['FIRMA O INICIALES'],
+        ];
+        $rawFields = is_array($reg['form_fields'] ?? null) ? $reg['form_fields'] : [];
+        foreach (['name', 'date', 'initials'] as $key) {
+            if (!isset($rawFields[$key])) {
+                continue;
+            }
+            $aliases = $rawFields[$key];
+            if (is_string($aliases)) {
+                $aliases = [$aliases];
+            }
+            if (!is_array($aliases)) {
+                continue;
+            }
+            $clean = [];
+            foreach ($aliases as $alias) {
+                $alias = trim((string) $alias);
+                if ($alias !== '') {
+                    $clean[] = $alias;
+                }
+            }
+            if ($clean !== []) {
+                $formFields[$key] = $clean;
+            }
+        }
+
         return [
             'template_path' => $path !== '' ? $path : $sourceUrl,
             'template_url' => $url,
@@ -759,6 +796,11 @@ final class CheckoutRequirements
             'doc_code' => (string) ($reg['doc_code'] ?? 'reglamento_firmado'),
             // Si hay reglamento configurado, siempre es obligatorio antes de pagar.
             'required_before_checkout' => true,
+            'signature_mode' => $mode,
+            'flatten' => array_key_exists('flatten', $reg)
+                ? (bool) $reg['flatten']
+                : ($mode === 'fill_acroform'),
+            'form_fields' => $formFields,
         ];
     }
 
