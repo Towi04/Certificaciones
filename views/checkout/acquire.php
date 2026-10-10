@@ -623,6 +623,11 @@ $stepLabels = [
 .form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:.75rem 1rem; }
 .form-grid label, .checkout-form label { display:flex; flex-direction:column; gap:.35rem; font-size:.88rem; font-weight:600; color:var(--doceo-muted); }
 .form-grid input, .form-grid select { font:inherit; padding:.55rem .7rem; border:1px solid #cfd8e6; border-radius:10px; background:#fff; }
+/* .form-grid label { display:flex } pisa el [hidden] del UA; forzar ocultar. */
+#exam-date-free-label[hidden],
+#exam-date-list-label[hidden],
+#exam-venue-sessions-wrap[hidden],
+#exam-venue-detail[hidden] { display: none !important; }
 
 .pay-tiles { display:flex; gap:.65rem; flex-wrap:wrap; }
 .pay-tile {
@@ -793,9 +798,24 @@ $stepLabels = [
     if (examVenueWindowWrap) {
       examVenueWindowWrap.style.display = hasRule && isOpen ? 'grid' : 'none';
     }
+    // recurring_window: solo combobox de fechas del patrón (sin calendario libre).
+    // open_window: solo input date (calendario).
     const useDateList = examVenueRuleType === 'recurring_window';
-    if (examDateFreeLabel) examDateFreeLabel.hidden = useDateList;
-    if (examDateListLabel) examDateListLabel.hidden = !useDateList;
+    if (examDateFreeLabel) {
+      examDateFreeLabel.hidden = useDateList;
+      examDateFreeLabel.style.display = useDateList ? 'none' : '';
+    }
+    if (examDateListLabel) {
+      examDateListLabel.hidden = !useDateList;
+      examDateListLabel.style.display = useDateList ? '' : 'none';
+    }
+    if (examDateSelect) {
+      examDateSelect.disabled = useDateList;
+      examDateSelect.required = isOpen && !useDateList;
+    }
+    if (examDateListSelect) {
+      examDateListSelect.required = useDateList;
+    }
   }
 
   function fillExamDateList(dates) {
