@@ -86,6 +86,8 @@ $router->get('/admin/combos', fn () => $admin->combos());
 $router->get('/admin/combos/nuevo', fn () => $admin->comboCreateForm());
 $router->post('/admin/combos/nuevo', fn () => $admin->comboCreate());
 $router->post('/admin/combos/{id}/eliminar', fn (string $id) => $admin->comboDelete($id));
+$router->post('/admin/combos/{id}/logo', fn (string $id) => $admin->comboLogoUpload($id));
+$router->post('/admin/combos/{id}/logo/quitar', fn (string $id) => $admin->comboLogoClear($id));
 $router->get('/admin/combos/{id}', fn (string $id) => $admin->comboEdit($id));
 $router->post('/admin/combos/{id}', fn (string $id) => $admin->comboUpdate($id));
 
