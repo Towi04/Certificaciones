@@ -44,10 +44,14 @@ No se piden otros campos (sin CURP, fecha de nacimiento, etc.).
 - **Único documento requerido** en el registro.
 - El alumno debe leer y **firmar digitalmente** el reglamento **antes** de completar la compra.
 - La **firma va como última página del PDF** (un solo archivo).
+- Modo grupo: `signature_mode: append_to_pdf` (canvas o subir PDF).
 - Plantilla en sistema: `/assets/reglamentos/elet-reglamento.pdf`
 - Fuente original: [Google Drive](https://drive.google.com/file/d/1sfP7zSPlqqpBdYaHUmz-_kM_BijRZDHW/view?usp=sharing)
 
 **No se puede registrar sin reglamento firmado.**
+
+> Cambridge/Linguaskill usa otro flujo (`fill_acroform`: solo checkbox + relleno automático).  
+> Ver `docs/products/cambridge-reglamento-fill.md`.
 
 ## Examen
 
