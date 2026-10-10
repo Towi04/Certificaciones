@@ -20,6 +20,10 @@ final class CatalogFilterRepository
     public function catalogVisible(string $section = 'all'): array
     {
         $section = \App\Repositories\ProductRepository::normalizeCatalogSection($section);
+        // Combos aún no tienen filtros laterales propios.
+        if ($section === 'combos') {
+            return [];
+        }
         $sql = 'SELECT cf.*
              FROM catalog_filters cf
              WHERE cf.is_active = 1

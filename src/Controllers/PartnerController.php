@@ -571,6 +571,8 @@ final class PartnerController
         }
 
         $repo = new ProductRepository();
+        $comboRepo = new \App\Repositories\ComboRepository();
+        $presenter = new \App\Services\ComboCatalogPresenter($comboRepo);
         $section = ProductRepository::normalizeCatalogSection(
             is_string($_GET['seccion'] ?? null) ? (string) $_GET['seccion'] : 'certificaciones'
         );
@@ -585,9 +587,18 @@ final class PartnerController
         $sectionCounts = [
             'certificaciones' => $repo->publicCatalogCount('all', null, false, 'certificaciones'),
             'cursos' => $repo->publicCatalogCount('all', null, false, 'cursos'),
+            'combos' => $comboRepo->publicCatalogCount(null, false),
         ];
-        $catalogFilters = (new CatalogFilterService())->catalogFilters($section);
-        $products = $repo->publicCatalog($filter, $q !== '' ? $q : null, false, null, null, $section);
+        if ($section === 'combos') {
+            $filter = 'all';
+            $catalogFilters = [];
+            $products = $presenter->presentCards(
+                $comboRepo->publicCatalog($q !== '' ? $q : null, false, null, null, 'relevantes')
+            );
+        } else {
+            $catalogFilters = (new CatalogFilterService())->catalogFilters($section);
+            $products = $repo->publicCatalog($filter, $q !== '' ? $q : null, false, null, null, $section);
+        }
         $pricing = new PricingService();
         $priced = [];
         foreach ($products as $p) {

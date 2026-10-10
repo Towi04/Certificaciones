@@ -10,7 +10,12 @@
         <div class="star-carousel-viewport">
             <div class="star-carousel-track" data-carousel-track>
                 <?php foreach ($stars as $p): ?>
-                    <a class="star-carousel-item" href="<?= e(url('/producto/' . $p['slug'])) ?>">
+                    <?php
+                    $starHref = (($p['catalog_kind'] ?? '') === 'combo')
+                        ? url('/paquete/' . $p['slug'])
+                        : url('/producto/' . $p['slug']);
+                    ?>
+                    <a class="star-carousel-item" href="<?= e($starHref) ?>">
                         <div class="star-carousel-logo">
                             <?php if (!empty($p['logo_path'])): ?>
                                 <img src="<?= e(asset($p['logo_path'])) ?>" alt="">

@@ -31,6 +31,8 @@ $router->get('/archivo/{token}', fn (string $token) => $fileLinks->download($tok
 $router->get('/', fn () => $catalog->home());
 $router->get('/catalogo', fn () => $catalog->home());
 $router->get('/producto/{slug}', fn (string $slug) => $catalog->show($slug));
+$router->get('/paquete/{slug}', fn (string $slug) => $catalog->showCombo($slug));
+$router->get('/combo/{slug}', fn (string $slug) => $catalog->showCombo($slug));
 
 $router->get('/adquirir/{slug}', fn (string $slug) => $checkout->show($slug));
 $router->post('/adquirir/{slug}', fn (string $slug) => $checkout->submit($slug));

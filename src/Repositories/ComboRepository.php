@@ -124,6 +124,134 @@ final class ComboRepository
         return $stmt->fetchAll();
     }
 
+    /**
+     * @param list<int> $comboIds
+     * @return array<int, list<array<string, mixed>>>
+     */
+    public function itemsByComboIds(array $comboIds): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $comboIds))));
+        if ($ids === []) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $this->pdo->prepare(
+            "SELECT ci.combo_id, p.*, ci.sort_order
+             FROM combo_items ci
+             INNER JOIN products p ON p.id = ci.product_id
+             WHERE ci.combo_id IN ({$placeholders})
+             ORDER BY ci.combo_id ASC, ci.sort_order ASC, p.name ASC"
+        );
+        $stmt->execute($ids);
+        $out = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $cid = (int) ($row['combo_id'] ?? 0);
+            unset($row['combo_id']);
+            $out[$cid][] = $row;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function publicCatalog(
+        ?string $q = null,
+        bool $starsOnly = false,
+        ?int $limit = null,
+        ?int $offset = null,
+        string $sort = 'relevantes'
+    ): array {
+        [$where, $params] = $this->publicCatalogWhere($q, $starsOnly);
+        $sql = 'SELECT c.* FROM combos c' . $where
+            . ' ORDER BY ' . $this->publicCatalogOrderBy($sort);
+        if ($limit !== null) {
+            $sql .= ' LIMIT ' . (int) $limit . ' OFFSET ' . max(0, (int) ($offset ?? 0));
+        }
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        return $stmt->fetchAll();
+    }
+
+    public function publicCatalogCount(?string $q = null, bool $starsOnly = false): int
+    {
+        [$where, $params] = $this->publicCatalogWhere($q, $starsOnly);
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM combos c' . $where);
+        $stmt->execute($params);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function starCombos(?int $limit = null): array
+    {
+        return $this->publicCatalog(null, true, $limit, 0, 'relevantes');
+    }
+
+    public function findPublicBySlug(string $slug): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM combos
+             WHERE slug = ? AND is_active = 1 AND COALESCE(is_public, 1) = 1
+             LIMIT 1'
+        );
+        $stmt->execute([$slug]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    /**
+     * @return array{0:string,1:list<mixed>}
+     */
+    private function publicCatalogWhere(?string $q, bool $starsOnly): array
+    {
+        $sql = ' WHERE c.is_active = 1 AND COALESCE(c.is_public, 1) = 1';
+        $params = [];
+        if ($starsOnly) {
+            $sql .= ' AND c.is_star = 1';
+        }
+        if ($q !== null && trim($q) !== '') {
+            $tokens = preg_split('/\s+/u', trim($q), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            foreach ($tokens as $token) {
+                $token = trim((string) $token);
+                if ($token === '') {
+                    continue;
+                }
+                $sql .= ' AND (
+                    c.name LIKE ? OR c.code LIKE ? OR c.slug LIKE ?
+                    OR c.short_description LIKE ? OR c.description LIKE ?
+                    OR EXISTS (
+                        SELECT 1 FROM combo_items ci
+                        INNER JOIN products p ON p.id = ci.product_id
+                        WHERE ci.combo_id = c.id
+                          AND (p.name LIKE ? OR p.code LIKE ? OR p.slug LIKE ?)
+                    )
+                )';
+                $like = '%' . $token . '%';
+                array_push($params, $like, $like, $like, $like, $like, $like, $like, $like);
+            }
+        }
+
+        return [$sql, $params];
+    }
+
+    private function publicCatalogOrderBy(string $sort): string
+    {
+        $sort = ProductRepository::normalizeCatalogSort($sort);
+        $priceExpr = 'COALESCE(NULLIF(c.catalog_price, 0), NULLIF(c.public_price, 0), 0)';
+
+        return match ($sort) {
+            'precio_asc' => $priceExpr . ' ASC, c.name ASC',
+            'precio_desc' => $priceExpr . ' DESC, c.name ASC',
+            'nombre_asc' => 'c.name ASC',
+            'nombre_desc' => 'c.name DESC',
+            default => 'c.is_star DESC, c.name ASC',
+        };
+    }
+
     /** @return list<int> */
     public function productIds(int $comboId): array
     {
