@@ -65,6 +65,44 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
         </p>
     </div>
 
+    <?php if ($isFillAcroform): ?>
+        <div class="reglamento-fill-summary" id="reglamento-fill-summary" aria-live="polite">
+            <p style="margin:0 0 .55rem;font-weight:600;color:var(--doceo-blue);font-size:.92rem">
+                Datos que se escribirán en el PDF
+            </p>
+            <dl class="reglamento-fill-dl">
+                <div>
+                    <dt>Nombre</dt>
+                    <dd id="reglamento-preview-name">—</dd>
+                </div>
+                <div>
+                    <dt>Fecha</dt>
+                    <dd id="reglamento-preview-date">—</dd>
+                </div>
+                <div>
+                    <dt>Iniciales</dt>
+                    <dd>
+                        <input type="text" id="reglamento-initials-input" maxlength="12"
+                               autocomplete="off" spellcheck="false"
+                               aria-label="Iniciales para el PDF"
+                               placeholder="Ej. JPG">
+                        <span class="muted" style="font-size:.75rem;font-weight:500">
+                            Se calculan del nombre; puedes editarlas.
+                        </span>
+                    </dd>
+                </div>
+            </dl>
+            <div class="reglamento-preview-actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="reglamento-preview-btn">
+                    Ver PDF con mis datos
+                </button>
+                <a id="reglamento-preview-link" class="muted" href="#" target="_blank" rel="noopener"
+                   hidden style="font-size:.82rem;font-weight:600">Abrir de nuevo</a>
+            </div>
+            <p class="muted" id="reglamento-fill-status" style="font-size:.82rem;margin:.35rem 0 0"></p>
+        </div>
+    <?php endif; ?>
+
     <label class="accept-box" id="reglamento-accept-box">
         <input type="checkbox" name="reglamento_accepted" id="reglamento_accepted" value="1">
         <span class="accept-box-inner">
@@ -79,21 +117,26 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
     </label>
 
     <?php if ($isFillAcroform): ?>
-        <p class="muted" id="reglamento-fill-status" style="font-size:.82rem;margin:.25rem 0 0"></p>
-        <details class="reglamento-upload-fallback" style="margin-top:.85rem">
-            <summary class="muted" style="cursor:pointer;font-size:.84rem;font-weight:600">
-                ¿Problemas? Subir PDF firmado manualmente
+        <details class="reglamento-upload-fallback" id="reglamento-upload-fallback">
+            <summary>
+                ¿Problemas con el relleno automático? Subir PDF firmado
             </summary>
-            <div class="upload-block" style="margin-top:.65rem">
-                <p class="muted" style="font-size:.82rem;margin:0 0 .65rem">
-                    Descarga el PDF, fírmalo y súbelo aquí (solo si el relleno automático no aplica).
-                </p>
+            <div class="upload-block" style="margin-top:.7rem">
+                <ol class="reglamento-fallback-steps muted">
+                    <li>Descarga la plantilla con el enlace de arriba (o ábrela en pestaña nueva).</li>
+                    <li>Rellena nombre, fecha e iniciales (o firma) en un lector de PDF.</li>
+                    <li>Sube aquí el archivo <strong>.pdf</strong> ya firmado.</li>
+                </ol>
                 <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;max-width:420px">
                     Subir PDF firmado
                     <input type="file" id="reglamento-upload-input" accept=".pdf,application/pdf"
                            style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
                 </label>
                 <p class="muted" id="reglamento-upload-status" style="font-size:.82rem;margin:.5rem 0 0"></p>
+                <p class="muted" style="font-size:.78rem;margin:.45rem 0 0">
+                    Si subes un PDF manual, ese archivo reemplaza el relleno automático.
+                    Sigue siendo obligatorio marcar la casilla de aceptación.
+                </p>
             </div>
         </details>
     <?php else: ?>
@@ -159,7 +202,30 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
 .accept-box-inner strong { color:var(--doceo-blue); font-size:.95rem; }
 .accept-box-inner .muted { font-size:.82rem; font-weight:500; }
 .accept-box:has(input:checked) { border-color:var(--doceo-blue); background:#eef4fc; }
-.reglamento-upload-fallback summary { color:var(--doceo-muted); }
+.reglamento-fill-summary {
+  margin:1rem 0 0; padding:.9rem 1rem; border:1px solid #d5deea; border-radius:12px;
+  background:#f8fafc;
+}
+.reglamento-fill-dl { margin:0; display:grid; gap:.65rem; }
+.reglamento-fill-dl > div { display:grid; grid-template-columns:7rem 1fr; gap:.5rem; align-items:start; }
+.reglamento-fill-dl dt { margin:0; font-size:.78rem; font-weight:700; color:var(--doceo-muted); text-transform:uppercase; letter-spacing:.02em; padding-top:.35rem; }
+.reglamento-fill-dl dd { margin:0; font-size:.92rem; font-weight:600; color:var(--doceo-text); }
+#reglamento-initials-input {
+  width:min(100%, 8rem); padding:.4rem .55rem; border:1px solid #cfd8e6; border-radius:8px;
+  font:inherit; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+}
+.reglamento-preview-actions { display:flex; flex-wrap:wrap; gap:.65rem; align-items:center; margin-top:.75rem; }
+.reglamento-upload-fallback {
+  margin-top:.9rem; padding:.75rem .9rem; border:1px dashed #cfd8e6; border-radius:12px; background:#fff;
+}
+.reglamento-upload-fallback summary {
+  cursor:pointer; font-size:.84rem; font-weight:600; color:var(--doceo-muted); list-style-position:outside;
+}
+.reglamento-upload-fallback[open] summary { color:var(--doceo-blue); margin-bottom:.15rem; }
+.reglamento-fallback-steps {
+  margin:0 0 .75rem 1.1rem; padding:0; font-size:.82rem; line-height:1.45;
+}
+.reglamento-fallback-steps li { margin:.2rem 0; }
 </style>
 
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -180,6 +246,11 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
   const uploadStatus = document.getElementById('reglamento-upload-status');
   const digitalPanel = document.getElementById('reglamento-mode-digital');
   const uploadPanel = document.getElementById('reglamento-mode-upload');
+  const previewNameEl = document.getElementById('reglamento-preview-name');
+  const previewDateEl = document.getElementById('reglamento-preview-date');
+  const initialsInput = document.getElementById('reglamento-initials-input');
+  const previewBtn = document.getElementById('reglamento-preview-btn');
+  const previewLink = document.getElementById('reglamento-preview-link');
   const form = document.getElementById('checkout-form');
   if (!form || !docInput || !accepted) return;
 
@@ -188,6 +259,8 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
   let hasStroke = false;
   let reglamentoAttached = false;
   let uploadedFile = null;
+  let previewObjectUrl = null;
+  let initialsManual = false;
 
   const ctx = canvas ? canvas.getContext('2d') : null;
   if (ctx && canvas) {
@@ -290,7 +363,9 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
       reglamentoAttached = false;
       docInput.value = '';
       if (!file) {
+        if (isFill) mode = 'fill';
         if (uploadStatus) uploadStatus.textContent = '';
+        if (isFill && statusEl) statusEl.textContent = '';
         return;
       }
       const name = String(file.name || '').toLowerCase();
@@ -301,8 +376,13 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
         return;
       }
       uploadedFile = file;
-      if (isFill) mode = 'upload';
-      if (uploadStatus) uploadStatus.textContent = 'Archivo listo: ' + file.name;
+      if (isFill) {
+        mode = 'upload';
+        if (statusEl) statusEl.textContent = 'Usasando PDF subido (sin relleno automático).';
+      }
+      if (uploadStatus) {
+        uploadStatus.textContent = 'Archivo listo: ' + file.name + ' · se usará al enviar el registro.';
+      }
     });
   }
 
@@ -318,15 +398,23 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
     return parts.join(' ') || 'Aspirante';
   }
 
-  function signerInitials() {
+  function derivedInitials() {
     const parts = ['first_name', 'last_name_p', 'last_name_m']
       .map(formValue)
       .filter(Boolean);
-    if (parts.length === 0) return 'A';
+    if (parts.length === 0) return '';
     return parts.map(function (p) {
       const ch = p.charAt(0);
       return ch ? ch.toUpperCase() : '';
     }).join('');
+  }
+
+  function signerInitials() {
+    if (initialsInput) {
+      const typed = String(initialsInput.value || '').trim().toUpperCase();
+      if (typed) return typed;
+    }
+    return derivedInitials() || 'A';
   }
 
   function fechaHoy() {
@@ -336,6 +424,30 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
       const d = new Date();
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     }
+  }
+
+  function refreshFillSummary() {
+    if (!isFill) return;
+    if (previewNameEl) previewNameEl.textContent = signerName();
+    if (previewDateEl) previewDateEl.textContent = fechaHoy();
+    if (initialsInput && !initialsManual) {
+      initialsInput.value = derivedInitials();
+    }
+  }
+
+  if (isFill) {
+    ['first_name', 'last_name_p', 'last_name_m'].forEach(function (name) {
+      const el = form.querySelector('[name="' + name + '"]');
+      if (el) el.addEventListener('input', refreshFillSummary);
+    });
+    if (initialsInput) {
+      initialsInput.addEventListener('input', function () {
+        initialsManual = String(initialsInput.value || '').trim() !== '';
+        reglamentoAttached = false;
+        docInput.value = '';
+      });
+    }
+    refreshFillSummary();
   }
 
   function setTextField(formApi, aliases, value) {
@@ -351,8 +463,9 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
     return false;
   }
 
-  async function buildFilledAcroformPdf() {
-    if (!accepted.checked) {
+  async function buildFilledAcroformPdf(opts) {
+    const requireAccept = !(opts && opts.requireAccept === false);
+    if (requireAccept && !accepted.checked) {
       throw new Error('Debes aceptar los términos y condiciones marcando la casilla amarilla.');
     }
     if (typeof PDFLib === 'undefined') {
@@ -362,6 +475,10 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
     if (!name || name === 'Aspirante') {
       throw new Error('Completa primero tu nombre en el paso de datos personales.');
     }
+    const initials = signerInitials();
+    if (!initials) {
+      throw new Error('Indica tus iniciales (se escriben en el campo FIRMA O INICIALES).');
+    }
     const res = await fetch(templateUrl);
     if (!res.ok) throw new Error('No se pudo cargar el PDF de términos y condiciones.');
     const templateBytes = await res.arrayBuffer();
@@ -369,7 +486,7 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
     const pdfForm = pdfDoc.getForm();
     const okName = setTextField(pdfForm, formFields.name || ['NOMBRE'], name);
     const okDate = setTextField(pdfForm, formFields.date || ['FECHA'], fechaHoy());
-    const okInit = setTextField(pdfForm, formFields.initials || ['FIRMA O INICIALES'], signerInitials());
+    const okInit = setTextField(pdfForm, formFields.initials || ['FIRMA O INICIALES'], initials);
     if (!okName && !okDate && !okInit) {
       throw new Error('El PDF no tiene campos rellenables reconocidos. Usa “Subir PDF firmado” o contacta a un asesor.');
     }
@@ -379,6 +496,46 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
     const bytes = await pdfDoc.save();
     return new File([bytes], 'terminos-aceptados.pdf', { type: 'application/pdf' });
   }
+
+  async function openFilledPreview() {
+    if (!previewBtn) return;
+    refreshFillSummary();
+    previewBtn.disabled = true;
+    const prevLabel = previewBtn.textContent;
+    previewBtn.textContent = 'Generando vista previa…';
+    if (statusEl) statusEl.textContent = '';
+    try {
+      const file = await buildFilledAcroformPdf({ requireAccept: false });
+      if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+      previewObjectUrl = URL.createObjectURL(file);
+      if (previewLink) {
+        previewLink.href = previewObjectUrl;
+        previewLink.hidden = false;
+      }
+      const win = window.open(previewObjectUrl, '_blank', 'noopener');
+      if (!win && statusEl) {
+        statusEl.textContent = 'Vista previa lista. Usa “Abrir de nuevo” si el navegador bloqueó la pestaña.';
+      } else if (statusEl) {
+        statusEl.textContent = 'Vista previa abierta. Revisa nombre, fecha e iniciales antes de continuar.';
+      }
+    } catch (err) {
+      if (statusEl) statusEl.textContent = '';
+      alert(err.message || 'No se pudo generar la vista previa.');
+    } finally {
+      previewBtn.disabled = false;
+      previewBtn.textContent = prevLabel || 'Ver PDF con mis datos';
+    }
+  }
+
+  if (previewBtn) {
+    previewBtn.addEventListener('click', function () {
+      openFilledPreview();
+    });
+  }
+
+  window.addEventListener('beforeunload', function () {
+    if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+  });
 
   async function buildSignedPdf() {
     if (!accepted.checked) {
