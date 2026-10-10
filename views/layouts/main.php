@@ -2,6 +2,9 @@
 /** @var string $contentFile */
 $user = $user ?? \App\Auth\Auth::user();
 $title = $title ?? app_name();
+$metaDescription = trim((string) ($metaDescription ?? ''));
+$canonicalUrl = trim((string) ($canonicalUrl ?? ''));
+$ogImage = trim((string) ($ogImage ?? ''));
 ?>
 <!DOCTYPE html>
 <html lang="es-MX">
@@ -9,6 +12,19 @@ $title = $title ?? app_name();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e($title) ?> · <?= e(app_name()) ?></title>
+    <?php if ($metaDescription !== ''): ?>
+        <meta name="description" content="<?= e($metaDescription) ?>">
+        <meta property="og:description" content="<?= e($metaDescription) ?>">
+    <?php endif; ?>
+    <?php if ($canonicalUrl !== ''): ?>
+        <link rel="canonical" href="<?= e($canonicalUrl) ?>">
+        <meta property="og:url" content="<?= e($canonicalUrl) ?>">
+    <?php endif; ?>
+    <meta property="og:title" content="<?= e($title) ?> · <?= e(app_name()) ?>">
+    <meta property="og:type" content="website">
+    <?php if ($ogImage !== ''): ?>
+        <meta property="og:image" content="<?= e($ogImage) ?>">
+    <?php endif; ?>
     <link rel="icon" href="<?= e(asset('/assets/brand/favicon.ico')) ?>">
     <link rel="stylesheet" href="<?= e(asset('/assets/css/app.css')) ?>">
 </head>

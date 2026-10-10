@@ -62,6 +62,16 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e($title) ?> · Partner</title>
+    <?php
+    $metaDescription = trim((string) ($metaDescription ?? ''));
+    $canonicalUrl = trim((string) ($canonicalUrl ?? ''));
+    ?>
+    <?php if ($metaDescription !== ''): ?>
+        <meta name="description" content="<?= e($metaDescription) ?>">
+    <?php endif; ?>
+    <?php if ($canonicalUrl !== ''): ?>
+        <link rel="canonical" href="<?= e($canonicalUrl) ?>">
+    <?php endif; ?>
     <link rel="icon" href="<?= e(asset('/assets/brand/favicon.ico')) ?>">
     <link rel="stylesheet" href="<?= e(asset('/assets/css/app.css')) ?>">
     <script>

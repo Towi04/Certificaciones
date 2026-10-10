@@ -11,11 +11,16 @@ use App\Repositories\ComboRepository;
  */
 final class ComboCatalogPresenter
 {
-    private ComboRepository $combos;
+    private ?ComboRepository $combos;
 
     public function __construct(?ComboRepository $combos = null)
     {
-        $this->combos = $combos ?? new ComboRepository();
+        $this->combos = $combos;
+    }
+
+    private function repo(): ComboRepository
+    {
+        return $this->combos ??= new ComboRepository();
     }
 
     /**
@@ -25,7 +30,7 @@ final class ComboCatalogPresenter
      */
     public function presentCard(array $combo, ?array $items = null): array
     {
-        $items ??= $this->combos->items((int) ($combo['id'] ?? 0));
+        $items ??= $this->repo()->items((int) ($combo['id'] ?? 0));
         $certs = $this->certificationItems($items);
         $fallbackPool = $certs !== [] ? $certs : $items;
 
@@ -72,7 +77,13 @@ final class ComboCatalogPresenter
             'items' => $items,
             'certification_items' => $certs,
         ];
-        foreach (array_keys(PartnerAdminService::specialPriceFieldLabels()) as $specialCol) {
+        try {
+            $specialCols = array_keys(PartnerAdminService::specialPriceFieldLabels());
+        } catch (\Throwable) {
+            // Sin BD / tiers especiales no disponibles (CLI QA, boot parcial).
+            $specialCols = [];
+        }
+        foreach ($specialCols as $specialCol) {
             $card[$specialCol] = $combo[$specialCol] ?? null;
         }
 
@@ -89,7 +100,7 @@ final class ComboCatalogPresenter
             return [];
         }
         $ids = array_map(static fn (array $c): int => (int) ($c['id'] ?? 0), $combos);
-        $byCombo = $this->combos->itemsByComboIds($ids);
+        $byCombo = $this->repo()->itemsByComboIds($ids);
         $out = [];
         foreach ($combos as $combo) {
             $id = (int) ($combo['id'] ?? 0);
