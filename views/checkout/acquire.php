@@ -1670,13 +1670,24 @@ $stepLabels = [
         }
         if (usesVenuePickerMode(examMode) && examVenueSelect && Array.isArray(data.venues)) {
           examVenuesById = {};
-          examVenueSelect.innerHTML = '<option value="">— elige sede —</option>';
+          examVenueSelect.innerHTML = '<option value="">— elige ciudad —</option>';
+          // Contar ciudades para desambiguar solo si hay duplicados.
+          var cityCounts = {};
+          data.venues.forEach(function (v) {
+            var c = String(v.city || '').trim().toLowerCase();
+            if (c) cityCounts[c] = (cityCounts[c] || 0) + 1;
+          });
           data.venues.forEach(function (v) {
             examVenuesById[v.id] = v;
             const opt = document.createElement('option');
             opt.value = v.id || '';
-            var label = v.name || 'Sede';
-            if (v.city) label += ' · ' + v.city;
+            var city = String(v.city || '').trim();
+            var name = String(v.name || '').trim();
+            var label = city || name || 'Sede';
+            // Si dos sedes comparten ciudad, añadir el nombre para distinguirlas.
+            if (city && name && (cityCounts[city.toLowerCase()] || 0) > 1) {
+              label = city + ' · ' + name;
+            }
             opt.textContent = label;
             examVenueSelect.appendChild(opt);
           });
