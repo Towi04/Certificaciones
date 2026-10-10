@@ -36,4 +36,4 @@ Luego en Admin (manual, no lo hace el script):
 |------|--------|
 | 0–6 + gate ops | Hechas |
 | **7 Config real por grupo** | Hecha (#265) |
-| **8 QA cutover** | `docs/products/cutover-phase8-qa.md` |
+| **8 QA cutover** | `docs/products/cutover-phase8-qa.md` + `php bin/cutover-phase8-matrix.php` |

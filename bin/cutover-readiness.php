@@ -17,4 +17,6 @@ $result = (new CutoverReadinessChecker())->run();
 foreach ($result['lines'] as $line) {
     fwrite(STDOUT, $line . PHP_EOL);
 }
+
+fwrite(STDOUT, PHP_EOL . 'Siguiente: php bin/cutover-phase8-matrix.php' . PHP_EOL);
 exit($result['ok'] ? 0 : 1);
