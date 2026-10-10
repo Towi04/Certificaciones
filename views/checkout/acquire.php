@@ -241,9 +241,14 @@ $stepLabels = [
                                     </label>
                                 </div>
                                 <div id="exam-venue-window-wrap" class="form-grid" style="grid-column:1/-1;max-width:480px;display:none;gap:.75rem;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
-                                    <label>Fecha del examen *
+                                    <label id="exam-date-free-label">Fecha del examen *
                                         <input type="date" id="exam_date_select" lang="es-MX"
                                                min="<?= e($examMinDate ?? '') ?>">
+                                    </label>
+                                    <label id="exam-date-list-label" hidden>Fecha del examen *
+                                        <select id="exam_date_list_select" disabled>
+                                            <option value="">— elige fecha —</option>
+                                        </select>
                                     </label>
                                     <label>Hora *
                                         <select id="exam_time_select" disabled>
@@ -752,6 +757,9 @@ $stepLabels = [
   const examSessionHidden = document.getElementById('exam_session_id');
   const examVenueIdHidden = document.getElementById('exam_venue_id');
   const examDateSelect = document.getElementById('exam_date_select');
+  const examDateListSelect = document.getElementById('exam_date_list_select');
+  const examDateFreeLabel = document.getElementById('exam-date-free-label');
+  const examDateListLabel = document.getElementById('exam-date-list-label');
   const examTimeSelect = document.getElementById('exam_time_select');
   const examSessionSelect = document.getElementById('exam_session_select');
   const examVenueSelect = document.getElementById('exam_venue_select');
@@ -773,14 +781,33 @@ $stepLabels = [
     return mode === 'dated_list' || mode === 'venue_schedules';
   }
 
+  function isWindowRuleType(ruleType) {
+    return ruleType === 'open_window' || ruleType === 'recurring_window';
+  }
+
   function setVenuePickerMode(ruleType) {
     examVenueRuleType = ruleType || '';
     const hasRule = examVenueRuleType !== '';
-    const isOpen = examVenueRuleType === 'open_window';
+    const isOpen = isWindowRuleType(examVenueRuleType);
     if (examVenueSessionsWrap) examVenueSessionsWrap.hidden = !hasRule || isOpen;
     if (examVenueWindowWrap) {
       examVenueWindowWrap.style.display = hasRule && isOpen ? 'grid' : 'none';
     }
+    const useDateList = examVenueRuleType === 'recurring_window';
+    if (examDateFreeLabel) examDateFreeLabel.hidden = useDateList;
+    if (examDateListLabel) examDateListLabel.hidden = !useDateList;
+  }
+
+  function fillExamDateList(dates) {
+    if (!examDateListSelect) return;
+    examDateListSelect.innerHTML = '<option value="">— elige fecha —</option>';
+    (dates || []).forEach(function (ymd) {
+      const opt = document.createElement('option');
+      opt.value = ymd;
+      opt.textContent = formatExamDateEs(ymd) || ymd;
+      examDateListSelect.appendChild(opt);
+    });
+    examDateListSelect.disabled = !(dates && dates.length);
   }
 
   if (!form || !prevBtn || !nextBtn || !submitBtn) {
@@ -1543,6 +1570,10 @@ $stepLabels = [
       examTimeSelect.disabled = true;
     }
     if (examDateSelect) examDateSelect.value = '';
+    if (examDateListSelect) {
+      examDateListSelect.value = '';
+      fillExamDateList([]);
+    }
     setExamDateWarn('');
   }
 
@@ -1573,9 +1604,14 @@ $stepLabels = [
           || (examVenuesById[venueId] && examVenuesById[venueId].rule_type)
           || (examMode === 'dated_list' ? 'dated' : '');
         setVenuePickerMode(ruleType);
-        if (ruleType === 'open_window') {
+        if (isWindowRuleType(ruleType)) {
           if (examDateSelect && data.min_date) examDateSelect.min = data.min_date;
-          if (examSlotHint && data.min_advance_days !== undefined) {
+          if (ruleType === 'recurring_window') {
+            fillExamDateList(data.dates || []);
+            if (examSlotHint) {
+              examSlotHint.textContent = 'Elige una fecha del patrón (p. ej. martes) y luego la hora dentro de la ventana.';
+            }
+          } else if (examSlotHint && data.min_advance_days !== undefined) {
             examSlotHint.textContent = examAdvanceHint(data.min_advance_days);
           }
           if (examSessionSelect) {
@@ -1722,6 +1758,17 @@ $stepLabels = [
   if (examDateSelect) {
     examDateSelect.addEventListener('change', () => {
       const d = examDateSelect.value;
+      if (examDateHidden) examDateHidden.value = d;
+      if (examTimeHidden) examTimeHidden.value = '';
+      if (examKindHidden) examKindHidden.value = 'regular';
+      if (examSessionHidden) examSessionHidden.value = '';
+      loadExamSlots(d);
+    });
+  }
+  if (examDateListSelect) {
+    examDateListSelect.addEventListener('change', () => {
+      const d = examDateListSelect.value;
+      if (examDateSelect) examDateSelect.value = d;
       if (examDateHidden) examDateHidden.value = d;
       if (examTimeHidden) examTimeHidden.value = '';
       if (examKindHidden) examKindHidden.value = 'regular';

@@ -506,9 +506,13 @@ $pageHeading = $isEdit
                 Un bloque por sede, separados por línea en blanco. Primera línea:
                 <code>id|nombre|ciudad|dirección|tipo</code>
                 (<code>recurring</code>, <code>dated</code> o <code>open_window</code>).<br>
+                Días: <code>0</code>=dom … <code>6</code>=sáb (<code>1</code>=lun, <code>2</code>=mar).<br>
                 <strong>recurring</strong> (UKS):
-                <code>dows|horas|semanas|deadline_type|dow|weeks_before</code>
-                — ej. <code>2|10:00|16|previous_weekday|3|1</code> (martes 10:00; cierra el miércoles anterior).<br>
+                <code>dows|horas|semanas|deadline_type|dow|weeks_before[|slot_min]</code><br>
+                · Hora fija: <code>2|10:00|16|previous_weekday|3|1</code> (martes 10:00; cierra el miércoles anterior).<br>
+                · <strong>Ventana</strong> (alumno elige hora): <code>2|10:00-15:00|16|previous_weekday|3|1|30</code>
+                (martes 10:00–15:00, slots de 30 min).<br>
+                · Antelación en días: <code>2|10:00-15:00|16|days_before|0|8|30</code> (cierra 8 días antes).<br>
                 <strong>dated</strong>: líneas
                 <code>fecha|hora|límite|etiqueta</code> (sin repetir la sede).<br>
                 <strong>open_window</strong>:
@@ -517,7 +521,7 @@ $pageHeading = $isEdit
             </p>
             <textarea name="schedule_venues_text" rows="10"
                       style="<?= e($inputStyle) ?>;font-family:ui-monospace,monospace;font-size:.82rem;width:100%;resize:vertical"
-                      placeholder="leon-centro|Campus Centro|León, Gto.|Av. Ejemplo 123|recurring&#10;2|10:00|16|previous_weekday|3|1&#10;&#10;gto-norte|Sede Norte|Guanajuato, Gto.|Calle Falsa 456|dated&#10;2026-11-15|10:00|2026-10-20|Noviembre&#10;2027-03-12|10:00|2027-02-15|Marzo&#10;&#10;cdmx-flex|Campus CDMX|CDMX|Insurgentes 100|open_window&#10;1,2,3,4,5|09:00|18:00|09:00|14:00|2|30"><?= e((string) ($extras['schedule_venues_text'] ?? '')) ?></textarea>
+                      placeholder="leon-centro|Campus Centro|León, Gto.|Av. Ejemplo 123|recurring&#10;2|10:00-15:00|16|previous_weekday|3|1|30&#10;&#10;gto-norte|Sede Norte|Guanajuato, Gto.|Calle Falsa 456|dated&#10;2026-11-15|10:00|2026-10-20|Noviembre&#10;2027-03-12|10:00|2027-02-15|Marzo&#10;&#10;cdmx-flex|Campus CDMX|CDMX|Insurgentes 100|open_window&#10;1,2,3,4,5|09:00|18:00|09:00|14:00|2|30"><?= e((string) ($extras['schedule_venues_text'] ?? '')) ?></textarea>
             <p class="muted" style="font-size:.78rem;margin:.55rem 0 0">
                 Vacaciones DOCEO (fechas bloqueadas globales):
                 <a href="<?= e(url('/admin/vacaciones')) ?>">Administrar</a>

@@ -33,11 +33,19 @@ Detalle Fase 7: `docs/products/cutover-phase7.md`.
 1. Modo de agenda → **Sedes con regla propia** (`venue_schedules`).
    Si UKS solo manda fechas sueltas (sin patrón semanal), puedes usar
    **Lista de convocatorias** (`dated_list`) como Cambridge.
-2. Con `venue_schedules` + regla **recurring** (ej. martes 10:00, cierra el miércoles anterior):
+2. Con `venue_schedules` + regla **recurring**:
+   - Hora fija (una sola convocatoria por martes):
 
 ```
 leon-centro|Campus Centro|León, Gto.|Av. Ejemplo 123|recurring
 2|10:00|16|previous_weekday|3|1
+```
+
+   - **Ventana** 10:00–15:00 (el alumno elige la hora; slots de 30 min; cierra el miércoles anterior):
+
+```
+leon-centro|Campus Centro|León, Gto.|Av. Ejemplo 123|recurring
+2|10:00-15:00|16|previous_weekday|3|1|30
 ```
 
    Con fechas fijas por sede (`dated`):

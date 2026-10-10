@@ -27,13 +27,19 @@ Siempre se guarda en `trackings.exam_date` / `exam_time` (placeholders `{{exam_d
 
 ### `venue_schedules` (UKS / sedes con regla propia)
 - Lista `venues[]`; cada sede tiene `rule.type`:
-  - `recurring` — DOWs + horas + horizonte + deadline (p. ej. martes 10:00; cierra el miércoles anterior).
+  - `recurring` — DOWs + horas **fijas** o **ventana** + horizonte + deadline.
+    - Fija: `2|10:00|16|previous_weekday|3|1` → martes 10:00; cierra el miércoles anterior.
+    - Ventana (alumno elige hora): `2|10:00-15:00|16|previous_weekday|3|1|30`
+      → martes 10:00–15:00, slots de 30 min. El API expone `venue_rule_type=recurring_window`.
+    - DOW: `0`=dom … `6`=sáb (`1`=lun, `2`=mar).
+    - Deadline alternativo: `days_before|0|8` = cierra 8 días antes del examen.
   - `dated` — convocatorias explícitas **sin** repetir sede en cada línea.
   - `open_window` — días + ventana Lun–Vie / sábado + `min_advance_days` + `slot_minutes`.
 - Admin → Grupos → Fechas: modo **Sedes con regla propia**; bloques separados por línea en blanco
   (ver ayuda del textarea o `ProductAdminService::venuesToText`).
-- Checkout: sede primero; según la regla muestra convocatorias (recurring/dated) o fecha+hora (open_window).
-- API: `venue_rule_type` en la respuesta; `venue_id` obligatorio al pedir slots de `open_window`.
+- Checkout: sede primero; según la regla muestra convocatorias (recurring fijo/dated)
+  o fecha+hora (`open_window` / `recurring_window`).
+- API: `venue_rule_type` en la respuesta; `venue_id` obligatorio al pedir slots de ventana.
 - Vacaciones globales DOCEO bloquean fechas en todos los tipos.
 - Motor: `VenueScheduleEngine` + `ExamScheduleService::MODE_VENUE_SCHEDULES`.
 - Cutover UKS online → presencial: ver `docs/products/uks-presencial-cutover.md`.
