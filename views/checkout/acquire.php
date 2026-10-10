@@ -1132,8 +1132,12 @@ $stepLabels = [
       html += '<dt>Documentos</dt><dd>' + (names.length ? names.join(', ') : '—') + '</dd>';
     }
     if (examVenueSelect && examVenueSelect.value) {
+      const vMeta = examVenuesById[examVenueSelect.value];
       const vOpt = examVenueSelect.options[examVenueSelect.selectedIndex];
-      html += '<dt>Sede</dt><dd>' + (vOpt ? vOpt.textContent : examVenueSelect.value) + '</dd>';
+      const sedeLabel = vMeta
+        ? [vMeta.city, vMeta.name, vMeta.address].filter(Boolean).join(' · ')
+        : (vOpt ? vOpt.textContent : examVenueSelect.value);
+      html += '<dt>Sede</dt><dd>' + sedeLabel + '</dd>';
     }
     html += '<dt>Forma de pago</dt><dd>' + payMethodLabel() + '</dd>';
     const app = creditApplication();
