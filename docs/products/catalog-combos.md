@@ -35,11 +35,18 @@ ALTER TABLE combos
 - CTA → `/adquirir/{cert-slug}?combo_id={id}` (preselecciona el paquete)
 - Partner: misma pestaña en `/partner/registrar?seccion=combos`
 
+## Ficha `/paquete/{slug}`
+
+- Layout alineado a producto (hero, precio, CTA, admin edit)
+- Aside sticky con ahorro vs precios de lista
+- Tarjetas de ítems con logo + enlace a `/producto/{slug}`
+- SEO: `meta description`, `canonical`, `og:title` / `og:image`
+
 ## Estado del plan
 
 | Fase | Estado |
 |------|--------|
 | 1 Schema + admin | Lista |
 | 2 Tab catálogo + presenter | Lista |
-| 3 Ficha `/paquete/{slug}` | Base en Fase 2 (pulido pendiente) |
-| 4 Checkout CTA + QA | Parcial (deep-link `combo_id`) |
+| 3 Ficha `/paquete/{slug}` | Lista (pulido visual + SEO) |
+| 4 Checkout CTA + QA | Parcial (deep-link `combo_id`; QA staging pendiente) |

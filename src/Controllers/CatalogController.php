@@ -10,6 +10,7 @@ use App\Repositories\ProductMediaRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\PartnerRepository;
 use App\Services\CatalogFilterService;
+use App\Services\ComboAdminService;
 use App\Services\ComboCatalogPresenter;
 use App\Services\PartnerDirectoryService;
 use App\Services\PartnerRegistrationService;
@@ -247,6 +248,10 @@ final class CatalogController
         }
 
         $presented = (new ComboCatalogPresenter($comboRepo))->presentCard($combo);
+        $items = is_array($presented['items'] ?? null) ? $presented['items'] : [];
+        $listPrice = ComboAdminService::listPriceForCombo($presented);
+        $breakdown = ComboAdminService::priceBreakdown($items, $listPrice);
+
         $user = Auth::user();
         $partner = null;
         $partnerPrice = null;
@@ -264,13 +269,43 @@ final class CatalogController
             ? url('/adquirir/' . rawurlencode($acquireSlug) . '?combo_id=' . (int) $presented['id'])
             : url('/catalogo?seccion=combos');
 
+        $metaRaw = trim(strip_tags((string) ($presented['short_description'] ?? '')));
+        if ($metaRaw === '') {
+            $names = [];
+            foreach ($items as $item) {
+                $n = trim((string) ($item['name'] ?? ''));
+                if ($n !== '') {
+                    $names[] = $n;
+                }
+            }
+            $metaRaw = $names !== []
+                ? 'Paquete que incluye: ' . implode(', ', $names) . '.'
+                : 'Paquete de certificaciones y cursos del Instituto DOCEO.';
+        }
+        if (function_exists('mb_substr')) {
+            $metaDescription = mb_substr($metaRaw, 0, 160);
+        } else {
+            $metaDescription = substr($metaRaw, 0, 160);
+        }
+
+        $logoPath = trim((string) ($presented['logo_path'] ?? ''));
+        $ogImage = $logoPath !== '' ? asset($logoPath) : '';
+        if ($ogImage !== '' && !str_starts_with($ogImage, 'http')) {
+            $appUrl = rtrim((string) (\App\Config\Env::get('APP_URL', '') ?? ''), '/');
+            $ogImage = $appUrl !== '' ? $appUrl . $ogImage : $ogImage;
+        }
+
         view('catalog/combo_show', [
-            'title' => $presented['name'],
+            'title' => (string) $presented['name'] . ' · Combo',
             'combo' => $presented,
+            'breakdown' => $breakdown,
             'user' => $user,
             'partner' => $partner,
             'partnerPrice' => $partnerPrice,
             'ctaUrl' => $ctaUrl,
+            'metaDescription' => $metaDescription,
+            'canonicalUrl' => url('/paquete/' . (string) $presented['slug']),
+            'ogImage' => $ogImage,
             'layout' => (($user['role'] ?? '') === 'partner') ? 'partner' : 'main',
         ]);
     }
