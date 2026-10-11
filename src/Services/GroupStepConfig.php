@@ -948,10 +948,9 @@ final class GroupStepConfig
             'audience' => (string) ($emailRaw['audience'] ?? $row['email_audience'] ?? ''),
         ]);
         $csvRaw = is_array($row['csv'] ?? null) ? $row['csv'] : [];
-        $csvScope = strtolower(trim((string) ($csvRaw['scope'] ?? $row['csv_scope'] ?? 'student')));
-        if (!in_array($csvScope, ['student', 'exam_date'], true)) {
-            $csvScope = 'student';
-        }
+        $csvScope = ExportService::normalizeScope(
+            (string) ($csvRaw['scope'] ?? $row['csv_scope'] ?? ExportService::SCOPE_STUDENT)
+        );
         $csvTemplate = trim((string) ($csvRaw['template_code'] ?? $row['csv_template'] ?? ''));
         $opsIcon = strtolower(trim((string) ($row['ops_icon'] ?? '')));
         if ($opsIcon !== '' && !isset(self::OPS_ICONS[$opsIcon])) {

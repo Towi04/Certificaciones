@@ -3068,12 +3068,21 @@ final class AdminController
     public function exportDownload(string $code): void
     {
         Auth::requireRole(['admin']);
-        $options = [];
+        $options = [
+            'exclude_registered' => empty($_GET['include_registered']),
+            'template_code' => $code,
+            'actor_user_id' => (int) Auth::id(),
+        ];
         if (!empty($_GET['tracking_id'])) {
             $options['tracking_id'] = (int) $_GET['tracking_id'];
         }
         if (!empty($_GET['exam_date']) && is_string($_GET['exam_date'])) {
             $options['exam_date'] = trim($_GET['exam_date']);
+            $options['batch'] = true;
+        }
+        if (!empty($_GET['product_id'])) {
+            $options['product_id'] = (int) $_GET['product_id'];
+            $options['batch'] = true;
         }
         if (!empty($_GET['all_paid'])) {
             $options['step_codes'] = [];
@@ -3296,7 +3305,9 @@ final class AdminController
         Auth::requireRole(['admin']);
         $svc = new ExportService();
         $trackingId = (int) ($_GET['tracking_id'] ?? 0);
-        $scope = (string) ($_GET['scope'] ?? 'student');
+        $scope = ExportService::normalizeScope((string) ($_GET['scope'] ?? ExportService::SCOPE_STUDENT));
+        $includeRegistered = !empty($_GET['include_registered']);
+        $stepCode = trim((string) ($_GET['step_code'] ?? ''));
         $returnTo = trim((string) ($_GET['return'] ?? ''));
         if ($returnTo === '' || !str_starts_with($returnTo, '/admin')) {
             $returnTo = $trackingId > 0
@@ -3306,25 +3317,28 @@ final class AdminController
 
         try {
             if ($trackingId > 0) {
-                $stepCode = trim((string) ($_GET['step_code'] ?? ''));
-                try {
-                    (new TrackingService())->markCsvDownloaded(
-                        $trackingId,
-                        $stepCode,
-                        $code,
-                        (int) Auth::id()
-                    );
-                } catch (\Throwable) {
-                    // La marca de estado no debe bloquear la descarga.
-                }
-                $svc->sendDownloadForTracking($code, $trackingId, ['scope' => $scope]);
+                $svc->sendDownloadForTracking($code, $trackingId, [
+                    'scope' => $scope,
+                    'exclude_registered' => !$includeRegistered,
+                    'step_code' => $stepCode,
+                    'actor_user_id' => (int) Auth::id(),
+                ]);
 
                 return;
             }
 
-            $options = [];
+            $options = [
+                'exclude_registered' => !$includeRegistered,
+                'template_code' => $code,
+                'step_code' => $stepCode,
+                'actor_user_id' => (int) Auth::id(),
+                'batch' => true,
+            ];
             if (!empty($_GET['exam_date']) && is_string($_GET['exam_date'])) {
                 $options['exam_date'] = trim($_GET['exam_date']);
+            }
+            if (!empty($_GET['product_id'])) {
+                $options['product_id'] = (int) $_GET['product_id'];
             }
             if (!empty($_GET['all_paid'])) {
                 $options['step_codes'] = [];
@@ -3334,6 +3348,52 @@ final class AdminController
             flash('error', 'No se pudo descargar el CSV: ' . $e->getMessage());
             redirect($returnTo);
         }
+    }
+
+    public function csvTemplatePreview(string $code): void
+    {
+        Auth::requireRole(['admin']);
+        header('Content-Type: application/json; charset=UTF-8');
+        $svc = new ExportService();
+        $trackingId = (int) ($_GET['tracking_id'] ?? 0);
+        $scope = ExportService::normalizeScope((string) ($_GET['scope'] ?? ExportService::SCOPE_STUDENT));
+        $includeRegistered = !empty($_GET['include_registered']);
+        $stepCode = trim((string) ($_GET['step_code'] ?? ''));
+
+        try {
+            if ($trackingId > 0) {
+                $options = $svc->optionsForTrackingScope($code, $trackingId, [
+                    'scope' => $scope,
+                    'exclude_registered' => !$includeRegistered,
+                    'step_code' => $stepCode,
+                ]);
+            } else {
+                $options = [
+                    'exclude_registered' => !$includeRegistered,
+                    'template_code' => $code,
+                    'step_code' => $stepCode,
+                    'batch' => true,
+                ];
+                if (!empty($_GET['exam_date']) && is_string($_GET['exam_date'])) {
+                    $options['exam_date'] = trim($_GET['exam_date']);
+                }
+                if (!empty($_GET['product_id'])) {
+                    $options['product_id'] = (int) $_GET['product_id'];
+                }
+            }
+            $preview = $svc->previewDownload($code, $options);
+            echo json_encode([
+                'ok' => true,
+                'scope' => $scope,
+                'included' => $preview['included'],
+                'excluded' => $preview['excluded'],
+                'excluded_reasons' => $preview['excluded_reasons'],
+            ], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
     }
 
     public function vacations(): void
