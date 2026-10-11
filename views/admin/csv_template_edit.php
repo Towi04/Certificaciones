@@ -1,13 +1,16 @@
 <?php
 /** @var array<string,mixed> $template */
-/** @var list<array{header:string,field:string}> $columns */
+/** @var list<array{header:string,field:string,formula?:string}> $columns */
 /** @var list<array{value:string,label:string}> $fieldOptions */
+/** @var list<array<string,mixed>> $suppliers */
 /** @var bool $isNew */
 $isNew = $isNew ?? empty($template['code']);
 $code = (string) ($template['code'] ?? '');
 $name = (string) ($template['name'] ?? '');
 $batchBy = (string) ($template['batch_by'] ?? 'none');
 $active = (int) ($template['is_active'] ?? 1) === 1;
+$supplierId = (int) ($template['supplier_id'] ?? 0);
+$suppliers = is_array($suppliers ?? null) ? $suppliers : [];
 $map = [];
 if (!empty($template['mapping_json'])) {
     $decoded = is_string($template['mapping_json'])
@@ -29,7 +32,7 @@ $fieldOptions = is_array($fieldOptions ?? null) ? $fieldOptions : \App\Services\
 $formAction = $isNew ? url('/admin/plantillas-csv/nueva') : url('/admin/plantillas-csv/' . $code);
 $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;font:inherit;width:100%';
 ?>
-<p class="meta"><a href="<?= e(url('/admin/plantillas-csv')) ?>">← Plantillas CSV</a></p>
+<p class="meta"><a href="<?= e(url('/admin/plantillas-csv')) ?>">← Plantillas proveedor</a></p>
 <h1 style="margin:.2rem 0;color:var(--doceo-blue)"><?= $isNew ? 'Nueva plantilla CSV' : e($name !== '' ? $name : $code) ?></h1>
 <p class="muted">Código: <code><?= e($code !== '' ? $code : 'por definir') ?></code>
     <?php if (!$active && !$isNew): ?>
@@ -55,6 +58,24 @@ $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;
                            value="<?= e($code) ?>" <?= $isNew ? '' : 'readonly' ?>
                            placeholder="uks_elet_registro" style="<?= e($inputStyle) ?>">
                     <span style="font-size:.78rem;font-weight:400">Minúsculas, números, _ y -. No se puede cambiar después.</span>
+                </label>
+                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
+                    Proveedor
+                    <select name="supplier_id" style="<?= e($inputStyle) ?>">
+                        <option value="">— Sin proveedor —</option>
+                        <?php foreach ($suppliers as $s): ?>
+                            <?php
+                            $sid = (int) ($s['id'] ?? 0);
+                            if ($sid < 1) {
+                                continue;
+                            }
+                            ?>
+                            <option value="<?= $sid ?>" <?= $supplierId === $sid ? 'selected' : '' ?>>
+                                <?= e((string) ($s['name'] ?? $s['code'] ?? ('#' . $sid))) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <span style="font-size:.78rem;font-weight:400">Etiqueta para filtrar en el catálogo y en Progreso.</span>
                 </label>
                 <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
                     Agrupación por defecto

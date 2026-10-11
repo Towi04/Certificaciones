@@ -3068,12 +3068,21 @@ final class AdminController
     public function exportDownload(string $code): void
     {
         Auth::requireRole(['admin']);
-        $options = [];
+        $options = [
+            'exclude_registered' => empty($_GET['include_registered']),
+            'template_code' => $code,
+            'actor_user_id' => (int) Auth::id(),
+        ];
         if (!empty($_GET['tracking_id'])) {
             $options['tracking_id'] = (int) $_GET['tracking_id'];
         }
         if (!empty($_GET['exam_date']) && is_string($_GET['exam_date'])) {
             $options['exam_date'] = trim($_GET['exam_date']);
+            $options['batch'] = true;
+        }
+        if (!empty($_GET['product_id'])) {
+            $options['product_id'] = (int) $_GET['product_id'];
+            $options['batch'] = true;
         }
         if (!empty($_GET['all_paid'])) {
             $options['step_codes'] = [];
@@ -3139,7 +3148,7 @@ final class AdminController
         Auth::requireRole(['admin']);
         $templates = (new \App\Repositories\ExportTemplateRepository())->all();
         view('admin/csv_templates', [
-            'title' => 'Plantillas CSV',
+            'title' => 'Plantillas proveedor',
             'templates' => $templates,
             'layout' => 'admin',
         ]);
@@ -3152,6 +3161,7 @@ final class AdminController
         $template = [
             'code' => (string) ($old['code'] ?? ''),
             'name' => (string) ($old['name'] ?? ''),
+            'supplier_id' => !empty($old['supplier_id']) ? (int) $old['supplier_id'] : null,
             'batch_by' => (string) ($old['batch_by'] ?? 'none'),
             'is_active' => array_key_exists('is_active', $old) ? (!empty($old['is_active']) ? 1 : 0) : 1,
             'mapping_json' => null,
@@ -3159,10 +3169,15 @@ final class AdminController
         $columns = [];
         if (isset($old['col_header'], $old['col_field']) && is_array($old['col_header']) && is_array($old['col_field'])) {
             foreach ($old['col_header'] as $i => $header) {
-                $columns[] = [
+                $col = [
                     'header' => (string) $header,
                     'field' => (string) ($old['col_field'][$i] ?? 'first_name'),
                 ];
+                $formula = trim((string) ($old['col_formula'][$i] ?? ''));
+                if ($formula !== '') {
+                    $col['formula'] = $formula;
+                }
+                $columns[] = $col;
             }
         }
         if ($columns === []) {
@@ -3189,6 +3204,7 @@ final class AdminController
             'template' => $template,
             'columns' => $columns,
             'fieldOptions' => ExportService::fieldOptions(),
+            'suppliers' => (new SupplierRepository())->all(),
             'isNew' => true,
             'layout' => 'admin',
         ]);
@@ -3223,6 +3239,7 @@ final class AdminController
         $old = old_input();
         if ($old !== []) {
             $template['name'] = (string) ($old['name'] ?? $template['name']);
+            $template['supplier_id'] = !empty($old['supplier_id']) ? (int) $old['supplier_id'] : null;
             $template['batch_by'] = (string) ($old['batch_by'] ?? $template['batch_by']);
             $template['is_active'] = !empty($old['is_active']) ? 1 : 0;
             $map = $svc->mapping($template);
@@ -3239,18 +3256,28 @@ final class AdminController
         $columns = [];
         if (isset($old['col_header'], $old['col_field']) && is_array($old['col_header']) && is_array($old['col_field'])) {
             foreach ($old['col_header'] as $i => $header) {
-                $columns[] = [
+                $col = [
                     'header' => (string) $header,
                     'field' => (string) ($old['col_field'][$i] ?? ''),
                 ];
+                $formula = trim((string) ($old['col_formula'][$i] ?? ''));
+                if ($formula !== '') {
+                    $col['formula'] = $formula;
+                }
+                $columns[] = $col;
             }
         } else {
             foreach (($mapping['columns'] ?? []) as $col) {
                 if (is_array($col)) {
-                    $columns[] = [
+                    $entry = [
                         'header' => (string) ($col['header'] ?? ''),
                         'field' => (string) ($col['field'] ?? ''),
                     ];
+                    $formula = trim((string) ($col['formula'] ?? ''));
+                    if ($formula !== '') {
+                        $entry['formula'] = $formula;
+                    }
+                    $columns[] = $entry;
                 }
             }
         }
@@ -3260,6 +3287,7 @@ final class AdminController
             'template' => $template,
             'columns' => $columns,
             'fieldOptions' => ExportService::fieldOptions(),
+            'suppliers' => (new SupplierRepository())->all(),
             'isNew' => false,
             'layout' => 'admin',
         ]);
@@ -3296,7 +3324,13 @@ final class AdminController
         Auth::requireRole(['admin']);
         $svc = new ExportService();
         $trackingId = (int) ($_GET['tracking_id'] ?? 0);
-        $scope = (string) ($_GET['scope'] ?? 'student');
+        $scope = ExportService::normalizeScope((string) ($_GET['scope'] ?? ExportService::SCOPE_STUDENT));
+        $includeRegistered = !empty($_GET['include_registered']);
+        $comboMode = strtolower(trim((string) ($_GET['combo_mode'] ?? 'repeat')));
+        if (!in_array($comboMode, ['repeat', 'single'], true)) {
+            $comboMode = 'repeat';
+        }
+        $stepCode = trim((string) ($_GET['step_code'] ?? ''));
         $returnTo = trim((string) ($_GET['return'] ?? ''));
         if ($returnTo === '' || !str_starts_with($returnTo, '/admin')) {
             $returnTo = $trackingId > 0
@@ -3306,25 +3340,30 @@ final class AdminController
 
         try {
             if ($trackingId > 0) {
-                $stepCode = trim((string) ($_GET['step_code'] ?? ''));
-                try {
-                    (new TrackingService())->markCsvDownloaded(
-                        $trackingId,
-                        $stepCode,
-                        $code,
-                        (int) Auth::id()
-                    );
-                } catch (\Throwable) {
-                    // La marca de estado no debe bloquear la descarga.
-                }
-                $svc->sendDownloadForTracking($code, $trackingId, ['scope' => $scope]);
+                $svc->sendDownloadForTracking($code, $trackingId, [
+                    'scope' => $scope,
+                    'exclude_registered' => !$includeRegistered,
+                    'step_code' => $stepCode,
+                    'actor_user_id' => (int) Auth::id(),
+                    'combo_mode' => $comboMode,
+                ]);
 
                 return;
             }
 
-            $options = [];
+            $options = [
+                'exclude_registered' => !$includeRegistered,
+                'template_code' => $code,
+                'step_code' => $stepCode,
+                'actor_user_id' => (int) Auth::id(),
+                'batch' => true,
+                'combo_mode' => $comboMode,
+            ];
             if (!empty($_GET['exam_date']) && is_string($_GET['exam_date'])) {
                 $options['exam_date'] = trim($_GET['exam_date']);
+            }
+            if (!empty($_GET['product_id'])) {
+                $options['product_id'] = (int) $_GET['product_id'];
             }
             if (!empty($_GET['all_paid'])) {
                 $options['step_codes'] = [];
@@ -3334,6 +3373,62 @@ final class AdminController
             flash('error', 'No se pudo descargar el CSV: ' . $e->getMessage());
             redirect($returnTo);
         }
+    }
+
+    public function csvTemplatePreview(string $code): void
+    {
+        Auth::requireRole(['admin']);
+        header('Content-Type: application/json; charset=UTF-8');
+        $svc = new ExportService();
+        $trackingId = (int) ($_GET['tracking_id'] ?? 0);
+        $scope = ExportService::normalizeScope((string) ($_GET['scope'] ?? ExportService::SCOPE_STUDENT));
+        $includeRegistered = !empty($_GET['include_registered']);
+        $comboMode = strtolower(trim((string) ($_GET['combo_mode'] ?? 'repeat')));
+        if (!in_array($comboMode, ['repeat', 'single'], true)) {
+            $comboMode = 'repeat';
+        }
+        $stepCode = trim((string) ($_GET['step_code'] ?? ''));
+
+        try {
+            if ($trackingId > 0) {
+                $options = $svc->optionsForTrackingScope($code, $trackingId, [
+                    'scope' => $scope,
+                    'exclude_registered' => !$includeRegistered,
+                    'step_code' => $stepCode,
+                    'combo_mode' => $comboMode,
+                ]);
+            } else {
+                $options = [
+                    'exclude_registered' => !$includeRegistered,
+                    'template_code' => $code,
+                    'step_code' => $stepCode,
+                    'batch' => true,
+                    'combo_mode' => $comboMode,
+                ];
+                if (!empty($_GET['exam_date']) && is_string($_GET['exam_date'])) {
+                    $options['exam_date'] = trim($_GET['exam_date']);
+                }
+                if (!empty($_GET['product_id'])) {
+                    $options['product_id'] = (int) $_GET['product_id'];
+                }
+            }
+            $preview = $svc->previewDownload($code, $options);
+            echo json_encode([
+                'ok' => true,
+                'scope' => $scope,
+                'included' => $preview['included'],
+                'excluded' => $preview['excluded'],
+                'excluded_reasons' => $preview['excluded_reasons'],
+                'combo_students' => $preview['combo_students'],
+                'combo_extra_rows' => $preview['combo_extra_rows'],
+                'needs_combo_choice' => $preview['needs_combo_choice'],
+                'combo_mode' => $preview['combo_mode'],
+            ], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
     }
 
     public function vacations(): void

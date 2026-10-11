@@ -12,6 +12,52 @@ use PDO;
 
 final class ExportService
 {
+    public const SCOPE_STUDENT = 'student';
+    public const SCOPE_PENDING = 'pending';
+    /** Misma fecha, sin filtrar producto (usa filtros de la plantilla). */
+    public const SCOPE_EXAM_DATE_ONLY = 'exam_date_only';
+    public const SCOPE_PRODUCT = 'product';
+    /** Misma fecha + mismo producto (valor histórico del paso: exam_date). */
+    public const SCOPE_EXAM_DATE_PRODUCT = 'exam_date_product';
+
+    /** @return list<string> */
+    public static function scopes(): array
+    {
+        return [
+            self::SCOPE_STUDENT,
+            self::SCOPE_PENDING,
+            self::SCOPE_EXAM_DATE_ONLY,
+            self::SCOPE_PRODUCT,
+            self::SCOPE_EXAM_DATE_PRODUCT,
+        ];
+    }
+
+    /** @return list<array{value:string,label:string}> */
+    public static function scopeOptions(): array
+    {
+        return [
+            ['value' => self::SCOPE_STUDENT, 'label' => 'Solo este alumno'],
+            ['value' => self::SCOPE_PENDING, 'label' => 'Pendientes del mismo examen (sin folio / sin descarga / no presentado)'],
+            ['value' => self::SCOPE_EXAM_DATE_PRODUCT, 'label' => 'Misma fecha + mismo examen'],
+            ['value' => self::SCOPE_EXAM_DATE_ONLY, 'label' => 'Misma fecha de examen (cualquier cert. de la plantilla)'],
+            ['value' => self::SCOPE_PRODUCT, 'label' => 'Mismo examen (cualquier fecha)'],
+        ];
+    }
+
+    public static function normalizeScope(string $scope): string
+    {
+        $scope = strtolower(trim($scope));
+        // Compat: el valor histórico exam_date significaba fecha+producto.
+        if ($scope === 'exam_date') {
+            return self::SCOPE_EXAM_DATE_PRODUCT;
+        }
+        if (!in_array($scope, self::scopes(), true)) {
+            return self::SCOPE_STUDENT;
+        }
+
+        return $scope;
+    }
+
     /** @return list<array{value:string,label:string}> */
     public static function fieldOptions(): array
     {
@@ -68,11 +114,29 @@ final class ExportService
      *   product_id?:int,
      *   product_group_id?:int,
      *   purchase_status?:list<string>,
-     *   step_codes?:list<string>|null
+     *   step_codes?:list<string>|null,
+     *   exclude_registered?:bool,
+     *   template_code?:string,
+     *   step_code?:string
      * } $options
      * @return list<array<string, string>>
      */
     public function rowsForTemplate(string $code, array $options = []): array
+    {
+        return $this->rowsWithMeta($code, $options)['rows'];
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     * @return array{
+     *   rows:list<array<string,string>>,
+     *   tracking_ids:list<int>,
+     *   included:int,
+     *   excluded:int,
+     *   excluded_reasons:array{downloaded:int,folio:int,presented:int}
+     * }
+     */
+    public function rowsWithMeta(string $code, array $options = []): array
     {
         $template = $this->template($code);
         if ($template === null) {
@@ -86,8 +150,8 @@ final class ExportService
             $normalize = 'none';
         }
 
-        $sql = 'SELECT pu.matricula, u.first_name, u.last_name_p, u.last_name_m, u.email, u.phone,
-                       t.id AS tracking_id, t.exam_date, t.exam_time, t.folio, t.access_key, t.zoom_url,
+        $sql = 'SELECT pu.matricula, pu.id AS purchase_id, u.first_name, u.last_name_p, u.last_name_m, u.email, u.phone,
+                       t.id AS tracking_id, t.student_user_id, t.exam_date, t.exam_time, t.folio, t.access_key, t.zoom_url,
                        t.current_step_code, t.extra_json,
                        st.curp AS student_curp, st.birth_date AS student_birth_date, st.sex AS student_sex,
                        st.nationality AS student_nationality, st.extra_fields_json AS student_extra_fields_json,
@@ -107,7 +171,7 @@ final class ExportService
                 WHERE t.status <> ?';
         $params = ['cancelled'];
 
-        if (!empty($options['tracking_id'])) {
+        if (!empty($options['tracking_id']) && empty($options['batch'])) {
             $sql .= ' AND t.id = ?';
             $params[] = (int) $options['tracking_id'];
         } else {
@@ -172,9 +236,50 @@ final class ExportService
         $stmt->execute($params);
         $rows = $stmt->fetchAll();
 
-        $columns = $mapping['columns'] ?? $this->defaultUksColumns();
-        $out = [];
+        $excludeRegistered = array_key_exists('exclude_registered', $options)
+            ? (bool) $options['exclude_registered']
+            : true;
+        // Un solo alumno: no filtrar (ops puede re-descargar ese caso).
+        if (!empty($options['tracking_id']) && empty($options['batch'])) {
+            $excludeRegistered = false;
+        }
+
+        $templateCode = trim((string) ($options['template_code'] ?? $code));
+        $stepCode = trim((string) ($options['step_code'] ?? ''));
+        $reasons = ['downloaded' => 0, 'folio' => 0, 'presented' => 0];
+        $excluded = 0;
+        $kept = [];
         foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            if ($excludeRegistered) {
+                $why = $this->registeredExclusionReason($row, $templateCode, $stepCode);
+                if ($why !== null) {
+                    $excluded++;
+                    $reasons[$why] = ($reasons[$why] ?? 0) + 1;
+                    continue;
+                }
+            }
+            $kept[] = $row;
+        }
+
+        $comboStats = $this->analyzeComboRows($kept);
+        $comboMode = strtolower(trim((string) ($options['combo_mode'] ?? 'repeat')));
+        if (!in_array($comboMode, ['repeat', 'single'], true)) {
+            $comboMode = 'repeat';
+        }
+        $preferTrackingId = (int) ($options['prefer_tracking_id'] ?? ($options['tracking_id'] ?? 0));
+        if ($comboStats['combo_students'] > 0 && $comboMode === 'single') {
+            $kept = $this->collapseComboRows($kept, $preferTrackingId);
+        }
+
+        $columns = $mapping['columns'] ?? $this->defaultUksColumns();
+        $ensureCertColumn = $comboStats['combo_students'] > 0 && $comboMode === 'repeat'
+            && !$this->columnsHaveCertLabel($columns);
+        $out = [];
+        $ids = [];
+        foreach ($kept as $row) {
             $row = $this->hydrateCheckoutFromStudent($row);
             $mapped = [];
             foreach ($columns as $col) {
@@ -189,7 +294,6 @@ final class ExportService
                 }
                 $value = $field !== '' ? $this->fieldValue($row, $field) : '';
                 if ($formula !== '') {
-                    // Campos disponibles para la fórmula de esta fila
                     $fieldsBag = $this->fieldsBagForRow($row);
                     try {
                         $value = WorkbookValueResolver::resolve(
@@ -207,18 +311,44 @@ final class ExportService
                 }
                 $mapped[$header] = $value;
             }
+            if ($ensureCertColumn) {
+                $mapped['Certificación'] = trim((string) ($row['product_name'] ?? $row['product_code'] ?? ''));
+            }
             if ($mapped !== []) {
                 $out[] = $mapped;
+                $tid = (int) ($row['tracking_id'] ?? 0);
+                if ($tid > 0) {
+                    $ids[] = $tid;
+                }
             }
         }
 
-        return $out;
+        return [
+            'rows' => $out,
+            'tracking_ids' => $ids,
+            'included' => count($ids),
+            'excluded' => $excluded,
+            'excluded_reasons' => $reasons,
+            'combo_students' => $comboStats['combo_students'],
+            'combo_extra_rows' => $comboStats['combo_extra_rows'],
+            'needs_combo_choice' => $comboStats['combo_students'] > 0,
+            'combo_mode' => $comboMode,
+            'ensure_cert_column' => $ensureCertColumn,
+        ];
     }
 
     /**
      * @param array<string, mixed> $options
+     * @return array{
+     *   content:string,
+     *   filename:string,
+     *   tracking_ids:list<int>,
+     *   included:int,
+     *   excluded:int,
+     *   excluded_reasons:array{downloaded:int,folio:int,presented:int}
+     * }
      */
-    public function csvContent(string $code, array $options = []): string
+    public function buildDownload(string $code, array $options = []): array
     {
         $template = $this->template($code);
         if ($template === null) {
@@ -237,14 +367,25 @@ final class ExportService
             throw new \RuntimeException('La plantilla no define columnas.');
         }
 
-        $rows = $this->rowsForTemplate($code, $options);
+        $meta = $this->rowsWithMeta($code, $options);
+        if ($meta['rows'] === []) {
+            throw new \InvalidArgumentException(
+                $meta['excluded'] > 0
+                    ? 'No hay alumnos para incluir (todos excluidos: ya descargados, con folio o ya presentaron).'
+                    : 'No hay alumnos que coincidan con el alcance elegido.'
+            );
+        }
+        if (!empty($meta['ensure_cert_column']) && !in_array('Certificación', $headers, true)) {
+            $headers[] = 'Certificación';
+        }
+
         $stream = fopen('php://temp', 'r+');
         if ($stream === false) {
             throw new \RuntimeException('No se pudo generar el CSV.');
         }
 
         csv_put($stream, $headers);
-        foreach ($rows as $row) {
+        foreach ($meta['rows'] as $row) {
             $line = [];
             foreach ($headers as $header) {
                 $line[] = $row[$header] ?? '';
@@ -255,8 +396,49 @@ final class ExportService
         rewind($stream);
         $content = stream_get_contents($stream);
         fclose($stream);
+        if ($content === false) {
+            $content = '';
+        }
 
-        return $content === false ? '' : $content;
+        return [
+            'content' => $content,
+            'filename' => $this->downloadFilename($code, $options),
+            'tracking_ids' => $meta['tracking_ids'],
+            'included' => $meta['included'],
+            'excluded' => $meta['excluded'],
+            'excluded_reasons' => $meta['excluded_reasons'],
+            'combo_students' => $meta['combo_students'],
+            'needs_combo_choice' => $meta['needs_combo_choice'],
+            'combo_mode' => $meta['combo_mode'],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     */
+    public function csvContent(string $code, array $options = []): string
+    {
+        return $this->buildDownload($code, $options)['content'];
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     * @return array{included:int,excluded:int,excluded_reasons:array{downloaded:int,folio:int,presented:int},tracking_ids:list<int>}
+     */
+    public function previewDownload(string $code, array $options = []): array
+    {
+        $meta = $this->rowsWithMeta($code, $options);
+
+        return [
+            'included' => $meta['included'],
+            'excluded' => $meta['excluded'],
+            'excluded_reasons' => $meta['excluded_reasons'],
+            'tracking_ids' => $meta['tracking_ids'],
+            'combo_students' => $meta['combo_students'],
+            'combo_extra_rows' => $meta['combo_extra_rows'],
+            'needs_combo_choice' => $meta['needs_combo_choice'],
+            'combo_mode' => $meta['combo_mode'],
+        ];
     }
 
     /**
@@ -264,20 +446,21 @@ final class ExportService
      */
     public function sendDownload(string $code, array $options = []): void
     {
-        $template = $this->template($code);
-        if ($template === null) {
-            throw new \InvalidArgumentException('Plantilla de exportación no encontrada: ' . $code);
-        }
+        $built = $this->buildDownload($code, $options);
+        $this->markDownloadedIds(
+            $built['tracking_ids'],
+            trim((string) ($options['step_code'] ?? '')),
+            $code,
+            isset($options['actor_user_id']) ? (int) $options['actor_user_id'] : null
+        );
 
-        $content = $this->csvContent($code, $options);
-        $filename = $this->downloadFilename($code, $options);
-        $payload = "\xEF\xBB\xBF" . $content;
+        $payload = "\xEF\xBB\xBF" . $built['content'];
 
         while (ob_get_level() > 0) {
             ob_end_clean();
         }
         header('Content-Type: text/csv; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Disposition: attachment; filename="' . $built['filename'] . '"');
         header('Cache-Control: no-store');
         header('Content-Length: ' . (string) strlen($payload));
         header('X-Content-Type-Options: nosniff');
@@ -286,42 +469,255 @@ final class ExportService
     }
 
     /**
-     * Descarga desde un caso: alumno solo, o todos con misma fecha + misma cert.
+     * Descarga desde un caso según alcance (alumno / pendientes / fecha / examen).
      *
-     * @param array{scope?:string} $opts
+     * @param array{scope?:string,exclude_registered?:bool,step_code?:string,actor_user_id?:int} $opts
      */
     public function sendDownloadForTracking(string $code, int $trackingId, array $opts = []): void
+    {
+        $this->sendDownload($code, $this->optionsForTrackingScope($code, $trackingId, $opts));
+    }
+
+    /**
+     * @param array{scope?:string,exclude_registered?:bool,step_code?:string,actor_user_id?:int,combo_mode?:string} $opts
+     * @return array<string, mixed>
+     */
+    public function optionsForTrackingScope(string $code, int $trackingId, array $opts = []): array
     {
         $tracking = (new TrackingService())->find($trackingId);
         if ($tracking === null) {
             throw new \InvalidArgumentException('Caso no encontrado.');
         }
 
-        $scope = (string) ($opts['scope'] ?? 'student');
-        if (!in_array($scope, ['student', 'exam_date'], true)) {
-            $scope = 'student';
+        $scope = self::normalizeScope((string) ($opts['scope'] ?? self::SCOPE_STUDENT));
+        $exclude = array_key_exists('exclude_registered', $opts)
+            ? (bool) $opts['exclude_registered']
+            : true;
+        $comboMode = strtolower(trim((string) ($opts['combo_mode'] ?? 'repeat')));
+        if (!in_array($comboMode, ['repeat', 'single'], true)) {
+            $comboMode = 'repeat';
         }
 
-        if ($scope === 'student') {
-            $this->sendDownload($code, ['tracking_id' => $trackingId]);
+        $base = [
+            'template_code' => $code,
+            'step_code' => trim((string) ($opts['step_code'] ?? '')),
+            'actor_user_id' => isset($opts['actor_user_id']) ? (int) $opts['actor_user_id'] : null,
+            'exclude_registered' => $exclude,
+            'combo_mode' => $comboMode,
+            'prefer_tracking_id' => $trackingId,
+        ];
 
-            return;
+        if ($scope === self::SCOPE_STUDENT) {
+            return $base + ['tracking_id' => $trackingId];
         }
 
+        $productId = (int) ($tracking['product_id'] ?? 0);
         $examDate = trim((string) ($tracking['exam_date'] ?? ''));
+
+        $options = $base + ['batch' => true];
+
+        if ($scope === self::SCOPE_PENDING || $scope === self::SCOPE_PRODUCT) {
+            if ($productId < 1) {
+                throw new \InvalidArgumentException('El caso no tiene producto asociado.');
+            }
+            $options['product_id'] = $productId;
+            $options['exclude_registered'] = $exclude;
+
+            return $options;
+        }
+
+        if ($scope === self::SCOPE_EXAM_DATE_ONLY) {
+            if ($examDate === '') {
+                throw new \InvalidArgumentException('El caso no tiene fecha de examen para el lote.');
+            }
+            $options['exam_date'] = $examDate;
+
+            return $options;
+        }
+
+        // exam_date_product (default histórico)
         if ($examDate === '') {
             throw new \InvalidArgumentException('El caso no tiene fecha de examen para generar el lote del día.');
         }
-
-        $options = [
-            'exam_date' => $examDate,
-            'product_id' => (int) ($tracking['product_id'] ?? 0),
-        ];
-        if ($options['product_id'] < 1) {
+        if ($productId < 1) {
             throw new \InvalidArgumentException('El caso no tiene producto asociado.');
         }
+        $options['exam_date'] = $examDate;
+        $options['product_id'] = $productId;
 
-        $this->sendDownload($code, $options);
+        return $options;
+    }
+
+    /**
+     * @param list<int> $trackingIds
+     */
+    public function markDownloadedIds(array $trackingIds, string $stepCode, string $templateCode, ?int $actorUserId = null): void
+    {
+        $svc = new TrackingService();
+        foreach ($trackingIds as $tid) {
+            $tid = (int) $tid;
+            if ($tid < 1) {
+                continue;
+            }
+            try {
+                $svc->markCsvDownloaded($tid, $stepCode, $templateCode, $actorUserId);
+            } catch (\Throwable) {
+                // no bloquear descarga
+            }
+        }
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows
+     * @return array{combo_students:int,combo_extra_rows:int}
+     */
+    private function analyzeComboRows(array $rows): array
+    {
+        $byStudent = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $sid = (int) ($row['student_user_id'] ?? 0);
+            if ($sid < 1) {
+                continue;
+            }
+            $byStudent[$sid][] = $row;
+        }
+        $comboStudents = 0;
+        $extraRows = 0;
+        foreach ($byStudent as $group) {
+            if (count($group) < 2) {
+                continue;
+            }
+            // Mismo alumno con ≥2 filas en el lote (p. ej. paquete multi-cert).
+            $comboStudents++;
+            $extraRows += count($group) - 1;
+        }
+
+        return [
+            'combo_students' => $comboStudents,
+            'combo_extra_rows' => $extraRows,
+        ];
+    }
+
+    /**
+     * Una fila por alumno: prioriza el tracking del botón; si no, el primero del grupo.
+     *
+     * @param list<array<string, mixed>> $rows
+     * @return list<array<string, mixed>>
+     */
+    private function collapseComboRows(array $rows, int $preferTrackingId): array
+    {
+        $byStudent = [];
+        $order = [];
+        foreach ($rows as $idx => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $sid = (int) ($row['student_user_id'] ?? 0);
+            $key = $sid > 0 ? 's' . $sid : 't' . (int) ($row['tracking_id'] ?? $idx);
+            if (!isset($byStudent[$key])) {
+                $byStudent[$key] = [];
+                $order[] = $key;
+            }
+            $byStudent[$key][] = $row;
+        }
+
+        $out = [];
+        foreach ($order as $key) {
+            $group = $byStudent[$key];
+            if (count($group) === 1) {
+                $out[] = $group[0];
+                continue;
+            }
+            $chosen = $group[0];
+            if ($preferTrackingId > 0) {
+                foreach ($group as $row) {
+                    if ((int) ($row['tracking_id'] ?? 0) === $preferTrackingId) {
+                        $chosen = $row;
+                        break;
+                    }
+                }
+            }
+            $out[] = $chosen;
+        }
+
+        return $out;
+    }
+
+    /** @param list<array<string, mixed>> $columns */
+    private function columnsHaveCertLabel(array $columns): bool
+    {
+        foreach ($columns as $col) {
+            if (!is_array($col)) {
+                continue;
+            }
+            $header = mb_strtolower(trim((string) ($col['header'] ?? '')));
+            $field = strtolower(trim((string) ($col['field'] ?? '')));
+            if ($header === 'certificación' || $header === 'certificacion'
+                || $field === 'product_name' || $field === 'product_code'
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return 'downloaded'|'folio'|'presented'|null
+     */
+    private function registeredExclusionReason(array $row, string $templateCode, string $stepCode): ?string
+    {
+        if (trim((string) ($row['folio'] ?? '')) !== '') {
+            return 'folio';
+        }
+        if (GroupStepConfig::isExamAttendancePresent($row)) {
+            return 'presented';
+        }
+        if ($this->rowWasCsvDownloaded($row, $templateCode, $stepCode)) {
+            return 'downloaded';
+        }
+
+        return null;
+    }
+
+    /** @param array<string, mixed> $row */
+    private function rowWasCsvDownloaded(array $row, string $templateCode, string $stepCode): bool
+    {
+        $extra = [];
+        $raw = $row['extra_json'] ?? null;
+        if (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            $extra = is_array($decoded) ? $decoded : [];
+        } elseif (is_array($raw)) {
+            $extra = $raw;
+        }
+        $map = is_array($extra['csv_downloads'] ?? null) ? $extra['csv_downloads'] : [];
+        if ($map === []) {
+            return false;
+        }
+        if ($stepCode !== '' && !empty($map[$stepCode]['at'])) {
+            return true;
+        }
+        if ($templateCode !== '' && !empty($map['tpl:' . $templateCode]['at'])) {
+            return true;
+        }
+        foreach ($map as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            if ($templateCode !== ''
+                && trim((string) ($entry['template'] ?? '')) === $templateCode
+                && trim((string) ($entry['at'] ?? '')) !== ''
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

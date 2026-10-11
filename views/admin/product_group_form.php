@@ -1306,6 +1306,9 @@ $pageHeading = $isEdit
             Para el paso de <strong>aplicación del examen</strong> elige la acción
             «Confirmar aplicación del examen» (✓ se presentó / ✗ no se presentó) y actívalo en Operación;
             no envía correo: solo confirma asistencia y avanza o deja pendiente reagendar.
+            Las plantillas CSV de registro al proveedor se crean en
+            <a href="<?= e(url('/admin/plantillas-csv')) ?>">Automatización → Plantillas proveedor</a>
+            y aquí solo se elige cuál descargar (UKS, Cambridge, etc.).
         </p>
 
         <div class="panel" style="margin:0 0 1rem;padding:.85rem 1rem;background:#f8fafc">
@@ -2323,7 +2326,11 @@ $pageHeading = $isEdit
       return ['code' => (string) ($t['code'] ?? ''), 'name' => (string) ($t['name'] ?? '')];
   }, $mailTemplates)), JSON_UNESCAPED_UNICODE) ?> || [];
   var csvTemplatesJs = <?= json_encode(array_values(array_map(static function ($t) {
-      return ['code' => (string) ($t['code'] ?? ''), 'name' => (string) ($t['name'] ?? '')];
+      return [
+          'code' => (string) ($t['code'] ?? ''),
+          'name' => (string) ($t['name'] ?? ''),
+          'supplier' => (string) ($t['supplier_name'] ?? ''),
+      ];
   }, $csvTemplates)), JSON_UNESCAPED_UNICODE) ?> || [];
   var actionOptions = <?= json_encode(\App\Services\GroupStepConfig::ACTIONS_EDITABLE, JSON_UNESCAPED_UNICODE) ?>;
   var allActionLabels = <?= json_encode(\App\Services\GroupStepConfig::ACTIONS, JSON_UNESCAPED_UNICODE) ?>;
@@ -2474,29 +2481,46 @@ $pageHeading = $isEdit
   }
 
   function csvTplSelect(idx, value) {
+    var csvAdminUrl = <?= json_encode(url('/admin/plantillas-csv'), JSON_UNESCAPED_UNICODE) ?>;
     var html = '<select data-field="csv_template" name="pipeline_steps[' + idx + '][csv_template]" style="' + inp + '">';
-    html += '<option value="">— Plantilla CSV —</option>';
+    // Default vacío: Cambridge/TOEFL no heredan la plantilla UKS.
+    html += '<option value="">— Elegir plantilla (ninguna) —</option>';
     var found = false;
     csvTemplatesJs.forEach(function (t) {
       if (!t.code) return;
       var sel = t.code === value;
       if (sel) found = true;
+      var label = (t.supplier ? (t.supplier + ' · ') : '') + (t.name || t.code) + ' (' + t.code + ')';
       html += '<option value="' + escapeHtml(t.code) + '"' + (sel ? ' selected' : '') + '>'
-        + escapeHtml(t.name || t.code) + ' (' + escapeHtml(t.code) + ')</option>';
+        + escapeHtml(label) + '</option>';
     });
     if (value && !found) {
       html += '<option value="' + escapeHtml(value) + '" selected>' + escapeHtml(value) + '</option>';
     }
     html += '</select>';
+    html += '<span class="muted" style="display:block;font-size:.75rem;font-weight:500;margin-top:.3rem;line-height:1.35">'
+      + (csvTemplatesJs.length ? '' : 'Aún no hay plantillas activas. ')
+      + '<a href="' + escapeHtml(csvAdminUrl) + '" target="_blank" rel="noopener">Administrar plantillas proveedor</a>'
+      + ' (UKS, Cambridge u otras; elige aquí cuál descargar — no uses UKS en Cambridge).'
+      + '</span>';
     return html;
   }
 
   function csvScopeSelect(idx, value) {
-    var v = value === 'exam_date' ? 'exam_date' : 'student';
-    return '<select data-field="csv_scope" name="pipeline_steps[' + idx + '][csv_scope]" style="' + inp + '">'
-      + '<option value="student"' + (v === 'student' ? ' selected' : '') + '>Solo este alumno</option>'
-      + '<option value="exam_date"' + (v === 'exam_date' ? ' selected' : '') + '>Todos del mismo día + misma certificación</option>'
-      + '</select>';
+    var scopeOpts = <?= json_encode(\App\Services\ExportService::scopeOptions(), JSON_UNESCAPED_UNICODE) ?>;
+    var v = String(value || 'student');
+    if (v === 'exam_date') v = 'exam_date_product'; // legado
+    var html = '<select data-field="csv_scope" name="pipeline_steps[' + idx + '][csv_scope]" style="' + inp + '">';
+    (scopeOpts || []).forEach(function (opt) {
+      html += '<option value="' + escapeHtml(opt.value) + '"'
+        + (opt.value === v ? ' selected' : '') + '>'
+        + escapeHtml(opt.label) + '</option>';
+    });
+    html += '</select>';
+    html += '<span class="muted" style="display:block;font-size:.75rem;font-weight:500;margin-top:.3rem;line-height:1.35">'
+      + 'En Operación puedes cambiar el alcance al descargar. Los lotes excluyen folio, ya descargados y quienes ya presentaron.'
+      + '</span>';
+    return html;
   }
 
   function opsIconSelect(idx, value) {
@@ -2681,8 +2705,8 @@ $pageHeading = $isEdit
           '<label class="muted"><span class="progress-step-tpl-label">Plantilla</span>' + mailTplSelect('email_template', idx, s.email_template || '') + '</label>' +
         '</div>' +
         '<div class="progress-step-grid progress-step-csv"' + (isCsv ? '' : ' style="display:none"') + '>' +
-          '<label class="muted">Plantilla CSV' + csvTplSelect(idx, s.csv_template || '') + '</label>' +
-          '<label class="muted">Alcance' + csvScopeSelect(idx, s.csv_scope || 'student') + '</label>' +
+          '<label class="muted">Plantilla a descargar' + csvTplSelect(idx, s.csv_template || '') + '</label>' +
+          '<label class="muted">Alcance por defecto' + csvScopeSelect(idx, s.csv_scope || 'student') + '</label>' +
         '</div>';
       stepsBody.appendChild(card);
       bindOpsIconPicker(card);

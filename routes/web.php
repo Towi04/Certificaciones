@@ -193,9 +193,12 @@ $router->get('/admin/plantillas-csv', fn () => $admin->csvTemplates());
 $router->get('/admin/plantillas-csv/nueva', fn () => $admin->csvTemplateCreate());
 $router->post('/admin/plantillas-csv/nueva', fn () => $admin->csvTemplateStore());
 $router->get('/admin/plantillas-csv/{code}/descargar', fn (string $code) => $admin->csvTemplateDownload($code));
+$router->get('/admin/plantillas-csv/{code}/resumen', fn (string $code) => $admin->csvTemplatePreview($code));
 $router->post('/admin/plantillas-csv/{code}/eliminar', fn (string $code) => $admin->csvTemplateDelete($code));
 $router->get('/admin/plantillas-csv/{code}', fn (string $code) => $admin->csvTemplateEdit($code));
 $router->post('/admin/plantillas-csv/{code}', fn (string $code) => $admin->csvTemplateUpdate($code));
+// Alias menú «Plantillas proveedor»
+$router->get('/admin/plantillas-proveedor', fn () => redirect('/admin/plantillas-csv'));
 
 $router->get('/admin/correos', fn () => $admin->mailTemplates());
 $router->post('/admin/correos/marca', fn () => $admin->mailBrandingUpdate());
