@@ -73,7 +73,7 @@ final class MailTemplateService
             'reglamento_url' => 'URL reglamento firmado',
             'pago_proveedor' => 'URL comprobante DOCEO → proveedor',
             'comprobante_url' => 'URL comprobante (alias de pago_proveedor)',
-            'workbook_url' => 'URL plantilla Excel rellenada',
+            'workbook_url' => 'URL Excel del catálogo (elige la plantilla en la sección Excel abajo)',
             'documentos_html' => 'Lista HTML de enlaces a documentos',
             'student_docs_html' => 'Lista HTML de docs del alumno (aprobados)',
             'doc_*_url' => 'URL firmada de un doc del alumno (ej. {{doc_ine_url}})',
@@ -282,10 +282,84 @@ final class MailTemplateService
             (string) ($row['subject'] ?? '') . "\n" . (string) ($row['body_html'] ?? '')
         );
 
-        return str_contains($haystack, '{{workbook_url}}')
+        if (str_contains($haystack, '{{workbook_url}}')
             || str_contains($haystack, '{{workbook_note}}')
             || str_contains($haystack, 'workbook_url')
-            || str_contains($haystack, 'workbook_note');
+            || str_contains($haystack, 'workbook_note')
+        ) {
+            return true;
+        }
+
+        // {{workbook:codigo_catalogo}}
+        return preg_match('/\{\{\s*workbook\s*:\s*[a-z0-9_\-]+\s*\}\}/i', $haystack) === 1;
+    }
+
+    /**
+     * Códigos de catálogo referenciados como {{workbook:codigo}} en la plantilla.
+     *
+     * @return list<string>
+     */
+    public static function workbookCatalogCodesInTemplate(string $code): array
+    {
+        $code = trim($code);
+        if ($code === '') {
+            return [];
+        }
+        $row = (new self())->find($code);
+        if ($row === null) {
+            return [];
+        }
+        $haystack = (string) ($row['subject'] ?? '') . "\n" . (string) ($row['body_html'] ?? '');
+        if (preg_match_all('/\{\{\s*workbook\s*:\s*([a-z0-9_\-]+)\s*\}\}/iu', $haystack, $m) < 1) {
+            return [];
+        }
+        $out = [];
+        foreach ($m[1] as $raw) {
+            $c = strtolower(trim((string) $raw));
+            if ($c !== '' && !in_array($c, $out, true)) {
+                $out[] = $c;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Si la plantilla pide Excel y no hay catálogo ni legacy usable, mensaje para ops.
+     * null = OK (o la plantilla no pide Excel).
+     */
+    public static function workbookSourceGapMessage(string $mailCode): ?string
+    {
+        $mailCode = trim($mailCode);
+        if ($mailCode === '' || !self::templateUsesWorkbookPlaceholders($mailCode)) {
+            return null;
+        }
+
+        $wb = self::workbookConfig($mailCode);
+        $catalogCode = trim((string) ($wb['workbook_template_code'] ?? ''));
+        if ($catalogCode !== '') {
+            $fromCatalog = (new ProviderWorkbookCatalogService())->workbookConfig($catalogCode);
+            if ($fromCatalog !== null && !empty($fromCatalog['enabled'])) {
+                return null;
+            }
+        }
+        foreach (self::workbookCatalogCodesInTemplate($mailCode) as $ref) {
+            $fromCatalog = (new ProviderWorkbookCatalogService())->workbookConfig($ref);
+            if ($fromCatalog !== null && !empty($fromCatalog['enabled'])) {
+                return null;
+            }
+        }
+        if (!empty($wb['enabled']) && trim((string) ($wb['template_path'] ?? '')) !== ''
+            && !empty($wb['cell_map'])
+        ) {
+            return null;
+        }
+
+        return 'La plantilla usa {{workbook_url}} (o {{workbook:código}}), pero no hay Excel '
+            . 'en el catálogo ni configuración legacy usable. '
+            . 'Elige una plantilla en «Plantilla del catálogo» o créala en '
+            . 'Automatización → Plantillas proveedor → Excel '
+            . '(/admin/plantillas-csv?tipo=xlsx).';
     }
 
 
@@ -1124,10 +1198,21 @@ final class MailTemplateService
         // Si el botón tiene href vacío/# y el texto es {{workbook_url}}, moverlo al href.
         $template = self::promoteUrlPlaceholdersIntoEmptyHrefs($template);
 
+        // Incluye {{workbook:codigo}} (Fase 3) además de placeholders simples.
         $rendered = (string) preg_replace_callback(
-            '/\{\{\s*([a-zA-Z0-9_\- ]+?)\s*\}\}/u',
+            '/\{\{\s*([a-zA-Z0-9_\-: ]+?)\s*\}\}/u',
             static function (array $m) use ($lookup): string {
-                $key = self::normalizePlaceholderKey($m[1]);
+                $raw = trim((string) $m[1]);
+                // workbook:codigo → clave workbook:codigo (sin normalizar los :)
+                if (preg_match('/^workbook\s*:\s*([a-zA-Z0-9_\-]+)$/iu', $raw, $wm) === 1) {
+                    $key = 'workbook:' . strtolower($wm[1]);
+                    if (array_key_exists($key, $lookup)) {
+                        return $lookup[$key];
+                    }
+
+                    return $m[0];
+                }
+                $key = self::normalizePlaceholderKey($raw);
                 if ($key !== '' && array_key_exists($key, $lookup)) {
                     return $lookup[$key];
                 }

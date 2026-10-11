@@ -4239,6 +4239,10 @@ final class AdminController
             ]);
 
             $messages = ['Plantilla guardada.'];
+            $wbGap = MailTemplateService::workbookSourceGapMessage($effectiveCode);
+            if ($wbGap !== null) {
+                flash('error', $wbGap);
+            }
 
             if (!empty($_POST['send_test'])) {
                 $testTo = trim((string) ($_POST['test_email'] ?? ''));

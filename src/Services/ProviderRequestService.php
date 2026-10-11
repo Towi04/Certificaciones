@@ -687,10 +687,11 @@ final class ProviderRequestService
         }
 
         $mailCode = trim((string) ($config['mail_template_code'] ?? ''));
+        $catalogSvc = new ProviderWorkbookCatalogService();
         // Catálogo / legacy: rellenar workbook si falta path o no está enabled.
         $wbNow = is_array($config['workbook'] ?? null) ? $config['workbook'] : [];
         if (empty($wbNow['enabled']) || trim((string) ($wbNow['template_path'] ?? '')) === '') {
-            $resolved = (new ProviderWorkbookCatalogService())->resolve($wbNow, $mailCode);
+            $resolved = $catalogSvc->resolve($wbNow, $mailCode);
             if (!empty($resolved['enabled'])) {
                 $config['workbook'] = array_merge($wbNow, $resolved, ['attach' => false]);
             }
@@ -701,7 +702,11 @@ final class ProviderRequestService
         if ($mailCode === '' || MailTemplateService::isUksSolicitudCode($mailCode)) {
             $templateWantsWorkbook = $templateWantsWorkbook || !empty($config['workbook']['enabled']);
         }
+        $namedWorkbookCodes = $mailCode !== ''
+            ? MailTemplateService::workbookCatalogCodesInTemplate($mailCode)
+            : [];
 
+        $extraWorkbookVars = [];
         if (!empty($config['workbook']['enabled'])) {
             try {
                 $workbookUrl = $this->prepareWorkbookLink($tracking, $purchase, $product, $config, $tmpFiles);
@@ -710,21 +715,60 @@ final class ProviderRequestService
                 error_log('[Doceo] Excel solicitud proveedor: ' . $e->getMessage());
                 $workbookUrl = '';
                 $varsWorkbookSkip = $e->getMessage();
-                // Si la plantilla pide {{workbook_url}}, no enviar botones rotos.
                 if ($templateWantsWorkbook) {
                     throw new \RuntimeException(
                         'No se pudo generar el Excel para el correo: ' . $e->getMessage()
+                        . ' Revisa Automatización → Plantillas proveedor → Excel '
+                        . 'o el selector «Plantilla del catálogo» en la plantilla de correo.'
                     );
                 }
             }
-        } elseif ($templateWantsWorkbook) {
-            $varsWorkbookSkip = 'la plantilla pide {{workbook_url}} pero no hay Excel habilitado/subido';
+        } elseif ($templateWantsWorkbook && $namedWorkbookCodes === []) {
+            $gap = MailTemplateService::workbookSourceGapMessage($mailCode);
+            $varsWorkbookSkip = $gap ?? 'la plantilla pide Excel pero no hay catálogo ni legacy';
             throw new \RuntimeException(
-                'La plantilla de correo usa {{workbook_url}}, pero no hay plantilla Excel activa. '
-                . 'Marca «Este correo incluye plantilla Excel», sube el .xlsx y guarda.'
+                $gap ?? (
+                    'La plantilla de correo usa {{workbook_url}}, pero no hay Excel en el catálogo '
+                    . 'ni configuración legacy. Elige una plantilla en el correo '
+                    . '(Plantilla del catálogo) o créala en /admin/plantillas-csv?tipo=xlsx.'
+                )
             );
         } else {
             $varsWorkbookSkip = '';
+        }
+
+        // {{workbook:codigo}} — Excel concreto del catálogo (opcional, Fase 3).
+        foreach ($namedWorkbookCodes as $namedCode) {
+            $namedCfg = $catalogSvc->workbookConfig($namedCode);
+            if ($namedCfg === null || empty($namedCfg['enabled'])) {
+                if ($templateWantsWorkbook) {
+                    throw new \RuntimeException(
+                        'La plantilla pide {{workbook:' . $namedCode . '}}, pero no hay una '
+                        . 'plantilla Excel activa con ese código en el catálogo '
+                        . '(Automatización → Plantillas proveedor → Excel).'
+                    );
+                }
+                continue;
+            }
+            $namedConfig = $config;
+            $namedConfig['workbook'] = array_merge($namedCfg, ['attach' => false, 'enabled' => true]);
+            try {
+                $namedUrl = $this->prepareWorkbookLink(
+                    $tracking,
+                    $purchase,
+                    $product,
+                    $namedConfig,
+                    $tmpFiles
+                );
+            } catch (\Throwable $e) {
+                throw new \RuntimeException(
+                    'No se pudo generar {{workbook:' . $namedCode . '}}: ' . $e->getMessage()
+                );
+            }
+            $extraWorkbookVars['workbook:' . $namedCode] = $namedUrl;
+            if ($workbookUrl === '') {
+                $workbookUrl = $namedUrl;
+            }
         }
 
         if ($includeProof && $comprobanteUrl === '') {
@@ -778,7 +822,7 @@ final class ProviderRequestService
             'last_name_p' => $fields['last_name_p'],
             'last_name_m' => $fields['last_name_m'],
             '_workbook_skip' => $varsWorkbookSkip,
-        ], $studentDocVars);
+        ], $extraWorkbookVars, $studentDocVars);
     }
 
     /**
@@ -977,9 +1021,13 @@ final class ProviderRequestService
         }
 
         $relative = trim((string) ($wb['template_path'] ?? ''));
+        $catalogHint = trim((string) ($wb['workbook_template_code'] ?? ''));
         if ($relative === '') {
             throw new \RuntimeException(
-                'La solicitud requiere plantilla Excel: súbela en Grupos → Solicitud a proveedor.'
+                'Falta el archivo .xlsx de la plantilla Excel'
+                . ($catalogHint !== '' ? ' «' . $catalogHint . '»' : '')
+                . '. Súbelo en Automatización → Plantillas proveedor → Excel '
+                . '(/admin/plantillas-csv?tipo=xlsx).'
             );
         }
 
@@ -991,7 +1039,11 @@ final class ProviderRequestService
             }
         }
         if (!is_file($abs)) {
-            throw new \RuntimeException('No se encontró el archivo de plantilla Excel del grupo.');
+            throw new \RuntimeException(
+                'No se encontró el archivo Excel en storage'
+                . ($catalogHint !== '' ? ' (catálogo «' . $catalogHint . '»)' : '')
+                . ': ' . $relative
+            );
         }
 
         $fields = $this->fieldValues($tracking, $purchase, $product);
@@ -1015,7 +1067,8 @@ final class ProviderRequestService
         }
         if ($cellValues === []) {
             throw new \RuntimeException(
-                'Define al menos un mapeo celda → dato en Grupos → Solicitud a proveedor.'
+                'La plantilla Excel no tiene mapeo de celdas. '
+                . 'Edítala en Automatización → Plantillas proveedor → Excel.'
             );
         }
 

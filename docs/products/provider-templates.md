@@ -68,9 +68,18 @@ Resolución al enviar: catálogo (grupo → mail) → legacy mail → legacy gru
 
 Seed CSV UKS: upsert **no destructivo** (no pisa `mapping_json` custom).
 
-## Fase 3 — Correo solo placeholder (pendiente)
+## Fase 3 (hecho) — Correo solo placeholder
 
-Camino feliz = catálogo; legacy solo fallback; errores claros si falta Excel.
+| Qué | Detalle |
+|-----|---------|
+| Camino feliz | En plantilla de correo: elegir Excel del catálogo + `{{workbook_url}}` en el HTML |
+| Opcional | `{{workbook:codigo}}` apunta a una plantilla concreta del catálogo |
+| Legacy | Bloque colapsado «Respaldo legacy» — no se borra hasta QA TOEFL |
+| Error claro | Si el HTML pide Excel y no hay catálogo ni legacy → mensaje con link a `/admin/plantillas-csv?tipo=xlsx` |
+
+## Fase 4 — QA / cutover (pendiente)
+
+Envío TOEFL staging = mismas celdas; re-seed no borra custom; menú admin.
 
 ## Relacionado
 
