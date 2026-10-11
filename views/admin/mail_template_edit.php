@@ -253,18 +253,46 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
             $wb = \App\Services\MailTemplateService::workbookConfig((string) $template['code']);
             $wbCells = $wb['cell_map'] !== [] ? $wb['cell_map'] : [['cell' => '', 'field' => '']];
             $fieldOptions = \App\Services\ProviderRequestService::FIELD_OPTIONS;
+            $xlsxCatalog = (new \App\Services\ProviderWorkbookCatalogService())->listActive();
+            $wbCatalogCode = (string) ($wb['workbook_template_code'] ?? '');
         ?>
         <div style="margin:1.25rem 0;padding:1rem;background:#f8fafc;border:1px solid #e6ebf2;border-radius:12px">
             <h2 style="margin:0 0 .35rem;font-size:1rem;color:var(--doceo-blue)">Plantilla Excel (opcional)</h2>
             <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
-                Si marcas esta opción, al enviar el correo se genera un Excel rellenado y se incluye
-                como enlace <code>{{workbook_url}}</code> (sin adjuntos SMTP).
+                Preferido: elige una plantilla del catálogo
+                (<a href="<?= e(url('/admin/plantillas-csv?tipo=xlsx')) ?>" target="_blank" rel="noopener">Plantillas proveedor · Excel</a>).
+                Al enviar se genera el Excel y se incluye como <code>{{workbook_url}}</code>.
+                El bloque legacy abajo se conserva como respaldo (no se borra al migrar).
             </p>
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-bottom:.75rem">
+                Plantilla del catálogo
+                <select name="workbook_template_code" style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px;max-width:28rem">
+                    <option value="">— Ninguna (usar legacy abajo) —</option>
+                    <?php foreach ($xlsxCatalog as $xt): ?>
+                        <?php
+                        $xc = (string) ($xt['code'] ?? '');
+                        if ($xc === '') {
+                            continue;
+                        }
+                        $xlabel = trim((string) ($xt['supplier_name'] ?? ''));
+                        $xlabel = ($xlabel !== '' ? $xlabel . ' · ' : '')
+                            . (string) ($xt['name'] ?? $xc) . ' (' . $xc . ')';
+                        ?>
+                        <option value="<?= e($xc) ?>" <?= $wbCatalogCode === $xc ? 'selected' : '' ?>>
+                            <?= e($xlabel) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
             <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem;margin-bottom:.75rem">
-                <input type="checkbox" name="workbook_enabled" value="1" id="workbook-enabled" <?= !empty($wb['enabled']) ? 'checked' : '' ?>>
+                <input type="checkbox" name="workbook_enabled" value="1" id="workbook-enabled" <?= !empty($wb['enabled']) || $wbCatalogCode !== '' ? 'checked' : '' ?>>
                 Este correo incluye plantilla Excel
             </label>
-            <div id="workbook-fields" style="<?= !empty($wb['enabled']) ? '' : 'opacity:.55' ?>">
+            <details id="workbook-fields" style="margin-top:.25rem" <?= (!empty($wb['enabled']) && $wbCatalogCode === '') ? 'open' : '' ?>>
+                <summary class="muted" style="cursor:pointer;font-size:.86rem;font-weight:600">
+                    Configuración legacy (archivo + celdas en esta plantilla de correo)
+                </summary>
+                <div style="margin-top:.75rem;<?= !empty($wb['enabled']) ? '' : 'opacity:.55' ?>">
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.65rem;margin-bottom:.65rem">
                     <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.85rem;font-weight:600">
                         Archivo actual
@@ -330,7 +358,8 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
                 <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.82rem;margin-top:.65rem">
                     <input type="checkbox" name="workbook_clear" value="1"> Quitar archivo Excel
                 </label>
-            </div>
+                </div>
+            </details>
         </div>
         <?php endif; ?>
 

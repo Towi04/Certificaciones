@@ -52,11 +52,25 @@ Si el lote incluye el mismo `student_user_id` en **≥2** trackings (paquete con
 
 La elección se recuerda en `localStorage` (`doceo-csv-combo-mode`). Parámetro: `combo_mode=repeat|single` en descarga y resumen.
 
-## Excel en correo (TOEFL, etc.) — aún en plantilla de correo
+## Fase 2 (hecho) — Excel en el catálogo + migración
 
-Hoy el `.xlsx` de TOEFL (y similares) vive en **Plantillas correo** → “Plantilla Excel” / `mail_tpl_{code}_workbook`, o en `provider_request.workbook` del grupo.
+| Qué | Dónde |
+|-----|-------|
+| Catálogo Excel | **Plantillas proveedor → Excel** (`?tipo=xlsx`) |
+| Crear/editar | upload `.xlsx` + mapa de celdas + proveedor |
+| Correo | selector «Plantilla del catálogo»; legacy colapsado (no se borra) |
+| Migración | `php bin/migrate-provider-workbooks.php` (también en `ensure-cutover-config`) |
 
-Fases 2–3 del plan: moverlos al mismo catálogo **sin borrar** lo ya configurado en BD.
+Códigos migrados: `xlsx_mail_{mail_code}`, `xlsx_group_{group_code}`.
+Se escribe `workbook_template_code` en Settings/grupo **sin DELETE** del JSON legacy.
+
+Resolución al enviar: catálogo (grupo → mail) → legacy mail → legacy grupo.
+
+Seed CSV UKS: upsert **no destructivo** (no pisa `mapping_json` custom).
+
+## Fase 3 — Correo solo placeholder (pendiente)
+
+Camino feliz = catálogo; legacy solo fallback; errores claros si falta Excel.
 
 ## Relacionado
 
