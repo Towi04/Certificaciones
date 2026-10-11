@@ -35,9 +35,9 @@ $configGroups = [
         'label' => 'Automatización',
         'items' => [
             ['href' => '/admin/correos', 'label' => 'Plantillas correo', 'icon' => 'mail', 'match' => '/correos'],
+            // Catálogo de CSV para Operación (UKS, Cambridge, etc.). Excel de correo se migra después.
+            ['href' => '/admin/plantillas-csv', 'label' => 'Plantillas CSV', 'icon' => 'export', 'match' => '/plantillas-csv'],
             ['href' => '/admin/publicidad', 'label' => 'Publicidad', 'icon' => 'promo', 'match' => '/publicidad'],
-            // Plantillas CSV / UKS import-export: la descarga e importación viven en Operación;
-            // las rutas siguen activas por URL si hace falta editar una plantilla.
             ['href' => '/admin/inventario', 'label' => 'Inventario códigos', 'icon' => 'export', 'match' => '/inventario'],
             ['href' => '/admin/vacaciones', 'label' => 'Vacaciones', 'icon' => 'calendar', 'match' => '/vacaciones'],
             ['href' => '/admin/promo', 'label' => 'Promo DOCEO', 'icon' => 'promo', 'match' => '/promo'],
@@ -55,7 +55,7 @@ foreach ($configGroups as $navGroup) {
         }
     }
 }
-if (!$configOpen && str_contains($path, '/certificadoras')) {
+if (!$configOpen && (str_contains($path, '/certificadoras') || str_contains($path, '/exportaciones'))) {
     $configOpen = true;
 }
 ?>

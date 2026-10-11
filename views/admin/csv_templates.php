@@ -5,8 +5,10 @@
     <div>
         <h1 style="margin:0;color:var(--doceo-blue)">Plantillas CSV</h1>
         <p class="muted" style="margin:.35rem 0 0;max-width:48rem">
-            Define columnas y datos para descargar registros al proveedor
-            (por alumno o por fecha de examen).
+            Catálogo de archivos que el admin descarga en Operación para registrar alumnos
+            ante el proveedor (UKS, Cambridge, etc.). Crea una plantilla por proveedor/formato
+            y asígnala en <strong>Grupos → Progreso</strong> (acción «Descargar CSV»).
+            El seed incluye UKS (<code>uks_elet_registro</code>); las demás se crean aquí.
         </p>
     </div>
     <a class="btn btn-accent" href="<?= e(url('/admin/plantillas-csv/nueva')) ?>">Nueva plantilla</a>
