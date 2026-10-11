@@ -1306,6 +1306,9 @@ $pageHeading = $isEdit
             Para el paso de <strong>aplicación del examen</strong> elige la acción
             «Confirmar aplicación del examen» (✓ se presentó / ✗ no se presentó) y actívalo en Operación;
             no envía correo: solo confirma asistencia y avanza o deja pendiente reagendar.
+            Las plantillas CSV de registro al proveedor se crean en
+            <a href="<?= e(url('/admin/plantillas-csv')) ?>">Configuración → Plantillas CSV</a>
+            y aquí solo se elige cuál descargar (UKS, Cambridge, etc.).
         </p>
 
         <div class="panel" style="margin:0 0 1rem;padding:.85rem 1rem;background:#f8fafc">
@@ -2474,8 +2477,9 @@ $pageHeading = $isEdit
   }
 
   function csvTplSelect(idx, value) {
+    var csvAdminUrl = <?= json_encode(url('/admin/plantillas-csv'), JSON_UNESCAPED_UNICODE) ?>;
     var html = '<select data-field="csv_template" name="pipeline_steps[' + idx + '][csv_template]" style="' + inp + '">';
-    html += '<option value="">— Plantilla CSV —</option>';
+    html += '<option value="">— Elegir plantilla (ninguna) —</option>';
     var found = false;
     csvTemplatesJs.forEach(function (t) {
       if (!t.code) return;
@@ -2488,6 +2492,11 @@ $pageHeading = $isEdit
       html += '<option value="' + escapeHtml(value) + '" selected>' + escapeHtml(value) + '</option>';
     }
     html += '</select>';
+    html += '<span class="muted" style="display:block;font-size:.75rem;font-weight:500;margin-top:.3rem;line-height:1.35">'
+      + (csvTemplatesJs.length ? '' : 'Aún no hay plantillas activas. ')
+      + '<a href="' + escapeHtml(csvAdminUrl) + '" target="_blank" rel="noopener">Administrar plantillas CSV</a>'
+      + ' (crear UKS, Cambridge u otras; luego elige aquí cuál descargar).'
+      + '</span>';
     return html;
   }
 
@@ -2681,8 +2690,8 @@ $pageHeading = $isEdit
           '<label class="muted"><span class="progress-step-tpl-label">Plantilla</span>' + mailTplSelect('email_template', idx, s.email_template || '') + '</label>' +
         '</div>' +
         '<div class="progress-step-grid progress-step-csv"' + (isCsv ? '' : ' style="display:none"') + '>' +
-          '<label class="muted">Plantilla CSV' + csvTplSelect(idx, s.csv_template || '') + '</label>' +
-          '<label class="muted">Alcance' + csvScopeSelect(idx, s.csv_scope || 'student') + '</label>' +
+          '<label class="muted">Plantilla a descargar' + csvTplSelect(idx, s.csv_template || '') + '</label>' +
+          '<label class="muted">Alcance por defecto' + csvScopeSelect(idx, s.csv_scope || 'student') + '</label>' +
         '</div>';
       stepsBody.appendChild(card);
       bindOpsIconPicker(card);

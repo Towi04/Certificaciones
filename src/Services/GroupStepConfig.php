@@ -29,7 +29,7 @@ final class GroupStepConfig
     public const ACTIONS = [
         self::ACTION_NONE => 'Solo progreso (sin botón)',
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
-        self::ACTION_DOWNLOAD_CSV => 'Descargar CSV (plantilla)',
+        self::ACTION_DOWNLOAD_CSV => 'Descargar CSV (plantilla proveedor)',
         self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
         self::ACTION_CONFIRM_EXAM => 'Confirmar aplicación del examen',
         self::ACTION_CONFIRM_PAYMENT_POPUP => 'Confirmar pago (ver comprobante)',
@@ -48,7 +48,7 @@ final class GroupStepConfig
     public const ACTIONS_EDITABLE = [
         self::ACTION_NONE => 'Solo progreso (sin botón)',
         self::ACTION_SEND_MAIL => 'Enviar correo (plantilla)',
-        self::ACTION_DOWNLOAD_CSV => 'Descargar CSV (plantilla)',
+        self::ACTION_DOWNLOAD_CSV => 'Descargar CSV (plantilla proveedor)',
         self::ACTION_ADVANCE => 'Avanzar / marcar hecho',
         self::ACTION_CONFIRM_EXAM => 'Confirmar aplicación del examen',
         self::ACTION_CONFIRM_PAYMENT_POPUP => 'Confirmar pago (ver comprobante)',
