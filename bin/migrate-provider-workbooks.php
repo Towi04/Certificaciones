@@ -29,4 +29,5 @@ try {
     exit(1);
 }
 
+fwrite(STDOUT, PHP_EOL . 'Siguiente: php bin/provider-templates-qa.php' . PHP_EOL);
 exit(0);
