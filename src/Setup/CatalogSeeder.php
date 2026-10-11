@@ -945,6 +945,38 @@ HTML;
         ]);
         $log[] = 'Export template: uks_elet_registro';
 
+        // Ejemplo Cambridge (solo insert si no existe: no pisar custom de ops).
+        if ($exportRepo->findByCode('cambridge_registro') === null) {
+            $cambridgeMapping = [
+                'columns' => [
+                    ['header' => 'Nombre completo', 'field' => 'full_name', 'formula' => '=MAYUSC({{full_name}})'],
+                    ['header' => 'Correo', 'field' => 'email'],
+                    ['header' => 'Fecha examen', 'field' => 'exam_date', 'formula' => '=TEXTO({{exam_date}};"dd/mm/aaaa")'],
+                    ['header' => 'Hora examen', 'field' => 'exam_time', 'formula' => '=TEXTO({{exam_time}};"hh:mm")'],
+                    ['header' => 'Certificación', 'field' => 'product_name'],
+                    ['header' => 'Matrícula', 'field' => 'matricula'],
+                ],
+                'normalize' => 'none',
+                'filters' => [
+                    'product_group_codes' => ['cambridge-flexible', 'cambridge-fixed'],
+                    'purchase_status' => ['paid'],
+                ],
+            ];
+            $exportRepo->upsert('cambridge_registro', [
+                'name' => 'Cambridge · Registro (ejemplo)',
+                'supplier_id' => $supplierIds['creative'] ?? null,
+                'file_type' => 'csv',
+                'storage_path' => 'templates/cambridge_registro.csv',
+                'delivery' => 'download',
+                'batch_by' => 'exam_date',
+                'mapping_json' => json_encode($cambridgeMapping, JSON_UNESCAPED_UNICODE),
+                'is_active' => 1,
+            ]);
+            $log[] = 'Export template: cambridge_registro (nuevo)';
+        } else {
+            $log[] = 'Export template: cambridge_registro (ya existía — sin overwrite)';
+        }
+
         $uksImportMapping = [
             'match_column' => 'Matrícula',
             'product_code' => 'ELET-UKS',
