@@ -1307,7 +1307,7 @@ $pageHeading = $isEdit
             «Confirmar aplicación del examen» (✓ se presentó / ✗ no se presentó) y actívalo en Operación;
             no envía correo: solo confirma asistencia y avanza o deja pendiente reagendar.
             Las plantillas CSV de registro al proveedor se crean en
-            <a href="<?= e(url('/admin/plantillas-csv')) ?>">Configuración → Plantillas CSV</a>
+            <a href="<?= e(url('/admin/plantillas-csv')) ?>">Automatización → Plantillas proveedor</a>
             y aquí solo se elige cuál descargar (UKS, Cambridge, etc.).
         </p>
 
@@ -2326,7 +2326,11 @@ $pageHeading = $isEdit
       return ['code' => (string) ($t['code'] ?? ''), 'name' => (string) ($t['name'] ?? '')];
   }, $mailTemplates)), JSON_UNESCAPED_UNICODE) ?> || [];
   var csvTemplatesJs = <?= json_encode(array_values(array_map(static function ($t) {
-      return ['code' => (string) ($t['code'] ?? ''), 'name' => (string) ($t['name'] ?? '')];
+      return [
+          'code' => (string) ($t['code'] ?? ''),
+          'name' => (string) ($t['name'] ?? ''),
+          'supplier' => (string) ($t['supplier_name'] ?? ''),
+      ];
   }, $csvTemplates)), JSON_UNESCAPED_UNICODE) ?> || [];
   var actionOptions = <?= json_encode(\App\Services\GroupStepConfig::ACTIONS_EDITABLE, JSON_UNESCAPED_UNICODE) ?>;
   var allActionLabels = <?= json_encode(\App\Services\GroupStepConfig::ACTIONS, JSON_UNESCAPED_UNICODE) ?>;
@@ -2479,14 +2483,16 @@ $pageHeading = $isEdit
   function csvTplSelect(idx, value) {
     var csvAdminUrl = <?= json_encode(url('/admin/plantillas-csv'), JSON_UNESCAPED_UNICODE) ?>;
     var html = '<select data-field="csv_template" name="pipeline_steps[' + idx + '][csv_template]" style="' + inp + '">';
+    // Default vacío: Cambridge/TOEFL no heredan la plantilla UKS.
     html += '<option value="">— Elegir plantilla (ninguna) —</option>';
     var found = false;
     csvTemplatesJs.forEach(function (t) {
       if (!t.code) return;
       var sel = t.code === value;
       if (sel) found = true;
+      var label = (t.supplier ? (t.supplier + ' · ') : '') + (t.name || t.code) + ' (' + t.code + ')';
       html += '<option value="' + escapeHtml(t.code) + '"' + (sel ? ' selected' : '') + '>'
-        + escapeHtml(t.name || t.code) + ' (' + escapeHtml(t.code) + ')</option>';
+        + escapeHtml(label) + '</option>';
     });
     if (value && !found) {
       html += '<option value="' + escapeHtml(value) + '" selected>' + escapeHtml(value) + '</option>';
@@ -2494,8 +2500,8 @@ $pageHeading = $isEdit
     html += '</select>';
     html += '<span class="muted" style="display:block;font-size:.75rem;font-weight:500;margin-top:.3rem;line-height:1.35">'
       + (csvTemplatesJs.length ? '' : 'Aún no hay plantillas activas. ')
-      + '<a href="' + escapeHtml(csvAdminUrl) + '" target="_blank" rel="noopener">Administrar plantillas CSV</a>'
-      + ' (crear UKS, Cambridge u otras; luego elige aquí cuál descargar).'
+      + '<a href="' + escapeHtml(csvAdminUrl) + '" target="_blank" rel="noopener">Administrar plantillas proveedor</a>'
+      + ' (UKS, Cambridge u otras; elige aquí cuál descargar — no uses UKS en Cambridge).'
       + '</span>';
     return html;
   }
