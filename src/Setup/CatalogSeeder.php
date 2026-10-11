@@ -933,17 +933,39 @@ HTML;
             ],
         ];
         $exportRepo = new \App\Repositories\ExportTemplateRepository();
-        $exportRepo->upsert('uks_elet_registro', [
-            'name' => 'UKS · Registro ELeT (Instituto DOCEO)',
-            'supplier_id' => $supplierIds['uks'],
-            'file_type' => 'csv',
-            'storage_path' => 'templates/uks_elet_registro.csv',
-            'delivery' => 'download',
-            'batch_by' => 'exam_date',
-            'mapping_json' => json_encode($uksMapping, JSON_UNESCAPED_UNICODE),
-            'is_active' => 1,
-        ]);
-        $log[] = 'Export template: uks_elet_registro';
+        $uksExisting = $exportRepo->findByCode('uks_elet_registro');
+        if ($uksExisting !== null) {
+            // Upsert no destructivo: no pisar mapping/nombre custom de ops.
+            $existingMapRaw = $uksExisting['mapping_json'] ?? '';
+            $existingMap = is_string($existingMapRaw) ? json_decode($existingMapRaw, true) : $existingMapRaw;
+            $hasColumns = is_array($existingMap) && !empty($existingMap['columns']);
+            $patch = [];
+            if (empty($uksExisting['supplier_id']) && !empty($supplierIds['uks'])) {
+                $patch['supplier_id'] = $supplierIds['uks'];
+            }
+            if (trim((string) ($uksExisting['storage_path'] ?? '')) === '') {
+                $patch['storage_path'] = 'templates/uks_elet_registro.csv';
+            }
+            if ($patch !== []) {
+                $exportRepo->upsert('uks_elet_registro', $patch);
+                $log[] = 'Export template: uks_elet_registro (ya existía — solo defaults faltantes)';
+            } else {
+                $log[] = 'Export template: uks_elet_registro (ya existía — skip overwrite'
+                    . ($hasColumns ? ', mapping custom conservado' : '') . ')';
+            }
+        } else {
+            $exportRepo->upsert('uks_elet_registro', [
+                'name' => 'UKS · Registro ELeT (Instituto DOCEO)',
+                'supplier_id' => $supplierIds['uks'],
+                'file_type' => 'csv',
+                'storage_path' => 'templates/uks_elet_registro.csv',
+                'delivery' => 'download',
+                'batch_by' => 'exam_date',
+                'mapping_json' => json_encode($uksMapping, JSON_UNESCAPED_UNICODE),
+                'is_active' => 1,
+            ]);
+            $log[] = 'Export template: uks_elet_registro (nuevo)';
+        }
 
         // Ejemplo Cambridge (solo insert si no existe: no pisar custom de ops).
         if ($exportRepo->findByCode('cambridge_registro') === null) {

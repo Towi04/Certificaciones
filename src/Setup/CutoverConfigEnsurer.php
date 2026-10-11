@@ -6,6 +6,7 @@ namespace App\Setup;
 
 use App\Repositories\MailTemplateRepository;
 use App\Repositories\ProductGroupRepository;
+use App\Services\ProviderWorkbookCatalogService;
 
 /**
  * Parches seguros para el cutover UKS / Cambridge / CENNI.
@@ -22,6 +23,12 @@ final class CutoverConfigEnsurer
         $log = array_merge($log, $this->ensureGroupDocs('cambridge-fixed', $this->cambridgeInePatch('reglamento_cambridge_fixed')));
         $log = array_merge($log, $this->ensureGroupDocs('uks-elet-cenni', $this->cenniPatch()));
         $log = array_merge($log, $this->ensureMailTemplates());
+        // Fase 2: Excel correo/grupos → catálogo (sin borrar Settings).
+        try {
+            $log = array_merge($log, (new ProviderWorkbookCatalogService())->migrateFromLegacy());
+        } catch (\Throwable $e) {
+            $log[] = 'Workbook migración: error ' . $e->getMessage();
+        }
 
         if ($log === []) {
             $log[] = 'Cutover: nada que parchear (grupos/plantillas ya listos).';

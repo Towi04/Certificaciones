@@ -166,14 +166,25 @@ final class ProviderRequestService
                     ? (string) ($workbook['normalize'] ?? 'none')
                     : 'none',
                 'cell_map' => $cellMap,
+                'workbook_template_code' => trim((string) ($workbook['workbook_template_code'] ?? '')),
             ],
         ];
 
-        // Heredar Excel de la plantilla de correo SOLO si esa plantilla realmente
-        // usa placeholders de Excel. Evita forzar Excel (y fallos) cuando el paso
-        // apunta a un correo sin plantilla Excel.
+        // Catálogo → legacy mail → legacy grupo (Fase 2). Solo forzar si el correo
+        // pide Excel o el grupo ya tenía workbook.
         $mailCode = trim((string) ($out['mail_template_code'] ?? ''));
-        if ($mailCode !== '' && empty($out['workbook']['enabled'])) {
+        $resolved = (new ProviderWorkbookCatalogService())->resolve($out['workbook'], $mailCode);
+        if (!empty($resolved['enabled'])) {
+            $wantsWorkbook = $mailCode === ''
+                || MailTemplateService::isUksSolicitudCode($mailCode)
+                || MailTemplateService::templateUsesWorkbookPlaceholders($mailCode)
+                || !empty($out['workbook']['enabled'])
+                || trim((string) ($out['workbook']['workbook_template_code'] ?? '')) !== '';
+            if ($wantsWorkbook || str_starts_with((string) ($resolved['source'] ?? ''), 'catalog')) {
+                $out['workbook'] = array_merge($out['workbook'], $resolved, ['attach' => false]);
+            }
+        } elseif ($mailCode !== '' && empty($out['workbook']['enabled'])) {
+            // Compat: herencia mail legacy solo si el correo usa {{workbook_url}}.
             $fromMail = MailTemplateService::workbookConfig($mailCode);
             if (
                 !empty($fromMail['enabled'])
@@ -676,24 +687,12 @@ final class ProviderRequestService
         }
 
         $mailCode = trim((string) ($config['mail_template_code'] ?? ''));
-        // Si el grupo no trae Excel, heredar siempre de la plantilla de correo del paso.
-        if (
-            $mailCode !== ''
-            && (
-                empty($config['workbook']['enabled'])
-                || trim((string) ($config['workbook']['template_path'] ?? '')) === ''
-            )
-        ) {
-            $fromMail = MailTemplateService::workbookConfig($mailCode);
-            if (
-                !empty($fromMail['enabled'])
-                && trim((string) ($fromMail['template_path'] ?? '')) !== ''
-            ) {
-                $config['workbook'] = array_merge(
-                    is_array($config['workbook'] ?? null) ? $config['workbook'] : [],
-                    $fromMail,
-                    ['attach' => false]
-                );
+        // Catálogo / legacy: rellenar workbook si falta path o no está enabled.
+        $wbNow = is_array($config['workbook'] ?? null) ? $config['workbook'] : [];
+        if (empty($wbNow['enabled']) || trim((string) ($wbNow['template_path'] ?? '')) === '') {
+            $resolved = (new ProviderWorkbookCatalogService())->resolve($wbNow, $mailCode);
+            if (!empty($resolved['enabled'])) {
+                $config['workbook'] = array_merge($wbNow, $resolved, ['attach' => false]);
             }
         }
 

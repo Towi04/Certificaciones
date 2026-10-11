@@ -495,8 +495,9 @@ final class MailTemplateService
 
     /**
      * Config Excel asociada a una plantilla (Settings JSON).
+     * Puede incluir workbook_template_code → catálogo Plantillas proveedor (Fase 2).
      *
-     * @return array{enabled:bool,template_path:string,sheet:string,normalize:string,cell_map:list<array{cell:string,field:string}>}
+     * @return array{enabled:bool,template_path:string,sheet:string,normalize:string,cell_map:list<array{cell:string,field:string}>,workbook_template_code:string}
      */
     public static function workbookConfig(string $code): array
     {
@@ -529,11 +530,12 @@ final class MailTemplateService
                 ? (string) ($data['normalize'] ?? 'none')
                 : 'none',
             'cell_map' => $cellMap,
+            'workbook_template_code' => trim((string) ($data['workbook_template_code'] ?? '')),
         ];
     }
 
     /**
-     * @param array{enabled?:bool,template_path?:string,sheet?:string,normalize?:string,cell_map?:list<array{cell?:string,field?:string,formula?:string}>} $workbook
+     * @param array{enabled?:bool,template_path?:string,sheet?:string,normalize?:string,cell_map?:list<array{cell?:string,field?:string,formula?:string}>,workbook_template_code?:string} $workbook
      */
     public static function saveWorkbookConfig(string $code, array $workbook): void
     {
@@ -556,6 +558,12 @@ final class MailTemplateService
             }
             $cellMap[] = $row;
         }
+        $catalogCode = trim((string) ($workbook['workbook_template_code'] ?? ''));
+        // Si no viene en el POST, conservar el puntero ya migrado.
+        if (!array_key_exists('workbook_template_code', $workbook)) {
+            $prev = self::workbookConfig($code);
+            $catalogCode = $prev['workbook_template_code'];
+        }
         $normalized = [
             'enabled' => !empty($workbook['enabled']),
             'template_path' => trim((string) ($workbook['template_path'] ?? '')),
@@ -564,7 +572,15 @@ final class MailTemplateService
                 ? (string) ($workbook['normalize'] ?? 'none')
                 : 'none',
             'cell_map' => $cellMap,
+            'workbook_template_code' => $catalogCode,
         ];
+        // Preferir catálogo: si hay código de catálogo activo, marcar enabled.
+        if ($catalogCode !== '') {
+            $fromCatalog = (new ProviderWorkbookCatalogService())->workbookConfig($catalogCode);
+            if ($fromCatalog !== null && !empty($fromCatalog['enabled'])) {
+                $normalized['enabled'] = true;
+            }
+        }
         Settings::set('mail_tpl_' . $code . '_workbook', json_encode($normalized, JSON_UNESCAPED_UNICODE));
     }
 

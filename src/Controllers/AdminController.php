@@ -36,6 +36,7 @@ use App\Services\StepMailService;
 use App\Services\TrackingService;
 use App\Services\UksEletService;
 use App\Services\ProviderRequestService;
+use App\Services\ProviderWorkbookCatalogService;
 use App\Support\Pagination;
 use App\Support\Settings;
 
@@ -772,7 +773,7 @@ final class AdminController
                 (new MailTemplateService())->all(),
                 static fn (array $t): bool => !array_key_exists('is_active', $t) || !empty($t['is_active'])
             )),
-            'csvTemplates' => (new \App\Repositories\ExportTemplateRepository())->listActive(),
+            'csvTemplates' => (new \App\Repositories\ExportTemplateRepository())->listActiveCsv(),
             'layout' => 'admin',
         ];
         view('admin/product_group_form', $this->mergeOldIntoGroupForm($view));
@@ -838,7 +839,7 @@ final class AdminController
                 (new MailTemplateService())->all(),
                 static fn (array $t): bool => !array_key_exists('is_active', $t) || !empty($t['is_active'])
             )),
-            'csvTemplates' => (new \App\Repositories\ExportTemplateRepository())->listActive(),
+            'csvTemplates' => (new \App\Repositories\ExportTemplateRepository())->listActiveCsv(),
             'layout' => 'admin',
         ];
         $view = $this->mergeOldIntoGroupForm($view);
@@ -3055,7 +3056,7 @@ final class AdminController
     public function exports(): void
     {
         Auth::requireRole(['admin']);
-        $templates = (new \App\Repositories\ExportTemplateRepository())->listActive();
+        $templates = (new \App\Repositories\ExportTemplateRepository())->listActiveCsv();
         $importTemplates = (new \App\Repositories\ImportTemplateRepository())->listActive();
         view('admin/exports', [
             'title' => 'Exportaciones UKS',
@@ -3146,10 +3147,15 @@ final class AdminController
     public function csvTemplates(): void
     {
         Auth::requireRole(['admin']);
-        $templates = (new \App\Repositories\ExportTemplateRepository())->all();
+        $repo = new \App\Repositories\ExportTemplateRepository();
+        $kind = strtolower(trim((string) ($_GET['tipo'] ?? 'csv')));
+        if (!in_array($kind, ['csv', 'xlsx', 'all'], true)) {
+            $kind = 'csv';
+        }
         view('admin/csv_templates', [
             'title' => 'Plantillas proveedor',
-            'templates' => $templates,
+            'templates' => $kind === 'all' ? $repo->all() : $repo->listByFileType($kind, false),
+            'kind' => $kind,
             'layout' => 'admin',
         ]);
     }
@@ -3157,6 +3163,12 @@ final class AdminController
     public function csvTemplateCreate(): void
     {
         Auth::requireRole(['admin']);
+        $tipo = strtolower(trim((string) ($_GET['tipo'] ?? $_POST['file_type'] ?? 'csv')));
+        if ($tipo === 'xlsx') {
+            $this->xlsxTemplateCreateForm();
+
+            return;
+        }
         $old = old_input();
         $template = [
             'code' => (string) ($old['code'] ?? ''),
@@ -3214,6 +3226,22 @@ final class AdminController
     {
         Auth::requireRole(['admin']);
         csrf_verify();
+        $tipo = strtolower(trim((string) ($_POST['file_type'] ?? 'csv')));
+        if ($tipo === 'xlsx') {
+            try {
+                $upload = isset($_FILES['workbook_file']) && is_array($_FILES['workbook_file'])
+                    ? $_FILES['workbook_file']
+                    : null;
+                $code = (new ProviderWorkbookCatalogService())->createFromAdmin($_POST, $upload);
+                flash('success', 'Plantilla Excel creada.');
+                redirect('/admin/plantillas-csv/' . $code);
+            } catch (\Throwable $e) {
+                $this->formError($e->getMessage());
+                redirect('/admin/plantillas-csv/nueva?tipo=xlsx');
+            }
+
+            return;
+        }
         try {
             $code = (new ExportService())->createFromAdmin($_POST);
             flash('success', 'Plantilla CSV creada.');
@@ -3227,6 +3255,14 @@ final class AdminController
     public function csvTemplateEdit(string $code): void
     {
         Auth::requireRole(['admin']);
+        $xlsxSvc = new ProviderWorkbookCatalogService();
+        $xlsx = $xlsxSvc->find($code);
+        if ($xlsx !== null) {
+            $this->xlsxTemplateEditForm($code, $xlsx);
+
+            return;
+        }
+
         $svc = new ExportService();
         $template = $svc->template($code);
         if ($template === null) {
@@ -3297,6 +3333,21 @@ final class AdminController
     {
         Auth::requireRole(['admin']);
         csrf_verify();
+        $xlsxSvc = new ProviderWorkbookCatalogService();
+        if ($xlsxSvc->find($code) !== null) {
+            try {
+                $upload = isset($_FILES['workbook_file']) && is_array($_FILES['workbook_file'])
+                    ? $_FILES['workbook_file']
+                    : null;
+                $xlsxSvc->updateFromAdmin($code, $_POST, $upload);
+                flash('success', 'Plantilla Excel guardada.');
+            } catch (\Throwable $e) {
+                $this->formError($e->getMessage());
+            }
+            redirect('/admin/plantillas-csv/' . $code);
+
+            return;
+        }
         try {
             (new ExportService())->updateFromAdmin($code, $_POST);
             flash('success', 'Plantilla CSV guardada.');
@@ -3310,18 +3361,120 @@ final class AdminController
     {
         Auth::requireRole(['admin']);
         csrf_verify();
+        $xlsxSvc = new ProviderWorkbookCatalogService();
         try {
-            (new ExportService())->delete($code);
-            flash('success', 'Plantilla CSV eliminada.');
+            if ($xlsxSvc->find($code) !== null) {
+                $xlsxSvc->delete($code);
+                flash('success', 'Plantilla Excel eliminada (archivo en storage conservado).');
+            } else {
+                (new ExportService())->delete($code);
+                flash('success', 'Plantilla CSV eliminada.');
+            }
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
         redirect('/admin/plantillas-csv');
     }
 
+    private function xlsxTemplateCreateForm(): void
+    {
+        $old = old_input();
+        $template = [
+            'code' => (string) ($old['code'] ?? ''),
+            'name' => (string) ($old['name'] ?? ''),
+            'supplier_id' => !empty($old['supplier_id']) ? (int) $old['supplier_id'] : null,
+            'storage_path' => (string) ($old['template_path'] ?? ''),
+            'is_active' => array_key_exists('is_active', $old) ? (!empty($old['is_active']) ? 1 : 0) : 1,
+            'mapping_json' => json_encode([
+                'sheet' => (string) ($old['sheet'] ?? ''),
+                'normalize' => (string) ($old['normalize'] ?? 'none'),
+                'cell_map' => [],
+            ], JSON_UNESCAPED_UNICODE),
+        ];
+        $cellMap = [];
+        if (isset($old['workbook_cells']) && is_array($old['workbook_cells'])) {
+            foreach ($old['workbook_cells'] as $i => $cell) {
+                $cellMap[] = [
+                    'cell' => (string) $cell,
+                    'field' => (string) (($old['workbook_fields'][$i] ?? '')),
+                    'formula' => (string) (($old['workbook_formulas'][$i] ?? '')),
+                ];
+            }
+        }
+        if ($cellMap === []) {
+            $cellMap = [
+                ['cell' => 'B2', 'field' => 'full_name', 'formula' => '=ASCIIMAYUSC({{full_name}})'],
+                ['cell' => 'B3', 'field' => 'email', 'formula' => ''],
+            ];
+        }
+
+        view('admin/xlsx_template_edit', [
+            'title' => 'Nueva plantilla Excel',
+            'template' => $template,
+            'cellMap' => $cellMap,
+            'fieldOptions' => ProviderRequestService::FIELD_OPTIONS,
+            'suppliers' => (new SupplierRepository())->all(),
+            'isNew' => true,
+            'layout' => 'admin',
+        ]);
+    }
+
+    /** @param array<string, mixed> $template */
+    private function xlsxTemplateEditForm(string $code, array $template): void
+    {
+        $svc = new ProviderWorkbookCatalogService();
+        $old = old_input();
+        if ($old !== []) {
+            $template['name'] = (string) ($old['name'] ?? $template['name']);
+            $template['supplier_id'] = !empty($old['supplier_id']) ? (int) $old['supplier_id'] : null;
+            $template['is_active'] = !empty($old['is_active']) ? 1 : 0;
+        }
+        $map = $svc->mapping($template);
+        $cellMap = [];
+        if (isset($old['workbook_cells']) && is_array($old['workbook_cells'])) {
+            foreach ($old['workbook_cells'] as $i => $cell) {
+                $cellMap[] = [
+                    'cell' => (string) $cell,
+                    'field' => (string) (($old['workbook_fields'][$i] ?? '')),
+                    'formula' => (string) (($old['workbook_formulas'][$i] ?? '')),
+                ];
+            }
+        } else {
+            foreach (is_array($map['cell_map'] ?? null) ? $map['cell_map'] : [] as $row) {
+                if (is_array($row)) {
+                    $cellMap[] = $row;
+                }
+            }
+        }
+        if ($cellMap === []) {
+            $cellMap = [['cell' => '', 'field' => '', 'formula' => '']];
+        }
+        if ($old !== []) {
+            $map['sheet'] = (string) ($old['sheet'] ?? ($map['sheet'] ?? ''));
+            $map['normalize'] = (string) ($old['normalize'] ?? ($map['normalize'] ?? 'none'));
+            $template['mapping_json'] = json_encode($map, JSON_UNESCAPED_UNICODE);
+        }
+
+        view('admin/xlsx_template_edit', [
+            'title' => 'Editar Excel · ' . (string) ($template['name'] ?? $code),
+            'template' => $template,
+            'cellMap' => $cellMap,
+            'fieldOptions' => ProviderRequestService::FIELD_OPTIONS,
+            'suppliers' => (new SupplierRepository())->all(),
+            'isNew' => false,
+            'layout' => 'admin',
+        ]);
+    }
+
     public function csvTemplateDownload(string $code): void
     {
         Auth::requireRole(['admin']);
+        if ((new ProviderWorkbookCatalogService())->find($code) !== null) {
+            flash('error', 'Esa plantilla es Excel (correo), no CSV de descarga.');
+            redirect('/admin/plantillas-csv/' . $code);
+
+            return;
+        }
         $svc = new ExportService();
         $trackingId = (int) ($_GET['tracking_id'] ?? 0);
         $scope = ExportService::normalizeScope((string) ($_GET['scope'] ?? ExportService::SCOPE_STUDENT));
@@ -4074,12 +4227,15 @@ final class AdminController
                     ];
                 }
             }
+            $wbCatalogCode = trim((string) ($_POST['workbook_template_code'] ?? ''));
             MailTemplateService::saveWorkbookConfig($effectiveCode, [
-                'enabled' => !empty($_POST['workbook_enabled']) && $wbPath !== '',
+                'enabled' => (!empty($_POST['workbook_enabled']) && ($wbPath !== '' || $wbCatalogCode !== ''))
+                    || $wbCatalogCode !== '',
                 'template_path' => $wbPath,
                 'sheet' => trim((string) ($_POST['workbook_sheet'] ?? '')),
                 'normalize' => (string) ($_POST['workbook_normalize'] ?? 'none'),
                 'cell_map' => $cellMap,
+                'workbook_template_code' => $wbCatalogCode,
             ]);
 
             $messages = ['Plantilla guardada.'];

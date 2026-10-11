@@ -50,6 +50,37 @@ final class ExportTemplateRepository
         )->fetchAll();
     }
 
+    /** Solo CSV activos (selector Progreso / descarga Operación). */
+    /** @return list<array<string, mixed>> */
+    public function listActiveCsv(): array
+    {
+        return $this->listByFileType('csv', true);
+    }
+
+    /**
+     * @param 'csv'|'xlsx' $fileType
+     * @return list<array<string, mixed>>
+     */
+    public function listByFileType(string $fileType, bool $activeOnly = false): array
+    {
+        $fileType = strtolower(trim($fileType));
+        if (!in_array($fileType, ['csv', 'xlsx'], true)) {
+            $fileType = 'csv';
+        }
+        $sql = 'SELECT et.*, s.name AS supplier_name
+                FROM export_templates et
+                LEFT JOIN suppliers s ON s.id = et.supplier_id
+                WHERE et.file_type = ?';
+        if ($activeOnly) {
+            $sql .= ' AND et.is_active = 1';
+        }
+        $sql .= ' ORDER BY et.name ASC';
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$fileType]);
+
+        return $stmt->fetchAll();
+    }
+
     /** @return list<array<string, mixed>> */
     public function all(): array
     {
@@ -57,7 +88,7 @@ final class ExportTemplateRepository
             'SELECT et.*, s.name AS supplier_name
              FROM export_templates et
              LEFT JOIN suppliers s ON s.id = et.supplier_id
-             ORDER BY et.name ASC'
+             ORDER BY FIELD(et.file_type, \'csv\', \'xlsx\'), et.name ASC'
         )->fetchAll();
     }
 
