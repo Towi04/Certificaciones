@@ -3307,6 +3307,10 @@ final class AdminController
         $trackingId = (int) ($_GET['tracking_id'] ?? 0);
         $scope = ExportService::normalizeScope((string) ($_GET['scope'] ?? ExportService::SCOPE_STUDENT));
         $includeRegistered = !empty($_GET['include_registered']);
+        $comboMode = strtolower(trim((string) ($_GET['combo_mode'] ?? 'repeat')));
+        if (!in_array($comboMode, ['repeat', 'single'], true)) {
+            $comboMode = 'repeat';
+        }
         $stepCode = trim((string) ($_GET['step_code'] ?? ''));
         $returnTo = trim((string) ($_GET['return'] ?? ''));
         if ($returnTo === '' || !str_starts_with($returnTo, '/admin')) {
@@ -3322,6 +3326,7 @@ final class AdminController
                     'exclude_registered' => !$includeRegistered,
                     'step_code' => $stepCode,
                     'actor_user_id' => (int) Auth::id(),
+                    'combo_mode' => $comboMode,
                 ]);
 
                 return;
@@ -3333,6 +3338,7 @@ final class AdminController
                 'step_code' => $stepCode,
                 'actor_user_id' => (int) Auth::id(),
                 'batch' => true,
+                'combo_mode' => $comboMode,
             ];
             if (!empty($_GET['exam_date']) && is_string($_GET['exam_date'])) {
                 $options['exam_date'] = trim($_GET['exam_date']);
@@ -3358,6 +3364,10 @@ final class AdminController
         $trackingId = (int) ($_GET['tracking_id'] ?? 0);
         $scope = ExportService::normalizeScope((string) ($_GET['scope'] ?? ExportService::SCOPE_STUDENT));
         $includeRegistered = !empty($_GET['include_registered']);
+        $comboMode = strtolower(trim((string) ($_GET['combo_mode'] ?? 'repeat')));
+        if (!in_array($comboMode, ['repeat', 'single'], true)) {
+            $comboMode = 'repeat';
+        }
         $stepCode = trim((string) ($_GET['step_code'] ?? ''));
 
         try {
@@ -3366,6 +3376,7 @@ final class AdminController
                     'scope' => $scope,
                     'exclude_registered' => !$includeRegistered,
                     'step_code' => $stepCode,
+                    'combo_mode' => $comboMode,
                 ]);
             } else {
                 $options = [
@@ -3373,6 +3384,7 @@ final class AdminController
                     'template_code' => $code,
                     'step_code' => $stepCode,
                     'batch' => true,
+                    'combo_mode' => $comboMode,
                 ];
                 if (!empty($_GET['exam_date']) && is_string($_GET['exam_date'])) {
                     $options['exam_date'] = trim($_GET['exam_date']);
@@ -3388,6 +3400,10 @@ final class AdminController
                 'included' => $preview['included'],
                 'excluded' => $preview['excluded'],
                 'excluded_reasons' => $preview['excluded_reasons'],
+                'combo_students' => $preview['combo_students'],
+                'combo_extra_rows' => $preview['combo_extra_rows'],
+                'needs_combo_choice' => $preview['needs_combo_choice'],
+                'combo_mode' => $preview['combo_mode'],
             ], JSON_UNESCAPED_UNICODE);
         } catch (\Throwable $e) {
             http_response_code(400);
