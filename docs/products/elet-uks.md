@@ -153,7 +153,7 @@ Plantilla oficial **Plantilla Instituto DOCEO.csv** con columnas:
 **Cuándo exportar:** casos ELET-UKS con pago confirmado en pasos `confirm_pago` o `solicitud_uks`.
 
 **Admin:**
-- **Configuración → Plantillas CSV** (`/admin/plantillas-csv`) — editar columnas de `uks_elet_registro` (y crear plantillas de otros proveedores)
+- **Automatización → Plantillas proveedor** (`/admin/plantillas-csv`) — editar `uks_elet_registro` (y Cambridge u otras)
 - Grupo UKS → Progreso → paso «Descargar CSV» apunta a esa plantilla
 - **Operación** — botón CSV abre modal (alcance + resumen; excluye folio / ya descargados / ya presentaron; si hay paquete multi-cert, elegir repetir nombre vs una fila)
 - `/admin/exportaciones` — pendientes / lote por fecha (misma exclusión por defecto)

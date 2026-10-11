@@ -3,26 +3,27 @@
 ?>
 <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
     <div>
-        <h1 style="margin:0;color:var(--doceo-blue)">Plantillas CSV</h1>
+        <h1 style="margin:0;color:var(--doceo-blue)">Plantillas proveedor</h1>
         <p class="muted" style="margin:.35rem 0 0;max-width:48rem">
-            Catálogo de archivos que el admin descarga en Operación para registrar alumnos
-            ante el proveedor (UKS, Cambridge, etc.). Crea una plantilla por proveedor/formato
-            y asígnala en <strong>Grupos → Progreso</strong> (acción «Descargar CSV»).
-            El seed incluye UKS (<code>uks_elet_registro</code>); las demás se crean aquí.
+            Catálogo de CSV que Operación descarga para registrar alumnos ante el proveedor
+            (UKS, Cambridge, etc.). Asigna la plantilla en <strong>Grupos → Progreso</strong>
+            (acción «Descargar CSV»). El seed trae UKS y un ejemplo Cambridge; el Excel de correo
+            (TOEFL) se migra en una fase posterior.
         </p>
     </div>
-    <a class="btn btn-accent" href="<?= e(url('/admin/plantillas-csv/nueva')) ?>">Nueva plantilla</a>
+    <a class="btn btn-accent" href="<?= e(url('/admin/plantillas-csv/nueva')) ?>">Nueva plantilla CSV</a>
 </div>
 
 <div class="panel" style="margin-top:1rem">
     <?php if ($templates === []): ?>
-        <p class="muted" style="margin:0">Aún no hay plantillas CSV. Crea una o ejecuta el seed (incluye UKS).</p>
+        <p class="muted" style="margin:0">Aún no hay plantillas. Crea una o ejecuta el seed (UKS + Cambridge).</p>
     <?php else: ?>
         <div class="table-wrap">
             <table class="data">
                 <thead>
                 <tr>
                     <th>Nombre</th>
+                    <th>Proveedor</th>
                     <th>Código</th>
                     <th>Lote</th>
                     <th>Normalizar</th>
@@ -35,9 +36,11 @@
                     <?php
                     $mapping = (new \App\Services\ExportService())->mapping($tpl);
                     $normalize = (string) ($mapping['normalize'] ?? 'none');
+                    $supplierLabel = trim((string) ($tpl['supplier_name'] ?? ''));
                     ?>
                     <tr>
                         <td><strong><?= e((string) ($tpl['name'] ?? '')) ?></strong></td>
+                        <td><?= $supplierLabel !== '' ? e($supplierLabel) : '<span class="muted">—</span>' ?></td>
                         <td><code><?= e((string) ($tpl['code'] ?? '')) ?></code></td>
                         <td><?= ($tpl['batch_by'] ?? '') === 'exam_date' ? 'Por fecha' : 'Manual / alumno' ?></td>
                         <td><?= $normalize === 'toefl' ? 'TOEFL (sin acentos/Ñ, MAYÚS)' : 'Sin cambios' ?></td>

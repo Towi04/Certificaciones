@@ -6,13 +6,16 @@ Plan Notion: *Plantillas proveedor (CSV/Excel) desacopladas*.
 
 | Dónde | Qué |
 |-------|-----|
-| **Admin → Configuración → Plantillas CSV** | `/admin/plantillas-csv` — crear/editar plantillas (UKS, Cambridge, …) |
-| **Admin → Grupos → Progreso** | Paso con acción «Descargar CSV (plantilla proveedor)» → elegir plantilla + alcance |
+| **Admin → Automatización → Plantillas proveedor** | `/admin/plantillas-csv` (alias `/admin/plantillas-proveedor`) |
+| **Admin → Grupos → Progreso** | Paso «Descargar CSV» → elegir plantilla + alcance |
 | **Operación** | Botón del paso descarga el CSV |
 
-El seed trae `uks_elet_registro`. Para Cambridge (u otro proveedor) crea otra plantilla en **Plantillas CSV** y selecciónala en el grupo correspondiente (no uses la de UKS).
+## Fase 1 (hecho) — Catálogo CSV por proveedor
 
-Enlace directo desde el selector del progreso: **Administrar plantillas CSV**.
+- Lista y formulario con **etiqueta Proveedor** (`supplier_id`)
+- Seed: `uks_elet_registro` + ejemplo `cambridge_registro` (insert-only; no pisa custom)
+- En Progreso el selector muestra `Proveedor · Nombre (código)` y default vacío (Cambridge no hereda UKS)
+- Enlace: **Administrar plantillas proveedor**
 
 ## Fase 1b — Alcances y anti-duplicados (hecho)
 

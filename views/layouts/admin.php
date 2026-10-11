@@ -35,8 +35,8 @@ $configGroups = [
         'label' => 'Automatización',
         'items' => [
             ['href' => '/admin/correos', 'label' => 'Plantillas correo', 'icon' => 'mail', 'match' => '/correos'],
-            // Catálogo de CSV para Operación (UKS, Cambridge, etc.). Excel de correo se migra después.
-            ['href' => '/admin/plantillas-csv', 'label' => 'Plantillas CSV', 'icon' => 'export', 'match' => '/plantillas-csv'],
+            // Catálogo CSV proveedor (UKS, Cambridge…). Excel de correo se migra después.
+            ['href' => '/admin/plantillas-csv', 'label' => 'Plantillas proveedor', 'icon' => 'export', 'match' => '/plantillas'],
             ['href' => '/admin/publicidad', 'label' => 'Publicidad', 'icon' => 'promo', 'match' => '/publicidad'],
             ['href' => '/admin/inventario', 'label' => 'Inventario códigos', 'icon' => 'export', 'match' => '/inventario'],
             ['href' => '/admin/vacaciones', 'label' => 'Vacaciones', 'icon' => 'calendar', 'match' => '/vacaciones'],

@@ -3148,7 +3148,7 @@ final class AdminController
         Auth::requireRole(['admin']);
         $templates = (new \App\Repositories\ExportTemplateRepository())->all();
         view('admin/csv_templates', [
-            'title' => 'Plantillas CSV',
+            'title' => 'Plantillas proveedor',
             'templates' => $templates,
             'layout' => 'admin',
         ]);
@@ -3161,6 +3161,7 @@ final class AdminController
         $template = [
             'code' => (string) ($old['code'] ?? ''),
             'name' => (string) ($old['name'] ?? ''),
+            'supplier_id' => !empty($old['supplier_id']) ? (int) $old['supplier_id'] : null,
             'batch_by' => (string) ($old['batch_by'] ?? 'none'),
             'is_active' => array_key_exists('is_active', $old) ? (!empty($old['is_active']) ? 1 : 0) : 1,
             'mapping_json' => null,
@@ -3168,10 +3169,15 @@ final class AdminController
         $columns = [];
         if (isset($old['col_header'], $old['col_field']) && is_array($old['col_header']) && is_array($old['col_field'])) {
             foreach ($old['col_header'] as $i => $header) {
-                $columns[] = [
+                $col = [
                     'header' => (string) $header,
                     'field' => (string) ($old['col_field'][$i] ?? 'first_name'),
                 ];
+                $formula = trim((string) ($old['col_formula'][$i] ?? ''));
+                if ($formula !== '') {
+                    $col['formula'] = $formula;
+                }
+                $columns[] = $col;
             }
         }
         if ($columns === []) {
@@ -3198,6 +3204,7 @@ final class AdminController
             'template' => $template,
             'columns' => $columns,
             'fieldOptions' => ExportService::fieldOptions(),
+            'suppliers' => (new SupplierRepository())->all(),
             'isNew' => true,
             'layout' => 'admin',
         ]);
@@ -3232,6 +3239,7 @@ final class AdminController
         $old = old_input();
         if ($old !== []) {
             $template['name'] = (string) ($old['name'] ?? $template['name']);
+            $template['supplier_id'] = !empty($old['supplier_id']) ? (int) $old['supplier_id'] : null;
             $template['batch_by'] = (string) ($old['batch_by'] ?? $template['batch_by']);
             $template['is_active'] = !empty($old['is_active']) ? 1 : 0;
             $map = $svc->mapping($template);
@@ -3248,18 +3256,28 @@ final class AdminController
         $columns = [];
         if (isset($old['col_header'], $old['col_field']) && is_array($old['col_header']) && is_array($old['col_field'])) {
             foreach ($old['col_header'] as $i => $header) {
-                $columns[] = [
+                $col = [
                     'header' => (string) $header,
                     'field' => (string) ($old['col_field'][$i] ?? ''),
                 ];
+                $formula = trim((string) ($old['col_formula'][$i] ?? ''));
+                if ($formula !== '') {
+                    $col['formula'] = $formula;
+                }
+                $columns[] = $col;
             }
         } else {
             foreach (($mapping['columns'] ?? []) as $col) {
                 if (is_array($col)) {
-                    $columns[] = [
+                    $entry = [
                         'header' => (string) ($col['header'] ?? ''),
                         'field' => (string) ($col['field'] ?? ''),
                     ];
+                    $formula = trim((string) ($col['formula'] ?? ''));
+                    if ($formula !== '') {
+                        $entry['formula'] = $formula;
+                    }
+                    $columns[] = $entry;
                 }
             }
         }
@@ -3269,6 +3287,7 @@ final class AdminController
             'template' => $template,
             'columns' => $columns,
             'fieldOptions' => ExportService::fieldOptions(),
+            'suppliers' => (new SupplierRepository())->all(),
             'isNew' => false,
             'layout' => 'admin',
         ]);
