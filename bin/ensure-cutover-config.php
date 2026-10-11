@@ -31,6 +31,7 @@ try {
     exit(1);
 }
 
-fwrite(STDOUT, PHP_EOL . 'Siguiente: php bin/cutover-readiness.php' . PHP_EOL);
+fwrite(STDOUT, PHP_EOL . 'Siguiente: php bin/provider-templates-qa.php' . PHP_EOL);
+fwrite(STDOUT, '          php bin/cutover-readiness.php' . PHP_EOL);
 fwrite(STDOUT, '          php bin/cutover-phase8-matrix.php' . PHP_EOL);
 exit(0);

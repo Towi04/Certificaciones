@@ -160,7 +160,7 @@ Plantilla oficial **Plantilla Instituto DOCEO.csv** con columnas:
 
 Archivo de referencia: `storage/templates/uks_elet_registro.csv`
 
-Ver también: `docs/products/provider-templates.md`.
+Ver también: `docs/products/provider-templates.md` (QA: `php bin/provider-templates-qa.php`).
 
 ## Import UKS (`uks_elet_reporte`)
 

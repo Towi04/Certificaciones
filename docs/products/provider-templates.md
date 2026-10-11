@@ -77,9 +77,28 @@ Seed CSV UKS: upsert **no destructivo** (no pisa `mapping_json` custom).
 | Legacy | Bloque colapsado «Respaldo legacy» — no se borra hasta QA TOEFL |
 | Error claro | Si el HTML pide Excel y no hay catálogo ni legacy → mensaje con link a `/admin/plantillas-csv?tipo=xlsx` |
 
-## Fase 4 — QA / cutover (pendiente)
+## Fase 4 — QA / cutover
 
-Envío TOEFL staging = mismas celdas; re-seed no borra custom; menú admin.
+### Checklist automático
+
+```bash
+php bin/provider-templates-qa.php
+php bin/migrate-provider-workbooks.php   # staging/prod
+php bin/ensure-cutover-config.php        # incluye migración workbooks
+```
+
+Exit `0` = lógica OK (quedan pasos MANUAL en el output).
+
+### Checklist MANUAL staging
+
+| # | Prueba | OK |
+|---|--------|----|
+| 1 | Menú **Automatización → Plantillas proveedor** (+ alias `/admin/plantillas-proveedor`) | ☐ |
+| 2 | **Cambridge**: Progreso elige `cambridge_registro` (no UKS); descarga con alcances | ☐ |
+| 3 | **UKS**: uno-a-uno + pendientes; 2ª descarga masiva vacía; folio/present excluidos | ☐ |
+| 4 | **Combo** 2 certs: repetir nombre vs una fila | ☐ |
+| 5 | **TOEFL**: tras migración, un envío = mismas celdas/archivo que antes | ☐ |
+| 6 | Re-seed / ensure-cutover **no** pisa mapping UKS custom ni borra `mail_tpl_*_workbook` | ☐ |
 
 ## Relacionado
 
