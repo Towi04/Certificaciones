@@ -511,9 +511,7 @@ final class ProductAdminService
             'workbook_template_path' => trim((string) ($wb['template_path'] ?? '')),
             'workbook_attach' => array_key_exists('attach', $wb) ? (bool) $wb['attach'] : false,
             'workbook_sheet' => trim((string) ($wb['sheet'] ?? '')),
-            'workbook_normalize' => in_array((string) ($wb['normalize'] ?? 'none'), ['none', 'toefl'], true)
-                ? (string) ($wb['normalize'] ?? 'none')
-                : 'none',
+            'workbook_normalize' => 'none',
             'workbook_cell_map' => $cellMap,
         ];
     }
@@ -2347,11 +2345,6 @@ final class ProductAdminService
             $templatePath = trim((string) $input['provider_request_workbook_path']);
         }
 
-        $normalize = (string) ($input['provider_request_workbook_normalize'] ?? 'none');
-        if (!in_array($normalize, ['none', 'toefl'], true)) {
-            $normalize = 'none';
-        }
-
         $config['provider_request'] = [
             'enabled' => true,
             'auto_send_on_payment' => !empty($input['provider_request_auto_send']),
@@ -2372,7 +2365,8 @@ final class ProductAdminService
                 'template_path' => $templatePath,
                 'attach' => false,
                 'sheet' => trim((string) ($input['provider_request_workbook_sheet'] ?? '')),
-                'normalize' => $normalize,
+                // Normalización global obsoleta: usar fórmulas por celda (p. ej. ASCIIMAYUSC).
+                'normalize' => 'none',
                 'cell_map' => $cellMap,
             ],
         ];

@@ -642,9 +642,8 @@ final class MailTemplateService
             'enabled' => !empty($workbook['enabled']),
             'template_path' => trim((string) ($workbook['template_path'] ?? '')),
             'sheet' => trim((string) ($workbook['sheet'] ?? '')),
-            'normalize' => in_array((string) ($workbook['normalize'] ?? 'none'), ['none', 'toefl'], true)
-                ? (string) ($workbook['normalize'] ?? 'none')
-                : 'none',
+            // Normalización global obsoleta: usar fórmulas por celda (p. ej. ASCIIMAYUSC).
+            'normalize' => 'none',
             'cell_map' => $cellMap,
             'workbook_template_code' => $catalogCode,
         ];

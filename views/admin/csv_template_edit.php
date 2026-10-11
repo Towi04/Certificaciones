@@ -20,7 +20,6 @@ if (!empty($template['mapping_json'])) {
         $map = $decoded;
     }
 }
-$normalize = (string) ($map['normalize'] ?? 'none');
 $filters = is_array($map['filters'] ?? null) ? $map['filters'] : [];
 $productCodes = is_array($filters['product_codes'] ?? null) ? implode(', ', $filters['product_codes']) : '';
 $groupCodes = is_array($filters['product_group_codes'] ?? null) ? implode(', ', $filters['product_group_codes']) : '';
@@ -82,13 +81,6 @@ $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;
                     <select name="batch_by" style="<?= e($inputStyle) ?>">
                         <option value="none" <?= $batchBy === 'none' ? 'selected' : '' ?>>Sin agrupar (1 fila = 1 alumno)</option>
                         <option value="exam_date" <?= $batchBy === 'exam_date' ? 'selected' : '' ?>>Por fecha de examen</option>
-                    </select>
-                </label>
-                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-                    Normalización (si la columna no tiene fórmula)
-                    <select name="normalize" style="<?= e($inputStyle) ?>">
-                        <option value="none" <?= $normalize === 'none' ? 'selected' : '' ?>>Ninguna</option>
-                        <option value="toefl" <?= $normalize === 'toefl' ? 'selected' : '' ?>>TOEFL (MAYÚSCULAS, sin acentos/Ñ)</option>
                     </select>
                 </label>
             </div>
@@ -179,7 +171,6 @@ $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;
                 TOEFL <code>=ASCIIMAYUSC({{full_name}})</code>;
                 fechas <code>=TEXTO({{exam_date}};"dd/mm/aaaa")</code>;
                 hora <code>=TEXTO({{exam_time}};"hh:mm")</code>.
-                La normalización global TOEFL solo aplica si la columna no tiene fórmula.
             </p>
         </div>
 

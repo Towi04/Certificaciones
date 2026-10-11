@@ -3201,9 +3201,8 @@ final class AdminController
                 ['header' => 'Correo Electrónico', 'field' => 'email'],
             ];
         }
-        $normalize = (string) ($old['normalize'] ?? 'none');
         $template['mapping_json'] = json_encode([
-            'normalize' => $normalize,
+            'normalize' => 'none',
             'filters' => [
                 'product_codes' => array_values(array_filter(preg_split('/[\s,;]+/', (string) ($old['product_codes'] ?? '')) ?: [])),
                 'product_group_codes' => array_values(array_filter(preg_split('/[\s,;]+/', (string) ($old['product_group_codes'] ?? '')) ?: [])),
@@ -3279,7 +3278,7 @@ final class AdminController
             $template['batch_by'] = (string) ($old['batch_by'] ?? $template['batch_by']);
             $template['is_active'] = !empty($old['is_active']) ? 1 : 0;
             $map = $svc->mapping($template);
-            $map['normalize'] = (string) ($old['normalize'] ?? ($map['normalize'] ?? 'none'));
+            $map['normalize'] = 'none';
             $map['filters'] = [
                 'product_codes' => array_values(array_filter(preg_split('/[\s,;]+/', (string) ($old['product_codes'] ?? '')) ?: [])),
                 'product_group_codes' => array_values(array_filter(preg_split('/[\s,;]+/', (string) ($old['product_group_codes'] ?? '')) ?: [])),
@@ -3387,7 +3386,7 @@ final class AdminController
             'is_active' => array_key_exists('is_active', $old) ? (!empty($old['is_active']) ? 1 : 0) : 1,
             'mapping_json' => json_encode([
                 'sheet' => (string) ($old['sheet'] ?? ''),
-                'normalize' => (string) ($old['normalize'] ?? 'none'),
+                'normalize' => 'none',
                 'cell_map' => [],
             ], JSON_UNESCAPED_UNICODE),
         ];
@@ -3451,7 +3450,7 @@ final class AdminController
         }
         if ($old !== []) {
             $map['sheet'] = (string) ($old['sheet'] ?? ($map['sheet'] ?? ''));
-            $map['normalize'] = (string) ($old['normalize'] ?? ($map['normalize'] ?? 'none'));
+            $map['normalize'] = 'none';
             $template['mapping_json'] = json_encode($map, JSON_UNESCAPED_UNICODE);
         }
 
@@ -4233,7 +4232,7 @@ final class AdminController
                     || $wbCatalogCode !== '',
                 'template_path' => $wbPath,
                 'sheet' => trim((string) ($_POST['workbook_sheet'] ?? '')),
-                'normalize' => (string) ($_POST['workbook_normalize'] ?? 'none'),
+                'normalize' => 'none',
                 'cell_map' => $cellMap,
                 'workbook_template_code' => $wbCatalogCode,
             ]);

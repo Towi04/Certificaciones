@@ -341,13 +341,6 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
                         <input type="text" name="workbook_sheet" value="<?= e($wb['sheet']) ?>" placeholder="Sheet1"
                                style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
                     </label>
-                    <label class="muted" style="display:flex;flex-direction:column;gap:.3rem;font-size:.85rem;font-weight:600">
-                        Normalización (si no hay fórmula)
-                        <select name="workbook_normalize" style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px">
-                            <option value="none" <?= $wb['normalize'] === 'none' ? 'selected' : '' ?>>Ninguna</option>
-                            <option value="toefl" <?= $wb['normalize'] === 'toefl' ? 'selected' : '' ?>>TOEFL (MAYÚSCULAS sin acentos/Ñ)</option>
-                        </select>
-                    </label>
                 </div>
                 <p style="margin:0 0 .35rem;font-weight:700;font-size:.85rem;color:var(--doceo-blue)">Celdas → campo / fórmula</p>
                 <p class="muted" style="font-size:.8rem;margin:0 0 .65rem">

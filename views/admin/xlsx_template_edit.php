@@ -21,7 +21,6 @@ if (!empty($template['mapping_json'])) {
     }
 }
 $sheet = (string) ($map['sheet'] ?? '');
-$normalize = (string) ($map['normalize'] ?? 'none');
 $cellMap = is_array($cellMap ?? null) && $cellMap !== [] ? $cellMap : [['cell' => '', 'field' => '', 'formula' => '']];
 $fieldOptions = is_array($fieldOptions ?? null) ? $fieldOptions : \App\Services\ProviderRequestService::FIELD_OPTIONS;
 $formAction = $isNew ? url('/admin/plantillas-csv/nueva') : url('/admin/plantillas-csv/' . $code);
@@ -86,13 +85,6 @@ $inputStyle = 'padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px;
                 <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
                     Hoja (opcional)
                     <input type="text" name="sheet" value="<?= e($sheet) ?>" placeholder="Sheet1 o 1" style="<?= e($inputStyle) ?>">
-                </label>
-                <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
-                    Normalización
-                    <select name="normalize" style="<?= e($inputStyle) ?>">
-                        <option value="none" <?= $normalize === 'none' ? 'selected' : '' ?>>Ninguna</option>
-                        <option value="toefl" <?= $normalize === 'toefl' ? 'selected' : '' ?>>TOEFL (MAYÚSCULAS sin acentos/Ñ)</option>
-                    </select>
                 </label>
             </div>
             <?php if (!$isNew && $path !== ''): ?>

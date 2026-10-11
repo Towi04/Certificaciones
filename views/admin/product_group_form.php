@@ -2011,7 +2011,7 @@ $pageHeading = $isEdit
           template_path: (base.provider_request && base.provider_request.workbook && base.provider_request.workbook.template_path) || '',
           attach: false,
           sheet: val('provider_request_workbook_sheet', ''),
-          normalize: val('provider_request_workbook_normalize', 'none'),
+          normalize: 'none',
           cell_map: cellMap
         }
       };
