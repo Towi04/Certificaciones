@@ -150,8 +150,8 @@ final class ExportService
             $normalize = 'none';
         }
 
-        $sql = 'SELECT pu.matricula, u.first_name, u.last_name_p, u.last_name_m, u.email, u.phone,
-                       t.id AS tracking_id, t.exam_date, t.exam_time, t.folio, t.access_key, t.zoom_url,
+        $sql = 'SELECT pu.matricula, pu.id AS purchase_id, u.first_name, u.last_name_p, u.last_name_m, u.email, u.phone,
+                       t.id AS tracking_id, t.student_user_id, t.exam_date, t.exam_time, t.folio, t.access_key, t.zoom_url,
                        t.current_step_code, t.extra_json,
                        st.curp AS student_curp, st.birth_date AS student_birth_date, st.sex AS student_sex,
                        st.nationality AS student_nationality, st.extra_fields_json AS student_extra_fields_json,
@@ -264,7 +264,19 @@ final class ExportService
             $kept[] = $row;
         }
 
+        $comboStats = $this->analyzeComboRows($kept);
+        $comboMode = strtolower(trim((string) ($options['combo_mode'] ?? 'repeat')));
+        if (!in_array($comboMode, ['repeat', 'single'], true)) {
+            $comboMode = 'repeat';
+        }
+        $preferTrackingId = (int) ($options['prefer_tracking_id'] ?? ($options['tracking_id'] ?? 0));
+        if ($comboStats['combo_students'] > 0 && $comboMode === 'single') {
+            $kept = $this->collapseComboRows($kept, $preferTrackingId);
+        }
+
         $columns = $mapping['columns'] ?? $this->defaultUksColumns();
+        $ensureCertColumn = $comboStats['combo_students'] > 0 && $comboMode === 'repeat'
+            && !$this->columnsHaveCertLabel($columns);
         $out = [];
         $ids = [];
         foreach ($kept as $row) {
@@ -299,6 +311,9 @@ final class ExportService
                 }
                 $mapped[$header] = $value;
             }
+            if ($ensureCertColumn) {
+                $mapped['Certificación'] = trim((string) ($row['product_name'] ?? $row['product_code'] ?? ''));
+            }
             if ($mapped !== []) {
                 $out[] = $mapped;
                 $tid = (int) ($row['tracking_id'] ?? 0);
@@ -314,6 +329,11 @@ final class ExportService
             'included' => count($ids),
             'excluded' => $excluded,
             'excluded_reasons' => $reasons,
+            'combo_students' => $comboStats['combo_students'],
+            'combo_extra_rows' => $comboStats['combo_extra_rows'],
+            'needs_combo_choice' => $comboStats['combo_students'] > 0,
+            'combo_mode' => $comboMode,
+            'ensure_cert_column' => $ensureCertColumn,
         ];
     }
 
@@ -355,6 +375,9 @@ final class ExportService
                     : 'No hay alumnos que coincidan con el alcance elegido.'
             );
         }
+        if (!empty($meta['ensure_cert_column']) && !in_array('Certificación', $headers, true)) {
+            $headers[] = 'Certificación';
+        }
 
         $stream = fopen('php://temp', 'r+');
         if ($stream === false) {
@@ -384,6 +407,9 @@ final class ExportService
             'included' => $meta['included'],
             'excluded' => $meta['excluded'],
             'excluded_reasons' => $meta['excluded_reasons'],
+            'combo_students' => $meta['combo_students'],
+            'needs_combo_choice' => $meta['needs_combo_choice'],
+            'combo_mode' => $meta['combo_mode'],
         ];
     }
 
@@ -408,6 +434,10 @@ final class ExportService
             'excluded' => $meta['excluded'],
             'excluded_reasons' => $meta['excluded_reasons'],
             'tracking_ids' => $meta['tracking_ids'],
+            'combo_students' => $meta['combo_students'],
+            'combo_extra_rows' => $meta['combo_extra_rows'],
+            'needs_combo_choice' => $meta['needs_combo_choice'],
+            'combo_mode' => $meta['combo_mode'],
         ];
     }
 
@@ -449,7 +479,7 @@ final class ExportService
     }
 
     /**
-     * @param array{scope?:string,exclude_registered?:bool,step_code?:string,actor_user_id?:int} $opts
+     * @param array{scope?:string,exclude_registered?:bool,step_code?:string,actor_user_id?:int,combo_mode?:string} $opts
      * @return array<string, mixed>
      */
     public function optionsForTrackingScope(string $code, int $trackingId, array $opts = []): array
@@ -463,12 +493,18 @@ final class ExportService
         $exclude = array_key_exists('exclude_registered', $opts)
             ? (bool) $opts['exclude_registered']
             : true;
+        $comboMode = strtolower(trim((string) ($opts['combo_mode'] ?? 'repeat')));
+        if (!in_array($comboMode, ['repeat', 'single'], true)) {
+            $comboMode = 'repeat';
+        }
 
         $base = [
             'template_code' => $code,
             'step_code' => trim((string) ($opts['step_code'] ?? '')),
             'actor_user_id' => isset($opts['actor_user_id']) ? (int) $opts['actor_user_id'] : null,
             'exclude_registered' => $exclude,
+            'combo_mode' => $comboMode,
+            'prefer_tracking_id' => $trackingId,
         ];
 
         if ($scope === self::SCOPE_STUDENT) {
@@ -529,6 +565,104 @@ final class ExportService
                 // no bloquear descarga
             }
         }
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows
+     * @return array{combo_students:int,combo_extra_rows:int}
+     */
+    private function analyzeComboRows(array $rows): array
+    {
+        $byStudent = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $sid = (int) ($row['student_user_id'] ?? 0);
+            if ($sid < 1) {
+                continue;
+            }
+            $byStudent[$sid][] = $row;
+        }
+        $comboStudents = 0;
+        $extraRows = 0;
+        foreach ($byStudent as $group) {
+            if (count($group) < 2) {
+                continue;
+            }
+            // Mismo alumno con ≥2 filas en el lote (p. ej. paquete multi-cert).
+            $comboStudents++;
+            $extraRows += count($group) - 1;
+        }
+
+        return [
+            'combo_students' => $comboStudents,
+            'combo_extra_rows' => $extraRows,
+        ];
+    }
+
+    /**
+     * Una fila por alumno: prioriza el tracking del botón; si no, el primero del grupo.
+     *
+     * @param list<array<string, mixed>> $rows
+     * @return list<array<string, mixed>>
+     */
+    private function collapseComboRows(array $rows, int $preferTrackingId): array
+    {
+        $byStudent = [];
+        $order = [];
+        foreach ($rows as $idx => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $sid = (int) ($row['student_user_id'] ?? 0);
+            $key = $sid > 0 ? 's' . $sid : 't' . (int) ($row['tracking_id'] ?? $idx);
+            if (!isset($byStudent[$key])) {
+                $byStudent[$key] = [];
+                $order[] = $key;
+            }
+            $byStudent[$key][] = $row;
+        }
+
+        $out = [];
+        foreach ($order as $key) {
+            $group = $byStudent[$key];
+            if (count($group) === 1) {
+                $out[] = $group[0];
+                continue;
+            }
+            $chosen = $group[0];
+            if ($preferTrackingId > 0) {
+                foreach ($group as $row) {
+                    if ((int) ($row['tracking_id'] ?? 0) === $preferTrackingId) {
+                        $chosen = $row;
+                        break;
+                    }
+                }
+            }
+            $out[] = $chosen;
+        }
+
+        return $out;
+    }
+
+    /** @param list<array<string, mixed>> $columns */
+    private function columnsHaveCertLabel(array $columns): bool
+    {
+        foreach ($columns as $col) {
+            if (!is_array($col)) {
+                continue;
+            }
+            $header = mb_strtolower(trim((string) ($col['header'] ?? '')));
+            $field = strtolower(trim((string) ($col['field'] ?? '')));
+            if ($header === 'certificación' || $header === 'certificacion'
+                || $field === 'product_name' || $field === 'product_code'
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

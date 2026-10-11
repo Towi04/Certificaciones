@@ -1363,6 +1363,24 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
                     </span>
                 </span>
             </label>
+            <div id="ops-csv-combo-box" hidden style="padding:.75rem .85rem;border:1px solid #e6ebf2;border-radius:12px;background:#f8fafc">
+                <p style="margin:0 0 .55rem;font-size:.86rem;font-weight:700;color:var(--doceo-blue)">
+                    Paquete / varias certificaciones
+                </p>
+                <p id="ops-csv-combo-hint" class="muted" style="margin:0 0 .55rem;font-size:.8rem;line-height:1.4"></p>
+                <label style="display:flex;gap:.45rem;align-items:flex-start;font-size:.84rem;margin-bottom:.4rem">
+                    <input type="radio" name="ops_csv_combo_mode" id="ops-csv-combo-repeat" value="repeat" checked style="margin-top:.2rem">
+                    <span>Repetir el nombre por cada certificación
+                        <span class="muted" style="display:block;font-size:.76rem;font-weight:500">Se añade columna «Certificación» si la plantilla no la trae.</span>
+                    </span>
+                </label>
+                <label style="display:flex;gap:.45rem;align-items:flex-start;font-size:.84rem">
+                    <input type="radio" name="ops_csv_combo_mode" id="ops-csv-combo-single" value="single" style="margin-top:.2rem">
+                    <span>Una sola fila por alumno
+                        <span class="muted" style="display:block;font-size:.76rem;font-weight:500">Prioriza el caso desde el que abriste el botón.</span>
+                    </span>
+                </label>
+            </div>
             <p id="ops-csv-summary" class="muted" style="margin:0;font-size:.86rem;min-height:1.3em">
                 Elige alcance para ver cuántos alumnos se incluirán.
             </p>
@@ -1380,13 +1398,37 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
   var csvModal = document.getElementById('ops-csv-modal');
   var csvScope = document.getElementById('ops-csv-scope');
   var csvInclude = document.getElementById('ops-csv-include-registered');
+  var csvComboBox = document.getElementById('ops-csv-combo-box');
+  var csvComboHint = document.getElementById('ops-csv-combo-hint');
+  var csvComboRepeat = document.getElementById('ops-csv-combo-repeat');
+  var csvComboSingle = document.getElementById('ops-csv-combo-single');
   var csvSummary = document.getElementById('ops-csv-summary');
   var csvError = document.getElementById('ops-csv-error');
   var csvConfirm = document.getElementById('ops-csv-confirm');
   var csvState = { tpl: '', trackingId: 0, stepCode: '', returnTo: '', previewUrl: '', downloadUrl: '' };
+  var CSV_COMBO_KEY = 'doceo-csv-combo-mode';
 
   function csvClose() {
     if (csvModal) csvModal.hidden = true;
+  }
+
+  function csvComboMode() {
+    if (csvComboSingle && csvComboSingle.checked) return 'single';
+    return 'repeat';
+  }
+
+  function csvRememberComboMode(mode) {
+    try { localStorage.setItem(CSV_COMBO_KEY, mode); } catch (e) {}
+  }
+
+  function csvRestoreComboMode() {
+    var mode = 'repeat';
+    try { mode = localStorage.getItem(CSV_COMBO_KEY) || 'repeat'; } catch (e) {}
+    if (mode === 'single') {
+      if (csvComboSingle) csvComboSingle.checked = true;
+    } else if (csvComboRepeat) {
+      csvComboRepeat.checked = true;
+    }
   }
 
   function csvBuildUrls() {
@@ -1396,6 +1438,7 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
     q.set('step_code', csvState.stepCode);
     q.set('scope', csvScope ? csvScope.value : 'student');
     q.set('return', csvState.returnTo || '/admin/operacion');
+    q.set('combo_mode', csvComboMode());
     if (csvInclude && csvInclude.checked) q.set('include_registered', '1');
     var base = <?= json_encode(url('/admin/plantillas-csv/'), JSON_UNESCAPED_UNICODE) ?> + encodeURIComponent(csvState.tpl);
     csvState.previewUrl = base + '/resumen?' + q.toString();
@@ -1413,6 +1456,7 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
       .then(function (res) {
         if (!res.j || !res.j.ok) {
           csvSummary.textContent = '';
+          if (csvComboBox) csvComboBox.hidden = true;
           if (csvError) {
             csvError.hidden = false;
             csvError.textContent = (res.j && res.j.error) ? res.j.error : 'No se pudo calcular el resumen.';
@@ -1426,10 +1470,19 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
         if (reasons.presented) bits.push(reasons.presented + ' ya presentaron');
         csvSummary.textContent = 'Incluidos: ' + res.j.included
           + (res.j.excluded ? (' · Excluidos: ' + res.j.excluded + (bits.length ? ' (' + bits.join(', ') + ')' : '')) : '');
+        if (csvComboBox) {
+          var needs = !!res.j.needs_combo_choice;
+          csvComboBox.hidden = !needs;
+          if (csvComboHint && needs) {
+            csvComboHint.textContent = res.j.combo_students + ' alumno(s) tienen más de una certificación en este lote'
+              + (res.j.combo_extra_rows ? (' (+' + res.j.combo_extra_rows + ' fila(s) extra si se repite el nombre).') : '.');
+          }
+        }
         csvConfirm.disabled = !(res.j.included > 0);
       })
       .catch(function () {
         csvSummary.textContent = '';
+        if (csvComboBox) csvComboBox.hidden = true;
         if (csvError) {
           csvError.hidden = false;
           csvError.textContent = 'No se pudo calcular el resumen.';
@@ -1445,6 +1498,8 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
     csvState.returnTo = btn.getAttribute('data-return') || '/admin/operacion';
     if (csvScope) csvScope.value = btn.getAttribute('data-csv-scope') || 'student';
     if (csvInclude) csvInclude.checked = false;
+    if (csvComboBox) csvComboBox.hidden = true;
+    csvRestoreComboMode();
     csvModal.hidden = false;
     csvRefreshPreview();
   }
@@ -1454,12 +1509,20 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
   });
   if (csvScope) csvScope.addEventListener('change', csvRefreshPreview);
   if (csvInclude) csvInclude.addEventListener('change', csvRefreshPreview);
+  [csvComboRepeat, csvComboSingle].forEach(function (el) {
+    if (!el) return;
+    el.addEventListener('change', function () {
+      csvRememberComboMode(csvComboMode());
+      csvRefreshPreview();
+    });
+  });
   ['ops-csv-close', 'ops-csv-cancel', 'ops-csv-backdrop'].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('click', csvClose);
   });
   if (csvConfirm) {
     csvConfirm.addEventListener('click', function () {
+      csvRememberComboMode(csvComboMode());
       csvBuildUrls();
       if (!csvState.downloadUrl || csvConfirm.disabled) return;
       window.location.href = csvState.downloadUrl;

@@ -155,7 +155,7 @@ Plantilla oficial **Plantilla Instituto DOCEO.csv** con columnas:
 **Admin:**
 - **Configuración → Plantillas CSV** (`/admin/plantillas-csv`) — editar columnas de `uks_elet_registro` (y crear plantillas de otros proveedores)
 - Grupo UKS → Progreso → paso «Descargar CSV» apunta a esa plantilla
-- **Operación** — botón CSV abre modal (alcance + resumen; excluye folio / ya descargados / ya presentaron)
+- **Operación** — botón CSV abre modal (alcance + resumen; excluye folio / ya descargados / ya presentaron; si hay paquete multi-cert, elegir repetir nombre vs una fila)
 - `/admin/exportaciones` — pendientes / lote por fecha (misma exclusión por defecto)
 
 Archivo de referencia: `storage/templates/uks_elet_registro.csv`

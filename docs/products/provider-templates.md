@@ -38,6 +38,17 @@ Tras descargar un lote se marca `csv_downloads` en **todos** los tracking del ar
 
 API resumen: `GET /admin/plantillas-csv/{code}/resumen?...`
 
+## Fase 1c — Paquetes / combos multi-cert (hecho)
+
+Si el lote incluye el mismo `student_user_id` en **≥2** trackings (paquete con varias certificaciones), el modal muestra:
+
+| Opción | Efecto |
+|--------|--------|
+| **Repetir el nombre** (default) | Una fila por certificación; se añade columna «Certificación» (`product_name`) si la plantilla no la trae |
+| **Una sola fila** | Se queda el caso del botón (o el primero del grupo); solo esos IDs se marcan como descargados |
+
+La elección se recuerda en `localStorage` (`doceo-csv-combo-mode`). Parámetro: `combo_mode=repeat|single` en descarga y resumen.
+
 ## Excel en correo (TOEFL, etc.) — aún en plantilla de correo
 
 Hoy el `.xlsx` de TOEFL (y similares) vive en **Plantillas correo** → “Plantilla Excel” / `mail_tpl_{code}_workbook`, o en `provider_request.workbook` del grupo.
