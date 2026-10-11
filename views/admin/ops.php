@@ -560,31 +560,28 @@ $extraColHeader = count($extraColLabels) === 1
                                     <?php
                                     $csvCfg = is_array($btn['csv'] ?? null) ? $btn['csv'] : [];
                                     $csvTpl = trim((string) ($csvCfg['template_code'] ?? ''));
-                                    $csvScope = (string) ($csvCfg['scope'] ?? 'student');
-                                    if (!in_array($csvScope, ['student', 'exam_date'], true)) {
-                                        $csvScope = 'student';
-                                    }
-                                    $csvQs = http_build_query([
-                                        'tracking_id' => $tid,
-                                        'step_code' => (string) ($btn['code'] ?? ''),
-                                        'scope' => $csvScope,
-                                        'return' => '/admin/operacion?' . http_build_query(array_filter([
-                                            'view' => $view !== '' ? $view : null,
-                                            'q' => $q !== '' ? $q : null,
-                                        ])),
-                                    ]);
-                                    $csvTitle = $csvScope === 'exam_date'
-                                        ? 'Descargar CSV del día (misma fecha y certificación)'
-                                        : 'Descargar CSV de este alumno';
+                                    $csvScope = \App\Services\ExportService::normalizeScope(
+                                        (string) ($csvCfg['scope'] ?? 'student')
+                                    );
+                                    $csvReturn = '/admin/operacion?' . http_build_query(array_filter([
+                                        'view' => $view !== '' ? $view : null,
+                                        'q' => $q !== '' ? $q : null,
+                                    ]));
+                                    $csvTitle = 'Descargar CSV · ' . $label;
                                     ?>
                                     <?php if ($csvTpl !== ''): ?>
-                                        <a class="<?= e($btnClass) ?>"
-                                           href="<?= e(url('/admin/plantillas-csv/' . rawurlencode($csvTpl) . '/descargar?' . $csvQs)) ?>"
-                                           title="<?= e($csvTitle . ' · ' . $label) ?>"
-                                           aria-label="<?= e($label) ?>">
+                                        <button type="button"
+                                                class="<?= e($btnClass) ?> ops-csv-download-btn"
+                                                data-csv-tpl="<?= e($csvTpl) ?>"
+                                                data-csv-scope="<?= e($csvScope) ?>"
+                                                data-tracking-id="<?= (int) $tid ?>"
+                                                data-step-code="<?= e((string) ($btn['code'] ?? '')) ?>"
+                                                data-return="<?= e($csvReturn) ?>"
+                                                title="<?= e($csvTitle) ?>"
+                                                aria-label="<?= e($label) ?>">
                                             <?= $iconSvg !== '' ? $iconSvg : icon('download') ?>
                                             <?= $statusBadgeHtml ?>
-                                        </a>
+                                        </button>
                                     <?php else: ?>
                                         <span class="muted" title="Configura la plantilla CSV en el grupo">CSV sin plantilla</span>
                                     <?php endif; ?>
@@ -1341,8 +1338,135 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
     </div>
 </div>
 
+<div class="ops-reschedule-modal" id="ops-csv-modal" hidden>
+    <button type="button" class="ops-reschedule-backdrop" id="ops-csv-backdrop" aria-label="Cerrar"></button>
+    <div class="ops-reschedule-dialog" role="dialog" aria-modal="true" aria-labelledby="ops-csv-title">
+        <div class="ops-reschedule-head">
+            <strong id="ops-csv-title">Descargar CSV proveedor</strong>
+            <button type="button" class="btn btn-primary btn-sm" id="ops-csv-close">Cerrar</button>
+        </div>
+        <div class="ops-reschedule-form">
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.86rem;font-weight:600">
+                Alcance
+                <select id="ops-csv-scope" style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px;font:inherit">
+                    <?php foreach (\App\Services\ExportService::scopeOptions() as $opt): ?>
+                        <option value="<?= e($opt['value']) ?>"><?= e($opt['label']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label style="display:flex;gap:.45rem;align-items:flex-start;font-size:.86rem;color:var(--doceo-text)">
+                <input type="checkbox" id="ops-csv-include-registered" value="1" style="margin-top:.2rem">
+                <span>
+                    Incluir ya registrados
+                    <span class="muted" style="display:block;font-size:.78rem;font-weight:500">
+                        Por defecto se excluyen: ya descargados, con folio, o que ya presentaron el examen.
+                    </span>
+                </span>
+            </label>
+            <p id="ops-csv-summary" class="muted" style="margin:0;font-size:.86rem;min-height:1.3em">
+                Elige alcance para ver cuántos alumnos se incluirán.
+            </p>
+            <p id="ops-csv-error" class="flash flash-error" hidden style="margin:0;font-size:.84rem"></p>
+            <div class="ops-reschedule-actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="ops-csv-cancel">Cancelar</button>
+                <button type="button" class="btn btn-accent btn-sm" id="ops-csv-confirm" disabled>Descargar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
+  var csvModal = document.getElementById('ops-csv-modal');
+  var csvScope = document.getElementById('ops-csv-scope');
+  var csvInclude = document.getElementById('ops-csv-include-registered');
+  var csvSummary = document.getElementById('ops-csv-summary');
+  var csvError = document.getElementById('ops-csv-error');
+  var csvConfirm = document.getElementById('ops-csv-confirm');
+  var csvState = { tpl: '', trackingId: 0, stepCode: '', returnTo: '', previewUrl: '', downloadUrl: '' };
+
+  function csvClose() {
+    if (csvModal) csvModal.hidden = true;
+  }
+
+  function csvBuildUrls() {
+    if (!csvState.tpl) return;
+    var q = new URLSearchParams();
+    q.set('tracking_id', String(csvState.trackingId));
+    q.set('step_code', csvState.stepCode);
+    q.set('scope', csvScope ? csvScope.value : 'student');
+    q.set('return', csvState.returnTo || '/admin/operacion');
+    if (csvInclude && csvInclude.checked) q.set('include_registered', '1');
+    var base = <?= json_encode(url('/admin/plantillas-csv/'), JSON_UNESCAPED_UNICODE) ?> + encodeURIComponent(csvState.tpl);
+    csvState.previewUrl = base + '/resumen?' + q.toString();
+    csvState.downloadUrl = base + '/descargar?' + q.toString();
+  }
+
+  function csvRefreshPreview() {
+    if (!csvSummary || !csvConfirm) return;
+    csvBuildUrls();
+    csvConfirm.disabled = true;
+    if (csvError) { csvError.hidden = true; csvError.textContent = ''; }
+    csvSummary.textContent = 'Calculando…';
+    fetch(csvState.previewUrl, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.j || !res.j.ok) {
+          csvSummary.textContent = '';
+          if (csvError) {
+            csvError.hidden = false;
+            csvError.textContent = (res.j && res.j.error) ? res.j.error : 'No se pudo calcular el resumen.';
+          }
+          return;
+        }
+        var reasons = res.j.excluded_reasons || {};
+        var bits = [];
+        if (reasons.downloaded) bits.push(reasons.downloaded + ' ya descargados');
+        if (reasons.folio) bits.push(reasons.folio + ' con folio');
+        if (reasons.presented) bits.push(reasons.presented + ' ya presentaron');
+        csvSummary.textContent = 'Incluidos: ' + res.j.included
+          + (res.j.excluded ? (' · Excluidos: ' + res.j.excluded + (bits.length ? ' (' + bits.join(', ') + ')' : '')) : '');
+        csvConfirm.disabled = !(res.j.included > 0);
+      })
+      .catch(function () {
+        csvSummary.textContent = '';
+        if (csvError) {
+          csvError.hidden = false;
+          csvError.textContent = 'No se pudo calcular el resumen.';
+        }
+      });
+  }
+
+  function csvOpen(btn) {
+    if (!csvModal || !btn) return;
+    csvState.tpl = btn.getAttribute('data-csv-tpl') || '';
+    csvState.trackingId = parseInt(btn.getAttribute('data-tracking-id') || '0', 10) || 0;
+    csvState.stepCode = btn.getAttribute('data-step-code') || '';
+    csvState.returnTo = btn.getAttribute('data-return') || '/admin/operacion';
+    if (csvScope) csvScope.value = btn.getAttribute('data-csv-scope') || 'student';
+    if (csvInclude) csvInclude.checked = false;
+    csvModal.hidden = false;
+    csvRefreshPreview();
+  }
+
+  document.querySelectorAll('.ops-csv-download-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () { csvOpen(btn); });
+  });
+  if (csvScope) csvScope.addEventListener('change', csvRefreshPreview);
+  if (csvInclude) csvInclude.addEventListener('change', csvRefreshPreview);
+  ['ops-csv-close', 'ops-csv-cancel', 'ops-csv-backdrop'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('click', csvClose);
+  });
+  if (csvConfirm) {
+    csvConfirm.addEventListener('click', function () {
+      csvBuildUrls();
+      if (!csvState.downloadUrl || csvConfirm.disabled) return;
+      window.location.href = csvState.downloadUrl;
+      csvClose();
+    });
+  }
+
   var proofModal = document.getElementById('ops-proof-modal');
   var proofFrame = document.getElementById('ops-proof-frame');
   var proofEmpty = document.getElementById('ops-proof-empty');

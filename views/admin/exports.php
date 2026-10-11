@@ -1,8 +1,10 @@
 <?php /** @var list<array<string,mixed>> $templates */ ?>
 <?php /** @var list<array<string,mixed>> $importTemplates */ ?>
 <h1 style="margin:.2rem 0 1rem;color:var(--doceo-blue)">Integración UKS</h1>
-<p class="muted">La descarga diaria de alumnos se hace desde <a href="<?= e(url('/admin')) ?>">Operación</a>.
-Esta pantalla queda para <strong>importar el reporte UKS</strong> (resultados / CENNI) o descargas pendientes puntuales.</p>
+<p class="muted">La descarga diaria de alumnos se hace desde <a href="<?= e(url('/admin')) ?>">Operación</a>
+(con alcance y exclusión de ya registrados). Esta pantalla queda para <strong>importar el reporte UKS</strong>
+(resultados / CENNI) o descargas pendientes puntuales.
+Por defecto <strong>Descargar pendientes</strong> excluye casos con folio, ya descargados o que ya presentaron.</p>
 
 <?php if ($templates === []): ?>
     <div class="panel">
@@ -31,7 +33,9 @@ Esta pantalla queda para <strong>importar el reporte UKS</strong> (resultados / 
                     <td><?= e(strtoupper((string) $tpl['file_type'])) ?></td>
                     <td><?= ($tpl['batch_by'] ?? 'none') === 'exam_date' ? 'Por fecha de examen' : 'Manual' ?></td>
                     <td style="white-space:nowrap">
-                        <a class="btn btn-primary btn-sm" href="<?= e(url('/admin/exportaciones/' . $tpl['code'])) ?>">Descargar pendientes</a>
+                        <a class="btn btn-primary btn-sm" href="<?= e(url('/admin/exportaciones/' . rawurlencode((string) $tpl['code']))) ?>">Descargar pendientes</a>
+                        <a class="btn btn-ghost btn-sm" href="<?= e(url('/admin/exportaciones/' . rawurlencode((string) $tpl['code']) . '?include_registered=1')) ?>"
+                           title="Incluye folio / ya descargados / ya presentaron">Incluir ya registrados</a>
                     </td>
                 </tr>
             <?php endforeach; ?>
@@ -43,10 +47,13 @@ Esta pantalla queda para <strong>importar el reporte UKS</strong> (resultados / 
         <?php if (($tpl['batch_by'] ?? '') === 'exam_date'): ?>
             <div class="panel" style="margin-top:1rem">
                 <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)"><?= e($tpl['name']) ?> · por fecha</h2>
-                <form method="get" action="<?= e(url('/admin/exportaciones/' . $tpl['code'])) ?>" style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end">
+                <form method="get" action="<?= e(url('/admin/exportaciones/' . rawurlencode((string) $tpl['code']))) ?>" style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end">
                     <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600">
                         Fecha de examen
                         <input type="date" name="exam_date" required style="padding:.55rem .7rem;border:1px solid #cfd8e6;border-radius:10px">
+                    </label>
+                    <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.84rem;font-weight:600;padding-bottom:.35rem">
+                        <input type="checkbox" name="include_registered" value="1"> Incluir ya registrados
                     </label>
                     <button class="btn btn-accent" type="submit">Descargar lote</button>
                 </form>

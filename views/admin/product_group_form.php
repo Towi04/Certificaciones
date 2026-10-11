@@ -2501,11 +2501,20 @@ $pageHeading = $isEdit
   }
 
   function csvScopeSelect(idx, value) {
-    var v = value === 'exam_date' ? 'exam_date' : 'student';
-    return '<select data-field="csv_scope" name="pipeline_steps[' + idx + '][csv_scope]" style="' + inp + '">'
-      + '<option value="student"' + (v === 'student' ? ' selected' : '') + '>Solo este alumno</option>'
-      + '<option value="exam_date"' + (v === 'exam_date' ? ' selected' : '') + '>Todos del mismo día + misma certificación</option>'
-      + '</select>';
+    var scopeOpts = <?= json_encode(\App\Services\ExportService::scopeOptions(), JSON_UNESCAPED_UNICODE) ?>;
+    var v = String(value || 'student');
+    if (v === 'exam_date') v = 'exam_date_product'; // legado
+    var html = '<select data-field="csv_scope" name="pipeline_steps[' + idx + '][csv_scope]" style="' + inp + '">';
+    (scopeOpts || []).forEach(function (opt) {
+      html += '<option value="' + escapeHtml(opt.value) + '"'
+        + (opt.value === v ? ' selected' : '') + '>'
+        + escapeHtml(opt.label) + '</option>';
+    });
+    html += '</select>';
+    html += '<span class="muted" style="display:block;font-size:.75rem;font-weight:500;margin-top:.3rem;line-height:1.35">'
+      + 'En Operación puedes cambiar el alcance al descargar. Los lotes excluyen folio, ya descargados y quienes ya presentaron.'
+      + '</span>';
+    return html;
   }
 
   function opsIconSelect(idx, value) {

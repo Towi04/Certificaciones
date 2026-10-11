@@ -14,15 +14,29 @@ El seed trae `uks_elet_registro`. Para Cambridge (u otro proveedor) crea otra pl
 
 Enlace directo desde el selector del progreso: **Administrar plantillas CSV**.
 
-## Decisiones ops (exclusión en lotes — Fase 1b+)
+## Fase 1b — Alcances y anti-duplicados (hecho)
 
-Al armar “pendientes” / lotes masivos se excluirá por defecto a quien:
+En **Operación**, al pulsar el botón CSV se abre un modal:
 
-1. **Ya se descargó** en esa plantilla/paso (`csv_downloads`), o
-2. Tiene **folio** no vacío (= ya registrado en el proveedor; la clave no es necesaria para excluir), o
-3. **Ya presentó** el examen (asistencia `present`)
+| Alcance | Qué incluye |
+|---------|-------------|
+| Solo este alumno | El caso del botón (siempre, aunque tenga folio) |
+| Pendientes del mismo examen | Mismo `product_id`, excluyendo registrados |
+| Misma fecha + mismo examen | Lote del día de esa certificación |
+| Misma fecha | Misma fecha (filtros de la plantilla) |
+| Mismo examen | Misma certificación, cualquier fecha |
 
-Override explícito “incluir ya registrados” queda para Fase 1b.
+**Exclusión por defecto** (lotes / pendientes / exportaciones):
+
+1. Ya descargado en esa plantilla/paso (`csv_downloads`)
+2. **Folio** no vacío (= registrado; la clave no se exige)
+3. Asistencia **present** (ya presentó)
+
+Override: checkbox **Incluir ya registrados**.
+
+Tras descargar un lote se marca `csv_downloads` en **todos** los tracking del archivo.
+
+API resumen: `GET /admin/plantillas-csv/{code}/resumen?...`
 
 ## Excel en correo (TOEFL, etc.) — aún en plantilla de correo
 
