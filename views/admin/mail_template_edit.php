@@ -255,19 +255,43 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
             $fieldOptions = \App\Services\ProviderRequestService::FIELD_OPTIONS;
             $xlsxCatalog = (new \App\Services\ProviderWorkbookCatalogService())->listActive();
             $wbCatalogCode = (string) ($wb['workbook_template_code'] ?? '');
+            $wantsWb = \App\Services\MailTemplateService::templateUsesWorkbookPlaceholders((string) $template['code']);
+            $wbGap = \App\Services\MailTemplateService::workbookSourceGapMessage((string) $template['code']);
+            $legacyReady = !empty($wb['enabled']) && trim((string) $wb['template_path']) !== '' && !empty($wb['cell_map']);
+            $catalogReady = false;
+            if ($wbCatalogCode !== '') {
+                $catCfg = (new \App\Services\ProviderWorkbookCatalogService())->workbookConfig($wbCatalogCode);
+                $catalogReady = $catCfg !== null && !empty($catCfg['enabled']);
+            }
         ?>
         <div style="margin:1.25rem 0;padding:1rem;background:#f8fafc;border:1px solid #e6ebf2;border-radius:12px">
-            <h2 style="margin:0 0 .35rem;font-size:1rem;color:var(--doceo-blue)">Plantilla Excel (opcional)</h2>
+            <h2 style="margin:0 0 .35rem;font-size:1rem;color:var(--doceo-blue)">Excel para el correo</h2>
             <p class="muted" style="font-size:.82rem;margin:0 0 .75rem">
-                Preferido: elige una plantilla del catálogo
-                (<a href="<?= e(url('/admin/plantillas-csv?tipo=xlsx')) ?>" target="_blank" rel="noopener">Plantillas proveedor · Excel</a>).
-                Al enviar se genera el Excel y se incluye como <code>{{workbook_url}}</code>.
-                El bloque legacy abajo se conserva como respaldo (no se borra al migrar).
+                <strong>Camino feliz:</strong> el archivo y las celdas viven en
+                <a href="<?= e(url('/admin/plantillas-csv?tipo=xlsx')) ?>" target="_blank" rel="noopener">Plantillas proveedor · Excel</a>.
+                Aquí solo eliges cuál usar y pones <code>{{workbook_url}}</code> en el HTML
+                (o <code>{{workbook:codigo}}</code> para una plantilla concreta).
             </p>
-            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-bottom:.75rem">
-                Plantilla del catálogo
-                <select name="workbook_template_code" style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px;max-width:28rem">
-                    <option value="">— Ninguna (usar legacy abajo) —</option>
+            <?php if ($wbGap !== null): ?>
+                <div class="flash flash-error" style="margin:0 0 .75rem;font-size:.84rem"><?= e($wbGap) ?></div>
+            <?php elseif ($catalogReady): ?>
+                <p style="margin:0 0 .75rem;font-size:.84rem;color:#166534;font-weight:600">
+                    ✓ Catálogo listo — al enviar se generará el Excel.
+                </p>
+            <?php elseif ($legacyReady): ?>
+                <p style="margin:0 0 .75rem;font-size:.84rem;color:#92400e;font-weight:600">
+                    ⚠ Usando configuración legacy (respaldo). Migra al catálogo cuando puedas.
+                </p>
+            <?php elseif ($wantsWb): ?>
+                <p style="margin:0 0 .75rem;font-size:.84rem;color:#b45309;font-weight:600">
+                    El HTML pide Excel: elige una plantilla del catálogo abajo.
+                </p>
+            <?php endif; ?>
+            <label class="muted" style="display:flex;flex-direction:column;gap:.35rem;font-size:.88rem;font-weight:600;margin-bottom:.55rem">
+                Plantilla del catálogo *
+                <select name="workbook_template_code" id="workbook-catalog-select"
+                        style="padding:.5rem .65rem;border:1px solid #cfd8e6;border-radius:10px;max-width:28rem">
+                    <option value="">— Elegir del catálogo —</option>
                     <?php foreach ($xlsxCatalog as $xt): ?>
                         <?php
                         $xc = (string) ($xt['code'] ?? '');
@@ -284,13 +308,22 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
                     <?php endforeach; ?>
                 </select>
             </label>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
+                <button type="button" class="btn btn-ghost btn-sm" id="workbook-insert-url"
+                        title="Inserta un botón con {{workbook_url}} en el HTML">
+                    Insertar {{workbook_url}} en HTML
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" id="workbook-insert-named" hidden>
+                    Insertar {{workbook:…}} de la elegida
+                </button>
+            </div>
             <label class="muted" style="display:flex;gap:.4rem;align-items:center;font-size:.88rem;margin-bottom:.75rem">
                 <input type="checkbox" name="workbook_enabled" value="1" id="workbook-enabled" <?= !empty($wb['enabled']) || $wbCatalogCode !== '' ? 'checked' : '' ?>>
                 Este correo incluye plantilla Excel
             </label>
-            <details id="workbook-fields" style="margin-top:.25rem" <?= (!empty($wb['enabled']) && $wbCatalogCode === '') ? 'open' : '' ?>>
+            <details id="workbook-fields" style="margin-top:.25rem" <?= ($legacyReady && !$catalogReady) ? 'open' : '' ?>>
                 <summary class="muted" style="cursor:pointer;font-size:.86rem;font-weight:600">
-                    Configuración legacy (archivo + celdas en esta plantilla de correo)
+                    Respaldo legacy (solo si aún no migraste — no borrar hasta QA TOEFL)
                 </summary>
                 <div style="margin-top:.75rem;<?= !empty($wb['enabled']) ? '' : 'opacity:.55' ?>">
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.65rem;margin-bottom:.65rem">
@@ -662,6 +695,58 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
   var fields = document.getElementById('workbook-fields');
   var list = document.getElementById('workbook-cells');
   var add = document.getElementById('workbook-cell-add');
+  var catalog = document.getElementById('workbook-catalog-select');
+  var insertUrl = document.getElementById('workbook-insert-url');
+  var insertNamed = document.getElementById('workbook-insert-named');
+  var body = document.getElementById('mail-body-html') || document.querySelector('[name="body_html"]');
+
+  function insertHtml(html) {
+    if (!body) return;
+    if (typeof body.selectionStart === 'number') {
+      var start = body.selectionStart;
+      var end = body.selectionEnd;
+      var val = body.value || '';
+      body.value = val.slice(0, start) + html + val.slice(end);
+      body.focus();
+      body.selectionStart = body.selectionEnd = start + html.length;
+      return;
+    }
+    body.value = (body.value || '') + html;
+  }
+
+  function syncNamedBtn() {
+    if (!insertNamed || !catalog) return;
+    insertNamed.hidden = !catalog.value;
+  }
+
+  if (catalog) {
+    catalog.addEventListener('change', function () {
+      if (catalog.value && en) en.checked = true;
+      syncNamedBtn();
+    });
+    syncNamedBtn();
+  }
+  if (insertUrl) {
+    insertUrl.addEventListener('click', function () {
+      var btnHtml = '<a href="{{workbook_url}}" style="display:inline-block;padding:12px 18px;'
+        + 'background:#315285;color:#ffffff;text-decoration:none;border-radius:8px;'
+        + 'font-weight:600">Descargar Excel</a>';
+      insertHtml(btnHtml);
+      if (en) en.checked = true;
+    });
+  }
+  if (insertNamed) {
+    insertNamed.addEventListener('click', function () {
+      if (!catalog || !catalog.value) return;
+      var tag = '{{workbook:' + catalog.value + '}}';
+      var btnHtml = '<a href="' + tag + '" style="display:inline-block;padding:12px 18px;'
+        + 'background:#315285;color:#ffffff;text-decoration:none;border-radius:8px;'
+        + 'font-weight:600">Descargar Excel</a>';
+      insertHtml(btnHtml);
+      if (en) en.checked = true;
+    });
+  }
+
   if (en && fields) {
     en.addEventListener('change', function () {
       fields.style.opacity = en.checked ? '1' : '.55';
