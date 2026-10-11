@@ -766,10 +766,8 @@ final class ExportService
             throw new \InvalidArgumentException('Agrega al menos una columna al CSV.');
         }
 
-        $normalize = (string) ($input['normalize'] ?? 'none');
-        if (!in_array($normalize, ['none', 'toefl'], true)) {
-            $normalize = 'none';
-        }
+        // La normalización por plantilla quedó obsoleta: usar fórmulas (p. ej. ASCIIMAYUSC).
+        $normalize = 'none';
         $batchBy = (string) ($input['batch_by'] ?? 'none');
         if (!in_array($batchBy, ['none', 'exam_date'], true)) {
             $batchBy = 'none';

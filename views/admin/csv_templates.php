@@ -67,10 +67,7 @@ $kind = in_array(($kind ?? 'csv'), ['csv', 'xlsx', 'all'], true) ? $kind : 'csv'
                         $detail = $cells . ' celdas'
                             . (trim((string) ($tpl['storage_path'] ?? '')) !== '' ? '' : ' · sin archivo');
                     } else {
-                        $mapping = (new \App\Services\ExportService())->mapping($tpl);
-                        $normalize = (string) ($mapping['normalize'] ?? 'none');
-                        $detail = (($tpl['batch_by'] ?? '') === 'exam_date' ? 'Lote por fecha' : 'Manual')
-                            . ($normalize === 'toefl' ? ' · TOEFL norm.' : '');
+                        $detail = (($tpl['batch_by'] ?? '') === 'exam_date' ? 'Lote por fecha' : 'Manual');
                     }
                     ?>
                     <tr>

@@ -252,15 +252,11 @@ final class ProviderWorkbookCatalogService
             throw new \InvalidArgumentException('Define al menos una celda con campo o fórmula.');
         }
 
-        $normalize = (string) ($input['normalize'] ?? 'none');
-        if (!in_array($normalize, ['none', 'toefl'], true)) {
-            $normalize = 'none';
-        }
-
+        // La normalización por plantilla quedó obsoleta: usar fórmulas (p. ej. ASCIIMAYUSC).
         $mapping = [
             'kind' => 'xlsx',
             'sheet' => trim((string) ($input['sheet'] ?? '')),
-            'normalize' => $normalize,
+            'normalize' => 'none',
             'cell_map' => $cellMap,
         ];
         if ($existing !== null) {
