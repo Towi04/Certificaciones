@@ -913,7 +913,15 @@ final class MailTemplateService
         $tpl = $this->repo->findByCode($code);
         $vars = self::sampleVarsForCode($code);
         if ($tpl !== null) {
-            $vars = array_merge($vars, self::sampleVarsForPlaceholders(self::placeholdersForTemplate($tpl)));
+            // Incluye placeholders del combobox y los escritos en asunto/cuerpo
+            // (p. ej. {{exam_venue_line}} aunque no esté en required_fields_json).
+            $selected = self::placeholdersForTemplate($tpl);
+            $used = self::mergeUsedPlaceholders(
+                (string) ($tpl['subject'] ?? ''),
+                (string) ($tpl['body_html'] ?? ''),
+                $selected
+            );
+            $vars = array_merge($vars, self::sampleVarsForPlaceholders($used));
         }
         $rendered = $this->render($code, $vars);
         if ($rendered === null) {
