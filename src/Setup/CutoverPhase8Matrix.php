@@ -117,12 +117,12 @@ final class CutoverPhase8Matrix
         $out[] = [
             'id' => 'A5',
             'status' => 'MANUAL',
-            'detail' => 'rechazar INE → plantilla student_document_rejected + re-subida a pending',
+            'detail' => 'revisión en lote ops → un correo student_document_rejected (rejection_list_html) + re-subida',
         ];
         $out[] = [
             'id' => 'A6',
             'status' => 'MANUAL',
-            'detail' => 'Operaciones → Docs por revisar muestra el caso',
+            'detail' => 'Operaciones → Docs por revisar; reglamento subido a mano también aparece pending',
         ];
 
         return $out;

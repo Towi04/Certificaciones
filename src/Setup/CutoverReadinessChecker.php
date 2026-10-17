@@ -97,7 +97,7 @@ final class CutoverReadinessChecker
         foreach ([
             'uks_solicitud' => ['doc_ine_url', 'reglamento_url'],
             'cenni_solicitud' => ['student_docs_html', 'doc_ine_url'],
-            'student_document_rejected' => ['doc_label', 'rejection_reason', 'case_url'],
+            'student_document_rejected' => ['rejection_list_html', 'case_url'],
         ] as $code => $needles) {
             $tpl = $mailRepo->findByCode($code);
             if ($tpl === null) {

@@ -232,13 +232,19 @@ $statusDoc = [
     'rejected' => 'Rechazado',
 ];
 $otherDocs = [];
+$reglamentoCodes = \App\Services\CheckoutRequirements::reglamentoManagedDocCodes();
 foreach ($documents as $d) {
     $codes = array_column($registrationDocs, 'code');
-    if (in_array((string) $d['doc_type'], $codes, true)) {
+    $dtype = (string) $d['doc_type'];
+    if (in_array($dtype, $codes, true)) {
+        continue;
+    }
+    // Reglamento se muestra en su bloque dedicado (pending/rejected) o se oculta si ya está approved.
+    if (in_array($dtype, $reglamentoCodes, true) || str_starts_with($dtype, 'reglamento')) {
         continue;
     }
     // Ocultar tipos de expediente que este producto ya no pide.
-    if (in_array((string) $d['doc_type'], ['reglamento', 'signature'], true) && $registrationDocs === []) {
+    if (in_array($dtype, ['signature'], true) && $registrationDocs === []) {
         continue;
     }
     $otherDocs[] = $d;
@@ -264,9 +270,39 @@ $studentDocsReport = $studentDocsReport ?? null;
 </div>
 <?php endif; ?>
 
-<?php if ($registrationDocs !== [] || $otherDocs !== []): ?>
+<?php
+/** @var array<string,mixed>|null $reglamentoDoc */
+$reglamentoDoc = $reglamentoDoc ?? null;
+$reglamentoStatus = is_array($reglamentoDoc) ? (string) ($reglamentoDoc['status'] ?? '') : '';
+$showReglamentoPanel = is_array($reglamentoDoc)
+    && in_array($reglamentoStatus, ['pending', 'rejected'], true);
+?>
+<?php if ($registrationDocs !== [] || $otherDocs !== [] || $showReglamentoPanel): ?>
 <div class="panel" style="margin-top:1rem">
     <h2 style="margin-top:0;font-size:1.05rem;color:var(--doceo-blue)">Documentos del registro</h2>
+    <?php if ($showReglamentoPanel): ?>
+        <div style="padding:.75rem 0;border-bottom:1px solid #e6ebf2">
+            <strong>Reglamento firmado</strong>
+            · <span class="pill"><?= e($statusDoc[$reglamentoStatus] ?? $reglamentoStatus) ?></span>
+            <?php if (!empty($reglamentoDoc['id']) && !empty($reglamentoDoc['original_name'])): ?>
+                · <a href="<?= e(url('/alumno/documentos/' . (int) $reglamentoDoc['id'] . '/ver')) ?>" target="_blank" rel="noopener">
+                    <?= e((string) $reglamentoDoc['original_name']) ?>
+                </a>
+            <?php endif; ?>
+            <?php if ($reglamentoStatus === 'pending'): ?>
+                <p class="muted" style="margin:.4rem 0 0;font-size:.85rem">En revisión por administración.</p>
+            <?php endif; ?>
+            <?php if ($reglamentoStatus === 'rejected'): ?>
+                <p class="muted" style="margin:.4rem 0">Motivo: <?= e((string) ($reglamentoDoc['rejection_reason'] ?? '')) ?></p>
+                <form method="post" action="<?= e(url('/alumno/documentos/' . (int) $reglamentoDoc['id'] . '/reenviar')) ?>"
+                      enctype="multipart/form-data" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-top:.5rem">
+                    <?= csrf_field() ?>
+                    <input type="file" name="document" required accept=".pdf,application/pdf">
+                    <button class="btn btn-accent btn-sm" type="submit">Subir de nuevo</button>
+                </form>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
     <?php if ($registrationDocs !== []): ?>
         <p class="muted" style="margin-top:0">Sube los documentos que pide este producto. Administración los revisará.</p>
         <?php foreach ($registrationDocs as $req): ?>

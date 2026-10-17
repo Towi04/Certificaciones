@@ -1809,6 +1809,59 @@ final class AdminController
         redirect('/admin/seguimientos/' . $trackingId);
     }
 
+    public function opsReviewDocuments(string $id): void
+    {
+        Auth::requireRole(['admin']);
+        csrf_verify();
+        $trackingId = (int) $id;
+        $rawDecisions = $_POST['decisions'] ?? [];
+        $rawReasons = $_POST['reasons'] ?? [];
+        if (!is_array($rawDecisions)) {
+            $rawDecisions = [];
+        }
+        if (!is_array($rawReasons)) {
+            $rawReasons = [];
+        }
+        $decisions = [];
+        foreach ($rawDecisions as $docId => $action) {
+            $docId = (int) $docId;
+            if ($docId < 1) {
+                continue;
+            }
+            $decisions[] = [
+                'id' => $docId,
+                'action' => (string) $action,
+                'reason' => is_array($rawReasons)
+                    ? trim((string) ($rawReasons[$docId] ?? $rawReasons[(string) $docId] ?? ''))
+                    : '',
+            ];
+        }
+        try {
+            $result = (new TrackingService())->reviewDocumentsBatch(
+                $trackingId,
+                (int) Auth::id(),
+                $decisions
+            );
+            $bits = [];
+            if ((int) ($result['approved'] ?? 0) > 0) {
+                $bits[] = (int) $result['approved'] . ' aprobado(s)';
+            }
+            if ((int) ($result['rejected'] ?? 0) > 0) {
+                $bits[] = (int) $result['rejected'] . ' rechazado(s)';
+                $bits[] = !empty($result['mailed'])
+                    ? 'correo enviado al alumno'
+                    : 'no se pudo enviar el correo (revisa student_document_rejected)';
+            }
+            flash('success', $bits !== [] ? ('Revisión guardada: ' . implode(' · ', $bits)) : 'Sin cambios.');
+        } catch (\Throwable $e) {
+            flash('error', $e->getMessage());
+        }
+        if (!empty($_POST['return_ops'])) {
+            redirect('/admin' . $this->opsReturnQuery());
+        }
+        redirect('/admin/seguimientos/' . $trackingId);
+    }
+
     public function documentApprove(string $id): void
     {
         Auth::requireRole(['admin']);

@@ -100,6 +100,7 @@ $router->post('/admin/precios/import', fn () => $admin->pricesImport());
 $router->get('/admin/operacion/exportar', fn () => $admin->opsExport());
 $router->post('/admin/operacion/accesos-lote', fn () => $admin->opsBulkAccess());
 $router->post('/admin/operacion/{id}/accesos', fn (string $id) => $admin->opsSaveAccess($id));
+$router->post('/admin/operacion/{id}/revisar-documentos', fn (string $id) => $admin->opsReviewDocuments($id));
 $router->get('/admin/maestra', fn () => $admin->master());
 $router->get('/admin/maestra/exportar', fn () => $admin->masterExport());
 $router->get('/admin/filtros-catalogo', fn () => $admin->catalogFilters());

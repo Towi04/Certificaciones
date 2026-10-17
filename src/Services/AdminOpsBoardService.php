@@ -330,6 +330,19 @@ final class AdminOpsBoardService
                         $labelByCode[$code] = (string) ($req['label'] ?? $code);
                     }
                 }
+                $reg = CheckoutRequirements::reglamentoForProduct($productForDocs);
+                if ($reg !== null) {
+                    $regCode = trim((string) ($reg['doc_code'] ?? ''));
+                    if ($regCode !== '') {
+                        $labelByCode[$regCode] = 'Reglamento firmado';
+                    }
+                }
+                foreach (CheckoutRequirements::reglamentoManagedDocCodes($productForDocs) as $regCode) {
+                    $regCode = trim((string) $regCode);
+                    if ($regCode !== '' && !isset($labelByCode[$regCode])) {
+                        $labelByCode[$regCode] = 'Reglamento firmado';
+                    }
+                }
             } catch (\Throwable) {
                 $labelByCode = [];
             }

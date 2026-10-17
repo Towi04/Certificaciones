@@ -83,8 +83,10 @@ final class MailTemplateService
             'workbook_note' => 'Nota breve del Excel por enlace',
         ],
         'Rechazo de documento' => [
-            'doc_label' => 'Nombre del documento rechazado',
-            'rejection_reason' => 'Motivo del rechazo',
+            'doc_label' => 'Nombre del documento rechazado (primer ítem)',
+            'rejection_reason' => 'Motivo del rechazo (primer ítem)',
+            'rejection_list_html' => 'Lista HTML de documentos rechazados + motivos',
+            'rejected_count' => 'Cantidad de documentos rechazados',
             'case_url' => 'URL del caso del alumno',
             'student_name' => 'Nombre del alumno',
         ],
@@ -1684,12 +1686,47 @@ final class MailTemplateService
     public function ensureDefaults(): void
     {
         $this->migrateUksSolicitudTemplate();
+        $this->ensureStudentDocumentRejectedTemplate();
 
         if ($this->repo->all() !== []) {
             return;
         }
 
         $this->seedDefaultTemplates();
+    }
+
+    /** Garantiza plantilla de rechazo (lista) aunque el catálogo ya exista. */
+    public function ensureStudentDocumentRejectedTemplate(): void
+    {
+        $code = 'student_document_rejected';
+        $name = 'Alumno · Documentos por corregir';
+        $subject = 'Documentos por corregir · {{matricula}}';
+        $body = '<p>Hola {{student_name}},</p>'
+            . '<p>Revisamos los documentos de tu caso <strong>{{matricula}}</strong> '
+            . '({{product_name}}) y necesitamos que corrijas lo siguiente:</p>'
+            . '{{rejection_list_html}}'
+            . '<p><a href="{{case_url}}">Subir de nuevo desde tu portal</a></p>'
+            . '<p>— Instituto DOCEO</p>';
+
+        $existing = $this->repo->findByCode($code);
+        if ($existing === null) {
+            $this->repo->upsert($code, $name, $subject, $body, 'automatic');
+            $this->saveAudience($code, 'student');
+
+            return;
+        }
+        $hay = strtolower(
+            (string) ($existing['subject'] ?? '') . ' ' . (string) ($existing['body_html'] ?? '')
+        );
+        if (!str_contains($hay, 'rejection_list_html')) {
+            $this->repo->upsert(
+                $code,
+                (string) ($existing['name'] ?? $name),
+                $subject,
+                $body,
+                (string) ($existing['trigger_mode'] ?? 'automatic')
+            );
+        }
     }
 
     public function migrateUksSolicitudTemplate(): void

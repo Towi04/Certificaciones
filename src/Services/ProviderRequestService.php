@@ -662,12 +662,21 @@ final class ProviderRequestService
                     );
                 }
             } else {
-                $abs = $this->documents->absolutePath((string) $regDoc['storage_path']);
-                if (!is_file($abs) && $requireReglamento) {
-                    throw new \RuntimeException('El archivo del reglamento firmado no está disponible.');
-                }
-                if (is_file($abs)) {
-                    $reglamentoUrl = $fileLinks->documentLink((int) $regDoc['id']);
+                $regStatus = strtolower(trim((string) ($regDoc['status'] ?? '')));
+                if ($regStatus !== 'approved') {
+                    if ($requireReglamento) {
+                        throw new \RuntimeException(
+                            'El reglamento firmado aún no está aprobado. Revísalo en Operación antes de enviar al proveedor.'
+                        );
+                    }
+                } else {
+                    $abs = $this->documents->absolutePath((string) $regDoc['storage_path']);
+                    if (!is_file($abs) && $requireReglamento) {
+                        throw new \RuntimeException('El archivo del reglamento firmado no está disponible.');
+                    }
+                    if (is_file($abs)) {
+                        $reglamentoUrl = $fileLinks->documentLink((int) $regDoc['id']);
+                    }
                 }
             }
         }

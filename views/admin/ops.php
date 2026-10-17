@@ -701,20 +701,19 @@ $extraColHeader = count($extraColLabels) === 1
                                         'label' => (string) ($pd['label'] ?? $pd['doc_type'] ?? 'Documento'),
                                         'name' => (string) ($pd['original_name'] ?? ''),
                                         'view_url' => url('/admin/documentos/' . $docId . '/ver'),
-                                        'approve_url' => url('/admin/documentos/' . $docId . '/aprobar'),
-                                        'reject_url' => url('/admin/documentos/' . $docId . '/rechazar'),
                                     ];
                                 }
                                 ?>
                                 <button type="button"
                                         class="ops-icon-btn ops-icon-btn--pending ops-approve-docs-btn"
                                         data-docs="<?= e(json_encode($docsPayload, JSON_UNESCAPED_UNICODE)) ?>"
+                                        data-review-url="<?= e(url('/admin/operacion/' . $tid . '/revisar-documentos')) ?>"
                                         data-return-view="<?= e($view) ?>"
                                         data-return-q="<?= e($q) ?>"
                                         data-csrf="<?= e(csrf_token()) ?>"
-                                        data-title="<?= e('Aprobar documentos · ' . (string) ($r['matricula'] ?? '')) ?>"
-                                        title="Aprobar documentos del alumno (<?= (int) $docsPendingCount ?>)"
-                                        aria-label="Aprobar documentos pendientes">
+                                        data-title="<?= e('Revisar documentos · ' . (string) ($r['matricula'] ?? '')) ?>"
+                                        title="Revisar documentos del alumno (<?= (int) $docsPendingCount ?>)"
+                                        aria-label="Revisar documentos pendientes">
                                     <?= icon('document') ?>
                                     <span class="ops-status-badge ops-status-badge--pending" title="Pendiente de aprobar"><?= icon('clock') ?></span>
                                     <?php if ($docsPendingCount > 1): ?>
@@ -1289,7 +1288,7 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
     <button type="button" class="ops-proof-backdrop" id="ops-docs-backdrop" aria-label="Cerrar"></button>
     <div class="ops-proof-dialog" role="dialog" aria-modal="true" aria-labelledby="ops-docs-title">
         <div class="ops-proof-head">
-            <strong id="ops-docs-title">Aprobar documento</strong>
+            <strong id="ops-docs-title">Revisar documentos</strong>
             <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
                 <span class="muted" id="ops-docs-counter" style="font-size:.82rem"></span>
                 <a class="btn btn-ghost btn-sm" id="ops-docs-open" href="#" target="_blank" rel="noopener">Abrir en pestaña</a>
@@ -1302,30 +1301,37 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
                 No hay documento para mostrar.
             </div>
         </div>
-        <div class="ops-proof-confirm" style="display:flex;flex-direction:column;gap:.65rem">
+        <form method="post" id="ops-docs-batch-form" class="ops-proof-confirm" style="display:flex;flex-direction:column;gap:.65rem">
+            <input type="hidden" name="_csrf" id="ops-docs-batch-csrf" value="">
+            <input type="hidden" name="return_ops" value="1">
+            <input type="hidden" name="return_view" id="ops-docs-batch-return-view" value="">
+            <input type="hidden" name="return_q" id="ops-docs-batch-return-q" value="">
+            <div id="ops-docs-decision-fields" hidden></div>
             <div style="display:flex;gap:.45rem;flex-wrap:wrap;align-items:center;justify-content:space-between">
                 <div style="display:flex;gap:.35rem">
                     <button type="button" class="btn btn-ghost btn-sm" id="ops-docs-prev" hidden>← Anterior</button>
                     <button type="button" class="btn btn-ghost btn-sm" id="ops-docs-next" hidden>Siguiente →</button>
                 </div>
-                <form method="post" id="ops-docs-approve" style="display:inline">
-                    <input type="hidden" name="_csrf" id="ops-docs-approve-csrf" value="">
-                    <input type="hidden" name="return_ops" value="1">
-                    <input type="hidden" name="return_view" id="ops-docs-approve-return-view" value="">
-                    <input type="hidden" name="return_q" id="ops-docs-approve-return-q" value="">
-                    <button type="submit" class="btn btn-accent" id="ops-docs-approve-btn">Aprobar</button>
-                </form>
+                <div style="display:flex;gap:.35rem;flex-wrap:wrap">
+                    <button type="button" class="btn btn-accent btn-sm" id="ops-docs-mark-approve">Marcar aprobar</button>
+                    <button type="button" class="btn btn-ghost btn-sm" id="ops-docs-mark-reject">Marcar rechazar</button>
+                </div>
             </div>
-            <form method="post" id="ops-docs-reject" style="display:flex;gap:.45rem;flex-wrap:wrap;align-items:center">
-                <input type="hidden" name="_csrf" id="ops-docs-reject-csrf" value="">
-                <input type="hidden" name="return_ops" value="1">
-                <input type="hidden" name="return_view" id="ops-docs-reject-return-view" value="">
-                <input type="hidden" name="return_q" id="ops-docs-reject-return-q" value="">
-                <input type="text" name="reason" id="ops-docs-reject-reason" required
-                       placeholder="Motivo de rechazo" style="flex:1;min-width:12rem;padding:.45rem .65rem;border:1px solid #cfd8e6;border-radius:8px;font:inherit">
-                <button type="submit" class="btn btn-ghost">Rechazar</button>
-            </form>
-        </div>
+            <p class="muted" id="ops-docs-decision-status" style="margin:0;font-size:.82rem"></p>
+            <label id="ops-docs-reason-wrap" hidden style="display:flex;flex-direction:column;gap:.3rem;font-size:.85rem;font-weight:600">
+                Motivo de rechazo (este documento)
+                <input type="text" id="ops-docs-reason-input"
+                       placeholder="Ej. Imagen borrosa / documento incorrecto"
+                       style="padding:.45rem .65rem;border:1px solid #cfd8e6;border-radius:8px;font:inherit;font-weight:500">
+            </label>
+            <div style="display:flex;justify-content:flex-end;gap:.45rem;flex-wrap:wrap">
+                <button type="submit" class="btn btn-accent" id="ops-docs-batch-submit">Guardar revisión</button>
+            </div>
+            <p class="muted" style="margin:0;font-size:.78rem">
+                Revisa todos los documentos, márcalos y al final guarda. Si hay rechazos, el alumno recibe
+                <strong>un solo correo</strong> con todas las observaciones.
+            </p>
+        </form>
     </div>
 </div>
 
@@ -1737,16 +1743,25 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
   var docsBackdrop = document.getElementById('ops-docs-backdrop');
   var docsPrev = document.getElementById('ops-docs-prev');
   var docsNext = document.getElementById('ops-docs-next');
-  var docsApprove = document.getElementById('ops-docs-approve');
-  var docsReject = document.getElementById('ops-docs-reject');
-  var docsApproveCsrf = document.getElementById('ops-docs-approve-csrf');
-  var docsRejectCsrf = document.getElementById('ops-docs-reject-csrf');
-  var docsApproveReturnView = document.getElementById('ops-docs-approve-return-view');
-  var docsApproveReturnQ = document.getElementById('ops-docs-approve-return-q');
-  var docsRejectReturnView = document.getElementById('ops-docs-reject-return-view');
-  var docsRejectReturnQ = document.getElementById('ops-docs-reject-return-q');
-  var docsRejectReason = document.getElementById('ops-docs-reject-reason');
-  var docsState = { list: [], index: 0, csrf: '', returnView: '', returnQ: '' };
+  var docsBatchForm = document.getElementById('ops-docs-batch-form');
+  var docsBatchCsrf = document.getElementById('ops-docs-batch-csrf');
+  var docsBatchReturnView = document.getElementById('ops-docs-batch-return-view');
+  var docsBatchReturnQ = document.getElementById('ops-docs-batch-return-q');
+  var docsDecisionFields = document.getElementById('ops-docs-decision-fields');
+  var docsDecisionStatus = document.getElementById('ops-docs-decision-status');
+  var docsReasonWrap = document.getElementById('ops-docs-reason-wrap');
+  var docsReasonInput = document.getElementById('ops-docs-reason-input');
+  var docsMarkApprove = document.getElementById('ops-docs-mark-approve');
+  var docsMarkReject = document.getElementById('ops-docs-mark-reject');
+  var docsState = {
+    list: [],
+    index: 0,
+    decisions: {},
+    csrf: '',
+    returnView: '',
+    returnQ: '',
+    reviewUrl: ''
+  };
 
   function closeDocsModal() {
     if (!docsModal) return;
@@ -1754,17 +1769,53 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
     if (docsFrame) docsFrame.removeAttribute('src');
   }
 
+  function currentDoc() {
+    return docsState.list[docsState.index] || null;
+  }
+
+  function decisionKey(doc) {
+    return String((doc && doc.id) || '');
+  }
+
+  function syncReasonFromInput() {
+    var doc = currentDoc();
+    if (!doc) return;
+    var key = decisionKey(doc);
+    var d = docsState.decisions[key];
+    if (!d || d.action !== 'reject') return;
+    d.reason = docsReasonInput ? String(docsReasonInput.value || '').trim() : '';
+  }
+
+  function updateDecisionUi() {
+    var doc = currentDoc();
+    if (!doc) return;
+    var key = decisionKey(doc);
+    var d = docsState.decisions[key] || null;
+    var status = 'Sin marcar';
+    if (d && d.action === 'approve') status = 'Marcado: aprobar';
+    if (d && d.action === 'reject') {
+      status = 'Marcado: rechazar' + (d.reason ? (' · ' + d.reason) : ' (falta motivo)');
+    }
+    if (docsDecisionStatus) docsDecisionStatus.textContent = status;
+    if (docsReasonWrap) {
+      var showReject = !!(d && d.action === 'reject');
+      docsReasonWrap.hidden = !showReject;
+      docsReasonWrap.style.display = showReject ? 'flex' : 'none';
+    }
+    if (docsReasonInput) {
+      docsReasonInput.value = (d && d.action === 'reject') ? (d.reason || '') : '';
+    }
+  }
+
   function renderDocsModal() {
     if (!docsModal || !docsState.list.length) {
       closeDocsModal();
       return;
     }
-    var doc = docsState.list[docsState.index] || docsState.list[0];
+    var doc = currentDoc();
     var label = (doc && doc.label) ? String(doc.label) : 'Documento';
     var name = (doc && doc.name) ? String(doc.name) : '';
     var viewUrl = (doc && doc.view_url) ? String(doc.view_url) : '';
-    var approveUrl = (doc && doc.approve_url) ? String(doc.approve_url) : '';
-    var rejectUrl = (doc && doc.reject_url) ? String(doc.reject_url) : '';
 
     if (docsTitle) {
       docsTitle.textContent = label + (name ? (' · ' + name) : '');
@@ -1789,17 +1840,13 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
         docsEmpty.hidden = false;
       }
     }
-    if (docsApprove) docsApprove.action = approveUrl;
-    if (docsReject) docsReject.action = rejectUrl;
-    if (docsApproveCsrf) docsApproveCsrf.value = docsState.csrf || '';
-    if (docsRejectCsrf) docsRejectCsrf.value = docsState.csrf || '';
-    if (docsApproveReturnView) docsApproveReturnView.value = docsState.returnView || '';
-    if (docsApproveReturnQ) docsApproveReturnQ.value = docsState.returnQ || '';
-    if (docsRejectReturnView) docsRejectReturnView.value = docsState.returnView || '';
-    if (docsRejectReturnQ) docsRejectReturnQ.value = docsState.returnQ || '';
-    if (docsRejectReason) docsRejectReason.value = '';
+    if (docsBatchForm) docsBatchForm.action = docsState.reviewUrl || '';
+    if (docsBatchCsrf) docsBatchCsrf.value = docsState.csrf || '';
+    if (docsBatchReturnView) docsBatchReturnView.value = docsState.returnView || '';
+    if (docsBatchReturnQ) docsBatchReturnQ.value = docsState.returnQ || '';
     if (docsPrev) docsPrev.hidden = docsState.list.length < 2 || docsState.index <= 0;
     if (docsNext) docsNext.hidden = docsState.list.length < 2 || docsState.index >= docsState.list.length - 1;
+    updateDecisionUi();
     docsModal.hidden = false;
   }
 
@@ -1815,13 +1862,29 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
     if (!Array.isArray(list) || list.length === 0) return;
     docsState.list = list;
     docsState.index = 0;
+    docsState.decisions = {};
     docsState.csrf = btn.getAttribute('data-csrf') || '';
     docsState.returnView = btn.getAttribute('data-return-view') || '';
     docsState.returnQ = btn.getAttribute('data-return-q') || '';
-    if (docsTitle && btn.getAttribute('data-title')) {
-      // title is refreshed per-doc in renderDocsModal
-    }
+    docsState.reviewUrl = btn.getAttribute('data-review-url') || '';
     renderDocsModal();
+  }
+
+  function markCurrent(action) {
+    var doc = currentDoc();
+    if (!doc) return;
+    var key = decisionKey(doc);
+    docsState.decisions[key] = {
+      id: doc.id,
+      action: action,
+      reason: action === 'reject'
+        ? (docsReasonInput ? String(docsReasonInput.value || '').trim() : '')
+        : ''
+    };
+    updateDecisionUi();
+    if (action === 'reject' && docsReasonInput) {
+      setTimeout(function () { docsReasonInput.focus(); }, 20);
+    }
   }
 
   document.querySelectorAll('.ops-approve-docs-btn').forEach(function (btn) {
@@ -1841,16 +1904,69 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
   docsClose && docsClose.addEventListener('click', closeDocsModal);
   docsBackdrop && docsBackdrop.addEventListener('click', closeDocsModal);
   docsPrev && docsPrev.addEventListener('click', function () {
+    syncReasonFromInput();
     if (docsState.index > 0) {
       docsState.index -= 1;
       renderDocsModal();
     }
   });
   docsNext && docsNext.addEventListener('click', function () {
+    syncReasonFromInput();
     if (docsState.index < docsState.list.length - 1) {
       docsState.index += 1;
       renderDocsModal();
     }
+  });
+  docsMarkApprove && docsMarkApprove.addEventListener('click', function () {
+    markCurrent('approve');
+  });
+  docsMarkReject && docsMarkReject.addEventListener('click', function () {
+    markCurrent('reject');
+  });
+  docsReasonInput && docsReasonInput.addEventListener('input', function () {
+    syncReasonFromInput();
+    updateDecisionUi();
+  });
+  docsBatchForm && docsBatchForm.addEventListener('submit', function (e) {
+    syncReasonFromInput();
+    var marked = 0;
+    var missingReason = [];
+    docsState.list.forEach(function (doc) {
+      var d = docsState.decisions[decisionKey(doc)];
+      if (!d || !d.action) return;
+      marked += 1;
+      if (d.action === 'reject' && !String(d.reason || '').trim()) {
+        missingReason.push(doc.label || ('#' + doc.id));
+      }
+    });
+    if (marked < 1) {
+      e.preventDefault();
+      alert('Marca al menos un documento (aprobar o rechazar) antes de guardar.');
+      return;
+    }
+    if (missingReason.length) {
+      e.preventDefault();
+      alert('Indica el motivo de rechazo para: ' + missingReason.join(', '));
+      return;
+    }
+    if (!docsDecisionFields) return;
+    docsDecisionFields.innerHTML = '';
+    docsState.list.forEach(function (doc) {
+      var d = docsState.decisions[decisionKey(doc)];
+      if (!d || !d.action) return;
+      var actionInput = document.createElement('input');
+      actionInput.type = 'hidden';
+      actionInput.name = 'decisions[' + doc.id + ']';
+      actionInput.value = d.action;
+      docsDecisionFields.appendChild(actionInput);
+      if (d.action === 'reject') {
+        var reasonInput = document.createElement('input');
+        reasonInput.type = 'hidden';
+        reasonInput.name = 'reasons[' + doc.id + ']';
+        reasonInput.value = d.reason || '';
+        docsDecisionFields.appendChild(reasonInput);
+      }
+    });
   });
 
   var rescheduleModal = document.getElementById('ops-reschedule-modal');
