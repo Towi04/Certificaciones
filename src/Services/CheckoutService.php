@@ -447,6 +447,12 @@ final class CheckoutService
             ]));
         }
 
+        try {
+            (new TelegramNotifyService())->notifyPurchaseCreated($purchaseId);
+        } catch (\Throwable $e) {
+            error_log('[Doceo] Telegram tras checkout compra ' . $purchaseId . ': ' . $e->getMessage());
+        }
+
         // Partner/admin deben conservar su sesión; el alumno inicia la suya solo en compra directa.
         $actorRole = Auth::role();
         if (!in_array($actorRole, ['partner', 'admin'], true)) {
