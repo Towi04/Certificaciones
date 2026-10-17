@@ -38,9 +38,18 @@ ops no envía a proveedor hasta aprobar el INE (u otros required).
 ## Flujo
 
 1. Alumno sube (checkout o portal) → status `pending`
-2. Admin aprueba / rechaza en seguimiento
-3. Rechazo → plantilla `student_document_rejected` + re-subida en portal
-4. Correos a proveedor usan enlaces firmados (`SignedFileLinkService`)
+2. Admin revisa en **Operación** (popup de documentos): marca aprobar/rechazar en lote y guarda
+3. Si hay rechazos → **un solo correo** `student_document_rejected` con `{{rejection_list_html}}` + re-subida en portal
+4. Correos a proveedor usan enlaces firmados (`SignedFileLinkService`) y exigen docs/reglamento **approved**
+
+## Reglamento firmado
+
+| Origen | Status inicial |
+|--------|----------------|
+| Firma en sistema (canvas / AcroForm) | `approved` (no requiere revisión) |
+| Subida manual del PDF escaneado | `pending` (ops debe aprobar) |
+
+Si el reglamento subido a mano queda `pending`/`rejected`, no se envía la solicitud al proveedor hasta aprobarlo. El alumno ve el motivo y puede re-subir desde su portal.
 
 ## Distinción con reglamento
 

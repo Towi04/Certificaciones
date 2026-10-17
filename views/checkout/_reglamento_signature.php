@@ -171,6 +171,7 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
     <?php endif; ?>
 
     <input type="file" name="<?= e($docField) ?>" id="<?= e($docField) ?>" accept=".pdf" hidden>
+    <input type="hidden" name="reglamento_capture" id="reglamento_capture" value="upload">
 </div>
 
 <style>
@@ -252,6 +253,7 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
   const previewBtn = document.getElementById('reglamento-preview-btn');
   const previewLink = document.getElementById('reglamento-preview-link');
   const form = document.getElementById('checkout-form');
+  const captureInput = document.getElementById('reglamento_capture');
   if (!form || !docInput || !accepted) return;
 
   let mode = isFill ? 'fill' : 'digital';
@@ -613,17 +615,22 @@ $formFields = is_array($reglamento['form_fields'] ?? null) ? $reglamento['form_f
     }
     try {
       let file = null;
+      let capture = 'upload';
       if (uploadedFile) {
         if (!accepted.checked) throw new Error('Marca la casilla de aceptación.');
         file = uploadedFile;
+        capture = 'upload';
         if (uploadStatus) uploadStatus.textContent = 'Adjuntando PDF…';
       } else if (isFill) {
         if (statusEl) statusEl.textContent = 'Generando PDF con tus datos…';
         file = await buildFilledAcroformPdf();
+        capture = 'system';
       } else {
         if (statusEl) statusEl.textContent = 'Generando PDF firmado…';
         file = await buildSignedPdf();
+        capture = 'system';
       }
+      if (captureInput) captureInput.value = capture;
       const dt = new DataTransfer();
       dt.items.add(file);
       docInput.files = dt.files;

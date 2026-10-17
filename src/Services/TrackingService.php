@@ -526,16 +526,46 @@ final class TrackingService
     public function assertStudentDocsApprovedForOps(int $trackingId, array $product): void
     {
         $report = $this->studentDocsApprovalReport($trackingId, $product);
-        if (!$report['gate_enabled'] || $report['ok']) {
+        $labels = [];
+        if ($report['gate_enabled'] && !$report['ok']) {
+            $labels = $report['blocking_labels'];
+        }
+        $regDoc = $this->reglamentoDocumentForTracking($trackingId, $product);
+        if ($regDoc !== null) {
+            $regStatus = strtolower(trim((string) ($regDoc['status'] ?? '')));
+            if ($regStatus !== 'approved') {
+                $labels[] = 'Reglamento firmado';
+            }
+        }
+        if ($labels === []) {
             return;
         }
-        $labels = $report['blocking_labels'];
-        $msg = 'Documentos del alumno pendientes de aprobación';
-        if ($labels !== []) {
-            $msg .= ': ' . implode(', ', $labels);
-        }
-        $msg .= '. Apruébalos en el caso antes de continuar.';
+        $labels = array_values(array_unique($labels));
+        $msg = 'Documentos del alumno pendientes de aprobación: ' . implode(', ', $labels)
+            . '. Apruébalos en Operación antes de continuar.';
         throw new \RuntimeException($msg);
+    }
+
+    /**
+     * Documento de reglamento del caso (si existe), por doc_code del grupo o códigos legados.
+     *
+     * @param array<string, mixed> $product
+     * @return array<string, mixed>|null
+     */
+    public function reglamentoDocumentForTracking(int $trackingId, array $product = []): ?array
+    {
+        $codes = CheckoutRequirements::reglamentoManagedDocCodes($product);
+        if ($codes === []) {
+            $codes = ['reglamento_firmado', 'reglamento'];
+        }
+        foreach ($this->documentsForTracking($trackingId) as $doc) {
+            $type = (string) ($doc['doc_type'] ?? '');
+            if ($type !== '' && in_array($type, $codes, true)) {
+                return $doc;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -675,29 +705,148 @@ final class TrackingService
         if ($doc === null) {
             throw new \InvalidArgumentException('Documento no encontrado.');
         }
+        $this->applyDocumentRejection($doc, $adminUserId, $reason);
+
+        if (empty($doc['tracking_id'])) {
+            return false;
+        }
+        $trackingId = (int) $doc['tracking_id'];
+        $label = $this->documentLabelForTracking($trackingId, (string) ($doc['doc_type'] ?? ''));
+
+        return $this->notifyStudentDocumentsRejected($trackingId, [
+            [
+                'doc_type' => (string) ($doc['doc_type'] ?? ''),
+                'label' => $label,
+                'reason' => $reason,
+            ],
+        ]);
+    }
+
+    /**
+     * Aprobar/rechazar varios docs del mismo caso y un solo correo si hay rechazos.
+     *
+     * @param list<array{id:int,action:string,reason?:string}> $decisions
+     * @return array{approved:int,rejected:int,mailed:bool}
+     */
+    public function reviewDocumentsBatch(int $trackingId, int $adminUserId, array $decisions): array
+    {
+        if ($trackingId < 1) {
+            throw new \InvalidArgumentException('Caso no válido.');
+        }
+        $tracking = $this->find($trackingId);
+        if ($tracking === null) {
+            throw new \InvalidArgumentException('Caso no encontrado.');
+        }
+
+        $approved = 0;
+        $rejectedItems = [];
+        foreach ($decisions as $decision) {
+            if (!is_array($decision)) {
+                continue;
+            }
+            $docId = (int) ($decision['id'] ?? 0);
+            $action = strtolower(trim((string) ($decision['action'] ?? '')));
+            if ($docId < 1 || !in_array($action, ['approve', 'reject'], true)) {
+                continue;
+            }
+            $doc = $this->findDocument($docId);
+            if ($doc === null || (int) ($doc['tracking_id'] ?? 0) !== $trackingId) {
+                throw new \InvalidArgumentException('Documento #' . $docId . ' no pertenece a este caso.');
+            }
+            $status = (string) ($doc['status'] ?? '');
+            if (!in_array($status, ['pending', 'rejected'], true)) {
+                continue;
+            }
+            if ($action === 'approve') {
+                $this->approveDocument($docId, $adminUserId);
+                $approved++;
+                continue;
+            }
+            $reason = trim((string) ($decision['reason'] ?? ''));
+            if ($reason === '') {
+                $label = $this->documentLabelForTracking($trackingId, (string) ($doc['doc_type'] ?? ''));
+                throw new \InvalidArgumentException('Indica el motivo del rechazo para: ' . $label);
+            }
+            $this->applyDocumentRejection($doc, $adminUserId, $reason);
+            $rejectedItems[] = [
+                'doc_type' => (string) ($doc['doc_type'] ?? ''),
+                'label' => $this->documentLabelForTracking($trackingId, (string) ($doc['doc_type'] ?? '')),
+                'reason' => $reason,
+            ];
+        }
+
+        $mailed = false;
+        if ($rejectedItems !== []) {
+            $mailed = $this->notifyStudentDocumentsRejected($trackingId, $rejectedItems);
+        }
+
+        return [
+            'approved' => $approved,
+            'rejected' => count($rejectedItems),
+            'mailed' => $mailed,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $doc
+     */
+    private function applyDocumentRejection(array $doc, int $adminUserId, string $reason): void
+    {
+        $docId = (int) ($doc['id'] ?? 0);
         $this->pdo->prepare(
             'UPDATE documents SET status = \'rejected\', rejection_reason = ?, reviewed_by = ?, reviewed_at = NOW()
              WHERE id = ?'
         )->execute([$reason, $adminUserId, $docId]);
 
-        $mailed = false;
         if (!empty($doc['tracking_id'])) {
             $trackingId = (int) $doc['tracking_id'];
             $this->pdo->prepare(
                 'UPDATE trackings SET status = \'waiting_student\' WHERE id = ?'
             )->execute([$trackingId]);
             $this->log($trackingId, 'doc_rejected', 'Rechazado ' . $doc['doc_type'] . ': ' . $reason, $adminUserId);
-            $mailed = $this->notifyStudentDocumentRejected($trackingId, $doc, $reason);
+        }
+    }
+
+    public function documentLabelForTracking(int $trackingId, string $docType): string
+    {
+        $docType = trim($docType);
+        if ($docType === '') {
+            return 'Documento';
+        }
+        $tracking = $this->find($trackingId);
+        $product = [
+            'type' => $tracking['product_type'] ?? '',
+            'config_json' => $tracking['config_json'] ?? null,
+            'group_config_json' => $tracking['group_config_json'] ?? null,
+        ];
+        foreach (array_merge(
+            CheckoutRequirements::docsForProduct($product),
+            CheckoutRequirements::registrationDocsForProduct($product),
+            CheckoutRequirements::studentDocsForProduct($product)
+        ) as $req) {
+            if (($req['code'] ?? '') === $docType) {
+                return (string) ($req['label'] ?? $docType);
+            }
+        }
+        $reg = CheckoutRequirements::reglamentoForProduct($product);
+        if ($reg !== null && (string) ($reg['doc_code'] ?? '') === $docType) {
+            return 'Reglamento firmado';
+        }
+        if (in_array($docType, CheckoutRequirements::reglamentoManagedDocCodes($product), true)) {
+            return 'Reglamento firmado';
         }
 
-        return $mailed;
+        return $docType;
     }
 
     /**
-     * @param array<string, mixed> $doc
+     * @param list<array{doc_type?:string,label:string,reason:string}> $items
      */
-    private function notifyStudentDocumentRejected(int $trackingId, array $doc, string $reason): bool
+    public function notifyStudentDocumentsRejected(int $trackingId, array $items): bool
     {
+        if ($items === []) {
+            return false;
+        }
         $tracking = $this->find($trackingId);
         if ($tracking === null) {
             return false;
@@ -707,23 +856,19 @@ final class TrackingService
             return false;
         }
 
-        $docType = (string) ($doc['doc_type'] ?? '');
-        $docLabel = $docType;
-        $product = [
-            'type' => $tracking['product_type'] ?? '',
-            'config_json' => $tracking['config_json'] ?? null,
-            'group_config_json' => $tracking['group_config_json'] ?? null,
-        ];
-        foreach (array_merge(
-            CheckoutRequirements::docsForProduct($product),
-            CheckoutRequirements::registrationDocsForProduct($product)
-        ) as $req) {
-            if (($req['code'] ?? '') === $docType) {
-                $docLabel = (string) $req['label'];
-                break;
-            }
+        $listHtml = '<ul>';
+        foreach ($items as $item) {
+            $label = trim((string) ($item['label'] ?? $item['doc_type'] ?? 'Documento'));
+            $reason = trim((string) ($item['reason'] ?? ''));
+            $listHtml .= '<li><strong>' . htmlspecialchars($label, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</strong>'
+                . ($reason !== ''
+                    ? ': ' . htmlspecialchars($reason, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                    : '')
+                . '</li>';
         }
+        $listHtml .= '</ul>';
 
+        $first = $items[0];
         $base = rtrim((string) (\App\Config\Env::get('APP_URL', '') ?? ''), '/');
         $name = trim(implode(' ', array_filter([
             (string) ($tracking['first_name'] ?? ''),
@@ -733,9 +878,11 @@ final class TrackingService
             'name' => $name !== '' ? $name : 'alumno',
             'full_name' => $name !== '' ? $name : 'alumno',
             'student_name' => $name !== '' ? $name : 'alumno',
-            'doc_label' => $docLabel,
-            'doc_type' => $docType,
-            'rejection_reason' => $reason,
+            'doc_label' => (string) ($first['label'] ?? $first['doc_type'] ?? 'Documento'),
+            'doc_type' => (string) ($first['doc_type'] ?? ''),
+            'rejection_reason' => (string) ($first['reason'] ?? ''),
+            'rejection_list_html' => $listHtml,
+            'rejected_count' => (string) count($items),
             'matricula' => (string) ($tracking['matricula'] ?? ''),
             'product_name' => (string) ($tracking['product_name'] ?? ''),
             'case_url' => $base . '/alumno/caso/' . $trackingId,
@@ -743,11 +890,13 @@ final class TrackingService
         ];
 
         try {
-            (new MailTemplateService())->send('student_document_rejected', $to, $vars);
+            $mail = new MailTemplateService();
+            $mail->ensureDefaults();
+            $mail->send('student_document_rejected', $to, $vars);
 
             return true;
         } catch (\Throwable $e) {
-            error_log('[Doceo] Correo rechazo documento: ' . $e->getMessage());
+            error_log('[Doceo] Correo rechazo documentos: ' . $e->getMessage());
 
             return false;
         }
@@ -768,7 +917,9 @@ final class TrackingService
             throw new \InvalidArgumentException('Solo puedes reemplazar documentos rechazados.');
         }
 
-        if ((string) $doc['doc_type'] === 'ine') {
+        $docType = (string) ($doc['doc_type'] ?? '');
+        if ($docType === 'ine' || in_array($docType, CheckoutRequirements::reglamentoManagedDocCodes(), true)
+            || str_starts_with($docType, 'reglamento')) {
             $accept = '.pdf';
         }
 

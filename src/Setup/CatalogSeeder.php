@@ -1205,23 +1205,39 @@ HTML;
             ],
             [
                 'code' => 'student_document_rejected',
-                'name' => 'Alumno · Documento rechazado',
-                'subject' => 'Debes volver a subir: {{doc_label}} · {{matricula}}',
+                'name' => 'Alumno · Documentos por corregir',
+                'subject' => 'Documentos por corregir · {{matricula}}',
                 'body' => '<p>Hola {{student_name}},</p>'
-                    . '<p>Revisamos el documento <strong>{{doc_label}}</strong> de tu caso '
-                    . '<strong>{{matricula}}</strong> y necesitamos que lo vuelvas a cargar.</p>'
-                    . '<p><strong>Motivo:</strong> {{rejection_reason}}</p>'
+                    . '<p>Revisamos los documentos de tu caso <strong>{{matricula}}</strong> '
+                    . '({{product_name}}) y necesitamos que corrijas lo siguiente:</p>'
+                    . '{{rejection_list_html}}'
                     . '<p><a href="{{case_url}}">Subir de nuevo desde tu portal</a></p>'
                     . '<p>— Instituto DOCEO</p>',
             ],
         ];
 
         foreach ($templates as $tpl) {
-            if ($repo->findByCode($tpl['code']) !== null) {
+            $existing = $repo->findByCode($tpl['code']);
+            if ($existing === null) {
+                $repo->upsert($tpl['code'], $tpl['name'], $tpl['subject'], $tpl['body'], 'automatic');
+                $log[] = 'Plantilla correo creada: ' . $tpl['code'];
                 continue;
             }
-            $repo->upsert($tpl['code'], $tpl['name'], $tpl['subject'], $tpl['body'], 'automatic');
-            $log[] = 'Plantilla correo creada: ' . $tpl['code'];
+            if ($tpl['code'] === 'student_document_rejected') {
+                $hay = strtolower(
+                    (string) ($existing['subject'] ?? '') . ' ' . (string) ($existing['body_html'] ?? '')
+                );
+                if (!str_contains($hay, 'rejection_list_html')) {
+                    $repo->upsert(
+                        $tpl['code'],
+                        $tpl['name'],
+                        $tpl['subject'],
+                        $tpl['body'],
+                        (string) ($existing['trigger_mode'] ?? 'automatic')
+                    );
+                    $log[] = 'Plantilla correo actualizada: ' . $tpl['code'];
+                }
+            }
         }
 
         // Plantilla UKS existente: añadir enlace INE si aún no lo tiene.

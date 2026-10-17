@@ -964,9 +964,12 @@ final class CheckoutService
             return;
         }
         $stored = $this->documents->storeUploaded($file, 'docs/' . $purchaseId, '.pdf');
+        // Firma en sistema (canvas / AcroForm) → approved. Subida manual → pending (ops revisa).
+        $capture = strtolower(trim((string) ($_POST['reglamento_capture'] ?? '')));
+        $status = $capture === 'system' ? 'approved' : 'pending';
         $this->pdo->prepare(
             'INSERT INTO documents (tracking_id, purchase_id, student_user_id, doc_type, original_name, storage_path, status, uploaded_by)
-             VALUES (?,?,?,?,?,?,\'approved\',?)'
+             VALUES (?,?,?,?,?,?,?,?)'
         )->execute([
             $trackingId,
             $purchaseId,
@@ -974,6 +977,7 @@ final class CheckoutService
             $reglamento['doc_code'],
             $stored['original_name'],
             $stored['path'],
+            $status,
             $studentUserId,
         ]);
     }
