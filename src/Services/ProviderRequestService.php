@@ -810,6 +810,8 @@ final class ProviderRequestService
         );
         unset($studentDocVars['_student_docs_list']);
 
+        $venueVars = ExamScheduleService::mailVenueVarsFromTracking($tracking);
+
         return array_merge([
             'certificacion' => $fields['product_name'],
             'product_name' => $fields['product_name'],
@@ -819,6 +821,11 @@ final class ProviderRequestService
             'student_phone' => $fields['phone'],
             'exam_date' => $fields['exam_date'],
             'exam_time' => $fields['exam_time'],
+            'exam_venue' => $venueVars['exam_venue'],
+            'exam_city' => $venueVars['exam_city'],
+            'exam_address' => $venueVars['exam_address'],
+            'exam_venue_line' => $venueVars['exam_venue_line'],
+            'sede' => $venueVars['sede'],
             'reglamento_url' => $reglamentoUrl,
             'comprobante_url' => $comprobanteUrl,
             'pago_proveedor' => $comprobanteUrl,

@@ -939,6 +939,53 @@ final class ExamScheduleService
         return null;
     }
 
+    /**
+     * Placeholders de sede para correos (alumno y proveedor).
+     * Lee trackings.extra_json.exam_schedule (venue / city / address).
+     *
+     * @param array<string, mixed> $tracking
+     * @return array{
+     *   exam_venue: string,
+     *   exam_city: string,
+     *   exam_address: string,
+     *   exam_venue_line: string,
+     *   sede: string
+     * }
+     */
+    public static function mailVenueVarsFromTracking(array $tracking): array
+    {
+        $meta = self::examScheduleMetaFromTracking($tracking);
+        $venue = trim((string) ($meta['venue'] ?? ''));
+        $city = trim((string) ($meta['city'] ?? ''));
+        $address = trim((string) ($meta['address'] ?? ''));
+        $line = trim(implode(', ', array_filter([$venue, $city, $address], static fn ($v) => $v !== '')));
+
+        return [
+            'exam_venue' => $venue,
+            'exam_city' => $city,
+            'exam_address' => $address,
+            'exam_venue_line' => $line,
+            'sede' => $venue,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $tracking
+     * @return array<string, mixed>
+     */
+    public static function examScheduleMetaFromTracking(array $tracking): array
+    {
+        $extra = $tracking['extra_json'] ?? null;
+        if (is_string($extra) && $extra !== '') {
+            $decoded = json_decode($extra, true);
+            $extra = is_array($decoded) ? $decoded : [];
+        } elseif (!is_array($extra)) {
+            $extra = [];
+        }
+
+        return is_array($extra['exam_schedule'] ?? null) ? $extra['exam_schedule'] : [];
+    }
+
     private function parseClockOnDate(string $date, string $clock, bool $isEnd): ?\DateTimeImmutable
     {
         $clock = trim($clock);
