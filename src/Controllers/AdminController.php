@@ -1822,6 +1822,9 @@ final class AdminController
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
         }
+        if (!empty($_POST['return_ops'])) {
+            redirect('/admin' . $this->opsReturnQuery());
+        }
         $tid = $doc['tracking_id'] ?? null;
         redirect($tid ? '/admin/seguimientos/' . $tid : '/admin');
     }
@@ -1843,6 +1846,9 @@ final class AdminController
             );
         } catch (\Throwable $e) {
             flash('error', $e->getMessage());
+        }
+        if (!empty($_POST['return_ops'])) {
+            redirect('/admin' . $this->opsReturnQuery());
         }
         $tid = $doc['tracking_id'] ?? null;
         redirect($tid ? '/admin/seguimientos/' . $tid : '/admin');
