@@ -16,7 +16,10 @@ El check del formulario escribe la misma lista en el bucket correcto.
 
 ## Campos por documento
 
-- `code` → placeholder `{{doc_<code>_url}}` / `{{doc_<code>_label}}` (alias `{{ine_url}}`)
+- `code` → placeholders:
+  - `{{doc_<code>_url}}` → **URL firmada** (va en el `href` del enlace; alias `{{ine_url}}`)
+  - `{{doc_<code>_label}}` → **texto visible** del enlace (no usar como `href`)
+  - Ejemplo correcto: `<a href="{{doc_ine_url}}">{{doc_ine_label}}</a>`
 - `label`, `description`, `accept`, `required`
 - `include_in_provider_mail` → entra en `documentos_html` / `student_docs_html`
 - `require_for_provider_send` → el envío a proveedor falla si no hay versión **aprobada**
