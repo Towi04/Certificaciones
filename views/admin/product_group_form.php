@@ -895,7 +895,10 @@ $pageHeading = $isEdit
         <p class="muted" style="font-size:.82rem;margin:0 0 .75rem;max-width:42rem">
             Solo archivos que el alumno (o el partner) debe <strong>subir</strong>: INE, CURP, solicitud, constancia, etc.
             Define el código, la etiqueta y la descripción/instrucciones de cada uno.
-            Cada código genera <code>{{doc_&lt;código&gt;_url}}</code> en correos.
+            Cada código genera <code>{{doc_&lt;código&gt;_url}}</code> (enlace, va en el
+            <code>href</code>) y <code>{{doc_&lt;código&gt;_label}}</code> (texto visible)
+            en correos. Ejemplo:
+            <code>&lt;a href="{{doc_ine_url}}"&gt;{{doc_ine_label}}&lt;/a&gt;</code>.
             <br><strong>El reglamento no va aquí</strong>: se configura en la pestaña
             <a href="#rules" data-tab-jump="rules">Reglamento</a>
             (link + firma digital o PDF escaneado, como hasta ahora).
@@ -949,7 +952,10 @@ $pageHeading = $isEdit
                                    value="<?= e((string) ($sdRow['code'] ?? '')) ?>"
                                    placeholder="ine" pattern="[a-z0-9_\-]*"
                                    style="<?= e($inputStyle) ?>">
-                            <span class="muted" style="font-size:.72rem;font-weight:500">→ {{doc_<?= e((string) ($sdRow['code'] ?? 'codigo')) ?>_url}}</span>
+                            <span class="muted" style="font-size:.72rem;font-weight:500">
+                                → <code>{{doc_<?= e((string) ($sdRow['code'] ?? 'codigo')) ?>_url}}</code>
+                                · texto <code>{{doc_<?= e((string) ($sdRow['code'] ?? 'codigo')) ?>_label}}</code>
+                            </span>
                         </label>
                         <label class="muted" style="<?= e($labelStyle) ?>">
                             Etiqueta

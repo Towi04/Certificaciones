@@ -66,8 +66,8 @@ final class MailTemplateService
             'instruction_video_label' => 'Etiqueta del video de instrucciones',
             'instructions_html' => 'Bloque HTML compacto con todos los docs',
             'instruction_docs_html' => 'Lista HTML (<ul>) de todos los documentos/enlaces/videos',
-            'doc_*_url' => 'URL de un doc por código (ej. {{doc_temario_url}})',
-            'doc_*_label' => 'Etiqueta de un doc por código (ej. {{doc_temario_label}})',
+            'doc_*_url' => 'URL del doc (va en href): escribe {{doc_temario_url}}',
+            'doc_*_label' => 'Texto visible del enlace (NO va en href): {{doc_temario_label}}',
         ],
         'Documentos (enlaces)' => [
             'reglamento_url' => 'URL reglamento firmado',
@@ -76,8 +76,8 @@ final class MailTemplateService
             'workbook_url' => 'URL Excel del catálogo (elige la plantilla en la sección Excel abajo)',
             'documentos_html' => 'Lista HTML de enlaces a documentos',
             'student_docs_html' => 'Lista HTML de docs del alumno (aprobados)',
-            'doc_*_url' => 'URL firmada de un doc del alumno (ej. {{doc_ine_url}})',
-            'doc_*_label' => 'Etiqueta del doc del alumno (ej. {{doc_ine_label}})',
+            'doc_*_url' => 'URL firmada (va en href): escribe {{doc_ine_url}}',
+            'doc_*_label' => 'Texto del enlace (NO href): {{doc_ine_label}} — usa <a href="{{doc_ine_url}}">{{doc_ine_label}}</a>',
             'ine_url' => 'Alias de {{doc_ine_url}}',
             'attachment_note' => 'Nota: documentos por enlace (sin adjuntos)',
             'workbook_note' => 'Nota breve del Excel por enlace',
@@ -1204,6 +1204,8 @@ final class MailTemplateService
 
         // Editores a veces dejan el placeholder URL-encoded en el href.
         $template = self::decodeEncodedPlaceholdersInHrefs($template);
+        // href="{{doc_ine_label}}" (etiqueta) → href="{{doc_ine_url}}" (enlace real).
+        $template = self::rewriteMisplacedLabelHrefs($template);
         // Si el botón tiene href vacío/# y el texto es {{workbook_url}}, moverlo al href.
         $template = self::promoteUrlPlaceholdersIntoEmptyHrefs($template);
 
@@ -1260,6 +1262,27 @@ final class MailTemplateService
             'instruction_pdf_url',
             'instruction_video_url',
         ];
+    }
+
+    /**
+     * Corrige plantillas donde el href usó {{…_label}} en vez de {{…_url}}.
+     * Evita enlaces tipo http://INE%20o%20Pasaporte en clientes de correo.
+     */
+    public static function rewriteMisplacedLabelHrefs(string $html): string
+    {
+        return (string) preg_replace_callback(
+            '/\bhref\s*=\s*(["\'])\s*\{\{\s*([a-zA-Z0-9_\- ]+?)\s*\}\}\s*\1/iu',
+            static function (array $m): string {
+                $key = self::normalizePlaceholderKey($m[2]);
+                if ($key === '' || !str_ends_with($key, '_label')) {
+                    return $m[0];
+                }
+                $urlKey = substr($key, 0, -strlen('_label')) . '_url';
+
+                return 'href=' . $m[1] . '{{' . $urlKey . '}}' . $m[1];
+            },
+            $html
+        );
     }
 
     /** Decodifica %7B%7Bworkbook_url%7D%7D → {{workbook_url}} dentro de atributos href. */
@@ -1352,10 +1375,37 @@ final class MailTemplateService
                 $urlByKey[$key] = $val;
             }
         }
+        // Incluye {{doc_ine_url}} y cualquier otra *_url del envío.
+        foreach ($lookup as $key => $val) {
+            $key = (string) $key;
+            $val = trim((string) $val);
+            if (
+                str_ends_with($key, '_url')
+                && $val !== ''
+                && preg_match('#^https?://#i', $val) === 1
+            ) {
+                $urlByKey[$key] = $val;
+            }
+        }
+
+        /** @var array<string, string> $urlByLabelText */
+        $urlByLabelText = [];
+        foreach ($lookup as $key => $labelVal) {
+            $key = (string) $key;
+            if (!str_ends_with($key, '_label')) {
+                continue;
+            }
+            $urlKey = substr($key, 0, -strlen('_label')) . '_url';
+            $url = trim((string) ($urlByKey[$urlKey] ?? $lookup[$urlKey] ?? ''));
+            $labelText = trim((string) $labelVal);
+            if ($labelText !== '' && $url !== '' && preg_match('#^https?://#i', $url) === 1) {
+                $urlByLabelText[self::normalizeLooseLabel($labelText)] = $url;
+            }
+        }
 
         return (string) preg_replace_callback(
             '/<a\b([^>]*)>(.*?)<\/a>/is',
-            static function (array $m) use ($urlByKey): string {
+            static function (array $m) use ($urlByKey, $urlByLabelText, $lookup): string {
                 $attrs = $m[1];
                 $inner = $m[2];
                 $href = null;
@@ -1365,13 +1415,25 @@ final class MailTemplateService
                     $href = trim(html_entity_decode($hm[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
                 }
 
+                $labelHrefUrl = '';
+                if (
+                    is_string($href)
+                    && $href !== ''
+                    && !str_contains($href, '{{')
+                    && preg_match('#^https?://#i', $href) !== 1
+                ) {
+                    // href ya es el texto de una etiqueta (p. ej. "INE o Pasaporte").
+                    $labelHrefUrl = $urlByLabelText[self::normalizeLooseLabel($href)] ?? '';
+                }
+
                 $hrefBroken = $href === null
                     || $href === ''
                     || $href === '#'
                     || strcasecmp($href, 'about:blank') === 0
                     || str_starts_with($href, 'javascript:')
                     // Placeholder sin sustituir (vars no llegaron) → clientes quitan el <a>.
-                    || str_contains($href, '{{');
+                    || str_contains($href, '{{')
+                    || $labelHrefUrl !== '';
 
                 if (!$hrefBroken) {
                     return $m[0];
@@ -1380,10 +1442,17 @@ final class MailTemplateService
                 $text = trim(html_entity_decode(strip_tags($inner), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
                 $newHref = '';
 
+                // Caso 0: el href (o texto) coincide con un *_label → usar *_url.
+                if ($labelHrefUrl !== '') {
+                    $newHref = $labelHrefUrl;
+                } elseif (isset($urlByLabelText[self::normalizeLooseLabel($text)])) {
+                    $newHref = $urlByLabelText[self::normalizeLooseLabel($text)];
+                }
+
                 // Caso 1: el texto del botón YA es la URL absoluta.
-                if (preg_match('#^https?://\S+#i', $text) === 1) {
+                if ($newHref === '' && preg_match('#^https?://\S+#i', $text) === 1) {
                     $newHref = $text;
-                } else {
+                } elseif ($newHref === '') {
                     // Caso 2: etiquetar por texto del botón (Excel / comprobante / reglamento).
                     $lower = function_exists('mb_strtolower')
                         ? \mb_strtolower($text, 'UTF-8')
@@ -1426,6 +1495,17 @@ final class MailTemplateService
                         || str_contains($lower, 'sesion')
                     ) {
                         $candidates[] = 'login_url';
+                    }
+                    // Docs del alumno: ine / curp / pasaporte → doc_*_url si existe.
+                    foreach ($lookup as $key => $_val) {
+                        $key = (string) $key;
+                        if (!preg_match('/^doc_([a-z0-9_\-]+)_url$/u', $key, $dm)) {
+                            continue;
+                        }
+                        $code = $dm[1];
+                        if ($code !== '' && str_contains($lower, $code)) {
+                            $candidates[] = $key;
+                        }
                     }
                     foreach ($candidates as $key) {
                         if (isset($urlByKey[$key])) {
@@ -1572,6 +1652,19 @@ final class MailTemplateService
         $key = preg_replace('/_+/', '_', $key) ?? $key;
 
         return trim($key, '_');
+    }
+
+    /** Compara etiquetas de docs ignorando mayúsculas y espacios repetidos. */
+    public static function normalizeLooseLabel(string $label): string
+    {
+        $label = trim(html_entity_decode($label, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        $label = rawurldecode($label);
+        $label = function_exists('mb_strtolower')
+            ? \mb_strtolower($label, 'UTF-8')
+            : strtolower($label);
+        $label = preg_replace('/\s+/u', ' ', $label) ?? $label;
+
+        return trim($label);
     }
 
     public static function textFromHtml(string $html): string

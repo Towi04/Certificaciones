@@ -184,6 +184,10 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
             <p class="muted" style="font-size:.82rem;margin:0 0 .85rem">
                 Elige del catálogo e inserta en el asunto o el HTML (ej. <code>{{pago_proveedor}}</code>).
                 También puedes escribir la etiqueta a mano; al guardar se reconocen solas.
+                Para docs del alumno: el <strong>enlace</strong> es <code>{{doc_ine_url}}</code>
+                (va en el <code>href</code>); <code>{{doc_ine_label}}</code> es solo el
+                <strong>texto visible</strong>:
+                <code>&lt;a href="{{doc_ine_url}}"&gt;{{doc_ine_label}}&lt;/a&gt;</code>.
             </p>
 
             <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.55rem;align-items:end;margin-bottom:.85rem">
@@ -240,8 +244,10 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
                     Para la solicitud al proveedor, pon el placeholder en el
                     <strong>href</strong> del botón (no solo como texto suelto):
                     <code>&lt;a href="{{workbook_url}}"&gt;Formato de Inscripción&lt;/a&gt;</code>,
-                    <code>&lt;a href="{{pago_proveedor}}"&gt;Comprobante de pago&lt;/a&gt;</code>.
-                    También puedes usar <code>{{documentos_html}}</code>.
+                    <code>&lt;a href="{{pago_proveedor}}"&gt;Comprobante de pago&lt;/a&gt;</code>,
+                    <code>&lt;a href="{{doc_ine_url}}"&gt;{{doc_ine_label}}&lt;/a&gt;</code>.
+                    También puedes usar <code>{{documentos_html}}</code> /
+                    <code>{{student_docs_html}}</code>.
                     Si ves <code>{{workbook_url}}</code> literal en el correo, el envío
                     no pasó por la solicitud a proveedor (faltaron las URLs).
                 </p>
@@ -655,6 +661,10 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
     if (!item) return;
     var key = item.getAttribute('data-key') || '';
     if (!key) return;
+    // doc_*_url / doc_*_label del catálogo → ejemplo concreto (ine).
+    if (key.indexOf('*') !== -1) {
+      key = key.replace('*', 'ine');
+    }
     var tag = '{{' + key + '}}';
     var urlKeys = {
       workbook_url: 'Descargar Excel',
@@ -665,15 +675,24 @@ $formAction = $isNew ? url('/admin/correos/nueva') : url('/admin/correos/' . $te
       exam_url: 'Acceso al examen',
       results_url: 'Ver resultados',
       results_pdf_url: 'PDF de resultados',
-      moodle_url: 'Ir a Moodle'
+      moodle_url: 'Ir a Moodle',
+      ine_url: 'INE / identificación'
     };
     if (insertBtn.getAttribute('data-target') === 'subject') {
       insertAtCursor(subjectInput, tag);
-    } else if (urlKeys[key]) {
+    } else if (urlKeys[key] || /_url$/.test(key)) {
+      var linkLabel = urlKeys[key];
+      if (!linkLabel && /^doc_.+_url$/.test(key)) {
+        linkLabel = '{{' + key.replace(/_url$/, '_label') + '}}';
+      }
+      if (!linkLabel) linkLabel = 'Abrir enlace';
       var btnHtml = '<a href="' + tag + '" style="display:inline-block;padding:12px 18px;'
         + 'background:#315285;color:#ffffff;text-decoration:none;border-radius:8px;'
-        + 'font-weight:600">' + urlKeys[key] + '</a>';
+        + 'font-weight:600">' + linkLabel + '</a>';
       insertAtCursor(bodyInput, btnHtml);
+    } else if (/^doc_.+_label$/.test(key)) {
+      // Solo texto: no crear href con la etiqueta (rompe el enlace).
+      insertAtCursor(bodyInput, tag);
     } else {
       insertAtCursor(bodyInput, tag);
     }
