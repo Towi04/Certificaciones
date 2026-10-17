@@ -24,7 +24,7 @@ final class AdminOpsBoardService
     /** Texto corto bajo el título de Operaciones (antes de pestañas/filtro). */
     public const VIEW_HINTS = [
         'action' => 'Casos que requieren acción tuya: pago por confirmar, solicitud a proveedor pendiente o accesos incompletos.',
-        'docs' => 'Casos con documentos del alumno en revisión (pending). Ábrelo y aprueba o rechaza.',
+        'docs' => 'Casos con documentos del alumno en revisión. Usa el botón de documento para verlos y aprobar/rechazar en el popup.',
         'provider' => 'Pagados con solicitud al proveedor pendiente de enviar (p. ej. UKS / Lingua Franca).',
         'access' => 'Exámenes ELeT pagados: captura o revisa folio y clave del día.',
         'exams' => 'Exámenes de hoy a 21 días. Semáforo: rojo = hoy, ámbar = mañana, verde = posteriores.',
@@ -314,17 +314,57 @@ final class AdminOpsBoardService
         // Campo extra (Zoom / ID escuela / código curso…): por config del grupo, heurística TOEFL, o ya hay valor.
         $row['show_zoom_fields'] = $captureZoom || $zoomUrl !== '';
         $row['extra_field_label'] = $extraLabel;
-        $docsPending = 0;
+        $pendingDocs = [];
         try {
+            $tid = (int) ($row['id'] ?? 0);
+            $labelByCode = [];
+            try {
+                $productForDocs = [
+                    'type' => $row['product_type'] ?? '',
+                    'config_json' => $row['config_json'] ?? null,
+                    'group_config_json' => $row['group_config_json'] ?? null,
+                ];
+                foreach (CheckoutRequirements::studentDocsForProduct($productForDocs) as $req) {
+                    $code = trim((string) ($req['code'] ?? ''));
+                    if ($code !== '') {
+                        $labelByCode[$code] = (string) ($req['label'] ?? $code);
+                    }
+                }
+            } catch (\Throwable) {
+                $labelByCode = [];
+            }
             $dstmt = $this->pdo->prepare(
-                "SELECT COUNT(*) FROM documents WHERE tracking_id = ? AND status = 'pending'"
+                "SELECT id, doc_type, original_name, status
+                 FROM documents
+                 WHERE tracking_id = ? AND status = 'pending'
+                 ORDER BY id ASC"
             );
-            $dstmt->execute([(int) ($row['id'] ?? 0)]);
-            $docsPending = (int) $dstmt->fetchColumn();
+            $dstmt->execute([$tid]);
+            foreach ($dstmt->fetchAll() ?: [] as $docRow) {
+                if (!is_array($docRow)) {
+                    continue;
+                }
+                $docId = (int) ($docRow['id'] ?? 0);
+                if ($docId < 1) {
+                    continue;
+                }
+                $code = trim((string) ($docRow['doc_type'] ?? ''));
+                $pendingDocs[] = [
+                    'id' => $docId,
+                    'doc_type' => $code,
+                    'label' => $labelByCode[$code] ?? ($code !== '' ? strtoupper($code) : 'Documento'),
+                    'original_name' => (string) ($docRow['original_name'] ?? 'documento'),
+                    'view_url' => '/admin/documentos/' . $docId . '/ver',
+                    'approve_url' => '/admin/documentos/' . $docId . '/aprobar',
+                    'reject_url' => '/admin/documentos/' . $docId . '/rechazar',
+                ];
+            }
         } catch (\Throwable) {
-            $docsPending = 0;
+            $pendingDocs = [];
         }
+        $docsPending = count($pendingDocs);
         $row['docs_pending_count'] = $docsPending;
+        $row['pending_docs'] = $pendingDocs;
         $row['needs_action'] = $pendingOps > 0
             || (string) ($row['tracking_status'] ?? '') === 'waiting_admin'
             || $docsPending > 0;

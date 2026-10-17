@@ -683,7 +683,47 @@ $extraColHeader = count($extraColLabels) === 1
                                 </form>
                             <?php endif; ?>
 
-                            <?php if ($opsButtons === []): ?>
+                            <?php
+                            $pendingDocs = is_array($r['pending_docs'] ?? null) ? $r['pending_docs'] : [];
+                            $docsPendingCount = (int) ($r['docs_pending_count'] ?? count($pendingDocs));
+                            if ($pendingDocs !== []):
+                                $docsPayload = [];
+                                foreach ($pendingDocs as $pd) {
+                                    if (!is_array($pd)) {
+                                        continue;
+                                    }
+                                    $docId = (int) ($pd['id'] ?? 0);
+                                    if ($docId < 1) {
+                                        continue;
+                                    }
+                                    $docsPayload[] = [
+                                        'id' => $docId,
+                                        'label' => (string) ($pd['label'] ?? $pd['doc_type'] ?? 'Documento'),
+                                        'name' => (string) ($pd['original_name'] ?? ''),
+                                        'view_url' => url('/admin/documentos/' . $docId . '/ver'),
+                                        'approve_url' => url('/admin/documentos/' . $docId . '/aprobar'),
+                                        'reject_url' => url('/admin/documentos/' . $docId . '/rechazar'),
+                                    ];
+                                }
+                                ?>
+                                <button type="button"
+                                        class="ops-icon-btn ops-icon-btn--pending ops-approve-docs-btn"
+                                        data-docs="<?= e(json_encode($docsPayload, JSON_UNESCAPED_UNICODE)) ?>"
+                                        data-return-view="<?= e($view) ?>"
+                                        data-return-q="<?= e($q) ?>"
+                                        data-csrf="<?= e(csrf_token()) ?>"
+                                        data-title="<?= e('Aprobar documentos · ' . (string) ($r['matricula'] ?? '')) ?>"
+                                        title="Aprobar documentos del alumno (<?= (int) $docsPendingCount ?>)"
+                                        aria-label="Aprobar documentos pendientes">
+                                    <?= icon('document') ?>
+                                    <span class="ops-status-badge ops-status-badge--pending" title="Pendiente de aprobar"><?= icon('clock') ?></span>
+                                    <?php if ($docsPendingCount > 1): ?>
+                                        <span class="ops-reschedule-count" aria-label="<?= (int) $docsPendingCount ?> documentos"><?= (int) $docsPendingCount ?></span>
+                                    <?php endif; ?>
+                                </button>
+                            <?php endif; ?>
+
+                            <?php if ($opsButtons === [] && $pendingDocs === []): ?>
                                 <span class="ops-flag ops-flag--ok">Al día</span>
                             <?php endif; ?>
                         </td>
@@ -720,10 +760,12 @@ $extraColHeader = count($extraColLabels) === 1
                             <div class="muted" style="font-size:.72rem"><?= e((string) ($r['tracking_status'] ?? '')) ?></div>
                             <?php if ((int) ($r['docs_pending_count'] ?? 0) > 0): ?>
                                 <div style="margin-top:.25rem">
-                                    <span class="pill" style="background:#fff4d6;color:#92400e;font-size:.72rem"
-                                          title="Documentos del alumno pendientes de aprobar">
+                                    <button type="button" class="pill ops-docs-pill-btn"
+                                            style="background:#fff4d6;color:#92400e;font-size:.72rem;border:0;cursor:pointer;padding:.2rem .45rem;border-radius:999px"
+                                            title="Abrir documentos pendientes de aprobar"
+                                            data-docs-for-tid="<?= (int) $tid ?>">
                                         Docs ×<?= (int) $r['docs_pending_count'] ?>
-                                    </span>
+                                    </button>
                                 </div>
                             <?php endif; ?>
                         </td>
@@ -1243,6 +1285,50 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
     </div>
 </div>
 
+<div class="ops-proof-modal" id="ops-docs-modal" hidden>
+    <button type="button" class="ops-proof-backdrop" id="ops-docs-backdrop" aria-label="Cerrar"></button>
+    <div class="ops-proof-dialog" role="dialog" aria-modal="true" aria-labelledby="ops-docs-title">
+        <div class="ops-proof-head">
+            <strong id="ops-docs-title">Aprobar documento</strong>
+            <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+                <span class="muted" id="ops-docs-counter" style="font-size:.82rem"></span>
+                <a class="btn btn-ghost btn-sm" id="ops-docs-open" href="#" target="_blank" rel="noopener">Abrir en pestaña</a>
+                <button type="button" class="btn btn-primary btn-sm" id="ops-docs-close">Cerrar</button>
+            </div>
+        </div>
+        <div class="ops-proof-body">
+            <iframe class="ops-proof-frame" id="ops-docs-frame" title="Vista del documento"></iframe>
+            <div class="ops-proof-empty" id="ops-docs-empty" hidden>
+                No hay documento para mostrar.
+            </div>
+        </div>
+        <div class="ops-proof-confirm" style="display:flex;flex-direction:column;gap:.65rem">
+            <div style="display:flex;gap:.45rem;flex-wrap:wrap;align-items:center;justify-content:space-between">
+                <div style="display:flex;gap:.35rem">
+                    <button type="button" class="btn btn-ghost btn-sm" id="ops-docs-prev" hidden>← Anterior</button>
+                    <button type="button" class="btn btn-ghost btn-sm" id="ops-docs-next" hidden>Siguiente →</button>
+                </div>
+                <form method="post" id="ops-docs-approve" style="display:inline">
+                    <input type="hidden" name="_csrf" id="ops-docs-approve-csrf" value="">
+                    <input type="hidden" name="return_ops" value="1">
+                    <input type="hidden" name="return_view" id="ops-docs-approve-return-view" value="">
+                    <input type="hidden" name="return_q" id="ops-docs-approve-return-q" value="">
+                    <button type="submit" class="btn btn-accent" id="ops-docs-approve-btn">Aprobar</button>
+                </form>
+            </div>
+            <form method="post" id="ops-docs-reject" style="display:flex;gap:.45rem;flex-wrap:wrap;align-items:center">
+                <input type="hidden" name="_csrf" id="ops-docs-reject-csrf" value="">
+                <input type="hidden" name="return_ops" value="1">
+                <input type="hidden" name="return_view" id="ops-docs-reject-return-view" value="">
+                <input type="hidden" name="return_q" id="ops-docs-reject-return-q" value="">
+                <input type="text" name="reason" id="ops-docs-reject-reason" required
+                       placeholder="Motivo de rechazo" style="flex:1;min-width:12rem;padding:.45rem .65rem;border:1px solid #cfd8e6;border-radius:8px;font:inherit">
+                <button type="submit" class="btn btn-ghost">Rechazar</button>
+            </form>
+        </div>
+    </div>
+</div>
+
 <div class="ops-reschedule-modal" id="ops-reschedule-modal" hidden>
     <button type="button" class="ops-reschedule-backdrop" id="ops-reschedule-backdrop" aria-label="Cerrar"></button>
     <div class="ops-reschedule-dialog" role="dialog" aria-modal="true" aria-labelledby="ops-reschedule-title">
@@ -1640,6 +1726,132 @@ details.ops-collect-details > summary.ops-icon-btn::-webkit-details-marker { dis
   });
   proofClose && proofClose.addEventListener('click', closeProof);
   proofBackdrop && proofBackdrop.addEventListener('click', closeProof);
+
+  var docsModal = document.getElementById('ops-docs-modal');
+  var docsFrame = document.getElementById('ops-docs-frame');
+  var docsEmpty = document.getElementById('ops-docs-empty');
+  var docsTitle = document.getElementById('ops-docs-title');
+  var docsCounter = document.getElementById('ops-docs-counter');
+  var docsOpen = document.getElementById('ops-docs-open');
+  var docsClose = document.getElementById('ops-docs-close');
+  var docsBackdrop = document.getElementById('ops-docs-backdrop');
+  var docsPrev = document.getElementById('ops-docs-prev');
+  var docsNext = document.getElementById('ops-docs-next');
+  var docsApprove = document.getElementById('ops-docs-approve');
+  var docsReject = document.getElementById('ops-docs-reject');
+  var docsApproveCsrf = document.getElementById('ops-docs-approve-csrf');
+  var docsRejectCsrf = document.getElementById('ops-docs-reject-csrf');
+  var docsApproveReturnView = document.getElementById('ops-docs-approve-return-view');
+  var docsApproveReturnQ = document.getElementById('ops-docs-approve-return-q');
+  var docsRejectReturnView = document.getElementById('ops-docs-reject-return-view');
+  var docsRejectReturnQ = document.getElementById('ops-docs-reject-return-q');
+  var docsRejectReason = document.getElementById('ops-docs-reject-reason');
+  var docsState = { list: [], index: 0, csrf: '', returnView: '', returnQ: '' };
+
+  function closeDocsModal() {
+    if (!docsModal) return;
+    docsModal.hidden = true;
+    if (docsFrame) docsFrame.removeAttribute('src');
+  }
+
+  function renderDocsModal() {
+    if (!docsModal || !docsState.list.length) {
+      closeDocsModal();
+      return;
+    }
+    var doc = docsState.list[docsState.index] || docsState.list[0];
+    var label = (doc && doc.label) ? String(doc.label) : 'Documento';
+    var name = (doc && doc.name) ? String(doc.name) : '';
+    var viewUrl = (doc && doc.view_url) ? String(doc.view_url) : '';
+    var approveUrl = (doc && doc.approve_url) ? String(doc.approve_url) : '';
+    var rejectUrl = (doc && doc.reject_url) ? String(doc.reject_url) : '';
+
+    if (docsTitle) {
+      docsTitle.textContent = label + (name ? (' · ' + name) : '');
+    }
+    if (docsCounter) {
+      docsCounter.textContent = docsState.list.length > 1
+        ? ((docsState.index + 1) + ' / ' + docsState.list.length)
+        : '';
+    }
+    if (docsOpen) {
+      docsOpen.href = viewUrl || '#';
+      docsOpen.hidden = !viewUrl;
+    }
+    if (docsFrame && docsEmpty) {
+      if (viewUrl) {
+        docsFrame.hidden = false;
+        docsEmpty.hidden = true;
+        docsFrame.src = viewUrl;
+      } else {
+        docsFrame.hidden = true;
+        docsFrame.removeAttribute('src');
+        docsEmpty.hidden = false;
+      }
+    }
+    if (docsApprove) docsApprove.action = approveUrl;
+    if (docsReject) docsReject.action = rejectUrl;
+    if (docsApproveCsrf) docsApproveCsrf.value = docsState.csrf || '';
+    if (docsRejectCsrf) docsRejectCsrf.value = docsState.csrf || '';
+    if (docsApproveReturnView) docsApproveReturnView.value = docsState.returnView || '';
+    if (docsApproveReturnQ) docsApproveReturnQ.value = docsState.returnQ || '';
+    if (docsRejectReturnView) docsRejectReturnView.value = docsState.returnView || '';
+    if (docsRejectReturnQ) docsRejectReturnQ.value = docsState.returnQ || '';
+    if (docsRejectReason) docsRejectReason.value = '';
+    if (docsPrev) docsPrev.hidden = docsState.list.length < 2 || docsState.index <= 0;
+    if (docsNext) docsNext.hidden = docsState.list.length < 2 || docsState.index >= docsState.list.length - 1;
+    docsModal.hidden = false;
+  }
+
+  function openDocsModal(btn) {
+    if (!docsModal || !btn) return;
+    var raw = btn.getAttribute('data-docs') || '[]';
+    var list = [];
+    try {
+      list = JSON.parse(raw);
+    } catch (e) {
+      list = [];
+    }
+    if (!Array.isArray(list) || list.length === 0) return;
+    docsState.list = list;
+    docsState.index = 0;
+    docsState.csrf = btn.getAttribute('data-csrf') || '';
+    docsState.returnView = btn.getAttribute('data-return-view') || '';
+    docsState.returnQ = btn.getAttribute('data-return-q') || '';
+    if (docsTitle && btn.getAttribute('data-title')) {
+      // title is refreshed per-doc in renderDocsModal
+    }
+    renderDocsModal();
+  }
+
+  document.querySelectorAll('.ops-approve-docs-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      openDocsModal(btn);
+    });
+  });
+  document.querySelectorAll('.ops-docs-pill-btn').forEach(function (pill) {
+    pill.addEventListener('click', function () {
+      var tid = pill.getAttribute('data-docs-for-tid') || '';
+      var rowBtn = tid
+        ? document.querySelector('tr[data-tracking-id="' + tid + '"] .ops-approve-docs-btn')
+        : null;
+      if (rowBtn) openDocsModal(rowBtn);
+    });
+  });
+  docsClose && docsClose.addEventListener('click', closeDocsModal);
+  docsBackdrop && docsBackdrop.addEventListener('click', closeDocsModal);
+  docsPrev && docsPrev.addEventListener('click', function () {
+    if (docsState.index > 0) {
+      docsState.index -= 1;
+      renderDocsModal();
+    }
+  });
+  docsNext && docsNext.addEventListener('click', function () {
+    if (docsState.index < docsState.list.length - 1) {
+      docsState.index += 1;
+      renderDocsModal();
+    }
+  });
 
   var rescheduleModal = document.getElementById('ops-reschedule-modal');
   var rescheduleForm = document.getElementById('ops-reschedule-form');
