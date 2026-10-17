@@ -24,6 +24,8 @@ Siempre se guarda en `trackings.exam_date` / `exam_time` (placeholders `{{exam_d
 - API: `GET /api/examen-slots/{slug}?venue_id=…` filtra sesiones; sin `venue_id` lista sedes.
 - Al comprar se guarda la sede en `trackings.extra_json.exam_schedule`
   (placeholders `{{exam_venue}}`, `{{exam_city}}`, `{{exam_address}}`, `{{exam_venue_line}}`).
+  Esos placeholders se rellenan en correos al alumno (`StepMailService`) y al proveedor
+  (`ProviderRequestService`) vía `ExamScheduleService::mailVenueVarsFromTracking`.
 
 ### `venue_schedules` (UKS / sedes con regla propia)
 - Lista `venues[]`; cada sede tiene `rule.type`:
