@@ -11,6 +11,24 @@ ADMIN_EMAIL=tu@correo.com
 ADMIN_PASSWORD=tu-password-admin
 ```
 
+### Telegram (aviso al celular al adquirir)
+
+Cuando un alumno completa el checkout se puede enviar un mensaje al bot de Telegram
+(no al confirmar el pago). En el `.env` del servidor:
+
+```env
+TELEGRAM_BOT_TOKEN=123456:ABC...
+TELEGRAM_CHAT_ID=123456789
+TELEGRAM_ENABLED=true
+```
+
+1. Crea el bot con [@BotFather](https://t.me/BotFather) y copia el token.
+2. Ábrele un chat (p. ej. `@notificaciones_doceo_bot`) y envía `/start` al menos una vez.
+3. Obtén tu `chat_id` (p. ej. con `@userinfobot` o la API `getUpdates`).
+4. Pon token y chat id **solo** en el `.env` del servidor (nunca en Git).
+
+Si faltan token/chat o `TELEGRAM_ENABLED=false`, el aviso se omite sin afectar la compra.
+
 ## 2) Instalar por navegador (no uses `bin/*.php`)
 
 Los archivos en `bin/` son solo para CLI. En hosting compartido **no se ejecutan** al abrirlos en el explorador.
