@@ -1936,10 +1936,13 @@ final class ProductAdminService
                 'provider_validity_months' => max(1, (int) ($input['inventory_provider_months'] ?? 12)),
                 'reallocate_enabled' => !empty($input['inventory_reallocate_enabled']),
                 'reallocate_min_future_days' => max(1, (int) ($input['inventory_reallocate_min_future_days'] ?? 14)),
-                // Acceso/resultados se definen en Progreso; se conservan defaults internos si ya existían.
-                'access_mail_template' => trim((string) ($prevInv['access_mail_template'] ?? ''))
+                'access_mail_template' => trim((string) ($input['inventory_access_mail_template']
+                    ?? $prevInv['access_mail_template']
+                    ?? ''))
                     ?: 'student_inventory_exam_access',
-                'results_mail_template' => trim((string) ($prevInv['results_mail_template'] ?? ''))
+                'results_mail_template' => trim((string) ($input['inventory_results_mail_template']
+                    ?? $prevInv['results_mail_template']
+                    ?? ''))
                     ?: 'student_results_cenni',
                 'low_stock_mail_template' => trim((string) ($input['inventory_low_stock_mail_template'] ?? '')),
             ];
