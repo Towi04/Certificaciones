@@ -30,6 +30,14 @@ final class CardMsiCalculator
      */
     public static function configForProduct(array $product): array
     {
+        // Paquetes: PricingService adjunta el merge de sus productos.
+        if (isset($product['_card_msi']) && is_array($product['_card_msi'])) {
+            return self::normalizeConfig(
+                $product['_card_msi'],
+                (string) ($product['type'] ?? 'certification')
+            );
+        }
+
         $cfg = [];
         $decoded = CheckoutRequirements::config($product);
         if (isset($decoded['card_msi']) && is_array($decoded['card_msi'])) {
@@ -39,7 +47,89 @@ final class CardMsiCalculator
             $cfg = $decoded['deferred'];
         }
 
-        $type = (string) ($product['type'] ?? '');
+        return self::normalizeConfig($cfg, (string) ($product['type'] ?? ''));
+    }
+
+    /**
+     * MSI de un paquete = unión de certificaciones/trámites con MSI activo
+     * (intersección de meses). Los cursos u otros con MSI apagado no lo bloquean.
+     *
+     * @param list<array<string, mixed>> $products
+     * @return array{enabled:bool,months:list<int>,min_amount:float}
+     */
+    public static function configFromProducts(array $products): array
+    {
+        $enabledCfgs = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $type = (string) ($product['type'] ?? '');
+            // Solo certificaciones/trámites definen MSI del paquete.
+            if (!in_array($type, ['certification', 'procedure'], true)) {
+                continue;
+            }
+            $cfg = self::configForProduct($product);
+            if (!$cfg['enabled']) {
+                continue;
+            }
+            $enabledCfgs[] = $cfg;
+        }
+
+        if ($enabledCfgs === []) {
+            return [
+                'enabled' => false,
+                'months' => [1],
+                'min_amount' => 0.0,
+            ];
+        }
+
+        $months = $enabledCfgs[0]['months'];
+        $minAmount = $enabledCfgs[0]['min_amount'];
+        for ($i = 1, $n = count($enabledCfgs); $i < $n; $i++) {
+            $months = array_values(array_intersect($months, $enabledCfgs[$i]['months']));
+            $minAmount = max($minAmount, $enabledCfgs[$i]['min_amount']);
+        }
+        if ($months === []) {
+            $months = self::DEFAULT_MONTHS;
+        }
+        if (!in_array(1, $months, true)) {
+            $months[] = 1;
+        }
+        $months = array_values(array_unique(array_map('intval', $months)));
+        sort($months);
+
+        return [
+            'enabled' => true,
+            'months' => $months,
+            'min_amount' => round($minAmount, 2),
+        ];
+    }
+
+    /**
+     * Adjunta MSI resuelto al combo para quote/checkout.
+     *
+     * @param array<string, mixed> $combo
+     * @param list<array<string, mixed>> $products
+     * @return array<string, mixed>
+     */
+    public static function attachComboMsi(array $combo, array $products): array
+    {
+        $combo['_card_msi'] = self::configFromProducts($products);
+        // Para defaults de enabled si alguien lee type.
+        if (!isset($combo['type']) || trim((string) $combo['type']) === '') {
+            $combo['type'] = 'certification';
+        }
+
+        return $combo;
+    }
+
+    /**
+     * @param array<string, mixed> $cfg
+     * @return array{enabled:bool,months:list<int>,min_amount:float}
+     */
+    public static function normalizeConfig(array $cfg, string $type = ''): array
+    {
         $enabledDefault = in_array($type, ['certification', 'procedure'], true);
 
         $months = self::DEFAULT_MONTHS;

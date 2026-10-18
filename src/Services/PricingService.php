@@ -163,6 +163,13 @@ final class PricingService
             }
         }
 
+        // Los combos no tienen group_config_json: MSI se hereda de certificaciones/trámites.
+        if (!isset($combo['_card_msi'])) {
+            $comboId = (int) ($combo['id'] ?? 0);
+            $items = $comboId > 0 ? (new \App\Repositories\ComboRepository())->items($comboId) : [];
+            $combo = CardMsiCalculator::attachComboMsi($combo, $items);
+        }
+
         return $this->quoteProduct($combo, $code !== '' ? $code : null);
     }
 

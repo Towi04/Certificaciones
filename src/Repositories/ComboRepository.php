@@ -113,9 +113,12 @@ final class ComboRepository
     public function items(int $comboId): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT p.*, ci.sort_order
+            'SELECT p.*,
+                    pg.config_json AS group_config_json,
+                    ci.sort_order
              FROM combo_items ci
              INNER JOIN products p ON p.id = ci.product_id
+             LEFT JOIN product_groups pg ON pg.id = p.product_group_id
              WHERE ci.combo_id = ?
              ORDER BY ci.sort_order ASC, p.name ASC'
         );
@@ -136,9 +139,12 @@ final class ComboRepository
         }
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $stmt = $this->pdo->prepare(
-            "SELECT ci.combo_id, p.*, ci.sort_order
+            "SELECT ci.combo_id, p.*,
+                    pg.config_json AS group_config_json,
+                    ci.sort_order
              FROM combo_items ci
              INNER JOIN products p ON p.id = ci.product_id
+             LEFT JOIN product_groups pg ON pg.id = p.product_group_id
              WHERE ci.combo_id IN ({$placeholders})
              ORDER BY ci.combo_id ASC, ci.sort_order ASC, p.name ASC"
         );
