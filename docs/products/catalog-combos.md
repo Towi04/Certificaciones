@@ -51,12 +51,33 @@ ALTER TABLE combos
 | 3 Ficha `/paquete/{slug}` | Lista (pulido visual + SEO) |
 | 4 Checkout CTA + QA | Lista (CLI lógica; checklist staging abajo) |
 
+## Checkout: upsell a paquete a mitad del registro
+
+El wizard de `/adquirir/{slug}` ofrece combos en el paso **Paquete** (después de
+datos / reglamento / docs / agenda del producto ancla). Si el alumno convierte un
+curso de preparación (pocos campos) en un paquete que incluye certificación:
+
+1. El cliente pide `GET /api/checkout-requisitos/{slug}?combo_id=` (o usa el mapa
+   embebido al cargar la página).
+2. Se calcula la **unión** de campos, docs, reglamento y agenda de los ítems del
+   combo (`CheckoutRequirements::requirementsForCheckout`).
+3. Aparecen pasos faltantes **después de Paquete y antes de Pago**
+   (`datos_extra`, reglamento, documentos, agenda según aplique).
+4. El submit valida contra esa misma unión (no solo el ancla).
+
+Sin combo seleccionado vuelve a los requisitos del producto inicial.
+
+```bash
+php bin/combo-checkout-requirements-qa.php
+```
+
 ## QA Fase 4
 
 ### Automático (sin BD)
 
 ```bash
 php bin/catalog-combos-qa.php
+php bin/combo-checkout-requirements-qa.php
 ```
 
 Valida rutas/UI, `ComboCatalogPresenter` (overrides vs fallback), ahorro/CTA,
@@ -70,3 +91,6 @@ columna partner y migración. Con `.env` + BD también cuenta combos públicos.
 - [ ] Partner `/partner/registrar?seccion=combos` con precio de nivel
 - [ ] CTA ficha → `/adquirir/{cert}?combo_id=` preselecciona el paquete
 - [ ] Tabs responsive (mobile): Certificaciones | Cursos | Combos
+- [ ] Prep (solo nombre/correo/tel) → elige paquete con certificación → pide
+      sexo/nacionalidad/nacimiento (+ reglamento/INE/agenda si aplica) antes de pagar
+- [ ] Volver a “solo producto” en Paquete → desaparecen los pasos extras
