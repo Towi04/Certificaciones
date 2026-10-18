@@ -41,14 +41,38 @@ $referralPromo = !$isPartnerCheckout
     ? strtoupper(trim((string) ($referralPromo ?? '')))
     : '';
 $docs = is_array($docs ?? null) ? $docs : [];
+$baseRequirements = is_array($baseRequirements ?? null) ? $baseRequirements : [
+    'fields' => \App\Services\CheckoutRequirements::fieldsForProduct($product),
+    'docs' => [],
+    'reglamento' => null,
+    'needs_exam' => false,
+    'exam_product_id' => null,
+    'exam_product_slug' => null,
+];
+$maxRequirements = is_array($maxRequirements ?? null) ? $maxRequirements : $baseRequirements;
+$comboRequirements = is_array($comboRequirements ?? null) ? $comboRequirements : [];
+$baseFieldCodes = is_array($baseFieldCodes ?? null)
+    ? $baseFieldCodes
+    : array_column($baseRequirements['fields'] ?? [], 'code');
+$baseDocCodes = is_array($baseDocCodes ?? null)
+    ? $baseDocCodes
+    : array_column($baseRequirements['docs'] ?? [], 'code');
+$baseHasReglamento = !empty($baseRequirements['reglamento']);
+$baseNeedsExam = !empty($baseRequirements['needs_exam']);
+$baseHasDocs = ($baseRequirements['docs'] ?? []) !== [];
+$maxHasReglamento = !empty($reglamento) || !empty($maxRequirements['reglamento']);
+$maxHasDocs = $docs !== [];
+$maxNeedsExam = !empty($needsExam);
+
+// Pasos iniciales = solo ancla. El JS inserta huecos al elegir paquete.
 $wizardSteps = ['datos'];
-if (!empty($reglamento)) {
+if ($baseHasReglamento) {
     $wizardSteps[] = 'reglamento';
 }
-if ($docs !== []) {
+if ($baseHasDocs) {
     $wizardSteps[] = 'documentos';
 }
-if ($needsExam) {
+if ($baseNeedsExam) {
     $wizardSteps[] = 'agenda';
 }
 if ($hasComboOffers) {
@@ -59,6 +83,7 @@ $wizardSteps[] = 'confirmar';
 
 $stepLabels = [
     'datos' => 'Datos',
+    'datos_extra' => 'Datos extra',
     'reglamento' => 'Reglamento',
     'documentos' => 'Documentos',
     'agenda' => 'Agenda',
@@ -66,6 +91,7 @@ $stepLabels = [
     'pago' => 'Pago',
     'confirmar' => 'Confirmar',
 ];
+$examProduct = is_array($examProduct ?? null) ? $examProduct : $product;
 ?>
 <div class="checkout-page">
     <?php if ($isPartnerCheckout): ?>
@@ -81,7 +107,7 @@ $stepLabels = [
 
     <div class="checkout-layout">
         <div class="checkout-main">
-            <nav class="checkout-timeline" aria-label="Pasos del registro">
+            <nav class="checkout-timeline" id="checkout-timeline" aria-label="Pasos del registro">
                 <?php foreach ($wizardSteps as $i => $code): ?>
                     <button type="button" class="timeline-step<?= $i === 0 ? ' active' : '' ?>" data-goto="<?= e($code) ?>" disabled>
                         <span class="timeline-num"><?= $i + 1 ?></span>
@@ -116,12 +142,14 @@ $stepLabels = [
                         Registra tu información <strong>tal cual debe aparecer en tu certificado</strong>
                         (nombres y apellidos sin abreviar, sin errores ortográficos).
                     </div>
-                    <div class="form-grid">
+                    <div class="form-grid" id="checkout-fields-base">
                         <?php foreach ($fields as $field): ?>
                             <?php
                             $code = $field['code'];
                             $val = $prefill[$code] ?? '';
-                            $req = !empty($field['required']);
+                            $inBase = in_array($code, $baseFieldCodes, true);
+                            $req = $inBase && !empty($field['required']);
+                            $fieldRequiredFlag = !empty($field['required']) ? '1' : '0';
                             ?>
                             <?php if (($field['type'] ?? '') === 'select'): ?>
                                 <?php
@@ -140,8 +168,9 @@ $stepLabels = [
                                     $selected = 'México';
                                 }
                                 ?>
-                                <label><?= e($field['label']) ?><?= $req ? ' *' : '' ?>
-                                    <select name="<?= e($code) ?>" <?= $req ? 'required' : '' ?>>
+                                <label class="checkout-field" data-field-code="<?= e($code) ?>" data-field-required="<?= e($fieldRequiredFlag) ?>" data-in-base="<?= $inBase ? '1' : '0' ?>" <?= $inBase ? '' : 'hidden' ?>>
+                                    <span class="checkout-field-label"><?= e($field['label']) ?><?= $req ? ' *' : '' ?></span>
+                                    <select name="<?= e($code) ?>" <?= $req ? 'required' : '' ?> <?= $inBase ? '' : 'disabled' ?>>
                                         <option value="">— Selecciona —</option>
                                         <?php foreach ($options as $opt): ?>
                                             <?php
@@ -160,9 +189,11 @@ $stepLabels = [
                                     <?php endif; ?>
                                 </label>
                             <?php else: ?>
-                                <label><?= e($field['label']) ?><?= $req ? ' *' : '' ?>
+                                <label class="checkout-field" data-field-code="<?= e($code) ?>" data-field-required="<?= e($fieldRequiredFlag) ?>" data-in-base="<?= $inBase ? '1' : '0' ?>" <?= $inBase ? '' : 'hidden' ?>>
+                                    <span class="checkout-field-label"><?= e($field['label']) ?><?= $req ? ' *' : '' ?></span>
                                     <input type="<?= e($field['type']) ?>" name="<?= e($code) ?>" value="<?= e((string) $val) ?>"
                                         <?= $req ? 'required' : '' ?>
+                                        <?= $inBase ? '' : 'disabled' ?>
                                         <?= $code === 'email' ? 'autocomplete="email"' : '' ?>
                                         <?= $code === 'phone' ? 'autocomplete="tel"' : '' ?>>
                                 </label>
@@ -171,16 +202,55 @@ $stepLabels = [
                     </div>
                 </div>
 
-                <?php if (!empty($reglamento)): ?>
+                <div class="wizard-step" data-step="datos_extra" hidden>
+                    <h2 class="step-title">Datos adicionales del paquete</h2>
+                    <div class="callout callout-info">
+                        Al elegir el paquete se requieren estos datos extras para la certificación o trámite incluido.
+                    </div>
+                    <div class="form-grid" id="checkout-fields-extra"></div>
+                </div>
+
+                <?php if ($maxHasReglamento && !empty($reglamento)): ?>
                     <div class="wizard-step" data-step="reglamento" hidden>
                         <h2 class="step-title">Reglamento del examen</h2>
                         <?php require BASE_PATH . '/views/checkout/_reglamento_signature.php'; ?>
                     </div>
                 <?php endif; ?>
 
-                <?php if ($needsExam): ?>
+                <?php if ($maxHasDocs): ?>
+                    <div class="wizard-step" data-step="documentos" hidden>
+                        <h2 class="step-title">Documentos requeridos</h2>
+                        <p class="muted" style="font-size:.88rem;margin-top:0">
+                            Sube los archivos solicitados para continuar con el registro.
+                        </p>
+                        <div class="form-grid" style="max-width:560px" id="checkout-docs-grid">
+                            <?php foreach ($docs as $doc): ?>
+                                <?php
+                                $docCode = (string) ($doc['code'] ?? '');
+                                $docInBase = in_array($docCode, $baseDocCodes, true);
+                                $docReq = $docInBase && !empty($doc['required']);
+                                ?>
+                                <label class="checkout-doc" data-doc-code="<?= e($docCode) ?>" data-doc-required="<?= !empty($doc['required']) ? '1' : '0' ?>" data-in-base="<?= $docInBase ? '1' : '0' ?>" <?= $docInBase ? '' : 'hidden' ?>>
+                                    <span class="checkout-doc-label"><?= e($doc['label']) ?><?= $docReq ? ' *' : '' ?></span>
+                                    <?php if (trim((string) ($doc['description'] ?? '')) !== ''): ?>
+                                        <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin:.2rem 0 .35rem">
+                                            <?= e((string) $doc['description']) ?>
+                                        </span>
+                                    <?php endif; ?>
+                                    <input type="file"
+                                           name="doc_<?= e($docCode) ?>"
+                                           accept="<?= e($doc['accept']) ?>"
+                                           <?= $docReq ? 'required' : '' ?>
+                                           <?= $docInBase ? '' : 'disabled' ?>>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($maxNeedsExam): ?>
                     <?php
-                    $examRules = \App\Services\ExamScheduleService::scheduleRules($product ?? []);
+                    $examRules = \App\Services\ExamScheduleService::scheduleRules($examProduct ?? $product ?? []);
                     $examMode = (string) ($examRules['mode'] ?? 'window');
                     $usesVenuePicker = \App\Services\ExamScheduleService::usesVenuePicker($examMode);
                     $examHelp = trim((string) ($examRules['checkout_help'] ?? ''));
@@ -194,31 +264,6 @@ $stepLabels = [
                     }
                     $extraCfg = is_array($examRules['extraordinary'] ?? null) ? $examRules['extraordinary'] : [];
                     ?>
-                    <?php if ($docs !== []): ?>
-                    <div class="wizard-step" data-step="documentos" hidden>
-                        <h2 class="step-title">Documentos requeridos</h2>
-                        <p class="muted" style="font-size:.88rem;margin-top:0">
-                            Sube los archivos solicitados para continuar con el registro.
-                        </p>
-                        <div class="form-grid" style="max-width:560px">
-                            <?php foreach ($docs as $doc): ?>
-                                <label>
-                                    <?= e($doc['label']) ?><?= !empty($doc['required']) ? ' *' : '' ?>
-                                    <?php if (trim((string) ($doc['description'] ?? '')) !== ''): ?>
-                                        <span class="muted" style="display:block;font-weight:500;font-size:.78rem;margin:.2rem 0 .35rem">
-                                            <?= e((string) $doc['description']) ?>
-                                        </span>
-                                    <?php endif; ?>
-                                    <input type="file"
-                                           name="doc_<?= e($doc['code']) ?>"
-                                           accept="<?= e($doc['accept']) ?>"
-                                           <?= !empty($doc['required']) ? 'required' : '' ?>>
-                                </label>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-
                     <div class="wizard-step" data-step="agenda" hidden>
                         <h2 class="step-title">Agenda tu examen</h2>
                         <p class="muted" style="font-size:.88rem;margin-top:0"><?= e($examHelp) ?></p>
@@ -710,13 +755,33 @@ $stepLabels = [
 (function () {
   const slug = <?= json_encode($product['slug'], JSON_UNESCAPED_UNICODE) ?>;
   const openpayReady = <?= $openpayReady ? 'true' : 'false' ?>;
-  const needsExam = <?= $needsExam ? 'true' : 'false' ?>;
-  const wizardSteps = <?= json_encode($wizardSteps, JSON_UNESCAPED_UNICODE) ?>;
-  const comboStepIndex = wizardSteps.indexOf('paquete');
+  const baseRequirements = <?= json_encode($baseRequirements, JSON_UNESCAPED_UNICODE) ?>;
+  const comboRequirementsMap = <?= json_encode($comboRequirements, JSON_UNESCAPED_UNICODE) ?>;
+  const stepLabels = <?= json_encode($stepLabels, JSON_UNESCAPED_UNICODE) ?>;
+  const hasComboOffers = <?= $hasComboOffers ? 'true' : 'false' ?>;
+  let activeRequirements = baseRequirements;
+  let needsExam = !!(activeRequirements && activeRequirements.needs_exam);
+  let examSlug = (activeRequirements && activeRequirements.exam_product_slug)
+    ? String(activeRequirements.exam_product_slug)
+    : slug;
+  let wizardSteps = <?= json_encode($wizardSteps, JSON_UNESCAPED_UNICODE) ?>;
+  let comboStepIndex = wizardSteps.indexOf('paquete');
   const comboSidebarTeaser = document.getElementById('combo-sidebar-teaser');
+  const timelineNav = document.getElementById('checkout-timeline');
   const depositCard = <?= json_encode($depositCard, JSON_UNESCAPED_UNICODE) ?>;
   const isPartnerCheckout = <?= $isPartnerCheckout ? 'true' : 'false' ?>;
   const partnerCreditBalance = <?= json_encode((float) ($partnerCreditBalance ?? 0)) ?>;
+  const baseFieldCodeSet = {};
+  (baseRequirements.fields || []).forEach(function (f) {
+    if (f && f.code) baseFieldCodeSet[String(f.code)] = true;
+  });
+  const baseDocCodeSet = {};
+  (baseRequirements.docs || []).forEach(function (d) {
+    if (d && d.code) baseDocCodeSet[String(d.code)] = true;
+  });
+  const baseHadReglamento = !!(baseRequirements.reglamento);
+  const baseHadDocs = (baseRequirements.docs || []).length > 0;
+  const baseHadExam = !!baseRequirements.needs_exam;
 
   let quoteData = <?= json_encode($quote, JSON_UNESCAPED_UNICODE) ?>;
   let payUi = 'transfer';
@@ -1045,8 +1110,8 @@ $stepLabels = [
   }
 
   function validateStep(step) {
-    if (step === 'datos') {
-      return validateFieldsInStep('datos');
+    if (step === 'datos' || step === 'datos_extra') {
+      return validateFieldsInStep(step);
     }
     if (step === 'reglamento' && window.reglamentoWizard) {
       try { window.reglamentoWizard.validateStep(); } catch (e) { alert(e.message); return false; }
@@ -1284,6 +1349,7 @@ $stepLabels = [
 
   const comboIdInput = document.getElementById('combo_id');
   const comboHint = document.getElementById('combo-match-hint');
+  const fieldsExtraGrid = document.getElementById('checkout-fields-extra');
 
   function selectedAddonIds() {
     return Array.prototype.slice.call(document.querySelectorAll('.combo-addon:checked'))
@@ -1298,6 +1364,237 @@ $stepLabels = [
     return String(s || '').replace(/[&<>"']/g, function (ch) {
       return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]);
     });
+  }
+
+  function activeFieldCodes(reqs) {
+    const set = {};
+    (reqs.fields || []).forEach(function (f) {
+      if (f && f.code) set[String(f.code)] = f;
+    });
+    return set;
+  }
+
+  function activeDocCodes(reqs) {
+    const set = {};
+    (reqs.docs || []).forEach(function (d) {
+      if (d && d.code) set[String(d.code)] = d;
+    });
+    return set;
+  }
+
+  function syncFieldVisibility(reqs) {
+    const byCode = activeFieldCodes(reqs);
+    const extraCodes = [];
+    document.querySelectorAll('.checkout-field').forEach(function (label) {
+      const code = label.getAttribute('data-field-code') || '';
+      const meta = byCode[code];
+      const inBase = label.getAttribute('data-in-base') === '1';
+      const control = label.querySelector('input, select, textarea');
+      if (!meta) {
+        label.hidden = true;
+        if (control) {
+          control.disabled = true;
+          control.required = false;
+        }
+        return;
+      }
+      const required = !!meta.required;
+      const showInDatos = inBase || !hasComboOffers;
+      if (showInDatos) {
+        label.hidden = false;
+        if (fieldsExtraGrid && label.parentElement === fieldsExtraGrid) {
+          const baseGrid = document.getElementById('checkout-fields-base');
+          if (baseGrid) baseGrid.appendChild(label);
+        }
+        if (control) {
+          control.disabled = false;
+          control.required = required;
+        }
+        const lbl = label.querySelector('.checkout-field-label');
+        if (lbl) {
+          const baseText = (meta.label || lbl.textContent || '').replace(/\s*\*$/, '');
+          lbl.textContent = baseText + (required ? ' *' : '');
+        }
+      } else {
+        // Campo nuevo del paquete → paso datos_extra
+        label.hidden = false;
+        if (fieldsExtraGrid && label.parentElement !== fieldsExtraGrid) {
+          fieldsExtraGrid.appendChild(label);
+        }
+        if (control) {
+          control.disabled = false;
+          control.required = required;
+        }
+        const lbl = label.querySelector('.checkout-field-label');
+        if (lbl) {
+          const baseText = (meta.label || lbl.textContent || '').replace(/\s*\*$/, '');
+          lbl.textContent = baseText + (required ? ' *' : '');
+        }
+        extraCodes.push(code);
+      }
+      delete byCode[code];
+    });
+    return extraCodes;
+  }
+
+  function syncDocVisibility(reqs) {
+    const byCode = activeDocCodes(reqs);
+    document.querySelectorAll('.checkout-doc').forEach(function (label) {
+      const code = label.getAttribute('data-doc-code') || '';
+      const meta = byCode[code];
+      const control = label.querySelector('input[type="file"]');
+      if (!meta) {
+        label.hidden = true;
+        if (control) {
+          control.disabled = true;
+          control.required = false;
+        }
+        return;
+      }
+      label.hidden = false;
+      if (control) {
+        control.disabled = false;
+        control.required = !!meta.required;
+      }
+      const lbl = label.querySelector('.checkout-doc-label');
+      if (lbl) {
+        const baseText = (meta.label || lbl.textContent || '').replace(/\s*\*$/, '');
+        lbl.textContent = baseText + (meta.required ? ' *' : '');
+      }
+    });
+  }
+
+  function syncReglamentoUi(reqs) {
+    const step = form.querySelector('.wizard-step[data-step="reglamento"]');
+    if (!step) return;
+    const reg = reqs.reglamento;
+    if (!reg) return;
+    const url = reg.template_url || '';
+    if (!url) return;
+    const frame = step.querySelector('.reglamento-frame');
+    if (frame && frame.getAttribute('src') !== url + '#toolbar=1') {
+      frame.setAttribute('src', url + '#toolbar=1');
+    }
+    step.querySelectorAll('a[href]').forEach(function (a) {
+      if (a.getAttribute('download') !== null || /Descargar|Abrir/.test(a.textContent || '')) {
+        a.setAttribute('href', url);
+      }
+    });
+    const docCode = String(reg.doc_code || 'reglamento_firmado');
+    const fileInput = step.querySelector('input[type="file"][name^="doc_"][hidden], input[type="file"][id^="doc_"]');
+    if (fileInput) {
+      fileInput.name = 'doc_' + docCode;
+      fileInput.id = 'doc_' + docCode;
+    }
+  }
+
+  function rebuildTimeline() {
+    if (!timelineNav) return;
+    const html = [];
+    wizardSteps.forEach(function (code, i) {
+      html.push(
+        '<button type="button" class="timeline-step' + (i === stepIndex ? ' active' : '') + (i < stepIndex ? ' done' : '') + '" data-goto="' + escapeHtml(code) + '"' + (i > stepIndex ? ' disabled' : '') + '>'
+          + '<span class="timeline-num">' + (i + 1) + '</span>'
+          + '<span class="timeline-label">' + escapeHtml(stepLabels[code] || code) + '</span>'
+          + '</button>'
+      );
+      if (i < wizardSteps.length - 1) {
+        html.push('<span class="timeline-line" aria-hidden="true"></span>');
+      }
+    });
+    timelineNav.innerHTML = html.join('');
+    timelineNav.querySelectorAll('.timeline-step').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const code = btn.getAttribute('data-goto');
+        const idx = wizardSteps.indexOf(code);
+        if (idx >= 0 && idx <= stepIndex) showStep(idx);
+      });
+    });
+  }
+
+  function buildWizardStepsFor(reqs, extraFieldCodes) {
+    const hasComboSelected = !!(comboIdInput && comboIdInput.value);
+    const hasNewDocs = (reqs.docs || []).some(function (d) {
+      return d && d.code && !baseDocCodeSet[String(d.code)];
+    });
+    // Si el paquete aporta docs nuevos (o el ancla no tenía), pedirlos después del upsell.
+    const docsAfterPackage = hasComboSelected && (!baseHadDocs || hasNewDocs);
+
+    const steps = ['datos'];
+    // Requisitos del ancla se mantienen antes del paquete.
+    if (baseHadReglamento && reqs.reglamento) steps.push('reglamento');
+    if (baseHadDocs && (reqs.docs || []).length && !docsAfterPackage) {
+      steps.push('documentos');
+    }
+    if (baseHadExam && reqs.needs_exam) steps.push('agenda');
+    if (hasComboOffers) steps.push('paquete');
+
+    // Huecos del upsell: después de paquete, antes de pago.
+    if (hasComboSelected && extraFieldCodes && extraFieldCodes.length) {
+      steps.push('datos_extra');
+    }
+    if (reqs.reglamento && !baseHadReglamento) steps.push('reglamento');
+    if ((reqs.docs || []).length && steps.indexOf('documentos') < 0) {
+      steps.push('documentos');
+    }
+    if (reqs.needs_exam && !baseHadExam) steps.push('agenda');
+
+    steps.push('pago', 'confirmar');
+    return steps;
+  }
+
+  function applyRequirements(reqs) {
+    activeRequirements = reqs || baseRequirements;
+    needsExam = !!activeRequirements.needs_exam;
+    examSlug = activeRequirements.exam_product_slug
+      ? String(activeRequirements.exam_product_slug)
+      : slug;
+
+    const extraCodes = syncFieldVisibility(activeRequirements);
+    syncDocVisibility(activeRequirements);
+    syncReglamentoUi(activeRequirements);
+
+    const prevStep = currentStep();
+    wizardSteps = buildWizardStepsFor(activeRequirements, extraCodes);
+    comboStepIndex = wizardSteps.indexOf('paquete');
+    rebuildTimeline();
+    let idx = wizardSteps.indexOf(prevStep);
+    if (idx < 0) {
+      idx = wizardSteps.indexOf('paquete');
+      if (idx < 0) idx = Math.min(stepIndex, wizardSteps.length - 1);
+    }
+    showStep(idx);
+  }
+
+  function resolveRequirementsForComboId(comboId) {
+    const id = String(comboId || '');
+    if (!id) {
+      applyRequirements(baseRequirements);
+      return;
+    }
+    if (comboRequirementsMap && comboRequirementsMap[id]) {
+      applyRequirements(comboRequirementsMap[id]);
+      return;
+    }
+    const url = <?= json_encode(url('/api/checkout-requisitos/')) ?> + encodeURIComponent(slug)
+      + '?combo_id=' + encodeURIComponent(id);
+    fetch(url)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data.ok && data.requirements) {
+          if (!comboRequirementsMap) {
+            /* no-op */
+          } else {
+            comboRequirementsMap[id] = data.requirements;
+          }
+          applyRequirements(data.requirements);
+        } else {
+          applyRequirements(baseRequirements);
+        }
+      })
+      .catch(function () {
+        applyRequirements(baseRequirements);
+      });
   }
 
   function renderComboBreakdown(breakdown, quote) {
@@ -1389,9 +1686,16 @@ $stepLabels = [
             : String((data.quote && data.quote.label) || '');
         }
         if (comboIdInput && data.matched && data.combo_id) {
-          comboIdInput.value = String(data.combo_id);
+          const nextId = String(data.combo_id);
+          if (comboIdInput.value !== nextId) {
+            comboIdInput.value = nextId;
+            resolveRequirementsForComboId(nextId);
+          }
         } else if (comboIdInput && !data.matched && !comboId) {
-          comboIdInput.value = '';
+          if (comboIdInput.value) {
+            comboIdInput.value = '';
+            resolveRequirementsForComboId('');
+          }
         }
         if (comboHint) {
           if (addons.length && !data.matched) {
@@ -1420,6 +1724,7 @@ $stepLabels = [
         cb.checked = addonIds.indexOf(cb.value) !== -1;
       });
       if (comboIdInput) comboIdInput.value = radio.value || '';
+      resolveRequirementsForComboId(radio.value || '');
       refreshQuote();
     });
   });
@@ -1436,6 +1741,7 @@ $stepLabels = [
         return;
       }
       comboIdInput.value = wanted;
+      resolveRequirementsForComboId(wanted);
       refreshQuote();
     } catch (e) {}
   })();
@@ -1447,6 +1753,7 @@ $stepLabels = [
         else r.checked = false;
       });
       if (comboIdInput) comboIdInput.value = '';
+      resolveRequirementsForComboId('');
       refreshQuote();
     });
   });
@@ -1619,7 +1926,7 @@ $stepLabels = [
       examSessionSelect.disabled = true;
       examSessionSelect.innerHTML = '<option value="">Cargando…</option>';
     }
-    fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(slug)
+    fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(examSlug)
       + '?venue_id=' + encodeURIComponent(venueId))
       .then(r => r.json())
       .then(data => {
@@ -1662,7 +1969,7 @@ $stepLabels = [
 
   function loadExamDates() {
     if (!needsExam) return;
-    fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(slug))
+    fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(examSlug))
       .then(r => r.json())
       .then(data => {
         if (!data.ok) return;
@@ -1766,7 +2073,7 @@ $stepLabels = [
     var venueQs = (examVenueIdHidden && examVenueIdHidden.value)
       ? '&venue_id=' + encodeURIComponent(examVenueIdHidden.value)
       : '';
-    fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(slug)
+    fetch(<?= json_encode(url('/api/examen-slots/')) ?> + encodeURIComponent(examSlug)
       + '?date=' + encodeURIComponent(date) + venueQs)
       .then(r => r.json())
       .then(data => {

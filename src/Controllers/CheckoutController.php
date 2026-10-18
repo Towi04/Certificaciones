@@ -73,12 +73,56 @@ final class CheckoutController
             $referralPromo = strtoupper(trim((string) ($_SESSION['partner_referral_code'] ?? '')));
         }
 
+        $baseRequirements = CheckoutRequirements::requirementsForCheckout($product, null);
+        $comboRequirements = [];
+        $unionProducts = [$product];
+        foreach ($offers['combos'] as $comboOffer) {
+            $cid = (int) ($comboOffer['id'] ?? 0);
+            $items = is_array($comboOffer['items'] ?? null) ? $comboOffer['items'] : [];
+            if ($cid > 0) {
+                $comboRequirements[$cid] = CheckoutRequirements::requirementsForCheckout($product, $items);
+            }
+            foreach ($items as $item) {
+                if (is_array($item)) {
+                    $unionProducts[] = $item;
+                }
+            }
+        }
+        $maxRequirements = CheckoutRequirements::requirementsForCheckout($product, $unionProducts);
+
+        $examProduct = CheckoutRequirements::examProductFromProducts(
+            ($maxRequirements['needs_exam'] ?? false) ? $unionProducts : [$product]
+        );
+        if ($examProduct === null && ExamScheduleService::needsExamAtCheckout($product)) {
+            $examProduct = $product;
+        }
+        $needsExamUi = $examProduct !== null;
+        $examMinDate = $needsExamUi
+            ? (new ExamScheduleService())->minSelectableDate($examProduct)
+            : null;
+        $examAdvanceDays = $needsExamUi
+            ? (int) (ExamScheduleService::scheduleRules($examProduct)['min_advance_days'] ?? 0)
+            : 0;
+
+        // UI: pre-render unión máxima (campos/docs/reglamento/agenda) para poder
+        // revelarlos si el alumno convierte a paquete a mitad del wizard.
+        $fields = $maxRequirements['fields'];
+        $docs = $maxRequirements['docs'];
+        $reglamento = $maxRequirements['reglamento'];
+        $baseFieldCodes = array_column($baseRequirements['fields'], 'code');
+        $baseDocCodes = array_column($baseRequirements['docs'], 'code');
+
         view('checkout/acquire', [
             'title' => ($isPartnerCheckout ? 'Registrar alumno · ' : 'Adquirir · ') . $product['name'],
             'product' => $product,
-            'fields' => CheckoutRequirements::fieldsForProduct($product),
-            'docs' => CheckoutRequirements::docsForProduct($product),
-            'reglamento' => CheckoutRequirements::reglamentoForProduct($product),
+            'fields' => $fields,
+            'docs' => $docs,
+            'reglamento' => $reglamento,
+            'baseRequirements' => $baseRequirements,
+            'maxRequirements' => $maxRequirements,
+            'comboRequirements' => $comboRequirements,
+            'baseFieldCodes' => $baseFieldCodes,
+            'baseDocCodes' => $baseDocCodes,
             'prefill' => $prefill,
             'user' => $user,
             'quote' => $quote,
@@ -86,13 +130,10 @@ final class CheckoutController
             'openpayReady' => $this->openPayConfigured(),
             'bank' => $this->bankTransferInfo(),
             'depositCard' => $this->depositCardNumber(),
-            'needsExam' => ExamScheduleService::needsExamAtCheckout($product),
-            'examMinDate' => ExamScheduleService::needsExamAtCheckout($product)
-                ? (new ExamScheduleService())->minSelectableDate($product)
-                : null,
-            'examAdvanceDays' => ExamScheduleService::needsExamAtCheckout($product)
-                ? (int) (ExamScheduleService::scheduleRules($product)['min_advance_days'] ?? 0)
-                : 0,
+            'needsExam' => $needsExamUi,
+            'examProduct' => $examProduct,
+            'examMinDate' => $examMinDate,
+            'examAdvanceDays' => $examAdvanceDays,
             'isPartnerCheckout' => $isPartnerCheckout,
             'partner' => $partner,
             'referralPromo' => $referralPromo,
@@ -104,7 +145,27 @@ final class CheckoutController
     {
         csrf_verify();
         $product = $this->loadProduct($slug);
-        $fieldCodes = array_column(CheckoutRequirements::fieldsForProduct($product), 'code');
+        $comboId = !empty($_POST['combo_id']) ? (int) $_POST['combo_id'] : null;
+        $comboItems = null;
+        if ($comboId !== null && $comboId > 0) {
+            $comboRepo = new \App\Repositories\ComboRepository();
+            $combo = $comboRepo->find($comboId);
+            if ($combo === null || !(int) ($combo['is_active'] ?? 0)) {
+                flash('error', 'El combo seleccionado no está disponible.');
+                redirect('/adquirir/' . rawurlencode($slug));
+            }
+            $comboItems = $comboRepo->items($comboId);
+            $ids = array_map(static fn (array $i): int => (int) $i['id'], $comboItems);
+            if (!in_array((int) $product['id'], $ids, true)) {
+                flash('error', 'Ese combo no incluye el producto que estás adquiriendo.');
+                redirect('/adquirir/' . rawurlencode($slug));
+            }
+        }
+
+        $activeFields = CheckoutRequirements::fieldsForProducts(
+            ($comboItems !== null && $comboItems !== []) ? $comboItems : [$product]
+        );
+        $fieldCodes = array_column($activeFields, 'code');
 
         $buyer = [
             'email' => trim((string) ($_POST['email'] ?? '')),
@@ -122,7 +183,7 @@ final class CheckoutController
                 : '',
             'extra_fields' => [],
         ];
-        foreach (CheckoutRequirements::fieldsForProduct($product) as $field) {
+        foreach ($activeFields as $field) {
             $code = (string) ($field['code'] ?? '');
             if ($code === '' || CheckoutRequirements::isBuiltinField($code)) {
                 continue;
@@ -141,7 +202,7 @@ final class CheckoutController
         $cardMsiMonths = max(1, (int) ($_POST['card_msi_months'] ?? 1));
 
         try {
-            foreach (CheckoutRequirements::fieldsForProduct($product) as $field) {
+            foreach ($activeFields as $field) {
                 if (!$field['required']) {
                     continue;
                 }
@@ -150,7 +211,7 @@ final class CheckoutController
                     throw new \InvalidArgumentException('Completa el campo: ' . $field['label']);
                 }
             }
-            foreach (CheckoutRequirements::fieldsForProduct($product) as $field) {
+            foreach ($activeFields as $field) {
                 if (($field['type'] ?? '') !== 'select') {
                     continue;
                 }
@@ -177,6 +238,9 @@ final class CheckoutController
                 $paymentMethod = 'transfer_proof';
             }
 
+            $reqProducts = ($comboItems !== null && $comboItems !== []) ? $comboItems : [$product];
+            $needsExam = CheckoutRequirements::examProductFromProducts($reqProducts) !== null;
+
             $result = (new CheckoutService())->complete(
                 (int) $product['id'],
                 $buyer,
@@ -184,7 +248,7 @@ final class CheckoutController
                 $paymentMethod,
                 $promoCode !== '' ? $promoCode : null,
                 $cardMsiMonths,
-                ExamScheduleService::needsExamAtCheckout($product)
+                $needsExam
                     ? [
                         'exam_date' => trim((string) ($_POST['exam_date'] ?? '')),
                         'exam_time' => trim((string) ($_POST['exam_time'] ?? '')),
@@ -194,7 +258,7 @@ final class CheckoutController
                         'exam_allow_short_advance' => !empty($_POST['exam_allow_short_advance']),
                     ]
                     : null,
-                !empty($_POST['combo_id']) ? (int) $_POST['combo_id'] : null,
+                $comboId,
                 $usePartnerCredit
             );
 
@@ -364,6 +428,52 @@ final class CheckoutController
         } catch (\Throwable $e) {
             http_response_code(422);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
+    /**
+     * Requisitos de checkout del producto ancla o del combo seleccionado (unión de ítems).
+     * Usado por el wizard al convertir a paquete a mitad del registro.
+     */
+    public function requirements(string $slug): void
+    {
+        header('Content-Type: application/json; charset=UTF-8');
+        $product = (new ProductRepository())->findBySlug($slug);
+        if (!$product || !(int) $product['is_active']) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Producto no encontrado']);
+
+            return;
+        }
+
+        $comboId = isset($_GET['combo_id']) ? (int) $_GET['combo_id'] : 0;
+        try {
+            $comboItems = null;
+            if ($comboId > 0) {
+                $comboRepo = new \App\Repositories\ComboRepository();
+                $combo = $comboRepo->find($comboId);
+                if ($combo === null || !(int) ($combo['is_active'] ?? 0)) {
+                    throw new \InvalidArgumentException('El combo seleccionado no está disponible.');
+                }
+                $comboItems = $comboRepo->items($comboId);
+                $ids = array_map(static fn (array $i): int => (int) $i['id'], $comboItems);
+                if (!in_array((int) $product['id'], $ids, true)) {
+                    throw new \InvalidArgumentException('Ese combo no incluye el producto que estás adquiriendo.');
+                }
+            }
+
+            $requirements = CheckoutRequirements::requirementsForCheckout($product, $comboItems);
+            echo json_encode([
+                'ok' => true,
+                'combo_id' => $comboId > 0 ? $comboId : null,
+                'requirements' => $requirements,
+            ], JSON_UNESCAPED_UNICODE);
+        } catch (\InvalidArgumentException $e) {
+            http_response_code(422);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => 'No se pudieron resolver los requisitos.'], JSON_UNESCAPED_UNICODE);
         }
     }
 

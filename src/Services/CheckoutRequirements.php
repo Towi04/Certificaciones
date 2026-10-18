@@ -720,6 +720,178 @@ final class CheckoutRequirements
     }
 
     /**
+     * Unión de campos de checkout de varios productos (p. ej. ítems de un combo).
+     * Un campo es required si alguno de los productos lo exige.
+     *
+     * @param list<array<string, mixed>> $products
+     * @return list<array{code:string,label:string,required:bool,type:string,custom?:bool,options?:list<array{value:string,label:string}>}>
+     */
+    public static function fieldsForProducts(array $products): array
+    {
+        if ($products === []) {
+            return [];
+        }
+
+        /** @var array<string, array{code:string,label:string,required:bool,type:string,custom?:bool,options?:list<array{value:string,label:string}>}> $byCode */
+        $byCode = [];
+        $order = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            foreach (self::fieldsForProduct($product) as $field) {
+                $code = (string) ($field['code'] ?? '');
+                if ($code === '') {
+                    continue;
+                }
+                if (!isset($byCode[$code])) {
+                    $byCode[$code] = $field;
+                    $order[] = $code;
+                    continue;
+                }
+                if (!empty($field['required'])) {
+                    $byCode[$code]['required'] = true;
+                }
+            }
+        }
+
+        $out = [];
+        foreach ($order as $code) {
+            $out[] = $byCode[$code];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Unión de documentos required_docs (before_payment) de varios productos.
+     *
+     * @param list<array<string, mixed>> $products
+     * @return list<array{code:string,label:string,description:string,required:bool,accept:string,include_in_provider_mail:bool,require_for_provider_send:bool}>
+     */
+    public static function docsForProducts(array $products): array
+    {
+        $out = [];
+        $seen = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            foreach (self::docsForProduct($product) as $doc) {
+                $code = (string) ($doc['code'] ?? '');
+                if ($code === '' || isset($seen[$code])) {
+                    if ($code !== '' && isset($seen[$code]) && !empty($doc['required'])) {
+                        $idx = $seen[$code];
+                        $out[$idx]['required'] = true;
+                    }
+                    continue;
+                }
+                $seen[$code] = count($out);
+                $out[] = $doc;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Primer reglamento required_before_checkout encontrado en la lista.
+     * Prioriza certificaciones y trámites sobre cursos.
+     *
+     * @param list<array<string, mixed>> $products
+     * @return array{
+     *   template_path:string,
+     *   template_url:string,
+     *   doc_code:string,
+     *   required_before_checkout:bool,
+     *   signature_mode:string,
+     *   flatten:bool,
+     *   form_fields:array<string, list<string>>
+     * }|null
+     */
+    public static function reglamentoForProducts(array $products): ?array
+    {
+        $priority = ['certification' => 0, 'procedure' => 1, 'course' => 2];
+        $sorted = $products;
+        usort($sorted, static function (array $a, array $b) use ($priority): int {
+            $oa = $priority[(string) ($a['type'] ?? '')] ?? 9;
+            $ob = $priority[(string) ($b['type'] ?? '')] ?? 9;
+
+            return $oa <=> $ob;
+        });
+
+        foreach ($sorted as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $reg = self::reglamentoForProduct($product);
+            if ($reg !== null) {
+                return $reg;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Primer producto de la lista que pide agenda de examen en checkout.
+     *
+     * @param list<array<string, mixed>> $products
+     * @return array<string, mixed>|null
+     */
+    public static function examProductFromProducts(array $products): ?array
+    {
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            if (ExamScheduleService::needsExamAtCheckout($product)) {
+                return $product;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Payload unificado de requisitos para el wizard / API.
+     * Sin comboItems → solo el ancla. Con combo → unión de los ítems del combo.
+     *
+     * @param array<string, mixed> $anchor
+     * @param list<array<string, mixed>>|null $comboItems
+     * @return array{
+     *   fields: list<array{code:string,label:string,required:bool,type:string,custom?:bool,options?:list<array{value:string,label:string}>}>,
+     *   docs: list<array{code:string,label:string,description:string,required:bool,accept:string,include_in_provider_mail:bool,require_for_provider_send:bool}>,
+     *   reglamento: array<string, mixed>|null,
+     *   needs_exam: bool,
+     *   exam_product_id: int|null,
+     *   exam_product_slug: string|null
+     * }
+     */
+    public static function requirementsForCheckout(array $anchor, ?array $comboItems = null): array
+    {
+        $products = ($comboItems !== null && $comboItems !== [])
+            ? array_values(array_filter($comboItems, static fn ($p): bool => is_array($p)))
+            : [$anchor];
+
+        $fields = self::fieldsForProducts($products);
+        $docs = self::docsForProducts($products);
+        $reglamento = self::reglamentoForProducts($products);
+        $examProduct = self::examProductFromProducts($products);
+
+        return [
+            'fields' => $fields,
+            'docs' => $docs,
+            'reglamento' => $reglamento,
+            'needs_exam' => $examProduct !== null,
+            'exam_product_id' => $examProduct !== null ? (int) ($examProduct['id'] ?? 0) : null,
+            'exam_product_slug' => $examProduct !== null
+                ? (string) ($examProduct['slug'] ?? '')
+                : null,
+        ];
+    }
+
+    /**
      * Reglamento con firma digital en checkout (PDF plantilla + firma en última página).
      *
      * @param array<string, mixed> $product

@@ -94,36 +94,18 @@ final class CheckoutService
             throw new \InvalidArgumentException('Método de pago inválido.');
         }
 
-        // Docs / reglamento: unión de ítems del combo (o solo el producto ancla).
+        // Docs / reglamento / agenda: unión de ítems del combo (o solo el producto ancla).
         $docsProducts = $comboItems !== [] ? $comboItems : [$product];
-        $required = [];
-        $seenDoc = [];
-        foreach ($docsProducts as $dp) {
-            foreach (CheckoutRequirements::docsForProduct($dp) as $doc) {
-                $code = (string) $doc['code'];
-                if (isset($seenDoc[$code])) {
-                    continue;
-                }
-                $seenDoc[$code] = true;
-                $required[] = $doc;
-            }
-        }
-        $reglamento = CheckoutRequirements::reglamentoForProduct($product);
+        $required = CheckoutRequirements::docsForProducts($docsProducts);
+        $reglamento = CheckoutRequirements::reglamentoForProducts($docsProducts);
         $this->assertRequiredDocs($required, $files);
         if ($reglamento !== null && $reglamento['required_before_checkout']) {
             $this->assertReglamentoFirmado($reglamento, $files);
         }
 
         $examSchedule = new ExamScheduleService();
-        $examProduct = $product;
-        if ($comboItems !== []) {
-            foreach ($comboItems as $ci) {
-                if (ExamScheduleService::needsExamAtCheckout($ci)) {
-                    $examProduct = $ci;
-                    break;
-                }
-            }
-        }
+        $examFromCombo = CheckoutRequirements::examProductFromProducts($docsProducts);
+        $examProduct = $examFromCombo ?? $product;
         $examMeta = null;
         if (ExamScheduleService::needsExamAtCheckout($examProduct)) {
             $examDate = trim((string) ($exam['exam_date'] ?? ''));
