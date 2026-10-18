@@ -167,6 +167,10 @@ final class CheckoutService
             $quote['base'] = $baseAmount;
         }
         $pricingProduct = $combo ?? $product;
+        if ($combo !== null && $comboItems !== []) {
+            // Validar MSI del paquete con la misma herencia que el quote.
+            $pricingProduct = CardMsiCalculator::attachComboMsi($combo, $comboItems);
+        }
         // El crédito partner solo aplica en transferencia (o pago 100% con crédito).
         if ($usePartnerCredit && $paymentMethod === 'credit') {
             // ok

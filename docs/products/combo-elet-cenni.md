@@ -16,6 +16,8 @@ después del examen (`starts_after: exam_completed`, plazo típico 15 días).
 2. **Combo / paquete con CENNI:** un pago; se generan los trackings de los ítems del combo.
    - El wizard de agenda/docs del checkout usa el producto de **examen** (INE + fecha/sede).
    - El trámite CENNI **no** pide esos docs en el checkout; aparecen en el portal del caso CENNI.
+   - **MSI (meses sin intereses):** el paquete hereda las opciones de las certificaciones/trámites
+     del combo (intersección de meses). Los cursos con MSI apagado no bloquean el MSI del paquete.
 3. **Solo CENNI** (si se vende aparte): paga sin docs; sube en portal.
 
 ## Gates y proveedor
