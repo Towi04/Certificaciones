@@ -579,6 +579,49 @@ $pageHeading = $isEdit
                        style="<?= e($inputStyle) ?>">
             </label>
             <label class="muted" style="<?= e($labelStyle) ?>">
+                Plantilla acceso (auto)
+                <select name="inventory_access_mail_template" style="<?= e($inputStyle) ?>">
+                    <?php
+                    $accessTpl = (string) ($extras['inventory_access_mail_template'] ?? 'student_inventory_exam_access');
+                    if ($accessTpl === '') {
+                        $accessTpl = 'student_inventory_exam_access';
+                    }
+                    foreach ($mailTemplates as $tpl):
+                        $tplCode = (string) ($tpl['code'] ?? '');
+                        if ($tplCode === '') {
+                            continue;
+                        }
+                        ?>
+                        <option value="<?= e($tplCode) ?>" <?= $accessTpl === $tplCode ? 'selected' : '' ?>>
+                            <?= e((string) ($tpl['name'] ?? $tplCode)) ?> (<?= e($tplCode) ?>)
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <span class="muted" style="font-size:.72rem;font-weight:500">
+                    Correo al alumno al asignar folio/clave (pago o N días antes). No uses la de ELeT salvo que el producto sea ELeT.
+                </span>
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
+                Plantilla resultados
+                <select name="inventory_results_mail_template" style="<?= e($inputStyle) ?>">
+                    <?php
+                    $resultsTpl = (string) ($extras['inventory_results_mail_template'] ?? 'student_results_cenni');
+                    if ($resultsTpl === '') {
+                        $resultsTpl = 'student_results_cenni';
+                    }
+                    foreach ($mailTemplates as $tpl):
+                        $tplCode = (string) ($tpl['code'] ?? '');
+                        if ($tplCode === '') {
+                            continue;
+                        }
+                        ?>
+                        <option value="<?= e($tplCode) ?>" <?= $resultsTpl === $tplCode ? 'selected' : '' ?>>
+                            <?= e((string) ($tpl['name'] ?? $tplCode)) ?> (<?= e($tplCode) ?>)
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label class="muted" style="<?= e($labelStyle) ?>">
                 Plantilla alerta stock
                 <select name="inventory_low_stock_mail_template" style="<?= e($inputStyle) ?>">
                     <option value="">— Sin alerta —</option>

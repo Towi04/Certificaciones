@@ -14,14 +14,18 @@ El sistema:
 6. Al cargar **resultados** (+ folio CENNI) se envía `student_results_cenni`.
 
 ## Configuración (grupo)
-En **Grupos → Fechas y horarios → Inventario**:
+En **Grupos → Inventario**:
 
 - Activar inventario
 - Días antes para enviar acceso (3)
 - Urgencia ≤ días (cuándo se permite quitar códigos de fechas lejanas)
 - Validez alumno 6 meses / proveedor 12 meses
 - Reasignación urgente
-- Plantillas de acceso y de resultados/CENNI
+- **Plantilla acceso (auto)** — correo con folio/clave al alumno (default `student_inventory_exam_access`).
+  El botón manual de Operación usa la plantilla del paso en **Progreso**; esta es la del envío automático.
+  No uses `student_elet_exam_access` salvo que el producto sea ELeT online.
+- **Plantilla resultados** — al cargar nivel/puntaje/CENNI (default `student_results_cenni`)
+- Plantilla alerta stock (opcional)
 
 ## Paquete estrella (examen + prep + CENNI)
 Si la compra es un **combo**:

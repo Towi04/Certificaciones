@@ -566,6 +566,43 @@ final class InventoryService
         }
     }
 
+    /**
+     * Candidatas de plantilla de acceso inventario.
+     * Orden: la configurada → student_inventory_exam_access.
+     * No se añade student_elet_exam_access como fallback silencioso
+     * (solo se usa si el admin la eligió explícitamente en el grupo).
+     *
+     * @return list<string>
+     */
+    public static function accessMailTemplateCandidates(string $preferred): array
+    {
+        $preferred = trim($preferred);
+        $candidates = [];
+        if ($preferred !== '') {
+            $candidates[] = $preferred;
+        }
+        if (!in_array('student_inventory_exam_access', $candidates, true)) {
+            $candidates[] = 'student_inventory_exam_access';
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * Resuelve plantilla de acceso inventario (nunca cae a ELeT).
+     */
+    public static function resolveAccessMailTemplate(MailTemplateService $mail, string $preferred): ?string
+    {
+        foreach (self::accessMailTemplateCandidates($preferred) as $code) {
+            // render con vars vacías solo valida existencia/activa; subject/body pueden quedar crudos.
+            if ($mail->render($code, []) !== null) {
+                return $code;
+            }
+        }
+
+        return null;
+    }
+
     private function sendAccessMail(int $trackingId, ?int $actorUserId, string $templateCode): void
     {
         $tracking = $this->tracking->find($trackingId);
@@ -585,13 +622,14 @@ final class InventoryService
             if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
                 throw new \RuntimeException('Sin correo de alumno.');
             }
-            if ($mail->render($templateCode, $vars) === null) {
-                // Fallback a plantilla ELeT de accesos si existe.
-                $templateCode = 'student_elet_exam_access';
-                if ($mail->render($templateCode, $vars) === null) {
-                    throw new \RuntimeException('Plantilla de accesos no encontrada.');
-                }
+            $resolved = self::resolveAccessMailTemplate($mail, $templateCode);
+            if ($resolved === null) {
+                throw new \RuntimeException(
+                    'Plantilla de accesos de inventario no encontrada o inactiva («'
+                    . $templateCode . '»). Configúrala en Grupos → Inventario → Plantilla acceso (auto).'
+                );
             }
+            $templateCode = $resolved;
             $mail->send($templateCode, $to, $vars);
             $this->mergeInventoryMeta($trackingId, [
                 'access_mail_sent_at' => date('c'),
